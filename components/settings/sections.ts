@@ -343,9 +343,10 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: "Ticket",
         title: "Ticket",
         description:
-          "Ancho, textos y logo del comprobante, y los modelos para diseñar cómo se imprime. El QR va siempre.",
+          "Ancho, textos y logo del comprobante, el diseño de facturas A4 y ticket, y los modelos propios. El QR va siempre.",
         icon: ReceiptText,
-        keywords: "ticket comprobante plantilla diseño modelo ancho 58 80 mm titulo leyenda pie logo qr",
+        keywords:
+          "ticket comprobante factura a4 pdf plantilla diseño modelo ancho 58 80 mm titulo leyenda pie logo qr color sello iibb inicio actividades",
       },
       {
         key: "facturacion",

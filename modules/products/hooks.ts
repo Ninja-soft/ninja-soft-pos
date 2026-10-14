@@ -82,10 +82,11 @@ export function useDecidePlu() {
   });
 }
 
-export function useWarrantyPlans(activeOnly = false) {
+export function useWarrantyPlans(activeOnly = false, enabled = true) {
   return useQuery({
     queryKey: ["warranty-plans", activeOnly],
     queryFn: () => warrantyPlansApi.list(activeOnly),
+    enabled,
   });
 }
 

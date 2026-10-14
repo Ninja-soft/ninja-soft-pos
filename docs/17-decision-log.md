@@ -4095,3 +4095,61 @@ F20-1 es la base económica de la cobranza: saber qué debe cada negocio, qué p
 - `subscription_billing_total()` baja el monto que piden `mp_subscription_checkout` y `mp_update_subscription_amount` a quien tenga descuentos; los preapproval ya creados no cambian solos. Un débito de MP mayor al cargo deja saldo a favor; uno menor deja deuda (información correcta).
 - Pendiente en F20-1 según la spec y no construido acá: promesas y notas de gestión (F20-9/F20-11), espejo `tenants.status` por trigger (spec §5.1 lo pasa a F20-2), contracargos automáticos desde el webhook (F20-10; hoy se registran a mano con "Revertir pago").
 - Tests: PGlite (86 chequeos: backfill, re-aplicar, 5 entregas del webhook, cron con espera de MP, FIFO, prorrateo, prueba, inmutabilidad, RLS, permisos, topes y vista general), `tests/unit/billingLedger.test.ts`, `tests/unit/saasKpis.test.ts` y `tests/integration/rls-cobranza-ledger.test.ts`.
+## ADR-114: Velocidad del POS: menos JS en el primer render, consultas del arranque sólo cuando hacen falta y catálogo offline una vez por apertura
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `perf/pos-velocidad`; sin migraciones, Edges ni secrets) · **Base:** ADR-077 (venta offline y foto local), ADR-058 (resolver de precios con `price_context_snapshot`), ADR-090 y ADR-091 (auditoría de rendimiento de la base).
+
+### Contexto
+
+Pedido del dueño: optimizar la velocidad del POS. Medido sobre `main`: `/pos` cargaba 448 kB de JS (438 kB gzip sumando chunks: 308 kB del panel y 133 kB propios del POS); el layout raíz precargaba 11 archivos de fuentes (~276 kB en producción, más que todo el JS de `/login`); al abrir el POS salían unas 55 a 60 consultas, varias sin uso hasta abrir un modal y otras duplicadas por dependencias que cambian durante el arranque (turno, sucursal). El catálogo para vender sin conexión (`products *`, hasta 5000) se bajaba 2 o 3 veces porque el efecto dependía del turno y la sucursal.
+
+### Decisión
+
+1. **Fuentes:** se precargan sólo Inter (texto) y Sora (títulos). Las candidatas de Apariencia y la monoespaciada llevan `preload: false`: se bajan si el CSS las usa (`display: swap`).
+2. **Chunks diferidos:** `UpgradeModal` pasa a ser un envoltorio con `next/dynamic` + `MountWhenOpened` (la implementación vive en `UpgradeModalBody`; los 35 importadores no cambian). Así `lib/saas/featureInfo.ts` sale del bundle del panel y los planes (`useGlobalPlansForUpgrade`) se piden al abrir el modal y no al montar cada ítem bloqueado o el `discountGate` del POS. `InfoHint` carga el plan mínimo al abrir el popover. En el POS, los diálogos chicos, las ventas pausadas (panel y diálogos), la ayuda de atajos y las miniaturas del selector de diseño van en chunks que se precargan en idle con el resto de los modales.
+3. **Consultas del arranque:** selector de clientes con `enabled` atado a abrirlo; planes de garantía con algo en el carrito; foto de precios con `enabled: registerFetched` (antes, una vez con `storeId` null y otra con la sucursal); lista mostrador (`price_lists` + todos sus items) sólo si la foto no llega o falla; heartbeat de la caja recién con el turno resuelto; `arca_status` cada 5 min si la facturación no está activa.
+4. **Catálogo offline:** una descarga por apertura del POS, en `requestIdleCallback` (máx. 3 s) y luego cada 10 min. Turno, sucursal y política van por ref y un segundo efecto los ajusta en la foto guardada sin bajar el catálogo (`snapshotWithMeta`, con lecturas y escrituras de IndexedDB en serie y 1,5 s de espera para no escribir el `null` transitorio del arranque).
+
+### Alternativas descartadas
+
+- **Saltear la descarga si la foto tiene menos de 10 min:** un producto recién creado no estaría en la venta offline hasta el siguiente refresco.
+- **Una RPC `my_context` que reúna las 6 lecturas de `tenant_users` y las 3 de `tenants` del panel:** es el mayor ahorro pendiente (9 a 11 consultas y tres cadenas en serie), pero toca el shell, los gates y la cuenta; va en su propio PR con migración.
+- **Achicar el `select *` de productos del POS:** el tipo `Product` se usa entero en el carrito, la foto offline y los pickers; recortarlo sin un mapa de uso arriesga romper la venta.
+
+### Consecuencias
+
+- `/pos` 448 → 421 kB de First Load JS (412 kB gzip); `/caja` 305 → 289, `/ventas` 312 → 286, `/productos` 370 → 351. Fuentes precargadas 11 → 2.
+- Abrir un modal diferido por primera vez antes de la precarga en idle muestra el modal un instante después (el chunk es chico y se pide en paralelo).
+- Pendientes para otro PR: unificar el contexto del usuario y el negocio en una RPC; quitar el doble `getUser` de middleware + layout; `pending_charges` del watcher trae hasta 100 cobros completados en cada sondeo (filtrar por `completed_at` en el servidor); miniaturas de 160 px al subir fotos de productos (hoy el tile de 44 px baja el WebP de 900 px); `select` explícito en `pos_settings`, `cash_shifts`, `categories` y `warranty_plans`.
+- Tests: `tests/unit/offlineSync.test.ts` (ajuste de turno, sucursal y política de la foto sin tocar el catálogo).
+## ADR-112: Motor de comprobantes con modelos de factura A4 y ticket, personalización por negocio y sello "Un software de Ninja Soft" ocultable por plan
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar) · **Base:** ADR-068 (impuestos y transparencia fiscal), ADR-072 (factura electrónica ARCA, CAE/CAEA y QR), H9b (plantillas de ticket), ADR-110 (cobranza SaaS, factura de la plataforma). **Numeración:** 109, 110 y 111 están tomados en `main` y en `feat/ticket-post-venta`.
+
+### Contexto
+
+El dueño pidió plantillas de factura "mucho más profesionales", con el lenguaje visual de una factura B real (logo, letra en recuadro al centro, bloques con título, tabla de renglones con cabecera oscura, totales, transparencia fiscal y pie con QR, ARCA y CAE), varios modelos A4 y de ticket, todos con lo que pide la normativa, muy personalizables, con el logo de Ninja Soft y la leyenda "Un software de Ninja Soft" desactivables, y con los colores y el logo de la tienda (o los de Ninja POS si la tienda no tiene). El mismo motor tiene que servir más adelante para la factura de NinjaSoft a sus clientes (ADR-110).
+
+Hasta ahora el comprobante sin plantilla propia era el ticket de bloques y el "A4" era un PDF básico de jsPDF (o el ticket pegado en una hoja), sin IIBB, inicio de actividades, letra en recuadro ni IVA discriminado.
+
+### Decisión
+
+1. **Modelo de documento neutro** (`lib/invoices/types.ts`, `InvoiceDoc`): emisor, receptor, letra, clase (factura, NC, ND, no fiscal), punto de venta y número, fecha, concepto y período facturado, condición de venta, moneda y cotización, renglones (código, cantidad, unidad, precio, bonificación, alícuota), totales (neto gravado, no gravado, exento, IVA por alícuota, otros tributos y percepciones), transparencia fiscal, CAE o CAEA con vencimiento, QR, comprobantes asociados, pagos, leyendas y copia. Cada origen tiene su adaptador: `invoiceFromTicket` para las ventas (reusa los datos que ya arma el detalle de la venta, incluida la factura de ARCA); la plataforma armará el mismo `InvoiceDoc` desde su ledger.
+2. **Requisitos legales en un solo lugar** (`lib/invoices/legal.ts`): `legalRequirements(doc, formato)` lista los campos obligatorios según tipo (RG 1415, RG 4291, RG 4892, Ley 27.743 y RG 5614, RG 5700 para identificar al consumidor final desde $10.000.000). `invoiceView` arma la vista (filas con la clave legal que cubren) y **todos los modelos la dibujan** marcando cada campo con `data-legal`. Los tests recorren cada modelo por cada tipo (A, B, C, NC, no fiscal, servicios con período, moneda extranjera) y fallan si falta uno. Comprobante sin CAE: no fiscal, letra X y "Documento no válido como factura".
+3. **Modelos**: A4 Clásico (el de la referencia), Moderno, Minimal, Corporativo (banda de color) y Ejecutivo (columna lateral); ticket 80/58 mm Clásico, Compacto y Destacado, más "Simple (anterior)", que es el ticket de bloques de siempre. Componentes React sin hooks y con estilos inline (`components/invoices`): el mismo render sirve para la vista previa, la impresión del navegador, el PDF A4 (html2canvas + jsPDF, una página por hoja, Original y Duplicado), el PDF adjunto del email y el PNG, y se puede renderizar en el servidor para la plataforma. El QR va siempre.
+4. **Integración sin romper lo que existe**: una plantilla propia activa (bloques, lienzo o HTML) sigue mandando igual que antes. Sin plantilla propia, el comprobante usa el modelo de ticket elegido (por defecto Clásico; "Simple" devuelve el de antes). "Descargar A4" genera la factura A4 del motor, salvo con plantilla propia activa. El email adjunta el ticket o la hoja A4 según la opción. "Mostrar logo en el ticket" apagado también vale para los modelos de ticket.
+5. **Personalización por negocio en `tenant_branding`** (Configuración › Ticket › Diseño de facturas y comprobantes), con vista previa en vivo de cada tipo con datos de ejemplo: `invoice_style jsonb` (modelos, color de resalte de la marca o propio, logo de la marca, propio para comprobantes o ninguno, sello, leyendas, nombre de fantasía, medios de pago, número interno, copias A4 y formato del email) e `iibb` y `activity_start` (datos fiscales obligatorios que no existían). Las policies RLS de `tenant_branding` (lectura del tenant, escritura owner/manager) cubren las columnas nuevas. Si la migración no está aplicada, la lectura falla en silencio y todo usa los defaults.
+6. **Defaults de marca**: color y logo de la tienda (`tenant_branding.accent` y `logo_url`); si no tiene, los de Ninja POS (`public/brand/oficial/ninja-pos-*`). Para la plataforma, el logo de Ninja Soft (`PLATFORM_DEFAULTS`). El texto en color se oscurece si el color elegido no tiene contraste sobre blanco.
+
+### Clasificación de plan (CLAUDE.md §6)
+
+- **BASE**: el modelo Clásico A4 y ticket y "Simple", con el color y el logo de la marca, los datos fiscales del emisor (IIBB, inicio de actividades), las opciones de medios de pago, número interno, copias y formato del email. Cumplir la normativa no depende del plan.
+- **OPTIONAL `tickets_pro` (Pro+)**: los modelos Moderno, Minimal, Corporativo, Ejecutivo, Compacto y Destacado, el color y el logo propios del comprobante y las leyendas propias. No se crea una key nueva: `tickets_pro` ya es "personalización de comprobantes" y se actualiza su descripción y su copy.
+- **OPTIONAL `comprobantes_sin_sello` (Business y Enterprise)**: ocultar el sello "Un software de Ninja Soft". Key nueva en `features` (grupo tickets, `is_basic=false`), marcada en `plans.limits.modules`, copy en `lib/saas/featureInfo.ts`; la comparación de planes la toma de la matriz.
+- **Gating real**: trigger `tenant_branding_assert_invoice_style` (BEFORE INSERT/UPDATE, sólo cuando cambia `invoice_style`) con `invoice_style_needs_pro(jsonb)`, espejo exacto de `invoiceStyleNeedsPro`. El render también vuelve al default lo que el plan ya no incluye (`clampInvoiceStyle`).
+
+### Consecuencias
+
+- Migración `20261112100000_comprobantes_plantillas` (sin aplicar).
+- `fiscal_documents` ahora se lee con `doc_tipo`, `doc_nro` y `concepto`, y el detalle de la venta trae documento, condición IVA y domicilio del cliente para el receptor. `saleTaxTicket` devuelve el IVA por alícuota para discriminarlo en la A.
+- Deuda: la nota de crédito de una devolución todavía se imprime con el ticket de devolución; el motor ya la soporta (comprobante asociado) y falta conectarla a la ventana de devolución y al detalle fiscal. Las líneas de venta no guardan código ni alícuota propios: en la A se usa la alícuota única de la venta (o "Varias") y el código es el número de renglón. Los textos legales son orientativos: validar con el contador del negocio.

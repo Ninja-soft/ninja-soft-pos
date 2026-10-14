@@ -467,9 +467,14 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Tickets ─────────────────────────────────────────────────────────────────
   tickets_pro: {
-    desc: "Diseñador avanzado de tickets: personaliza el formato del comprobante (logo, leyendas, layout, QR).",
-    impact: "Sin esto el ticket usa el formato estándar, sin personalización avanzada.",
+    desc: "Personalización de comprobantes: modelos de factura A4 (Moderno, Minimal, Corporativo, Ejecutivo) y de ticket (Compacto, Destacado), color de resalte y logo propios para comprobantes, leyendas propias y el diseñador de tickets (bloques y HTML).",
+    impact: "Sin esto se usan los modelos Clásicos de factura A4 y ticket, con el color y el logo de tu marca, que igual cumplen todo lo que pide ARCA.",
     minPlan: "Pro",
+  },
+  comprobantes_sin_sello: {
+    desc: "Comprobantes sin sello NinjaSoft: oculta la leyenda “Un software de Ninja Soft” y su logo del pie de facturas, notas de crédito y tickets.",
+    impact: "Sin esto los comprobantes llevan al pie el sello “Un software de Ninja Soft”.",
+    minPlan: "Business",
   },
   email_comprobantes: {
     desc: "Envío de comprobantes por email: manda el ticket/comprobante de la venta al correo del cliente.",

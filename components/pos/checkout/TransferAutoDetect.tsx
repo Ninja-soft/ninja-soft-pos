@@ -177,7 +177,7 @@ export function TransferAutoDetect({
                 className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-xs transition hover:bg-muted"
               >
                 <span className="min-w-0 truncate">
-                  {new Date(c.at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(c.at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}
                   {c.payer_name ? ` · ${c.payer_name}` : ""}
                   {c.payer_doc ? ` · ${c.payer_doc}` : ""}
                 </span>
@@ -211,7 +211,7 @@ export function TransferAutoDetect({
         <p className="font-medium text-foreground">Esperando transferencia de {formatCurrency(watch.amount)}...</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {watch.tolerance > 0 ? `Acepta ± ${formatCurrency(watch.tolerance)}. ` : ""}
-          Hasta las {new Date(watch.expires_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}.
+          Hasta las {new Date(watch.expires_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}.
           {watch.mode === "auto_close" ? " La venta se cierra sola al llegar." : ""}
         </p>
         {error && <p className="mt-1 text-xs text-warning">{error}</p>}

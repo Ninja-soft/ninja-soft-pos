@@ -21,6 +21,7 @@ interface TaxLineLike {
   jurisdiction: string | null;
   rate: number | null;
   amount: number;
+  base?: number | null;
 }
 
 const fmtRate = (r: number | null) => (r == null ? "" : ` ${String(Number(r)).replace(".", ",")} %`);
@@ -37,8 +38,13 @@ export function saleTaxTicket(sale: unknown, lines: TaxLineLike[]) {
     .map((l) => ({ name: perceptionLabel(l), amount: Number(l.amount) }));
   const iva = Number(s.iva_total ?? 0) || 0;
   const others = Number(s.internal_tax_total ?? 0) || 0;
+  // ADR-112: IVA por alícuota para discriminarlo en la factura A.
+  const ivaLines = lines
+    .filter((l) => l.kind === "iva")
+    .map((l) => ({ rate: Number(l.rate ?? 0), base: Number(l.base ?? 0), amount: Number(l.amount) }));
   return {
     perceptions,
     transparency: s.cbte_letter === "B" && iva + others > 0 ? { iva, others } : null,
+    ivaLines,
   };
 }

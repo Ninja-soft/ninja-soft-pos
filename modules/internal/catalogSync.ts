@@ -188,6 +188,10 @@ export interface DedupeStoreStats {
 }
 
 export interface DedupeStats {
+  /** Todavía no hay cálculo guardado (lo hace un cron cada 30 min). */
+  pending: boolean;
+  /** Cuándo se calcularon los números (caché de catalog_stats_cache). */
+  computedAt: string | null;
   items: number;
   itemsGlobales: number;
   itemsPorTienda: number;
@@ -207,6 +211,8 @@ export function parseDedupeStats(raw: unknown): DedupeStats {
   const ofertasTienda = num(r.ofertas_tienda);
   const ahorro = Math.max(ofertasTienda - items, 0);
   return {
+    pending: r.pending === true,
+    computedAt: typeof r.computed_at === "string" ? r.computed_at : null,
     items,
     itemsGlobales: num(r.items_globales),
     itemsPorTienda: num(r.items_por_tienda),

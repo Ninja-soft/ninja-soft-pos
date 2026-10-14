@@ -415,10 +415,43 @@ export function billingErrorMessage(e: unknown): string {
     not_staff: "La persona no es del staff.",
     tenant_not_found: "No encontramos el negocio.",
     ledger_ingest_failed: "No se pudo registrar el pago en la cuenta corriente.",
+    // F20-8 (ADR-120)
+    use_mode_change: "La modalidad se cambia con Cambiar modalidad.",
+    same_mode: "El negocio ya está en esa modalidad.",
+    mode_change_pending: "Ya hay un pase a Mercado Pago esperando el primer débito.",
+    invalid_billing_mode: "Elegí una modalidad.",
+    billing_mode_not_mp: "El negocio no paga con Mercado Pago: pasalo a débito automático desde Cambiar modalidad.",
+    invalid_cbu: "El CBU o CVU no es válido (revisá los 22 dígitos).",
+    invalid_alias: "El alias tiene que tener de 6 a 20 letras, números, puntos o guiones.",
+    cbu_or_alias_required: "Cargá un CBU, un CVU o un alias.",
+    invalid_cuit: "El CUIT tiene que tener 11 dígitos.",
+    bank_account_not_found: "No encontramos esa cuenta.",
+    invalid_email: "Hay un email con formato inválido.",
+    too_many_recipients: "Hasta 5 emails por lista.",
+    invalid_notice_terms: "Revisá los días del aviso.",
+    nothing_to_collect: "El negocio no tiene saldo pendiente.",
+    no_recipients: "El negocio no tiene a quién mandarle el aviso.",
+    report_not_pending: "Esa transferencia ya fue resuelta.",
+    report_not_found: "No encontramos esa transferencia.",
+    duplicate_proof: "Ese comprobante ya fue informado.",
+    invalid_proof: "No pudimos leer el comprobante. Volvé a subirlo.",
+    too_many_pending: "Tenés muchas transferencias sin verificar. Esperá a que las revisemos.",
+    invalid_overrides: "Revisá los límites.",
+    invalid_value: "Los límites son números enteros desde 0.",
+    invalid_key: "Ese límite no existe.",
+    subscription_not_found: "El negocio no tiene suscripción.",
+    code_taken: "Ya existe un código con ese texto.",
+    forbidden_lifetime: "Sólo un super admin puede crear códigos vitalicios.",
+    invalid_code: "El código va de 4 a 32 letras, números, guiones o guion bajo.",
+    plan_not_found: "Ese plan no está disponible.",
+    invalid_validity: "La fecha de fin no puede ser anterior a la de inicio.",
+    "check constraint": "Revisá los datos: hay un valor fuera de rango.",
   };
-  for (const [k, v] of Object.entries(map)) if (raw.includes(k)) return v;
+  // La clave más larga primero: "forbidden_exempt" antes que "forbidden".
+  const entries = Object.entries(map).sort((x, y) => y[0].length - x[0].length);
+  for (const [k, v] of entries) if (raw.includes(k)) return v;
   if (/function .* does not exist|Could not find the function/i.test(raw)) {
-    return "Falta aplicar la migración de cobranza (20261113100100).";
+    return "Falta aplicar la migración de cobranza.";
   }
   return raw || "No se pudo completar la acción.";
 }

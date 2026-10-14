@@ -25,6 +25,7 @@ import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
 import { AccountStatementCard } from "@/components/dashboard-team/AccountStatementCard";
+import { HowToPayCard } from "@/components/dashboard-team/HowToPayCard";
 import {
   MiniStat,
   QuickActions,
@@ -512,6 +513,13 @@ export default async function DashboardTeamPage() {
       {canManage && (
         <div id="estado-de-cuenta" className="mt-10 scroll-mt-24">
           <AccountStatementCard />
+        </div>
+      )}
+
+      {/* ── Cómo pagar (F20-8): cuenta corriente, Ya transferí y pase a MP ── */}
+      {canManage && (
+        <div id="como-pagar" className="mt-10 scroll-mt-24">
+          <HowToPayCard tenantId={tenant.id} />
         </div>
       )}
     </PageContainer>

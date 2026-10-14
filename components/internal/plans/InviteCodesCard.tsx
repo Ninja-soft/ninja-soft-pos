@@ -18,6 +18,24 @@ import {
   useInviteCodeMutations,
 } from "@/modules/internal/hooks";
 import type { InviteCode, InviteKind } from "@/modules/internal/api";
+import { billingErrorMessage } from "@/lib/billing/ledger";
+
+// Tipo del código en la tabla: vitalicio, días de prueba o cuenta corriente
+// (F20-8 · ADR-120: plazo de pago y descuento opcional, sin checkout de MP).
+function kindLabel(c: InviteCode): string {
+  if (c.kind === "lifetime") return "Vitalicio";
+  if (c.kind === "trial_days") return `Prueba de ${c.trial_days ?? 0} días`;
+  const parts = [`Cuenta corriente, paga a ${c.due_days ?? 0} días`];
+  if (c.discount_percent) {
+    parts.push(
+      `${Number(c.discount_percent).toLocaleString("es-AR")} % de descuento${
+        c.discount_months ? ` por ${c.discount_months} ${c.discount_months === 1 ? "mes" : "meses"}` : ""
+      }`,
+    );
+  }
+  if (c.billing_cycle === "yearly") parts.push("anual");
+  return parts.join(" · ");
+}
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
@@ -86,6 +104,11 @@ export function InviteCodesCard() {
   const [maxUses, setMaxUses] = useState("");
   const [validFrom, setValidFrom] = useState("");
   const [validUntil, setValidUntil] = useState("");
+  const [dueDays, setDueDays] = useState("10");
+  const [discount, setDiscount] = useState("");
+  const [discountMonths, setDiscountMonths] = useState("");
+  const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +119,11 @@ export function InviteCodesCard() {
     setMaxUses("");
     setValidFrom("");
     setValidUntil("");
+    setDueDays("10");
+    setDiscount("");
+    setDiscountMonths("");
+    setCycle("monthly");
+    setNotes("");
   }, [open, plans]);
 
   async function handleCreate() {
@@ -112,6 +140,21 @@ export function InviteCodesCard() {
       toast({ title: "Días inválidos", variant: "error" });
       return;
     }
+    const dueNum = kind === "account" ? Number(dueDays) : null;
+    if (kind === "account" && (!Number.isInteger(dueNum) || (dueNum ?? -1) < 0 || (dueNum ?? 61) > 60)) {
+      toast({ title: "El plazo de pago va de 0 a 60 días", variant: "error" });
+      return;
+    }
+    const discNum = kind === "account" && discount.trim() !== "" ? Number(discount.replace(",", ".")) : null;
+    if (discNum !== null && (!Number.isFinite(discNum) || discNum <= 0 || discNum > 100)) {
+      toast({ title: "El descuento va de 0,01 a 100 %", variant: "error" });
+      return;
+    }
+    const monthsNum = discNum !== null && discountMonths.trim() !== "" ? Number(discountMonths) : null;
+    if (monthsNum !== null && (!Number.isInteger(monthsNum) || monthsNum < 1 || monthsNum > 60)) {
+      toast({ title: "La duración del descuento va de 1 a 60 meses", variant: "error" });
+      return;
+    }
     const maxNum = maxUses.trim() === "" ? null : Number(maxUses);
     if (maxNum !== null && (!Number.isFinite(maxNum) || maxNum <= 0)) {
       toast({ title: "Cupo de usos inválido", variant: "error" });
@@ -126,13 +169,18 @@ export function InviteCodesCard() {
         max_uses: maxNum,
         valid_from: validFrom || null,
         valid_until: validUntil || null,
+        due_days: dueNum,
+        discount_percent: discNum,
+        discount_months: monthsNum,
+        billing_cycle: kind === "account" ? cycle : null,
+        notes: notes.trim() || null,
       });
       toast({ title: "Código creado", variant: "success" });
       setOpen(false);
     } catch (e) {
       toast({
         title: "No se pudo crear",
-        description: e instanceof Error ? e.message : undefined,
+        description: billingErrorMessage(e),
         variant: "error",
       });
     }
@@ -161,7 +209,7 @@ export function InviteCodesCard() {
       <SectionHeader
         title="Códigos de invitación"
         icon={Ticket}
-        description="Se canjean al registrarse: dan acceso vitalicio o más días de prueba sobre un plan."
+        description="Se canjean al registrarse: dan acceso vitalicio, más días de prueba o dejan al negocio en cuenta corriente (paga por transferencia, sin Mercado Pago)."
         actions={
           <Button size="sm" onClick={() => setOpen(true)}>
             <Plus size={15} /> Nuevo código
@@ -192,7 +240,7 @@ export function InviteCodesCard() {
                   compact
                   icon={Ticket}
                   title="Todavía no hay códigos"
-                  description="Creá uno para regalar acceso vitalicio o extender la prueba de un plan."
+                  description="Creá uno para regalar acceso vitalicio, extender la prueba o dar de alta un cliente en cuenta corriente."
                   action={
                     <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
                       <Plus size={15} /> Nuevo código
@@ -210,8 +258,9 @@ export function InviteCodesCard() {
                     <div className="font-mono text-sm font-semibold text-foreground">{c.code}</div>
                     <div className="text-xs text-muted-foreground md:hidden">{planName}</div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                    {c.kind === "lifetime" ? "Vitalicio" : `Prueba de ${c.trial_days ?? 0} días`}
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <span className="block max-w-[260px]">{kindLabel(c)}</span>
+                    {c.notes && <span className="block max-w-[260px] truncate text-xs">{c.notes}</span>}
                   </td>
                   <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
                     {planName}
@@ -307,8 +356,15 @@ export function InviteCodesCard() {
               options={[
                 { value: "lifetime", label: "Vitalicio" },
                 { value: "trial_days", label: "Días de prueba" },
+                { value: "account", label: "Cuenta corriente" },
               ]}
             />
+            {kind === "account" && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                El negocio queda activo en cuenta corriente: no pasa por el checkout de Mercado Pago, recibe el aviso de
+                cobro con los datos bancarios y paga por transferencia.
+              </p>
+            )}
           </div>
 
           <div>
@@ -340,6 +396,61 @@ export function InviteCodesCard() {
               value={days}
               onChange={(e) => setDays(e.target.value)}
             />
+          )}
+
+          {kind === "account" && (
+            <div className="space-y-4 rounded-lg bg-muted/50 p-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Plazo de pago (días)"
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={dueDays}
+                  onChange={(e) => setDueDays(e.target.value)}
+                  hint="Desde el inicio de cada período"
+                />
+                <div>
+                  <span className="mb-2 block text-sm font-medium text-muted-foreground">Ciclo</span>
+                  <Segmented<"monthly" | "yearly">
+                    value={cycle}
+                    onChange={setCycle}
+                    fill
+                    aria-label="Ciclo de facturación"
+                    options={[
+                      { value: "monthly", label: "Mensual" },
+                      { value: "yearly", label: "Anual" },
+                    ]}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Descuento % (opcional)"
+                  inputMode="decimal"
+                  placeholder="Sin descuento"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value.replace(/[^\d,.]/g, ""))}
+                />
+                <Input
+                  label="Durante (meses)"
+                  type="number"
+                  min="1"
+                  max="60"
+                  placeholder="Siempre"
+                  value={discountMonths}
+                  disabled={discount.trim() === ""}
+                  onChange={(e) => setDiscountMonths(e.target.value)}
+                />
+              </div>
+              <Input
+                label="Nota interna (opcional)"
+                value={notes}
+                maxLength={300}
+                placeholder="Ej. Cadena Norte, acuerdo con Juan"
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
           )}
 
           <Input

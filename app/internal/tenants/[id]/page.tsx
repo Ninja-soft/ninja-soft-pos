@@ -10,6 +10,7 @@ import {
   Check,
   CreditCard,
   ExternalLink,
+  Flag,
   Landmark,
   LayoutGrid,
   ScrollText,
@@ -22,6 +23,8 @@ import {
 import { BillingCard } from "@/components/internal/BillingCard";
 import { BillingProfileInternalCard } from "@/components/internal/BillingProfileInternalCard";
 import { PlanCard } from "@/components/internal/PlanCard";
+import { TenantLimitsCard } from "@/components/internal/TenantLimitsCard";
+import { SearchField } from "@/components/ui/SearchField";
 import { TenantLedgerTab } from "@/components/internal/billing/TenantLedgerTab";
 import { ImpersonationCard } from "@/components/internal/ImpersonationCard";
 import { Tenant360Card } from "@/components/internal/Tenant360Card";
@@ -40,7 +43,8 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Skeleton, SkeletonLines } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
-import { createClient } from "@/lib/supabase/client";
+import { createCheckoutLink } from "@/modules/billing/collection";
+import { billingErrorMessage } from "@/lib/billing/ledger";
 import {
   useInternalTenants,
   useTenantFlags,
@@ -56,7 +60,6 @@ import {
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { TenantProfileCard } from "@/components/internal/TenantProfileCard";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
-import { appOrigin } from "@/lib/site";
 import {
   EDITABLE_STATUSES,
   lifecycleErrorMessage,
@@ -126,10 +129,14 @@ export default function InternalTenantDetail({
   const { data: notes, isLoading: notesLoading } = useTenantNotes(params.id);
   const noteMut = useTenantNoteMutations(params.id);
   const [noteBody, setNoteBody] = useState("");
+  const [flagQuery, setFlagQuery] = useState("");
+  const visibleFlags = (flags ?? []).filter((f) => {
+    const q = flagQuery.trim().toLowerCase();
+    return !q || f.key.toLowerCase().includes(q) || (f.description ?? "").toLowerCase().includes(q);
+  });
   const { setStatus, setFlag, setIndustry } = useInternalMutations(
     params.id,
   );
-  const supabase = createClient();
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   // Nivel del staff actual (para mostrar/ocultar impersonation y acciones).
@@ -145,27 +152,20 @@ export default function InternalTenantDetail({
   const giftAi = useGiftAiAddon(params.id);
 
   // Genera el link de suscripción (preapproval) de Mercado Pago para el tenant.
+  // Si el negocio está en cuenta corriente, la Edge responde
+  // billing_mode_not_mp: el pase a MP se pide con Cambiar modalidad (ADR-120).
   const checkout = useMutation({
     mutationFn: async () => {
-      const backUrl =
-        typeof window !== "undefined"
-          ? `${appOrigin()}/internal/tenants/${params.id}`
-          : undefined;
-      const { data, error } = await supabase.functions.invoke(
-        "mp_subscription_checkout",
-        { body: { tenant_id: params.id, back_url: backUrl } },
-      );
-      if (error) throw error;
-      const res = data as { init_point?: string; error?: string };
-      if (res?.error || !res?.init_point) throw new Error(res?.error ?? "sin_link");
-      return res.init_point;
+      const res = await createCheckoutLink(params.id);
+      if (!res.url) throw new Error(res.error ?? "sin_link");
+      return res.url;
     },
     onSuccess: (u) => {
       setCheckoutUrl(u);
       toast({ title: "Link de cobro generado", variant: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: "No se pudo generar", description: e.message, variant: "error" }),
+      toast({ title: "No se pudo generar", description: billingErrorMessage(e), variant: "error" }),
   });
 
   function wrap(p: Promise<unknown>, ok: string) {
@@ -414,7 +414,7 @@ export default function InternalTenantDetail({
             <section>
               <SectionHeader
                 title="Cobro de suscripción"
-                description="Crea una suscripción mensual en Mercado Pago con la cuenta de NinjaSoft por el plan del negocio. El estado se actualiza solo cuando el cliente paga."
+                description="Crea una suscripción en Mercado Pago con la cuenta de NinjaSoft por el plan del negocio. El estado se actualiza solo cuando el cliente paga. Para pasar un negocio de cuenta corriente a débito automático, usá Cambiar modalidad en Cuenta corriente."
               />
               <Card className="mt-3">
                 <CardContent className="flex flex-wrap items-center gap-3 p-5">
@@ -595,13 +595,32 @@ export default function InternalTenantDetail({
           </>
         )}
 
-        {/* ── Configuración: feature flags ──────────────────────────────── */}
+        {/* ── Configuración: límites del plan y feature flags ───────────── */}
         {tab === "config" && (
+          <>
+          <TenantLimitsCard tenantId={params.id} />
           <section>
             <SectionHeader
               title="Feature flags"
-              description="Overrides por negocio. Si no hay override, vale el default de la plataforma."
+              icon={Flag}
+              description="Interruptores técnicos por negocio. Si no hay override, vale el default de la plataforma."
+              actions={
+                flags && flags.length > 0 ? (
+                  <Badge tone="neutral">
+                    {flags.filter((f) => f.enabled !== null && f.enabled !== undefined).length} con override
+                  </Badge>
+                ) : undefined
+              }
             />
+            {flags && flags.length > 6 && (
+              <SearchField
+                value={flagQuery}
+                onValueChange={setFlagQuery}
+                placeholder="Buscar flag"
+                aria-label="Buscar feature flag"
+                className="mt-3 sm:max-w-xs"
+              />
+            )}
             <Card className="mt-3 overflow-hidden">
               {flagsLoading ? (
                 <div className="p-5">
@@ -609,9 +628,11 @@ export default function InternalTenantDetail({
                 </div>
               ) : !flags || flags.length === 0 ? (
                 <EmptyState compact icon={SlidersHorizontal} title="Sin feature flags" />
+              ) : visibleFlags.length === 0 ? (
+                <EmptyState compact icon={SlidersHorizontal} title="Ningún flag coincide" />
               ) : (
                 <ul className="divide-y divide-border">
-                  {flags.map((f) => {
+                  {visibleFlags.map((f) => {
                     const effective = f.enabled ?? f.defaultEnabled;
                     return (
                       <li
@@ -628,6 +649,9 @@ export default function InternalTenantDetail({
                           {f.description && (
                             <div className="text-xs text-muted-foreground">{f.description}</div>
                           )}
+                          <div className="text-xs text-muted-foreground">
+                            Default de la plataforma: {f.defaultEnabled ? "activo" : "apagado"}
+                          </div>
                         </div>
                         <Switch
                           checked={effective}
@@ -646,6 +670,7 @@ export default function InternalTenantDetail({
               )}
             </Card>
           </section>
+          </>
         )}
 
         {/* ── Auditoría del negocio (timeline filtrable, ADR-073) ───────── */}

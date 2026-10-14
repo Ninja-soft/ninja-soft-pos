@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bike, CalendarDays, Hourglass, PackageCheck, Pause, Utensils } from "lucide-react";
+import { Bike, CalendarDays, FileSignature, Hourglass, PackageCheck, Pause, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -98,6 +98,8 @@ import { accentVars } from "@/components/pos/ui/posStyles";
 import type { PriceOverrideTarget } from "@/components/pos/screen/PosDialogs";
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
+import { useQuoteOrigin } from "@/modules/quotes/useQuoteOrigin";
+import { QuoteCartButton } from "@/components/quotes/QuoteCartButton";
 import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
 import { cartToSaleLines, usePosSale } from "@/modules/pos/screen/usePosSale";
 import { formatCurrency } from "@/lib/utils/format";
@@ -172,6 +174,8 @@ const IntentWaitDialog = dynamic(() => loadPausedDialogs().then((m) => m.IntentW
 const PausedOnCloseDialog = dynamic(() => loadPausedDialogs().then((m) => m.PausedOnCloseDialog), { ssr: false });
 const SwitchSaleDialog = dynamic(() => loadPausedDialogs().then((m) => m.SwitchSaleDialog), { ssr: false });
 const PausedSalesPanel = dynamic(() => loadPausedPanel().then((m) => m.PausedSalesPanel), { ssr: false });
+// ADR-122: "Presupuesto" junto a Cobrar (chunk aparte, se baja al abrirlo).
+const QuoteFromCartModal = dynamic(() => import("@/components/quotes/QuoteFromCartModal").then((m) => m.QuoteFromCartModal), { ssr: false });
 const PosShortcutsHelp = dynamic(() => loadShortcutsHelp().then((m) => m.PosShortcutsHelp), { ssr: false });
 // Cobros en espera (ADR-048): la pestaña se abre como hoja dentro del POS.
 const PendingChargesPanel = dynamic(
@@ -397,6 +401,9 @@ function PosPageInner() {
   const quickSale = myTenantFetched ? verticalHas(myTenant?.industry, "quickSale") : (boot?.quickSale ?? false);
   // Descuentos manuales: feature de plan (Pro). Sin ella el campo queda bloqueado.
   const discountGate = useFeatureGate("descuentos", "Descuentos");
+  // ADR-122: presupuestos (OPTIONAL Pro+; la base lo exige en quote_save).
+  const quoteGate = useFeatureGate("presupuestos", "Presupuestos");
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const { data: posSettings, isFetched: posSettingsFetched } = usePosSettings();
   const offerWarranty = posSettings?.offerWarranty ?? true;
   // La oferta de garantía sólo aparece con algo en el carrito: los planes se
@@ -636,6 +643,8 @@ function PosPageInner() {
 
   // ── Orígenes (turno, recompra, mesa, delivery) y precios ────────────────────
   const origins = usePosOrigins({ setCustomer, priceFor });
+  // ADR-122: cobro de un presupuesto (/pos?quote=<id>).
+  const quoteOrigin = useQuoteOrigin({ setCustomer });
   // Lista con la que se vende (misma regla que el servidor): la usan las promos por lista.
   const appliedList = useMemo(() => {
     const w = priceResolver.world;
@@ -1124,6 +1133,7 @@ function PosPageInner() {
       setOfferedWarrantyId("");
       pricing.clearCoupon();
       origins.afterSale();
+      quoteOrigin.afterSale(saleId);
       // ADR-106: si era una venta pausada retomada, queda completada.
       pauseRef.current.onSaleDone(saleId);
       flashPaidScreen(change);
@@ -1138,6 +1148,7 @@ function PosPageInner() {
       setOfferedWarrantyId("");
       pricing.clearCoupon();
       origins.afterSale();
+      quoteOrigin.afterSale(null);
       pauseRef.current.onSaleDone(null);
       flashPaidScreen(change);
       setOfflineTicket(entry);
@@ -1491,6 +1502,13 @@ function PosPageInner() {
       autoPrint={autoPrint}
       onAutoPrint={setAutoPrint}
       compact={preset === "caja_rapida"}
+      quoteAction={
+        <QuoteCartButton
+          disabled={lines.length === 0 || origins.tableActive || origins.deliveryActive || quoteOrigin.active}
+          locked={quoteGate.locked}
+          onClick={() => quoteGate.run(() => setQuoteOpen(true))}
+        />
+      }
       actionsSlot={
         <SaleActions
           disabled={lines.length === 0}
@@ -1584,6 +1602,15 @@ function PosPageInner() {
           text={`${origins.pendingAppt.customers?.name ? `Cliente: ${origins.pendingAppt.customers.name}. ` : ""}${apptAvailable > 0 ? `Seña cobrada: ${formatCurrency(apptAvailable)} (se descuenta sola). ` : ""}Sumá productos extra si hace falta y cobrá normalmente.`}
           exitLabel="Cancelar cobro del turno"
           onExit={origins.exitAppointmentMode}
+        />
+      )}
+      {quoteOrigin.active && (
+        <ModeBanner
+          icon={<FileSignature size={18} />}
+          title={`Cobrando el presupuesto N° ${quoteOrigin.label}`}
+          text={`${quoteOrigin.quote?.customer_name ? `Cliente: ${quoteOrigin.quote.customer_name}. ` : ""}Se cargó con los precios acordados. Al cobrar, el presupuesto queda convertido en esta venta.`}
+          exitLabel="Salir sin cobrar"
+          onExit={quoteOrigin.exit}
         />
       )}
       {origins.reservation && (
@@ -1816,6 +1843,23 @@ function PosPageInner() {
       </MountWhenOpened>
 
       {discountGate.modal}
+      {quoteGate.modal}
+      {quoteOpen && (
+        <QuoteFromCartModal
+          open={quoteOpen}
+          onOpenChange={setQuoteOpen}
+          lines={lines}
+          discountTotal={discountTotal}
+          customer={customer}
+          servicePeriod={hasServiceLines ? (servicePeriod ?? defaultServicePeriod()) : null}
+          businessName={myTenant?.name ?? "nuestro negocio"}
+          onSaved={() => {
+            clear();
+            setCustomer(null);
+            pricing.clearCoupon();
+          }}
+        />
+      )}
       <MountWhenOpened open={openShiftModal}>
         <OpenShiftModal
           open={openShiftModal}

@@ -108,6 +108,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Se ocultan las garantías en el POS y la ficha del producto; no se registran coberturas.",
     minPlan: "Business",
   },
+  presupuestos: {
+    desc: "Presupuestos de productos y servicios: número propio, validez, condiciones, revisiones, PDF A4 y ticket con tu marca, envío por WhatsApp o email con un link para que el cliente lo acepte, y conversión en venta con un click desde el POS.",
+    impact: "Sin esto no se pueden emitir presupuestos: las cotizaciones se arman fuera del sistema y la venta se carga a mano.",
+    minPlan: "Pro",
+  },
   cuenta_corriente: {
     desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
     impact: "Desactivado, no se puede vender en cuenta corriente ni llevar el saldo deudor de los clientes.",

@@ -43,6 +43,7 @@ import {
   ArrowLeftRight,
   ClipboardList,
   FileText,
+  FileSignature,
   PackageCheck,
   Truck,
   Undo2,
@@ -264,6 +265,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
         { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
+        // Presupuestos (ADR-122): OPTIONAL Pro+, con candado si no está.
+        { href: "/presupuestos", label: "Presupuestos", icon: FileSignature, feature: "presupuestos" },
         // Envíos con etiquetas de logísticas integradas (ADR-103).
         { href: "/envios", label: "Envíos", icon: Send, feature: "envios" },
         { href: "/caja", label: "Caja", icon: Wallet },

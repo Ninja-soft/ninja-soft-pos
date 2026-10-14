@@ -29,6 +29,8 @@ import {
   Utensils,
   Wallet,
   Wrench,
+  FileSignature,
+  Sparkles,
 } from "lucide-react";
 import { ArcaIcon, MercadoLibreIcon, NubceoIcon, type SettingsIcon } from "./brandIcons";
 
@@ -72,7 +74,9 @@ export type SettingsSectionKey =
   | "mercadolibre"
   | "canales-delivery"
   | "facturacion"
-  | "datos-facturacion";
+  | "datos-facturacion"
+  | "presupuestos"
+  | "imagenes-ia";
 
 export type SettingsSectionDef = {
   key: SettingsSectionKey;
@@ -310,6 +314,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "garantias",
         keywords: "garantia extendida prima",
       },
+      // ADR-122: portadas con IA (complemento Asistente IA; la card muestra
+      // el estado del complemento, sin candado de plan).
+      {
+        key: "imagenes-ia",
+        label: "Imágenes con IA",
+        title: "Imágenes con IA",
+        description:
+          "Portadas para tus servicios y productos generadas con IA: automáticas al crear un servicio, con el estilo y el color que elijas.",
+        icon: Sparkles,
+        keywords: "ia inteligencia artificial imagen foto portada icono gemini nano banana estilo prompt servicio",
+      },
       {
         key: "impuestos",
         label: "Impuestos",
@@ -359,6 +374,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: ReceiptText,
         keywords:
           "ticket comprobante factura a4 pdf plantilla diseño modelo ancho 58 80 mm titulo leyenda pie logo qr color sello iibb inicio actividades",
+      },
+      // ADR-122: presupuestos (OPTIONAL Pro+).
+      {
+        key: "presupuestos",
+        label: "Presupuestos",
+        title: "Presupuestos",
+        description: "Numeración, validez, condiciones por defecto y firma de aceptación de tus presupuestos.",
+        icon: FileSignature,
+        feature: "presupuestos",
+        keywords: "presupuesto cotizacion cotizar validez condiciones firma aceptacion numeracion",
       },
       {
         key: "facturacion",
@@ -525,6 +550,10 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   comprobante: "tickets",
   fiscal: "impuestos",
   iva: "impuestos",
+  presupuesto: "presupuestos",
+  cotizaciones: "presupuestos",
+  ia: "imagenes-ia",
+  "portadas-ia": "imagenes-ia",
   percepciones: "impuestos",
   padrones: "impuestos",
 };

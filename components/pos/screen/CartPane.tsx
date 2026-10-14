@@ -314,6 +314,8 @@ export interface CartSummaryProps {
   serviceSlot?: React.ReactNode;
   /** Pausar y Limpiar la venta en curso (ADR-106). */
   actionsSlot?: React.ReactNode;
+  /** ADR-122: botón "Presupuesto" junto a Cobrar (guarda sin cobrar). */
+  quoteAction?: React.ReactNode;
   compact?: boolean;
 }
 
@@ -537,12 +539,14 @@ export function CartSummary(p: CartSummaryProps) {
               ))}
             </div>
           )}
+          <div className="flex gap-1.5">
+          {p.quoteAction}
           <button
             type="button"
             disabled={!p.canCheckout || p.checkingOut}
             onClick={() => p.onCheckout()}
             data-tour="pos-cobrar"
-            className={cn("flex h-14 w-full items-center justify-between rounded-lg px-4 text-[17px] font-semibold", POS_CTA)}
+            className={cn("flex h-14 min-w-0 flex-1 items-center justify-between rounded-lg px-4 text-[17px] font-semibold", POS_CTA)}
           >
             <span className="flex items-center gap-2">
               {p.checkingOut && <Spinner size={16} className="!border-white/30 !border-t-[color:var(--pos-on)]" />}
@@ -555,17 +559,22 @@ export function CartSummary(p: CartSummaryProps) {
               </kbd>
             </span>
           </button>
+          </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={p.shiftPending ? undefined : p.onOpenShift}
-          aria-busy={p.shiftPending || undefined}
-          className={cn("flex h-14 w-full items-center justify-center gap-2 rounded-lg text-[15px] font-semibold", POS_QUIET)}
-        >
-          <Lock size={18} className="text-muted-foreground" aria-hidden />
-          Abrí la caja para vender
-        </button>
+        <div className="flex gap-1.5">
+          {/* El presupuesto no necesita la caja abierta. */}
+          {p.quoteAction}
+          <button
+            type="button"
+            onClick={p.shiftPending ? undefined : p.onOpenShift}
+            aria-busy={p.shiftPending || undefined}
+            className={cn("flex h-14 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg text-[15px] font-semibold", POS_QUIET)}
+          >
+            <Lock size={18} className="text-muted-foreground" aria-hidden />
+            Abrí la caja para vender
+          </button>
+        </div>
       )}
 
       {!p.compact && (

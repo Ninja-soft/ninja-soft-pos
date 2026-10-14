@@ -4289,7 +4289,7 @@ La primera corrida completa del catálogo maestro (14/10) terminó "ok" con 683.
 
 ## ADR-120: Suscripción por cuenta corriente (F20-8): cuentas de cobro con el editor de Transferencia, avisos idempotentes por cuota, "Ya transferí" verificado por el staff, cambio de modalidad sin cobros dobles y códigos de invitación de cuenta corriente
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-cta-cte`; migración `20261115200000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar) · **Hito:** H134 (F20-8) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §9.3, §10.1, §12.3, §14.5, §22 y §24 · **Base:** ADR-110, ADR-115 (ledger y modalidad), ADR-117, ADR-055 (cuentas de Transferencia), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 118 y 119 pueden estar tomadas por ramas abiertas.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-cta-cte`; migración `20261116100000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar) · **Hito:** H134 (F20-8) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §9.3, §10.1, §12.3, §14.5, §22 y §24 · **Base:** ADR-110, ADR-115 (ledger y modalidad), ADR-117, ADR-055 (cuentas de Transferencia), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 118 y 119 pueden estar tomadas por ramas abiertas.
 
 ### Contexto
 

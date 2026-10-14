@@ -2,7 +2,7 @@
 
 // =============================================================================
 // Cobro por cuenta corriente (F20-8 · ADR-120): tipos y hooks sobre las RPC de
-// 20261115200000_cobranza_cuenta_corriente y las Edges de suscripción de
+// 20261116100000_cobranza_cuenta_corriente y las Edges de suscripción de
 // Mercado Pago (mp_subscription_pause / mp_subscription_checkout).
 // Todo pasa por RPC security definer: el front nunca escribe tablas.
 // =============================================================================

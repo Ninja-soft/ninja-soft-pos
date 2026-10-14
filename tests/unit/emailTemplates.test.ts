@@ -153,7 +153,7 @@ describe("artefactos generados", () => {
     const sql = read("supabase/migrations/20261011160000_emails_diseno_ninja_soft.sql");
     expect(sql).not.toContain(EM_DASH);
     // Las plantillas que se suman después de ese rediseño se siembran en su
-    // propia migración (p. ej. las de cobranza de 20261115200000, ADR-120):
+    // propia migración (p. ej. las de cobranza de 20261116100000, ADR-120):
     // las aplicadas no se reescriben.
     const later = readdirSync(resolve(ROOT, "supabase/migrations"))
       .filter((f) => f > "20261011160000" && f.endsWith(".sql"))

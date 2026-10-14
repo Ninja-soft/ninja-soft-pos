@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261115200000_cobranza_cuenta_corriente  (F20-8 · ADR-120)
+-- 20261116100000_cobranza_cuenta_corriente  (F20-8 · ADR-120)
 --
 -- Suscripción por cuenta corriente con NinjaSoft (spec docs/40-cobranza-saas.md
 -- §9.3, §10.1, §12.3, §14.5 y las decisiones del dueño de §22, que mandan) y el

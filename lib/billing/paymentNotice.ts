@@ -2,7 +2,7 @@
 // Cuenta corriente de la plataforma (F20-8 · ADR-120, spec docs/40 §9.3, §10.1,
 // §12.3 y §22 #13): avisos de cobro, datos bancarios y comprobantes.
 //
-// Funciones puras, espejo de la migración 20261115200000_cobranza_cuenta_corriente:
+// Funciones puras, espejo de la migración 20261116100000_cobranza_cuenta_corriente:
 //   · noticeKey          → platform_notice_key (qué aviso toca hoy y su clave
 //                          de idempotencia)
 //   · bankBlockHtml      → platform_bank_block_html (bloque de cuentas del email)

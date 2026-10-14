@@ -1,7 +1,7 @@
 // @vitest-environment node
 // =============================================================================
 // F20-8 (ADR-120): suscripción por cuenta corriente (migración
-// 20261115200000_cobranza_cuenta_corriente).
+// 20261116100000_cobranza_cuenta_corriente).
 //   · Cuentas para cobrar: sólo super_admin las carga; el negocio no lee la
 //     tabla (las ve por my_billing_account).
 //   · "Ya transferí": sólo el dueño informa, en la carpeta de su negocio; otro

@@ -1573,7 +1573,7 @@ Código en `feat/cobranza-ledger`, decisión [ADR-115](./17-decision-log.md). Mi
 
 ## 24. Estado de F20-8: suscripción por cuenta corriente (2026-10-14)
 
-Código en `feat/cobranza-cta-cte`, decisión [ADR-120](./17-decision-log.md). Migración **sin aplicar**: `20261115200000_cobranza_cuenta_corriente`. Edges cambiadas **sin desplegar**: `mp_billing_webhook` y `mp_subscription_checkout`.
+Código en `feat/cobranza-cta-cte`, decisión [ADR-120](./17-decision-log.md). Migración **sin aplicar**: `20261116100000_cobranza_cuenta_corriente`. Edges cambiadas **sin desplegar**: `mp_billing_webhook` y `mp_subscription_checkout`.
 
 **Construido**
 

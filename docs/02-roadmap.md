@@ -1459,7 +1459,7 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Refacturación, también por letra equivocada.
   - [ ] Bonificaciones: sobre el próximo cargo, crédito a cuenta, meses sin cargo y condonación. Todas con topes por nivel y aprobación.
   - [ ] Baja con devolución y botón de arrepentimiento.
-- [ ] **H134 · F20-8: suscripción por cuenta corriente.** Código en `feat/cobranza-cta-cte` ([ADR-120](./17-decision-log.md)); migración `20261115200000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar.
+- [ ] **H134 · F20-8: suscripción por cuenta corriente.** Código en `feat/cobranza-cta-cte` ([ADR-120](./17-decision-log.md)); migración `20261116100000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar.
   - [x] Avisos de cobro periódicos (`statement_frequency`): una vez por cuota, cada N días hasta que pague o resumen mensual, días antes del vencimiento y destinatarios por negocio; cron diario `platform-payment-notices` y envío manual.
   - [x] Cuentas bancarias con CBU validado, cargadas con el editor de Transferencia (logos de bancos), y email y WhatsApp para comprobantes.
   - [x] "Ya transferí" con comprobante, más la bandeja de verificación del staff.

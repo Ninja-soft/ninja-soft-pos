@@ -92,11 +92,15 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
 
   const lines: InvoiceLine[] = items.map((it, i) => {
     // ADR-116: unidad del servicio y texto debajo del nombre.
-    const detailLines = serviceLineBlocks({
-      detail: it.line_detail,
-      clarifications: it.line_clarifications,
-      note: it.line_note,
-    });
+    const detailLines = [
+      // ADR-122: tipo del servicio, primero.
+      ...(it.service_type_name ? [{ bullet: false, text: `Tipo: ${it.service_type_name}` }] : []),
+      ...serviceLineBlocks({
+        detail: it.line_detail,
+        clarifications: it.line_clarifications,
+        note: it.line_note,
+      }),
+    ];
     return {
       code: String(i + 1).padStart(3, "0"),
       description: it.product_name,

@@ -63,6 +63,8 @@ export interface SampleTicketData {
     line_detail?: string | null;
     line_clarifications?: string[] | null;
     line_note?: string | null;
+    /** ADR-122: tipo del servicio al venderlo (Informe, Visita...). */
+    service_type_name?: string | null;
     /** ADR-119: foto del producto (data URL precargada) y su versión en monocromo. */
     image_url?: string | null;
     image_mono?: string | null;

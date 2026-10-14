@@ -24,6 +24,7 @@ export function serviceOfItem(item: object): {
   line_detail?: string;
   line_clarifications?: string[];
   line_note?: string;
+  service_type_name?: string;
 } {
   const it = item as Row;
   const cl = Array.isArray(it.line_clarifications)
@@ -34,5 +35,7 @@ export function serviceOfItem(item: object): {
     ...(str(it.line_detail) ? { line_detail: it.line_detail as string } : {}),
     ...(cl.length > 0 ? { line_clarifications: cl } : {}),
     ...(str(it.line_note) ? { line_note: it.line_note as string } : {}),
+    // ADR-122: tipo del servicio (sale_items.service_type_name).
+    ...(str(it.service_type_name) ? { service_type_name: it.service_type_name as string } : {}),
   };
 }

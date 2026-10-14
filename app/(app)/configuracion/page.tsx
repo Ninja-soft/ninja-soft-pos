@@ -228,6 +228,15 @@ const BranchLogoField = dynamic(
   () => import("@/components/config/BranchBranding").then((m) => m.BranchLogoField),
   { loading },
 );
+// ADR-122: presupuestos e imágenes con IA.
+const QuoteSettingsCard = dynamic(
+  () => import("@/components/quotes/QuoteSettingsCard").then((m) => m.QuoteSettingsCard),
+  { loading },
+);
+const AiImageSettingsCard = dynamic(
+  () => import("@/components/ai/AiImageSettingsCard").then((m) => m.AiImageSettingsCard),
+  { loading },
+);
 const StoreGroupsCard = dynamic(
   () => import("@/components/config/BranchBranding").then((m) => m.StoreGroupsCard),
   { loading },
@@ -462,6 +471,10 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // Datos fiscales para la factura de NinjaSoft (F20-3): dueño o encargado.
     case "datos-facturacion":
       return <BillingProfileSettings />;
+    case "presupuestos":
+      return <QuoteSettingsCard />;
+    case "imagenes-ia":
+      return <AiImageSettingsCard />;
   }
 }
 

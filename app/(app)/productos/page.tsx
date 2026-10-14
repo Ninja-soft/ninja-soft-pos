@@ -36,6 +36,7 @@ import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { BrandsModal } from "@/components/products/BrandsModal";
 import { ClarificationsModal } from "@/components/services/ClarificationsModal";
+import { useServiceTypes } from "@/modules/services/types";
 import { useCatalogMode } from "@/modules/services/hooks";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
 import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
@@ -104,6 +105,9 @@ export default function ProductosPage() {
   const [pluPromptOpen, setPluPromptOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
+  // ADR-122: filtro por tipo de servicio (catálogo con servicios).
+  const [serviceTypeId, setServiceTypeId] = useState("");
+  const { data: serviceTypes = [] } = useServiceTypes(catalogMode !== "productos");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -120,7 +124,7 @@ export default function ProductosPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, categoryId, brandId, pageSize]);
+  }, [debouncedSearch, categoryId, brandId, serviceTypeId, pageSize]);
 
   const { data: categories } = useCategories();
   const { data: brands } = useBrands();
@@ -130,13 +134,14 @@ export default function ProductosPage() {
     search: debouncedSearch,
     categoryId: categoryId || null,
     brandId: brandId || null,
+    serviceTypeId: serviceTypeId || null,
   });
   const products = data?.rows ?? [];
   const total = data?.total ?? 0;
   const { remove } = useProductMutations();
   const setFavorite = useSetFavorite();
   const { data: pluSettings } = usePluSettings();
-  const noFilters = !debouncedSearch && !categoryId && !brandId;
+  const noFilters = !debouncedSearch && !categoryId && !brandId && !serviceTypeId;
 
   // Stock por sucursal (F17 · H94): sólo con 2+ sucursales y la feature. Con
   // una sola sucursal la lista queda como siempre.
@@ -385,6 +390,21 @@ export default function ProductosPage() {
               </option>
             ))}
           </select>
+          {catalogMode !== "productos" && serviceTypes.length > 0 && (
+            <select
+              value={serviceTypeId}
+              onChange={(e) => setServiceTypeId(e.target.value)}
+              aria-label="Tipo de servicio"
+              className="h-11 min-w-[11rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
+            >
+              <option value="">Todos los tipos</option>
+              {serviceTypes.map((t) => (
+                <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Promo de Tiendita: solo cuando el tenant NO tiene ningún producto
@@ -418,7 +438,7 @@ export default function ProductosPage() {
               )}
               {!isLoading && !isError && products.length === 0 && (
                 <TableStateRow colSpan={5}>
-                  {search || categoryId || brandId ? (
+                  {search || categoryId || brandId || serviceTypeId ? (
                     <EmptyState
                       compact
                       icon={Search}

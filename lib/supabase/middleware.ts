@@ -57,7 +57,9 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/c/") ||
-    pathname.startsWith("/pagar/");
+    pathname.startsWith("/pagar/") ||
+    // Link de aceptación de un presupuesto (ADR-122): lo abre el cliente.
+    pathname.startsWith("/presupuesto/");
 
   // Inactividad (8 h): la marca vive en una cookie que escribe el
   // InactivityGuard. Se corta acá, antes de renderizar, para que una sesión

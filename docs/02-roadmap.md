@@ -31,6 +31,8 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
+| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | ⚪ Diseñada (spec [`40-cobranza-saas.md`](./40-cobranza-saas.md), ADR-110); facturar depende de la CUIT de NinjaSoft |
+| **F21** | Participación del staff y gastos recurrentes | a definir | ⚪ Futuro, no construir aún (diseño en spec §20; depende de F20) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1385,6 +1387,90 @@ Objetivo: gestionar envíos con etiquetas de logísticas integradas (Andreani, C
 - [ ] **H124 · Fase 4: impresión local y operación.** ZPL por el conector local (F10) sin diálogo del navegador, manifiesto diario por carrier y sucursal, retiro programado y reportes de costo de envío.
   - [ ] *Criterio:* 50 etiquetas en lote en una Zebra sin diálogo; manifiesto PDF del día por carrier y sucursal.
 
+### F20 · Cobranza SaaS (facturación de plataforma, cuenta corriente y KPIs)
+
+Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin planillas. Abarca la factura con CAE automática al cobrar (o a los X días), los datos fiscales del cliente verificados contra el padrón de ARCA, las notas de crédito y de débito, la cuenta corriente con avisos de cobro y transferencia, los punitorios con condonación, las promesas de pago, una escalera de mora configurable, la conciliación con Mercado Pago, la historia del cliente y KPIs con definición exacta. Spec: [`40-cobranza-saas.md`](./40-cobranza-saas.md). Decisión: [ADR-110](./17-decision-log.md). No es una feature de plan: es operación de la plataforma, y lo que ve el cliente es BASE. Bloqueo externo para facturar: la CUIT de NinjaSoft, su condición fiscal, el punto de venta y el certificado.
+
+- [ ] **H125 · F20-0a: dashboard interno con KPIs correctos.**
+  - [ ] Hay que corregir el cálculo de los KPI sobre los datos de hoy:
+    - excluir las cuentas lifetime, exentas y de prueba (`tenants.is_test`);
+    - plan anual = `yearly_price_ars / 12`;
+    - sumar addons y descuentos;
+    - conversión trial → pago por cohorte;
+    - churn calculado desde la auditoría en lugar de `updated_at`.
+  - [ ] Formato compacto y tooltip con la definición en cada tarjeta. "Riesgo de cobro" y "Riesgo de uso" pasan a ser listas separadas, con criterio explícito (spec §15).
+  - [ ] *Criterio:* MRR, churn y conversión coinciden con una planilla calculada a mano sobre un fixture; ninguna tarjeta se desborda a 360 px ni a 1280 px.
+- [ ] **H126 · F20-0b: "Pagos de plataforma" rediseñada.**
+  - [ ] Logos oficiales de Mercado Pago, y separación entre la cuenta que cobra y la app OAuth.
+  - [ ] Validación de formato. El Client ID tiene que ser numérico; hoy tiene cargado un email.
+  - [ ] Clave del webhook y validación de `x-signature` en `mp_billing_webhook`.
+  - [ ] Ambiente, "Probar conexión" (`/users/me`), URL del webhook para copiar y últimos eventos.
+  - [ ] *Criterio:* un webhook con firma inválida se descarta y queda en Salud de webhooks; "Probar conexión" muestra la cuenta y el ambiente.
+- [ ] **H127 · F20-1: ledger económico de la plataforma.**
+  - [ ] Tablas nuevas:
+    - `tenant_billing_terms`, con las modalidades MP, cuenta corriente, manual y exento;
+    - `platform_charges` y sus líneas;
+    - `platform_ledger`;
+    - `platform_allocations`;
+    - `platform_payments`, con backfill desde `billing_records`;
+    - promesas y notas de gestión.
+  - [ ] El webhook de MP genera el cargo, el pago y la imputación, de forma idempotente.
+  - [ ] `subscription_billing_total()` aplica los descuentos.
+  - [ ] `tenants.status` pasa a ser un espejo de `subscriptions.status`.
+  - [ ] Estado de cuenta en el panel interno y en el del cliente.
+  - [ ] *Criterio:* 5 entregas del mismo webhook dejan un solo pago y un solo cargo; RLS probada (`rls_internal_scope_leaks()` = 0, ningún dueño ve el ledger de otro negocio).
+- [ ] **H128 · F20-2: snapshots de MRR y KPIs de cobranza.**
+  - [ ] `platform_mrr_snapshots` diario.
+  - [ ] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación) y NRR.
+  - [ ] Cobrado bruto y neto, deuda vencida con aging, efectividad y DSO.
+- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.**
+  - [ ] `tenant_billing_profiles` con historia.
+  - [ ] Consulta de `ws_sr_constancia_inscripcion` con cache y rate limit.
+  - [ ] El panel del cliente muestra la letra que le va a corresponder.
+  - [ ] Carga manual de respaldo y lista de perfiles sin verificar.
+  - [ ] *Criterio:* un CUIT RI trae razón social, condición y domicilio y muestra "Vas a recibir Factura A"; sin la CUIT de NinjaSoft se puede cargar a mano y queda marcado.
+- [ ] **H130 · F20-4: factura de plataforma con CAE (emisión manual).**
+  - [ ] `platform_issuer_profile` y `platform_documents`, con sus líneas y eventos.
+  - [ ] Worker `platform_invoicing` sobre `_shared/arca`.
+  - [ ] PDF en el servidor con `pdf-lib` y Storage privado.
+  - [ ] Checklist de producción.
+  - [ ] *Criterio:* 3 facturas, 1 NC y 1 ND aprobadas en homologación; un timeout incierto no duplica número.
+- [ ] **H131 · F20-5: facturación automática.**
+  - [ ] Interruptor general y por negocio; factura inmediata o a X días (0 a 10); disparo al cobrar o al generar el cargo.
+  - [ ] Cron `platform-billing-run`.
+  - [ ] Adjuntos en la cola de emails; factura y recibo por email con el PDF.
+  - [ ] *Criterio:* un pago de MP en sandbox termina en un email con la factura adjunta, sin intervención; un contracargo dentro de la demora cancela la factura programada.
+- [ ] **H132 · F20-6: plantillas de factura configurables.**
+  - [ ] Editor en internal con vista previa en vivo y versiones inmutables.
+  - [ ] Plantillas de recibo, aviso de cobro y estado de cuenta.
+  - [ ] Los bloques fiscales obligatorios no se pueden ocultar.
+- [ ] **H133 · F20-7: notas de crédito y débito, refacturación y bonificaciones.**
+  - [ ] NC y ND con `CbtesAsoc` y tope de montos.
+  - [ ] Refacturación, también por letra equivocada.
+  - [ ] Bonificaciones: sobre el próximo cargo, crédito a cuenta, meses sin cargo y condonación. Todas con topes por nivel y aprobación.
+  - [ ] Baja con devolución y botón de arrepentimiento.
+- [ ] **H134 · F20-8: suscripción por cuenta corriente.**
+  - [ ] Avisos de cobro periódicos (`statement_frequency`).
+  - [ ] Cuentas bancarias con CBU validado.
+  - [ ] "Ya transferí" con comprobante, más la bandeja de verificación del staff.
+  - [ ] Pagar el saldo con Checkout Pro.
+- [ ] **H135 · F20-9: punitorios, mora y promesas.**
+  - [ ] Políticas de punitorios con tasa, gracia, cálculo diario o por mes empezado, tope y mínimo.
+  - [ ] Condonar o saldar punitorios, y ND al cobrarlos.
+  - [ ] Escalera de mora configurable (reemplaza `saas-dunning`): restricción blanda, promesas de pago y feriados.
+  - [ ] *Criterio:* una deuda vencida a 45 días da el punitorio exacto del simulador; la mitad condonada sale con su NC y queda en el timeline.
+- [ ] **H136 · F20-10 y F20-11: conciliación, prorrateo y cobranza 360.**
+  - [ ] Conciliación diaria con MP, contracargos y duplicados.
+  - [ ] Prorrateo de upgrades, cambios de ciclo y addons.
+  - [ ] Timeline unificado, lista de cobranza con cobrador asignado, permisos finos y export XLSX.
+
+### F21 · Participación del staff y gastos (futuro, no construir aún)
+
+Objetivo: cada persona del staff tiene un porcentaje de lo que factura NinjaSoft en el mes, ve ese porcentaje y cuánto va a recibir el mes próximo. Los gastos recurrentes (servidores, dominio, etc.) se descuentan en proporción a la participación, con exenciones por persona. **Va al roadmap pero no se construye todavía:** depende de que F20 (H127, H128, H136) dé el cobrado neto mensual confiable, y de que el dueño responda las preguntas de la spec §20.6. Diseño en [`40-cobranza-saas.md` §20](./40-cobranza-saas.md#20-participación-del-staff-y-gastos-futuro-no-construir-aún).
+
+- [ ] **H137 · Participaciones con vigencia y gastos recurrentes con exenciones.** Tablas `staff_shares`, `platform_expenses` y `platform_expense_exemptions`.
+- [ ] **H138 · Liquidación mensual inmutable y "Mi participación" con estimado del mes próximo.** Tablas `payout_runs` y `payout_lines`.
+
 ---
 
 ## TX — Mejoras transversales (UX y datos)
@@ -1562,7 +1648,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F5** | 23/49 | 10 | 16 | 47% | 57% |
 | **F6** | 55/62 | 4 | 3 | 89% | 92% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
-| **F8** | 18/56 | 21 | 17 | 32% | 51% |
+| **F8** | 18/57 | 22 | 17 | 32% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 31/47 | 13 | 3 | 66% | 80% |
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
@@ -1574,8 +1660,10 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 42/113 | 53 | 18 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
+| **F20** | 0/61 | 0 | 61 | 0% | 0% |
+| **F21** | 0/2 | 0 | 2 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 582/1050 | 301 | 167 | 55% | 70% |
+| **Total** | 582/1114 | 302 | 230 | 52% | 66% |
 <!-- roadmap-progress:end -->
 
 ---

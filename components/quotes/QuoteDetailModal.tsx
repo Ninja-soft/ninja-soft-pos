@@ -4,7 +4,7 @@
 // de comprobantes, PDF, impresión, envío por WhatsApp, email o link público
 // de aceptación, cambios de estado, revisiones, duplicar, editar y convertir
 // en venta (abre el POS con el carrito cargado).
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -82,6 +82,9 @@ export function QuoteDetailModal({
   const { data: revisions = [] } = useQuoteRevisions(quoteId, historyOpen);
   const a4Ref = useRef<HTMLDivElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
+  // El portal de las hojas fuera de pantalla sólo en el cliente (sin desfase de hidratación).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const eff = q ? effectiveQuoteStatus(q.status, q.valid_until) : null;
   const label = q ? quoteNumberLabel(q.pto_vta, q.number) : "";
@@ -155,7 +158,7 @@ export function QuoteDetailModal({
     ) : null;
 
   const offscreen =
-    q && typeof document !== "undefined"
+    q && mounted
       ? createPortal(
           <>
             <div ref={a4Ref} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
@@ -184,20 +187,20 @@ export function QuoteDetailModal({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-muted-foreground">Presupuesto</p>
-                <p className="font-display text-lg font-bold tabular-nums">N° {label}</p>
+                <p className="flex flex-wrap items-center gap-2 font-display text-lg font-bold tabular-nums">
+                  N° {label}
+                  {eff && (
+                    <Badge tone={QUOTE_STATUS_TONE[eff]} className="rounded-md font-sans">
+                      {QUOTE_STATUS_LABEL[eff]}
+                    </Badge>
+                  )}
+                </p>
                 <p className="truncate text-sm text-muted-foreground">
                   {q.customer_name || "Consumidor final"} · válido hasta el {fmtDate(q.valid_until)}
                   {q.version > 1 ? ` · revisión ${q.version}` : ""}
                 </p>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                {eff && (
-                  <Badge tone={QUOTE_STATUS_TONE[eff]} className="rounded-md">
-                    {QUOTE_STATUS_LABEL[eff]}
-                  </Badge>
-                )}
-                <span className="font-price text-xl font-bold tabular-nums">{formatCurrency(q.total)}</span>
-              </div>
+              <span className="self-end font-price text-xl font-bold tabular-nums">{formatCurrency(q.total)}</span>
             </div>
           ) : undefined
         }

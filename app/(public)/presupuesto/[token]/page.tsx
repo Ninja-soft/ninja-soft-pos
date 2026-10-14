@@ -221,10 +221,10 @@ export default function PublicQuotePage() {
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {mode === "reject" ? (
                       <>
-                        <button type="button" disabled={busy} onClick={() => respond(false)} className="h-12 flex-1 rounded-lg text-sm font-semibold" style={{ background: "#1b1f2a", color: "#fff" }}>
+                        <button type="button" disabled={busy} onClick={() => respond(false)} className="h-12 w-full rounded-lg text-sm font-semibold sm:flex-1" style={{ background: "#1b1f2a", color: "#fff" }}>
                           Confirmar rechazo
                         </button>
-                        <button type="button" disabled={busy} onClick={() => setMode("idle")} className="h-12 flex-1 rounded-lg text-sm font-semibold" style={{ background: "#eef0f3" }}>
+                        <button type="button" disabled={busy} onClick={() => setMode("idle")} className="h-12 w-full rounded-lg text-sm font-semibold sm:flex-1" style={{ background: "#eef0f3" }}>
                           Volver
                         </button>
                       </>
@@ -234,12 +234,12 @@ export default function PublicQuotePage() {
                           type="button"
                           disabled={busy}
                           onClick={() => respond(true)}
-                          className="h-12 flex-1 rounded-lg text-sm font-semibold"
+                          className="h-12 w-full rounded-lg text-sm font-semibold sm:flex-1"
                           style={{ background: pal.accent, color: pal.accentInk }}
                         >
                           Aceptar presupuesto
                         </button>
-                        <button type="button" disabled={busy} onClick={() => setMode("reject")} className="h-12 flex-1 rounded-lg text-sm font-semibold" style={{ background: "#eef0f3" }}>
+                        <button type="button" disabled={busy} onClick={() => setMode("reject")} className="h-12 w-full rounded-lg text-sm font-semibold sm:flex-1" style={{ background: "#eef0f3" }}>
                           Rechazar
                         </button>
                       </>

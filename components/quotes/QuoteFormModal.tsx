@@ -346,7 +346,7 @@ export function QuoteFormModal({
                     <div className="flex items-start gap-2">
                       <span
                         className={cn(
-                          "mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-fg-6",
+                          "mt-1 hidden h-7 w-7 shrink-0 place-items-center rounded-md bg-fg-6 sm:grid",
                           it.is_service ? "text-ninja-flameSoft" : "text-muted-foreground",
                         )}
                         aria-hidden
@@ -370,8 +370,8 @@ export function QuoteFormModal({
                           />
                         )}
                         {it.line_note && !expanded && <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs text-muted-foreground">{it.line_note}</p>}
-                        <div className="mt-2 grid grid-cols-[auto_1fr_1fr] items-center gap-2 sm:grid-cols-[auto_8rem_8rem_1fr]">
-                          <div className="flex items-center rounded-md bg-fg-4">
+                        <div className="mt-2 grid grid-cols-2 items-end gap-2 sm:grid-cols-[auto_8rem_8rem_1fr]">
+                          <div className="col-span-2 flex w-max items-center rounded-md bg-fg-4 sm:col-span-1">
                             <button type="button" className="grid h-9 w-9 place-items-center rounded-md hover:bg-fg-10" aria-label="Menos" onClick={() => patch(it.key, { quantity: Math.max(0.001, +(it.quantity - 1).toFixed(3)) || 1 })}>
                               <Minus size={14} />
                             </button>
@@ -397,7 +397,7 @@ export function QuoteFormModal({
                             Descuento
                             <input type="number" inputMode="decimal" min={0} step="0.01" value={it.discount || ""} placeholder="0" onChange={(e) => patch(it.key, { discount: Math.max(0, Number(e.target.value) || 0) })} className={smallNum} />
                           </label>
-                          <p className="col-span-3 text-right font-price text-sm font-semibold tabular-nums sm:col-span-1">
+                          <p className="col-span-2 text-right font-price text-sm font-semibold tabular-nums sm:col-span-1 sm:self-center">
                             {formatCurrency(lineSubtotal(it))}
                           </p>
                         </div>

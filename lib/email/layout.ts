@@ -65,6 +65,8 @@ export interface EmailLayoutOpts {
   intro: string;
   /** Filas de datos clave (etiqueta, valor) en una tarjeta suave. */
   rows?: Array<[string, string]>;
+  /** Bloque HTML extra debajo de las filas (p. ej. datos bancarios). */
+  extra?: string;
   /** Botón de acción principal. */
   cta?: { href: string; label: string };
   /** Nota chica debajo del botón (HTML confiable). */
@@ -164,6 +166,10 @@ export function emailLayout(o: EmailLayoutOpts): string {
     ? `<tr><td bgcolor="#ffffff" style="background:#ffffff;padding:28px 40px 0">${infoRows(o.rows!)}</td></tr>`
     : "";
 
+  const extra = o.extra
+    ? `<tr><td bgcolor="#ffffff" style="background:#ffffff;padding:20px 40px 0">${o.extra}</td></tr>`
+    : "";
+
   const closing =
     `<tr><td align="center" bgcolor="#ffffff" style="background:#ffffff;padding:${o.cta || o.note ? "32px" : "4px"} 40px 44px;text-align:center;border-radius:0 0 20px 20px">` +
     (o.cta ? ctaButton(o.cta.href, o.cta.label) : "") +
@@ -182,6 +188,7 @@ export function emailLayout(o: EmailLayoutOpts): string {
     header() +
     hero +
     rows +
+    extra +
     closing +
     footer(reason) +
     `</table></td></tr></table></body></html>`

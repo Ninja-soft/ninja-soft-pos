@@ -146,6 +146,23 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // F20-8 (ADR-120): un negocio en cuenta corriente, manual o exento no genera
+  // un débito automático salvo que el staff haya pedido el pase a Mercado Pago
+  // (pending_mode). Así nunca hay dos medios cobrando a la vez. Sin la
+  // migración (columna inexistente) la consulta falla y se sigue como antes.
+  const { data: terms, error: termsErr } = await admin
+    .from("tenant_billing_terms")
+    .select("billing_mode, pending_mode")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!termsErr && terms) {
+    const mode = (terms as { billing_mode?: string | null }).billing_mode ?? null;
+    const pending = (terms as { pending_mode?: string | null }).pending_mode ?? null;
+    if (mode && mode !== "mp_subscription" && pending !== "mp_subscription") {
+      return fail("billing_mode_not_mp", 409, { mode });
+    }
+  }
+
   // Access Token de la cuenta de NinjaSoft.
   const { data: plat, error: platErr } = await admin
     .from("platform_secrets")

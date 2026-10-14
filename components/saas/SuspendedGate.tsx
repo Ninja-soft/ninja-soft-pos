@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   fetchOwnerBillingSummary,
   startOwnerSubscriptionCheckout,
+  ACCOUNT_MODE_CHECKOUT_MESSAGE,
 } from "@/modules/saas/subscriptionBilling";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -61,8 +62,10 @@ export function SuspendedGate({
     onSuccess: (initPoint) => {
       window.location.href = initPoint;
     },
-    onError: () =>
-      toast({ title: "No se pudo iniciar el pago", variant: "error" }),
+    onError: (e: Error) =>
+      e.message === "billing_mode_not_mp"
+        ? toast({ title: ACCOUNT_MODE_CHECKOUT_MESSAGE, variant: "info" })
+        : toast({ title: "No se pudo iniciar el pago", variant: "error" }),
   });
 
   async function signOut() {

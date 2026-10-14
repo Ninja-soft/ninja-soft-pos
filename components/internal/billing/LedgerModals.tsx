@@ -10,7 +10,6 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
-import { Select } from "@/components/ui/Select";
 import { Callout } from "@/components/ui/Callout";
 import { useToast } from "@/components/ui/Toast";
 import { Info } from "lucide-react";
@@ -358,59 +357,43 @@ export function ChargeModal({
 }
 
 // ── Condiciones de cobro ────────────────────────────────────────────────────
-
-type ModeValue = "auto" | "mp_subscription" | "account" | "manual" | "exempt";
+// La modalidad se cambia con "Cambiar modalidad" (TenantCollectionPanel,
+// ADR-120): cancela o pide el débito automático de Mercado Pago. Acá queda el
+// plazo de pago y, si está exento, el motivo.
 
 export function TermsModal({
   open,
   onOpenChange,
   tenantId,
   statement,
-  access,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tenantId: string;
   statement: BillingStatement;
-  access: BillingAccess | undefined;
+  access?: BillingAccess | undefined;
 }) {
   const { toast } = useToast();
   const m = useLedgerMutations(tenantId);
-  const [mode, setMode] = useState<ModeValue>("auto");
   const [exemptReason, setExemptReason] = useState("");
   const [dueDays, setDueDays] = useState("");
   const [reason, setReason] = useState("");
+  const storedMode = statement.terms?.billing_mode ?? null;
   useResetOnOpen(open, () => {
-    setMode((statement.terms?.billing_mode as ModeValue | null) ?? "auto");
     setExemptReason(statement.terms?.exempt_reason ?? "");
     setDueDays(statement.terms?.due_days != null ? String(statement.terms.due_days) : "");
     setReason("");
   });
-  const isSuper = access?.role === "super_admin";
   const days = dueDays.trim() === "" ? null : Number(dueDays);
   const daysOk = days === null || (Number.isInteger(days) && days >= 0 && days <= 60);
-  const exemptOk = mode !== "exempt" || exemptReason.trim().length >= 5;
-  const can = daysOk && exemptOk && reasonOk(reason) && !m.setTerms.isPending;
-
-  const options = [
-    { value: "auto" as const, label: "Automática", description: "Débito con Mercado Pago si tiene suscripción en MP; si no, manual." },
-    { value: "mp_subscription" as const, label: BILLING_MODE_LABELS.mp_subscription! },
-    { value: "account" as const, label: BILLING_MODE_LABELS.account!, description: "Paga por transferencia contra aviso de cobro." },
-    { value: "manual" as const, label: BILLING_MODE_LABELS.manual!, description: "El staff registra cada pago." },
-    {
-      value: "exempt" as const,
-      label: BILLING_MODE_LABELS.exempt!,
-      description: isSuper ? "No se le generan cargos y no cuenta en los KPIs." : "Sólo un super admin puede marcarlo.",
-      disabled: !isSuper,
-    },
-  ];
+  const can = daysOk && reasonOk(reason) && !m.setTerms.isPending;
 
   async function submit() {
     if (!can) return;
     try {
       await m.setTerms.mutateAsync({
-        mode: mode === "auto" ? null : mode,
-        exemptReason: mode === "exempt" ? exemptReason.trim() : null,
+        mode: storedMode,
+        exemptReason: storedMode === "exempt" ? exemptReason.trim() || null : null,
         dueDays: days,
         reason: reason.trim(),
       });
@@ -425,8 +408,8 @@ export function TermsModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Condiciones de cobro"
-      description="Cómo paga este negocio y cuántos días tiene para pagar cada cargo."
+      title="Plazo de pago"
+      description={`Modalidad: ${storedMode ? BILLING_MODE_LABELS[storedMode] ?? storedMode : "Automática"}. Para cambiarla usá Cambiar modalidad.`}
       className="max-w-lg"
       footer={
         <>
@@ -440,8 +423,7 @@ export function TermsModal({
       }
     >
       <div className="space-y-4">
-        <Select<ModeValue> label="Modalidad" value={mode} options={options} onChange={setMode} />
-        {mode === "exempt" && (
+        {storedMode === "exempt" && (
           <Input
             label="Motivo de la exención"
             value={exemptReason}
@@ -458,7 +440,7 @@ export function TermsModal({
           error={daysOk ? undefined : "De 0 a 60 días"}
           hint="Vacío: usa el plazo por defecto. Rige para los cargos que se generen desde ahora."
         />
-        <ReasonField value={reason} onChange={setReason} placeholder="Ej.: pasa a pagar por transferencia mensual" />
+        <ReasonField value={reason} onChange={setReason} placeholder="Ej.: acordamos 15 días para pagar" />
       </div>
     </Modal>
   );

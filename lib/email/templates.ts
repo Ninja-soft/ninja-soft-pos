@@ -230,6 +230,88 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     }),
   },
 
+  // === Cobranza: cuenta corriente con NinjaSoft (F20-8 · ADR-120) ===========
+  {
+    key: "platform_payment_notice",
+    label: "Aviso de cobro (cuenta corriente)",
+    description:
+      "Lo manda el cron a los negocios en cuenta corriente antes del vencimiento, con los datos bancarios y a dónde mandar el comprobante.",
+    variables: [...BASE_VARS, "monto", "vence", "periodo", "referencia", "datos_bancarios", "comprobante", "link"],
+    defaultSubject: "Aviso de cobro: tu cuota vence el {{vence}}",
+    defaultHtml: emailLayout({
+      preheader: "La cuota de {{negocio}} por {{monto}} vence el {{vence}}.",
+      icon: "🧾",
+      eyebrow: "Aviso de cobro",
+      title: "Tu cuota vence el {{vence}}",
+      intro:
+        "Este es el aviso de cobro de <b>{{negocio}}</b> por <b>{{periodo}}</b>. Podés pagarlo por transferencia a cualquiera de estas cuentas.",
+      rows: [
+        ["Importe", "{{monto}}"],
+        ["Vence", "{{vence}}"],
+        ["Referencia", "{{referencia}}"],
+      ],
+      extra: "{{datos_bancarios}}{{comprobante}}",
+      cta: { href: "{{link}}", label: "Ver mi estado de cuenta" },
+      note: "Si ya transferiste, no hace falta que hagas nada más: lo acreditamos cuando verifiquemos el comprobante.",
+      reason: "Recibiste este email porque tu negocio paga NinjaPos por cuenta corriente.",
+    }),
+  },
+  {
+    key: "platform_transfer_reported",
+    label: "Transferencia informada (para NinjaSoft)",
+    description: "Le avisa al email que recibe los comprobantes que un negocio informó una transferencia.",
+    variables: [...BASE_VARS, "monto", "fecha", "referencia", "link"],
+    defaultSubject: "{{negocio}} informó una transferencia de {{monto}}",
+    defaultHtml: emailLayout({
+      preheader: "Hay un comprobante para verificar en el panel interno.",
+      icon: "📥",
+      eyebrow: "Pago a verificar",
+      title: "{{negocio}} informó una transferencia",
+      intro: "Subió el comprobante desde su panel. Verificalo en Cobranzas para imputar el pago.",
+      rows: [
+        ["Importe", "{{monto}}"],
+        ["Fecha de la transferencia", "{{fecha}}"],
+        ["Referencia", "{{referencia}}"],
+      ],
+      cta: { href: "{{link}}", label: "Verificar el pago" },
+      reason: "Recibiste este email porque es la dirección que recibe los comprobantes de NinjaSoft.",
+    }),
+  },
+  {
+    key: "platform_transfer_approved",
+    label: "Transferencia acreditada",
+    description: "Confirma al negocio que el staff verificó su transferencia y la imputó.",
+    variables: [...BASE_VARS, "monto", "link"],
+    defaultSubject: "Acreditamos tu pago de {{monto}}",
+    defaultHtml: emailLayout({
+      preheader: "Tu transferencia ya está imputada en tu cuenta.",
+      icon: "✅",
+      eyebrow: "Pago acreditado",
+      title: "Recibimos tu pago",
+      intro: "Verificamos tu transferencia de <b>{{monto}}</b> y la imputamos en la cuenta de <b>{{negocio}}</b>. ¡Gracias!",
+      cta: { href: "{{link}}", label: "Ver mi estado de cuenta" },
+      tone: "success",
+    }),
+  },
+  {
+    key: "platform_transfer_rejected",
+    label: "Transferencia rechazada",
+    description: "Avisa al negocio que el comprobante informado no se pudo verificar y por qué.",
+    variables: [...BASE_VARS, "monto", "motivo", "link"],
+    defaultSubject: "No pudimos verificar tu transferencia de {{monto}}",
+    defaultHtml: emailLayout({
+      preheader: "Revisá el comprobante que subiste.",
+      icon: "⚠️",
+      eyebrow: "Comprobante rechazado",
+      title: "No pudimos verificar tu transferencia",
+      intro: "Revisamos el comprobante de <b>{{monto}}</b> que informó <b>{{negocio}}</b> y no lo pudimos acreditar.",
+      rows: [["Motivo", "{{motivo}}"]],
+      cta: { href: "{{link}}", label: "Volver a informar el pago" },
+      note: "Si creés que es un error, respondé este email o escribinos por WhatsApp.",
+      tone: "danger",
+    }),
+  },
+
   // === Transaccionales: addon IA ============================================
   {
     key: "addon_ai_activated",
@@ -389,5 +471,13 @@ export function sampleVars(negocio: string): Record<string, string> {
     precio_anterior: "$ 9.900,00",
     precio_nuevo: "$ 12.500,00",
     catalogo: "Kiosco esencial",
+    periodo: "Plan Pro del 01/11/2026 al 30/11/2026",
+    referencia: "NS-MI-NEGOCIO",
+    datos_bancarios:
+      '<p style="margin:16px 0 8px;font-size:14px;font-weight:700;color:#09051C">Banco Galicia</p><p style="margin:0;font-size:14px;color:#6b7280">Titular Ninja Soft · Alias NINJASOFT.COBROS</p>',
+    comprobante:
+      '<p style="margin:20px 0 0;font-size:14px;color:#6b7280">Mandanos el comprobante a cobranzas@soft.ninja.</p>',
+    fecha: "14/10/2026",
+    motivo: "El importe no coincide con la transferencia.",
   };
 }

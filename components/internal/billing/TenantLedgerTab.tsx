@@ -43,6 +43,7 @@ import {
   StatementSummary,
 } from "@/components/billing/StatementParts";
 import { BonusModal, ChargeModal, RegisterPaymentModal, TermsModal } from "@/components/internal/billing/LedgerModals";
+import { TenantCollectionPanel } from "@/components/internal/billing/TenantCollectionPanel";
 import {
   BILLING_MODE_LABELS,
   BILLING_ROLE_LABELS,
@@ -89,6 +90,20 @@ const ACTION_LABELS: Record<string, string> = {
   subscription_cancelled_on_reanchor: "Baja al vencer",
   trial_extended: "Prueba extendida",
   payment_recorded: "Cobro de Mercado Pago",
+  // F20-8 (ADR-120)
+  billing_mode_change_requested: "Cambio de modalidad",
+  billing_mode_change_applied: "Pasó a débito automático (primer débito)",
+  billing_mode_mp_cancelled: "Débito automático cancelado en Mercado Pago",
+  billing_mode_mp_cancel_failed: "No se pudo cancelar el débito en Mercado Pago",
+  tenant_billing_notice_terms_set: "Aviso de cobro configurado",
+  platform_payment_notice_sent: "Aviso de cobro enviado",
+  platform_payment_notice_manual: "Aviso de cobro enviado a mano",
+  platform_transfer_reported: "Transferencia informada por el negocio",
+  platform_transfer_approved: "Transferencia acreditada",
+  platform_transfer_rejected: "Transferencia rechazada",
+  platform_transfer_report_cancelled: "Transferencia retirada por el negocio",
+  subscription_webhook_ignored: "Aviso de Mercado Pago ignorado (no es la modalidad vigente)",
+  invite_code_redeemed: "Código de invitación canjeado",
 };
 
 function eventDetail(e: TimelineEvent): string | null {
@@ -96,6 +111,7 @@ function eventDetail(e: TimelineEvent): string | null {
   const cents = typeof d.amount_cents === "number" ? d.amount_cents : typeof d.total_cents === "number" ? d.total_cents : null;
   if (cents !== null) return formatCents(cents);
   if (typeof d.is_test === "boolean") return d.is_test ? "Marcado de prueba" : "Vuelve a contar como cliente";
+  if (typeof d.to_mode === "string") return `a ${BILLING_MODE_LABELS[d.to_mode] ?? d.to_mode}`;
   if (typeof d.billing_mode === "string") return BILLING_MODE_LABELS[d.billing_mode] ?? d.billing_mode;
   if (typeof d.plan === "string") return `Plan ${d.plan}`;
   if (typeof d.status === "string") return `Estado ${d.status}`;
@@ -197,7 +213,7 @@ export function TenantLedgerTab({ tenantId, tenantName }: { tenantId: string; te
           )}
           {access?.can_set_terms && (
             <Button variant="secondary" size="sm" onClick={() => setModal("condiciones")}>
-              <Settings2 size={15} /> Condiciones
+              <Settings2 size={15} /> Plazo de pago
             </Button>
           )}
         </div>
@@ -224,6 +240,8 @@ export function TenantLedgerTab({ tenantId, tenantName }: { tenantId: string; te
       )}
 
       {s.overdue_cents > 0 && <AgingBar aging={s.aging} />}
+
+      <TenantCollectionPanel tenantId={tenantId} tenantName={tenantName} access={access} />
 
       <div className="space-y-3">
         <Segmented<View> value={view} onChange={setView} options={VIEWS} iconOnlyOnMobile aria-label="Vista de la cuenta corriente" />

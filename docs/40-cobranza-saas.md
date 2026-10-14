@@ -1,5 +1,6 @@
 # Cobranza SaaS: cómo NinjaSoft cobra, factura y gestiona la deuda de sus clientes
 
+> **Estado:** diseño (2026-10-13). **F20-3 construida** (2026-10-14, ADR-117, sin aplicar ni desplegar): ver §8.3. Ningún punto de este documento está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
 > **Estado:** diseño (2026-10-13). **F20-1 (cuenta corriente) tiene código desde el 2026-10-14 (ADR-115), ver §23.** El resto no está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
 >
 > **Alcance.** Es la cobranza de la **plataforma**: NinjaSoft le cobra la suscripción a cada negocio (tenant). No hay que confundirla con la cuenta corriente que un negocio le da a **sus** clientes (ADR-037, `customer_account_*`) ni con la facturación ARCA de las ventas del negocio (ADR-072, `fiscal_documents`). Este diseño reutiliza patrones y código de las dos, pero sus tablas son otras.
@@ -644,6 +645,18 @@ El interruptor tiene tres niveles: `platform_billing_settings.auto_invoice_enabl
   - la Edge responde `platform_not_configured`;
   - la UI ofrece la carga manual con el aviso "La verificación automática estará disponible pronto";
   - el staff ve la lista de perfiles sin verificar.
+
+### 8.3 Estado de F20-3 (2026-10-14, ADR-117)
+
+Construido en `feat/cobranza-datos-fiscales`. Migración `20261113300000_cobranza_datos_fiscales` (sin aplicar) y Edge `platform_billing` (sin desplegar).
+
+- **Tablas:** `platform_issuer_profile` (emisor por ambiente, una fila activa; condición vacía = letra pendiente), `tenant_billing_profiles` (historia con `valid_from`/`valid_to`, una fila abierta, baja lógica) y `platform_fiscal_lookups` (cache de 30 días y rate limit).
+- **Diferencias con §6.2:** la condición frente al IVA se guarda con el vocabulario de `lib/tax/catalog.ts` (`responsable_inscripto`, `monotributo`, etc.) y el id de ARCA se deriva con `fiscal_condition_arca_id`; `verification` suma `staff` (revisado a mano por el staff, con motivo). Con datos de la empresa la fila guarda el email y, si se verificó, la copia de ese CUIT.
+- **Letra:** `platform_cbte_letter` y `lib/billing/letter.ts` sobre `cbte_letter_infer`. Estados `pending_issuer` (hoy) y `pending_receptor`.
+- **Verificación:** el cliente nunca la declara. `owner_set_billing_profile({use_padron: true})` exige una consulta `ok` del CUIT de los últimos 30 días, grabada por la Edge con `service_role`, y toma sus datos.
+- **Padrón:** parser puro en `supabase/functions/_shared/arca/padron.ts`. Sin certificado de la plataforma la Edge responde `platform_not_configured` sin llamar a ARCA y la UI ofrece la carga manual.
+- **Pantallas:** Configuración › Datos de facturación (dueño o encargado), ficha del negocio › Plan y cobro (staff; edita admin o super_admin con motivo), filtro "Sin datos fiscales verificados" en Negocios y "Emisor de las facturas de NinjaSoft" en `/internal/arca` (super_admin).
+- **Pendiente:** cron de revalidación (F20-11), sumar el permiso "Cobranzas" de F20-1 a `internal_set_billing_profile` y resolver `tenant_billing_terms.send_to`/`cc` (F20-1) frente a `email_facturacion` (ADR-117).
 
 ---
 

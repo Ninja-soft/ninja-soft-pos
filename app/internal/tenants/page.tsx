@@ -15,6 +15,7 @@ import {
   useTenantHealth,
 } from "@/modules/internal/hooks";
 import type { InternalTenant } from "@/modules/internal/api";
+import { useBillingProfilesOverview } from "@/modules/fiscalProfile/hooks";
 import { Button } from "@/components/ui/Button";
 import { CreateTenantModal } from "@/components/internal/CreateTenantModal";
 import { formatRelative } from "@/lib/utils/format";
@@ -41,6 +42,13 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   suspended: "danger",
   cancelled: "neutral",
 };
+// Filtro de datos fiscales para la factura de NinjaSoft (F20-3).
+const FISCAL_OPTIONS = [
+  { value: "", label: "Datos fiscales: todos" },
+  { value: "unverified", label: "Sin datos fiscales verificados" },
+  { value: "verified", label: "Datos fiscales verificados" },
+];
+
 // Filtro extra: negocios dados de baja (baja lógica, ADR-073). Por defecto se
 // ocultan del listado.
 const DELETED_FILTER = "deleted";
@@ -71,6 +79,9 @@ export default function InternalTenantsPage() {
   const [status, setStatus] = useState("");
   const [plan, setPlan] = useState("");
   const [flag, setFlag] = useState("");
+  const [fiscal, setFiscal] = useState("");
+  // Se pide recién al usar el filtro (calcula el perfil de cada negocio).
+  const { data: fiscalMap } = useBillingProfilesOverview(Boolean(fiscal));
   const [range, setRange] = useState<DateRange | undefined>(undefined);
   const { data: flagsCatalog } = useFeatureFlagsCatalog();
   const { data: flagOverrides } = useFlagOverrides(flag || null);
@@ -97,6 +108,11 @@ export default function InternalTenantsPage() {
         if (status && (t.subStatus ?? t.status) !== status) return false;
       }
       if (plan && t.planKey !== plan) return false;
+      if (fiscal) {
+        if (!fiscalMap) return false; // cargando
+        const verified = fiscalMap.get(t.id)?.verified === true;
+        if (fiscal === "unverified" ? verified : !verified) return false;
+      }
       if (flag) {
         // Flag efectivo del tenant: override si existe, si no el default.
         if (!flagOverrides) return false; // cargando overrides
@@ -124,7 +140,7 @@ export default function InternalTenantsPage() {
           .some((v) => (v as string).replace(/\D/g, "").includes(qDigits));
       return textMatch || digitsMatch;
     });
-  }, [tenants, search, status, plan, flag, flagOverrides, range]);
+  }, [tenants, search, status, plan, flag, flagOverrides, range, fiscal, fiscalMap]);
 
   const lastActivity = (id: string) => {
     const h = health?.get(id);
@@ -147,7 +163,7 @@ export default function InternalTenantsPage() {
     { value: "", label: "Todos los flags" },
     ...(flagsCatalog ?? []).map((f) => ({ value: f.key, label: f.key })),
   ];
-  const hasFilters = Boolean(range?.from || flag || status || plan);
+  const hasFilters = Boolean(range?.from || flag || status || plan || fiscal);
 
   const empty =
     tenants?.length === 0 ? (
@@ -183,7 +199,7 @@ export default function InternalTenantsPage() {
       />
       <CreateTenantModal open={createOpen} onOpenChange={setCreateOpen} />
 
-      <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))_auto]">
+      <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))_auto]">
         <SearchField
           value={search}
           onValueChange={setSearch}
@@ -199,6 +215,7 @@ export default function InternalTenantsPage() {
           options={flagOptions}
           onChange={setFlag}
         />
+        <Select aria-label="Datos fiscales" value={fiscal} options={FISCAL_OPTIONS} onChange={setFiscal} />
         <DateRangePicker value={range} onChange={setRange} className="h-11" />
       </div>
       <div className="mt-3 flex min-h-[28px] flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -217,6 +234,7 @@ export default function InternalTenantsPage() {
               setFlag("");
               setStatus("");
               setPlan("");
+              setFiscal("");
             }}
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-foreground transition hover:bg-muted"
           >

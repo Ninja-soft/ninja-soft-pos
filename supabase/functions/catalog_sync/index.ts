@@ -249,7 +249,7 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
           }
           p = { ...p, ...applyPage(st, p.stores, p.totals, page, result) };
           pages++;
-          await saveRun(admin, run.id, p, { current_store: null });
+          await saveRun(admin, run.id, p, { current_store: null, last_error: null });
         } catch (e) {
           if (e instanceof RunStopped) throw e;
           const msg = e instanceof Error ? e.message : String(e);

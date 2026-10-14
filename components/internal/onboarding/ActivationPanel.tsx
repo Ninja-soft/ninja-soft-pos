@@ -12,7 +12,10 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Segmented } from "@/components/ui/Segmented";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SpinnerBlock } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonLines } from "@/components/ui/Skeleton";
+import { SectionHeader } from "@/components/ui/PageHeader";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 import { ReasonDialog } from "@/components/internal/ReasonDialog";
 import { useToast } from "@/components/ui/Toast";
 import { formatRelative } from "@/lib/utils/format";
@@ -43,6 +46,12 @@ const LEVEL_TONE: Record<ActivationLevel, BadgeTone> = {
   trabado: "danger",
 };
 
+const LEVEL_DOT: Record<ActivationLevel, string> = {
+  activado: "bg-success",
+  en_camino: "bg-warning",
+  trabado: "bg-danger",
+};
+
 type Kind = "tour" | "nudge";
 
 export function ActivationPanel() {
@@ -69,10 +78,27 @@ export function ActivationPanel() {
       ? tours?.find((t) => t.id === a.tour_id)?.title ?? "Recorrido"
       : nudges?.find((n) => n.id === a.nudge_id)?.title ?? "Sugerencia";
 
-  if (isLoading) return <SpinnerBlock />;
+  if (isLoading) {
+    return (
+      <div className="space-y-5" aria-busy="true" aria-label="Cargando activación">
+        <div className="grid grid-cols-3 gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="space-y-2 rounded-lg border border-border bg-card p-3 sm:p-4">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-7 w-10" />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <SkeletonLines lines={4} />
+        </div>
+      </div>
+    );
+  }
   if (error || !data) {
     return (
       <EmptyState
+        icon={AlertTriangle}
         title="No se pudo cargar la activación"
         description="Si las migraciones 20261108300100 a 20261108300300 no están aplicadas, esta vista no funciona."
       />
@@ -80,24 +106,26 @@ export function ActivationPanel() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="grid grid-cols-3 gap-3">
         {(Object.keys(levels) as ActivationLevel[]).map((l) => (
-          <div key={l} className="rounded-md border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground">{ACTIVATION_LEVEL_LABELS[l]}</p>
-            <p className="font-display text-2xl font-bold tabular-nums text-foreground">{levels[l]}</p>
+          <div key={l} className="min-w-0 rounded-lg border border-border bg-card p-3 sm:p-4">
+            <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+              <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", LEVEL_DOT[l])} />
+              {ACTIVATION_LEVEL_LABELS[l]}
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold tabular-nums text-foreground">{levels[l]}</p>
           </div>
         ))}
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-foreground">Cuentas trabadas ({stuck.length})</h2>
-          <p className="text-xs text-muted-foreground">
-            Puntaje 0 a 100: puesta en marcha, primera venta, uso de caja, usuarios y actividad de la semana.
-          </p>
-        </div>
-        <div className="w-48">
+        <SectionHeader
+          className="min-w-0 flex-1"
+          title={`Cuentas trabadas (${stuck.length})`}
+          description="Puntaje 0 a 100: puesta en marcha, primera venta, uso de caja, usuarios y actividad de la semana."
+        />
+        <div className="w-full sm:w-48">
           <Input
             label="Sin primera venta a (días)"
             type="number"
@@ -110,9 +138,16 @@ export function ActivationPanel() {
       </div>
 
       {stuck.length === 0 ? (
-        <EmptyState title="Ninguna cuenta trabada" description="Todos los negocios avanzan." compact />
+        <div className="rounded-lg border border-border bg-card">
+          <EmptyState
+            icon={CheckCircle2}
+            title="Ninguna cuenta trabada"
+            description="Todos los negocios avanzan."
+            compact
+          />
+        </div>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border bg-card">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
           {stuck.map((a) => (
             <li key={a.row.tenant_id} className="flex flex-wrap items-start gap-3 p-4">
               <div className="min-w-0 flex-1">
@@ -151,9 +186,9 @@ export function ActivationPanel() {
       )}
 
       {Boolean(assignments?.length) && (
-        <section className="space-y-2">
-          <h2 className="text-base font-semibold text-foreground">Correctivos abiertos</h2>
-          <ul className="divide-y divide-border rounded-md border border-border bg-card">
+        <section className="space-y-3">
+          <SectionHeader title="Correctivos abiertos" />
+          <ul className="divide-y divide-border rounded-lg border border-border bg-card">
             {assignments!.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
                 <div className="min-w-0 flex-1">

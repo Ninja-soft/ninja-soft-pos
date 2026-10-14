@@ -22,9 +22,9 @@ export function Chip({ on, label, onClick }: { on: boolean; label: string; onCli
       aria-pressed={on}
       onClick={onClick}
       className={cn(
-        "rounded-md border px-2.5 py-1 text-xs transition",
+        "min-h-[32px] rounded-md border px-2.5 py-1 text-xs transition",
         on
-          ? "border-ninja-flameSoft bg-ninja-flame/10 text-ninja-flameSoft"
+          ? "choice-on border-transparent font-medium text-foreground"
           : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >

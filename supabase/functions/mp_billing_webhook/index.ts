@@ -40,8 +40,17 @@
 // envía process_pending_emails (cron, por Resend/failover). El subject+html se
 // resuelven de system_email_templates (editable en /internal/emails); si la
 // plantilla no existe, cae a emailHtml() inline (defensivo).
+//
+// Firma (F20-0b · H126): si la plataforma tiene cargada la clave secreta del
+// webhook (platform_secrets.mercadopago.webhook_secret), se valida
+// `x-signature` (_shared/mpSignature.ts) y una firma inválida, vencida o
+// ausente se descarta con 401 y queda en Salud de webhooks. Sin clave cargada
+// se mantiene el comportamiento anterior (se re-consulta el recurso en MP).
+// Cada notificación queda en webhook_events (withWebhookLog, ADR-070).
 // =============================================================================
 import { readJsonLimited } from "../_shared/requestGuard.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
+import { verifyMpSignature } from "../_shared/mpSignature.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
 // preapproval.status -> subscriptions.status
@@ -98,7 +107,7 @@ type AuthorizedPayment = {
   payment?: { id?: string | number; status?: string; status_detail?: string } | null;
 };
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("mercadopago_billing", "mp_billing_webhook", async (req: Request, wh) => {
   const ok = () =>
     new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -112,8 +121,8 @@ Deno.serve(async (req: Request) => {
 
     let topic =
       reqUrl.searchParams.get("type") || reqUrl.searchParams.get("topic") || "";
-    let dataId =
-      reqUrl.searchParams.get("data.id") || reqUrl.searchParams.get("id") || "";
+    const queryDataId = reqUrl.searchParams.get("data.id") || "";
+    let dataId = queryDataId || reqUrl.searchParams.get("id") || "";
     // action de MP (p. ej. "payment.created", "subscription_authorized_payment.created").
     // La idempotencia NO usa el id de notificación: usa el id del recurso de pago
     // (authorized_payment / payment), que es único por evento de cobro (BUG 7).
@@ -135,6 +144,7 @@ Deno.serve(async (req: Request) => {
       }
     }
     if (!dataId) return ok();
+    wh.ref(dataId);
 
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
@@ -143,8 +153,29 @@ Deno.serve(async (req: Request) => {
       .select("secrets")
       .eq("key", "mercadopago")
       .maybeSingle();
-    const accessToken = (plat?.secrets as { access_token?: string } | null)
-      ?.access_token;
+    const platSecrets = (plat?.secrets ?? null) as
+      | { access_token?: string; webhook_secret?: string }
+      | null;
+    const accessToken = platSecrets?.access_token;
+
+    // Firma: sólo si hay clave cargada (no rompe integraciones sin clave).
+    const webhookSecret = (platSecrets?.webhook_secret ?? "").trim();
+    if (webhookSecret) {
+      const sig = await verifyMpSignature({
+        secret: webhookSecret,
+        signature: req.headers.get("x-signature"),
+        requestId: req.headers.get("x-request-id"),
+        dataId: queryDataId || dataId,
+      });
+      if (sig !== "valid") {
+        wh.fail(`invalid_signature:${sig}`);
+        return new Response(JSON.stringify({ error: "invalid_signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (!accessToken) return ok();
 
     // ¿Es el cobro recurrente (authorized_payment)? MP lo manda con
@@ -229,6 +260,8 @@ Deno.serve(async (req: Request) => {
           amountFromPlan(sub.billing_cycle as string | null, sub.plans as PlanRel),
       );
 
+      wh.tenant(sub.tenant_id as string);
+      wh.done();
       await creditApprovedPayment(admin, {
         sub,
         preapprovalId,
@@ -290,6 +323,8 @@ Deno.serve(async (req: Request) => {
 
     const tenantId = sub.tenant_id as string;
     const prevStatus = sub.status as string;
+    wh.tenant(tenantId);
+    wh.done();
 
     if (newStatus === "active") {
       // Autorización INICIAL del preapproval (alta / reactivación al pagar la
@@ -362,10 +397,11 @@ Deno.serve(async (req: Request) => {
     }
 
     return ok();
-  } catch {
+  } catch (e) {
+    wh.fail(e);
     return ok();
   }
-});
+}));
 
 // =============================================================================
 // Helpers

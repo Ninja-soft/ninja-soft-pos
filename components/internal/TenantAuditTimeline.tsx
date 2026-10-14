@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ScrollText, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonLines } from "@/components/ui/Skeleton";
+import { SearchField } from "@/components/ui/SearchField";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Callout } from "@/components/ui/Callout";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { useInternalAudit } from "@/modules/internal/hooks";
 import {
@@ -77,26 +80,20 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
           options={CATEGORIES.map((c) => ({ value: c, label: AUDIT_CATEGORY_LABELS[c] }))}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar acción, motivo o autor…"
-              aria-label="Buscar en la auditoría"
-              className="h-10 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-            />
-          </div>
+          <SearchField
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Buscar acción, motivo o autor"
+            aria-label="Buscar en la auditoría"
+            className="min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto"
+          />
           <DateRangePicker
             value={range}
             onChange={(r) => {
               setRange(r);
               setLimit(PAGE);
             }}
-            className="h-10"
+            className="h-11"
           />
           {(range?.from || query || category !== "all") && (
             <button
@@ -106,13 +103,14 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
                 setCategory("all");
                 setLimit(PAGE);
               }}
-              className="inline-flex h-10 items-center gap-1 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition hover:text-foreground"
+              type="button"
+              className="inline-flex h-11 items-center gap-1 rounded-lg px-3 text-xs font-medium text-foreground transition hover:bg-muted"
             >
               <X size={13} /> Limpiar
             </button>
           )}
           {data && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs tabular-nums text-muted-foreground">
               {filtered.length} de {data.length} registros
             </span>
           )}
@@ -120,18 +118,23 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
       </div>
 
       {isLoading ? (
-        <div className="grid place-items-center py-10">
-          <Spinner />
+        <div className="p-4" aria-busy>
+          <SkeletonLines lines={6} />
         </div>
       ) : isError ? (
-        <div className="flex items-center gap-3 px-4 py-4 text-sm text-muted-foreground">
-          No se pudo cargar la auditoría.
-          <Button variant="secondary" size="sm" onClick={() => refetch()}>
-            Reintentar
-          </Button>
+        <div className="p-4">
+          <Callout
+            tone="danger"
+            title="No se pudo cargar la auditoría"
+            actions={
+              <Button variant="secondary" size="sm" onClick={() => refetch()}>
+                Reintentar
+              </Button>
+            }
+          />
         </div>
       ) : groups.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-muted-foreground">Sin registros con estos filtros.</p>
+        <EmptyState compact icon={ScrollText} title="Sin registros con estos filtros" />
       ) : (
         <div>
           {groups.map((g) => (
@@ -156,9 +159,9 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
                       >
                         <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${CATEGORY_DOT[d.category]}`} />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium text-foreground">{d.label}</span>
+                          <span className="block break-words text-sm font-medium text-foreground">{d.label}</span>
                           {e.reason && (
-                            <span className="mt-0.5 block text-sm text-muted-foreground">Motivo: {e.reason}</span>
+                            <span className="mt-0.5 block break-words text-sm text-muted-foreground">Motivo: {e.reason}</span>
                           )}
                           {!open && changes.length > 0 && (
                             <span className="mt-0.5 block truncate text-xs text-muted-foreground">
@@ -183,7 +186,7 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
                       {open && (
                         <div className="px-4 pb-3 pl-9">
                           {changes.length > 0 ? (
-                            <table className="w-full text-xs">
+                            <div className="slim-scrollbar overflow-x-auto"><table className="w-full min-w-[320px] text-xs">
                               <thead className="text-left text-muted-foreground">
                                 <tr>
                                   <th className="py-1 pr-3 font-medium">Campo</th>
@@ -200,7 +203,7 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
                                   </tr>
                                 ))}
                               </tbody>
-                            </table>
+                            </table></div>
                           ) : (
                             <p className="text-xs text-muted-foreground">Sin cambios de datos registrados.</p>
                           )}

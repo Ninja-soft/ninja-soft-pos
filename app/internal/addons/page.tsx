@@ -7,14 +7,13 @@ export default function InternalAddonsPage() {
     <>
       <PageHeader
         eyebrow="Plataforma"
-        title="Complementos (Add-ons)"
+        title="Complementos"
         icon={Sparkles}
         description={
           <>
-            Complementos opcionales que los negocios contratan sobre su plan. Acá
-            configurás el <strong>Asistente IA</strong>: proveedor (Gemini o Claude),
-            modelo y la API key (write-only), más la presentación del complemento
-            (avatar, texto comercial, precio y prueba) que ven los dueños sin el addon.
+            Lo que los negocios contratan aparte de su plan. Acá configurás el
+            Asistente IA: proveedor, modelo, API key y cómo se presenta a los dueños
+            que todavía no lo tienen.
           </>
         }
       />

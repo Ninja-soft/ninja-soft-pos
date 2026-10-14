@@ -1,30 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Star } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Pencil, Plus, Star, Tag } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Heading, Money } from "@/components/ui/Typography";
+import { Money } from "@/components/ui/Typography";
 import { usePlansWithCounts } from "@/modules/internal/hooks";
 import type { PlanWithCount } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { PlanEditorModal } from "./PlanEditorModal";
 import { PlanBadge } from "./PlanBadge";
-import { Spinner } from "@/components/ui/Spinner";
-
-function StatusChip({ active }: { active: boolean }) {
-  return (
-    <span
-      className={
-        active
-          ? "inline-flex items-center whitespace-nowrap rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success"
-          : "inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground"
-      }
-    >
-      {active ? "Activo" : "Inactivo"}
-    </span>
-  );
-}
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SectionHeader } from "@/components/ui/PageHeader";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
 
 export function PlansManager() {
   const { data: plans, isLoading } = usePlansWithCounts();
@@ -36,100 +24,103 @@ export function PlansManager() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Heading as="h2">Planes</Heading>
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus size={15} /> Nuevo plan
-        </Button>
-      </div>
+      <SectionHeader
+        title="Planes globales"
+        icon={Tag}
+        description="Lo que ve el cliente al elegir plan. El precio es mensual y en pesos."
+        actions={
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus size={15} /> Nuevo plan
+          </Button>
+        }
+      />
 
-      <Card className="mt-3">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead className="border-b border-border text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Plan</th>
-                  <th className="px-4 py-3">Precio mensual</th>
-                  <th className="px-4 py-3">Trial</th>
-                  <th className="px-4 py-3">Suscriptos</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3 text-right">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border text-foreground">
-                {isLoading && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-10 text-center text-muted-foreground"
-                    >
-                      <Spinner />
-                    </td>
-                  </tr>
-                )}
-                {!isLoading && (plans?.length ?? 0) === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-10 text-center text-muted-foreground"
-                    >
-                      No hay planes cargados. Creá el primero.
-                    </td>
-                  </tr>
-                )}
-                {(plans ?? []).map((p) => (
-                  <tr key={p.id} className="transition hover:bg-muted/40">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <PlanBadge
-                          plan={{
-                            name: p.name,
-                            secondaryName: p.secondaryName,
-                            imageUrl: p.imageUrl,
-                            icon: p.icon,
-                          }}
-                          size="sm"
-                        />
-                        {p.isRecommended && (
-                          <span
-                            title="Plan recomendado"
-                            className="inline-flex items-center gap-1 rounded-full bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold"
-                          >
-                            <Star size={11} className="fill-ninja-gold" />
-                            Recomendado
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Money>{formatCurrency(p.monthlyPrice)}</Money>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {p.trialDays > 0 ? `${p.trialDays} días` : "Sin trial"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {p.subscriberCount}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusChip active={p.isActive} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setEditing(p)}
-                      >
-                        <Pencil size={14} /> Editar
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <TableWrap className="mt-3">
+        <table className="w-full min-w-[600px] text-sm">
+          <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3">Plan</th>
+              <th className="px-4 py-3 text-right">Precio mensual</th>
+              <th className="hidden px-4 py-3 md:table-cell">Prueba</th>
+              <th className="px-4 py-3 text-right">Suscriptos</th>
+              <th className="hidden px-4 py-3 sm:table-cell">Estado</th>
+              <th className="px-4 py-3 text-right">
+                <span className="sr-only">Acciones</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border text-foreground">
+            {isLoading && <TableStateRow colSpan={6} loading />}
+            {!isLoading && (plans?.length ?? 0) === 0 && (
+              <TableStateRow colSpan={6}>
+                <EmptyState
+                  compact
+                  icon={Tag}
+                  title="No hay planes cargados"
+                  description="Creá el primero para que los negocios puedan suscribirse."
+                  action={
+                    <Button size="sm" onClick={() => setCreating(true)}>
+                      <Plus size={15} /> Nuevo plan
+                    </Button>
+                  }
+                />
+              </TableStateRow>
+            )}
+            {(plans ?? []).map((p) => (
+              <tr key={p.id} className="transition hover:bg-muted/40">
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <PlanBadge
+                      plan={{
+                        name: p.name,
+                        secondaryName: p.secondaryName,
+                        imageUrl: p.imageUrl,
+                        icon: p.icon,
+                      }}
+                      size="sm"
+                    />
+                    {p.isRecommended && (
+                      <Badge tone="gold" title="Plan recomendado">
+                        <Star size={11} className="fill-current" aria-hidden />
+                        Recomendado
+                      </Badge>
+                    )}
+                    {!p.isActive && (
+                      <Badge tone="neutral" className="sm:hidden">
+                        Inactivo
+                      </Badge>
+                    )}
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                  <Money>{formatCurrency(p.monthlyPrice)}</Money>
+                </td>
+                <td className="hidden whitespace-nowrap px-4 py-3 text-muted-foreground md:table-cell">
+                  {p.trialDays > 0 ? `${p.trialDays} días` : "Sin prueba"}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                  {p.subscriberCount}
+                </td>
+                <td className="hidden px-4 py-3 sm:table-cell">
+                  <Badge tone={p.isActive ? "success" : "neutral"}>
+                    {p.isActive ? "Activo" : "Inactivo"}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setEditing(p)}
+                    aria-label={`Editar ${p.name}`}
+                  >
+                    <Pencil size={14} /> <span className="hidden sm:inline">Editar</span>
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableWrap>
 
       <PlanEditorModal
         open={open}

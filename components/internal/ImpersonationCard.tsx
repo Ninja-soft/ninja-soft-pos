@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Copy, ExternalLink, ShieldAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { ReasonDialog } from "@/components/internal/ReasonDialog";
 import { useImpersonateTenant } from "@/modules/internal/hooks";
@@ -15,9 +17,6 @@ import {
   durationLabel,
   impersonationErrorMessage,
 } from "@/supabase/functions/_shared/impersonation";
-
-const selectCls =
-  "h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft";
 
 function sessionState(s: {
   endedAt: string | null;
@@ -56,18 +55,15 @@ export function ImpersonationCard({ tenantId }: { tenantId: string }) {
     <>
       <Card className="mt-3">
         <CardContent className="p-5">
-          <div className="mb-4 flex items-start gap-2 rounded-md bg-warning/10 px-4 py-3 text-sm text-warning">
-            <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-            <span>
-              Abre una sesión como el dueño durante el tiempo que elijas, con un banner visible y cuenta regresiva.
-              Al vencer se cierra sola. <strong>Abrila en una ventana de incógnito</strong> para no cerrar tu sesión
-              de staff.
-            </span>
-          </div>
+          <Callout tone="warning" icon={ShieldAlert} className="mb-4">
+            Abre una sesión como el dueño durante el tiempo que elijas, con un banner visible y cuenta regresiva.
+            Al vencer se cierra sola. <strong className="text-foreground">Abrila en una ventana de incógnito</strong>{" "}
+            para no cerrar tu sesión de staff.
+          </Callout>
 
           {!result ? (
-            <Button disabled={impersonate.isPending} onClick={() => setAsk(true)}>
-              {impersonate.isPending ? "Generando…" : "Generar acceso"}
+            <Button loading={impersonate.isPending} onClick={() => setAsk(true)}>
+              Generar acceso
             </Button>
           ) : (
             <div className="space-y-3">
@@ -85,18 +81,12 @@ export function ImpersonationCard({ tenantId }: { tenantId: string }) {
                 >
                   <ExternalLink size={14} /> Abrir en nueva pestaña
                 </a>
-                <button
-                  onClick={() => copy(result.actionLink)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                >
+                <Button variant="secondary" size="sm" onClick={() => copy(result.actionLink)}>
                   <Copy size={14} /> Copiar link
-                </button>
-                <button
-                  onClick={() => setResult(null)}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setResult(null)}>
                   Generar nuevo
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -159,23 +149,12 @@ export function ImpersonationCard({ tenantId }: { tenantId: string }) {
         confirmLabel="Generar acceso"
         loading={impersonate.isPending}
         extra={
-          <div>
-            <label htmlFor="impersonation-minutes" className="mb-2 block text-sm font-medium text-muted-foreground">
-              Duración
-            </label>
-            <select
-              id="impersonation-minutes"
-              className={selectCls}
-              value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-            >
-              {IMPERSONATION_DURATIONS.map((m) => (
-                <option key={m} value={m} className="bg-popover text-popover-foreground">
-                  {durationLabel(m)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Duración"
+            value={String(minutes)}
+            options={IMPERSONATION_DURATIONS.map((m) => ({ value: String(m), label: durationLabel(m) }))}
+            onChange={(v) => setMinutes(Number(v))}
+          />
         }
         onConfirm={(reason) =>
           impersonate.mutate(

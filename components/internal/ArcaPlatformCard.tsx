@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Check, KeyRound, ShieldCheck, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import { Skeleton, SkeletonLines } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
-import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { SettingsCard } from "@/components/settings/Settings";
 import { CopyBlock } from "@/components/arca/shared";
@@ -36,7 +37,19 @@ export function ArcaPlatformCard() {
     setProblems([]);
   }, [info, env]);
 
-  if (q.isLoading) return <SpinnerBlock className="py-10" />;
+  if (q.isLoading) {
+    return (
+      <div
+        className="space-y-5 rounded-lg border border-border bg-card p-5"
+        aria-busy="true"
+        aria-label="Cargando configuración de ARCA"
+      >
+        <Skeleton className="h-5 w-56" />
+        <Skeleton className="h-10 w-64 max-w-full" />
+        <SkeletonLines lines={4} />
+      </div>
+    );
+  }
   if (q.error) {
     return (
       <Callout tone="warning" title="No disponible">
@@ -78,7 +91,9 @@ export function ArcaPlatformCard() {
         </div>
 
         <section className="space-y-2">
-          <h4 className="text-sm font-semibold">1. CUIT de la plataforma</h4>
+          <StepTitle n={1} done={Boolean(info?.cuit)}>
+            CUIT de la plataforma
+          </StepTitle>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <Input
               label="CUIT"
@@ -97,8 +112,10 @@ export function ArcaPlatformCard() {
           </div>
         </section>
 
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold">2. Pedido de certificado (CSR)</h4>
+        <section className="space-y-2 border-t border-border pt-5">
+          <StepTitle n={2} done={Boolean(csr) || Boolean(info?.has_cert)}>
+            Pedido de certificado (CSR)
+          </StepTitle>
           <p className="text-sm text-muted-foreground">
             La clave privada se genera y se cifra en el servidor. Subí el pedido a WSASS (homologación) o a Administración
             de Certificados Digitales (producción) con la clave fiscal de la plataforma.
@@ -121,10 +138,12 @@ export function ArcaPlatformCard() {
           {csr && <CopyBlock value={csr} fileName={`ninjasoft-${env}.csr`} />}
         </section>
 
-        <section className="space-y-2">
-          <h4 className="text-sm font-semibold">3. Certificado emitido por ARCA</h4>
+        <section className="space-y-2 border-t border-border pt-5">
+          <StepTitle n={3} done={Boolean(info?.has_cert)}>
+            Certificado emitido por ARCA
+          </StepTitle>
           {info?.has_cert && (
-            <div className="rounded-md bg-muted p-3 text-sm">
+            <div className="rounded-lg bg-muted p-3 text-sm">
               <p className="flex items-center gap-2 font-medium">
                 <ShieldCheck size={15} className="text-success" aria-hidden /> {info.subject}
               </p>
@@ -139,7 +158,7 @@ export function ArcaPlatformCard() {
             rows={5}
             placeholder="-----BEGIN CERTIFICATE-----"
             aria-label="Certificado de la plataforma"
-            className="w-full rounded-md border border-border bg-background p-3 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-full rounded-lg border border-border bg-background p-3 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <Button
             disabled={cert.trim().length < 50}
@@ -178,3 +197,22 @@ export function ArcaPlatformCard() {
   );
 }
 ArcaPlatformCard.displayName = "ArcaPlatformCard";
+
+// Título de paso numerado: el número pasa a check cuando el paso está hecho.
+function StepTitle({ n, done, children }: { n: number; done: boolean; children: React.ReactNode }) {
+  return (
+    <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+      <span
+        className={cn(
+          "grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums",
+          done ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
+        )}
+        aria-hidden
+      >
+        {done ? <Check size={13} strokeWidth={3} /> : n}
+      </span>
+      {children}
+      {done && <span className="sr-only">(hecho)</span>}
+    </h4>
+  );
+}

@@ -10,6 +10,7 @@ import {
   Check,
   CreditCard,
   ExternalLink,
+  Landmark,
   LayoutGrid,
   ScrollText,
   SlidersHorizontal,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { PlanCard } from "@/components/internal/PlanCard";
+import { TenantLedgerTab } from "@/components/internal/billing/TenantLedgerTab";
 import { ImpersonationCard } from "@/components/internal/ImpersonationCard";
 import { Tenant360Card } from "@/components/internal/Tenant360Card";
 import { TenantMembersCard } from "@/components/internal/TenantMembersCard";
@@ -79,6 +81,7 @@ const STATUS_TONE: Record<string, BadgeTone> = {
 const TABS = [
   { value: "resumen", label: "Resumen", icon: <LayoutGrid size={15} /> },
   { value: "plan", label: "Plan y cobro", icon: <CreditCard size={15} /> },
+  { value: "cuenta", label: "Cuenta corriente", icon: <Landmark size={15} /> },
   { value: "miembros", label: "Miembros y acceso", icon: <Users size={15} /> },
   { value: "config", label: "Configuración", icon: <SlidersHorizontal size={15} /> },
   { value: "auditoria", label: "Auditoría", icon: <ScrollText size={15} /> },
@@ -486,6 +489,9 @@ export default function InternalTenantDetail({
             </section>
           </>
         )}
+
+        {/* ── Cuenta corriente (F20-1 · ADR-113) ────────────────────────── */}
+        {tab === "cuenta" && <TenantLedgerTab tenantId={params.id} tenantName={tenant?.name ?? "El negocio"} />}
 
         {/* ── Miembros y acceso ─────────────────────────────────────────── */}
         {tab === "miembros" && (

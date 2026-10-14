@@ -69,6 +69,7 @@ import {
   RECOUNT_BATCH_ITEMS,
   runClosing,
   UPSERT_CHUNK,
+  upsertResilient,
   runMode,
   storeFaltantes,
   type CloseBatchResult,
@@ -240,12 +241,11 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
           const rows = mapCatalogPage(page.items);
           let result: UpsertResult = EMPTY_RESULT;
           for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-            const { data, error } = await admin.rpc("catalog_sync_upsert_catalog", {
-              p_run: run.id,
-              p_items: rows.slice(i, i + UPSERT_CHUNK),
+            const part = await upsertResilient(rows.slice(i, i + UPSERT_CHUNK), async (chunk) => {
+              const { data, error } = await admin.rpc("catalog_sync_upsert_catalog", { p_run: run.id, p_items: chunk });
+              return { data: (data ?? null) as UpsertResult | null, error: error ? { message: error.message } : null };
             });
-            if (error) throw new Error(`upsert: ${error.message}`);
-            result = mergeUpsertResults(result, data as UpsertResult);
+            result = mergeUpsertResults(result, part);
           }
           p = { ...p, ...applyPage(st, p.stores, p.totals, page, result) };
           pages++;

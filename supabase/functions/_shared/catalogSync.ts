@@ -157,7 +157,42 @@ export interface UpsertResult {
  */
 export const UPSERT_CHUNK = 50;
 
-/** Suma los resultados de varios lotes de upsert. */
+/** ¿El error es un corte por statement_timeout (PostgREST 8 s)? */
+export function isStatementTimeout(message: string | null | undefined): boolean {
+  return /statement timeout|canceling statement/i.test(message ?? "");
+}
+
+/**
+ * Guarda un lote resistiendo picos de lentitud: si se corta por tiempo, lo parte
+ * en dos y guarda cada mitad; con lotes chicos reintenta con pausa. Sólo después
+ * de eso el error sube (y cuenta como falla de la página).
+ */
+export async function upsertResilient<T>(
+  rows: T[],
+  save: (chunk: T[]) => Promise<{ data: UpsertResult | null; error: { message: string } | null }>,
+  opts: { minChunk?: number; retries?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<UpsertResult> {
+  const minChunk = opts.minChunk ?? 5;
+  const retries = opts.retries ?? 3;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const empty: UpsertResult = { recibidos: 0, nuevos: 0, actualizados: 0, ofertas: 0, ofertas_nuevas: 0, ofertas_actualizadas: 0, faltantes: 0, por_tienda: {} };
+  if (!rows.length) return empty;
+  for (let attempt = 0; ; attempt++) {
+    const { data, error } = await save(rows);
+    if (!error) return mergeUpsertResults(empty, (data ?? empty) as UpsertResult);
+    if (!isStatementTimeout(error.message)) throw new Error(`upsert: ${error.message}`);
+    if (rows.length > minChunk) {
+      const mid = Math.ceil(rows.length / 2);
+      const a = await upsertResilient(rows.slice(0, mid), save, opts);
+      const b = await upsertResilient(rows.slice(mid), save, opts);
+      return mergeUpsertResults(a, b);
+    }
+    if (attempt >= retries) throw new Error(`upsert: ${error.message}`);
+    await sleep(1000 * (attempt + 1));
+  }
+}
+
+/** Suma los resultados de varios lotes de upsert. *//** Suma los resultados de varios lotes de upsert. */
 export function mergeUpsertResults(a: UpsertResult, b: UpsertResult): UpsertResult {
   const por_tienda: UpsertResult["por_tienda"] = { ...a.por_tienda };
   for (const [k, r] of Object.entries(b.por_tienda ?? {})) {

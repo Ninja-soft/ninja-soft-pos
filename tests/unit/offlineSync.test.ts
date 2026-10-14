@@ -16,6 +16,7 @@ import {
   findByCodeInSnapshot,
   searchSnapshot,
   snapshotMatches,
+  snapshotWithMeta,
   toSnapshotProduct,
 } from "@/lib/pos/offline/snapshot";
 import { OFFLINE_POLICY_DEFAULTS } from "@/lib/pos/offline/policy";
@@ -261,5 +262,23 @@ describe("foto local", () => {
     expect(findByCodeInSnapshot(products, "779000")?.id).toBe("1");
     expect(findByCodeInSnapshot(products, "000123")?.id).toBe("1");
     expect(findByCodeInSnapshot(products, "nada")).toBeNull();
+  });
+
+  // El POS ya no vuelve a bajar el catálogo cuando llega el turno o la
+  // sucursal: ajusta la foto guardada (useOfflinePos).
+  it("ajusta turno, sucursal y política sin tocar el catálogo", () => {
+    const snap = buildSnapshot({ tenantId: T, userId: U, products, policy: OFFLINE_POLICY_DEFAULTS, shift: null });
+    const shift = { id: "s1", storeId: "st1" };
+    const withShift = snapshotWithMeta(snap, { shift, policy: OFFLINE_POLICY_DEFAULTS });
+    expect(withShift?.shift).toEqual(shift);
+    expect(withShift?.products).toBe(snap.products);
+    expect(withShift?.at).toBe(snap.at);
+    // Mismo turno y política: nada que escribir.
+    expect(snapshotWithMeta(withShift!, { shift: { ...shift }, policy: { ...OFFLINE_POLICY_DEFAULTS } })).toBeNull();
+    // Otra sucursal, turno cerrado o política nueva: cambia.
+    expect(snapshotWithMeta(withShift!, { shift: { id: "s1", storeId: "st2" }, policy: OFFLINE_POLICY_DEFAULTS })?.shift?.storeId).toBe("st2");
+    expect(snapshotWithMeta(withShift!, { shift: null, policy: OFFLINE_POLICY_DEFAULTS })?.shift).toBeNull();
+    const policy = { ...OFFLINE_POLICY_DEFAULTS, maxSales: 5 };
+    expect(snapshotWithMeta(withShift!, { shift, policy })?.policy).toEqual(policy);
   });
 });

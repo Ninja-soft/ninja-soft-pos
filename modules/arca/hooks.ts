@@ -17,7 +17,9 @@ export function useArcaStatus(enabled = true) {
     queryKey: [...KEY, "status"],
     queryFn: arcaApi.status,
     enabled,
-    refetchInterval: 60_000,
+    // Sin facturación activa no hay contingencia que vigilar: se revisa cada
+    // 5 min (antes, cada minuto en todo POS aunque el negocio no facture).
+    refetchInterval: (q) => (q.state.data && !(q.state.data as { enabled?: boolean }).enabled ? 5 * 60_000 : 60_000),
     retry: false,
     staleTime: 30_000,
   });

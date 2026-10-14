@@ -82,7 +82,6 @@ import { SwUpdateBanner } from "@/components/pwa/SwUpdateBanner";
 import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
-import { PosShortcutsHelp } from "@/components/pos/PosShortcutsHelp";
 import { matchPosShortcut } from "@/lib/pos/shortcuts";
 import { ModeBanner } from "@/components/pos/screen/ModeBanner";
 import { ArcaPosIndicator } from "@/components/arca/ArcaPosIndicator";
@@ -92,14 +91,7 @@ import { QuickKeypadPanel, QuickScanPane } from "@/components/pos/screen/QuickSc
 import { CategoryRail } from "@/components/pos/ui/CategoryBar";
 import { applyKey, type KeypadKey } from "@/components/pos/ui/Keypad";
 import { accentVars } from "@/components/pos/ui/posStyles";
-import {
-  CustomerPickerDialog,
-  FreeSaleDialog,
-  PriceOverrideDialog,
-  SerialDialog,
-  WeighDialog,
-  type PriceOverrideTarget,
-} from "@/components/pos/screen/PosDialogs";
+import type { PriceOverrideTarget } from "@/components/pos/screen/PosDialogs";
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
 import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
@@ -110,14 +102,6 @@ import { usePosPause } from "@/modules/pos/screen/usePosPause";
 import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import { SaleActions } from "@/components/pos/screen/SaleActions";
 import { PausedSalesBar } from "@/components/paused-sales/PausedSalesBar";
-import { PausedSalesPanel } from "@/components/paused-sales/PausedSalesPanel";
-import {
-  ClearBlockedDialog,
-  ClearConfirmDialog,
-  IntentWaitDialog,
-  PausedOnCloseDialog,
-  SwitchSaleDialog,
-} from "@/components/paused-sales/PausedSaleDialogs";
 import type { PausedSale } from "@/modules/paused-sales/logic";
 import { usePendingChargesWatcher } from "@/components/pending-charges/usePendingChargesWatcher";
 import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
@@ -155,6 +139,12 @@ const loadSellPack = () => import("@/components/pos/SellPackModal");
 const loadBarcodeScanner = () => import("@/components/pos/BarcodeScanner");
 const loadDniScan = () => import("@/components/customers/DniScanModal");
 const loadSalon = () => import("@/components/pos/screen/SalonTablesConnected");
+// Diálogos chicos (cliente, venta libre, peso, serie, precio), ventas pausadas y
+// atajos: tampoco hacen falta para pintar la primera pantalla.
+const loadPosDialogs = () => import("@/components/pos/screen/PosDialogs");
+const loadPausedDialogs = () => import("@/components/paused-sales/PausedSaleDialogs");
+const loadPausedPanel = () => import("@/components/paused-sales/PausedSalesPanel");
+const loadShortcutsHelp = () => import("@/components/pos/PosShortcutsHelp");
 
 const OpenShiftModal = dynamic(() => loadPosModals().then((m) => m.OpenShiftModal), { ssr: false });
 const CloseShiftModal = dynamic(() => loadPosModals().then((m) => m.CloseShiftModal), { ssr: false });
@@ -167,6 +157,18 @@ const SellPackModal = dynamic(() => loadSellPack().then((m) => m.SellPackModal),
 const BarcodeScanner = dynamic(() => loadBarcodeScanner().then((m) => m.BarcodeScanner), { ssr: false });
 const DniScanModal = dynamic(() => loadDniScan().then((m) => m.DniScanModal), { ssr: false });
 const SalonTablesConnected = dynamic(() => loadSalon().then((m) => m.SalonTablesConnected), { ssr: false });
+const CustomerPickerDialog = dynamic(() => loadPosDialogs().then((m) => m.CustomerPickerDialog), { ssr: false });
+const FreeSaleDialog = dynamic(() => loadPosDialogs().then((m) => m.FreeSaleDialog), { ssr: false });
+const PriceOverrideDialog = dynamic(() => loadPosDialogs().then((m) => m.PriceOverrideDialog), { ssr: false });
+const SerialDialog = dynamic(() => loadPosDialogs().then((m) => m.SerialDialog), { ssr: false });
+const WeighDialog = dynamic(() => loadPosDialogs().then((m) => m.WeighDialog), { ssr: false });
+const ClearBlockedDialog = dynamic(() => loadPausedDialogs().then((m) => m.ClearBlockedDialog), { ssr: false });
+const ClearConfirmDialog = dynamic(() => loadPausedDialogs().then((m) => m.ClearConfirmDialog), { ssr: false });
+const IntentWaitDialog = dynamic(() => loadPausedDialogs().then((m) => m.IntentWaitDialog), { ssr: false });
+const PausedOnCloseDialog = dynamic(() => loadPausedDialogs().then((m) => m.PausedOnCloseDialog), { ssr: false });
+const SwitchSaleDialog = dynamic(() => loadPausedDialogs().then((m) => m.SwitchSaleDialog), { ssr: false });
+const PausedSalesPanel = dynamic(() => loadPausedPanel().then((m) => m.PausedSalesPanel), { ssr: false });
+const PosShortcutsHelp = dynamic(() => loadShortcutsHelp().then((m) => m.PosShortcutsHelp), { ssr: false });
 // Cobros en espera (ADR-048): la pestaña se abre como hoja dentro del POS.
 const PendingChargesPanel = dynamic(
   () => import("@/components/pending-charges/PendingChargesPanel").then((m) => m.PendingChargesPanel),
@@ -186,6 +188,10 @@ function preloadPosModals() {
     loadSellPack,
     loadBarcodeScanner,
     loadDniScan,
+    loadPosDialogs,
+    loadPausedDialogs,
+    loadPausedPanel,
+    loadShortcutsHelp,
   ]) {
     void load().catch(() => {});
   }
@@ -377,7 +383,9 @@ function PosPageInner() {
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
   // F17 · H99: señal de esta caja para el monitor de sucursales.
-  useRegisterHeartbeat(register?.id ?? null, shift?.id ?? null);
+  // Arranca con el turno ya resuelto: antes salía una señal sin turno y otra
+  // apenas llegaba (dos RPC en el arranque).
+  useRegisterHeartbeat(shiftFetched ? (register?.id ?? null) : null, shift?.id ?? null);
   const { open, close } = usePosMutations();
   const { data: myTenant, isFetched: myTenantFetched } = useMyTenant();
   // Rubro y rol cambian piezas visibles (frecuentes, venta libre): hasta que
@@ -386,8 +394,11 @@ function PosPageInner() {
   // Descuentos manuales: feature de plan (Pro). Sin ella el campo queda bloqueado.
   const discountGate = useFeatureGate("descuentos", "Descuentos");
   const { data: posSettings, isFetched: posSettingsFetched } = usePosSettings();
-  const { data: warrantyPlans } = useWarrantyPlans(true);
   const offerWarranty = posSettings?.offerWarranty ?? true;
+  // La oferta de garantía sólo aparece con algo en el carrito: los planes se
+  // piden recién ahí (antes, en cada arranque del POS).
+  const cartHasLines = useCartStore((s) => s.lines.length > 0);
+  const { data: warrantyPlans } = useWarrantyPlans(true, offerWarranty && cartHasLines);
   const role = myTenant?.role ?? "cashier";
   // Venta libre (H36): flag del negocio Y sólo owner/manager.
   const allowFreeSale = posSettings?.allowFreeSale ?? true;
@@ -403,7 +414,7 @@ function PosPageInner() {
   const [sellPackOpen, setSellPackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
   const custSearchDebounced = useDebouncedValue(custSearch, 300);
-  const { data: customers } = useCustomersForPicker(custSearchDebounced);
+  const { data: customers } = useCustomersForPicker(custSearchDebounced, custOpen);
   const { createQuick } = useCustomerMutations();
 
   // Alta rápida de cliente desde el DNI escaneado (H31).
@@ -507,7 +518,13 @@ function PosPageInner() {
   // precios de la sucursal y el cliente y la lista o condición elegidas acá.
   // Contra una base sin la migración, la lista 'mostrador' de siempre.
   useApplyDuePrices();
-  const priceResolver = usePriceResolver({ storeId: register?.store_id ?? null, customerId: customer?.id ?? null });
+  // Espera a la caja: sin esto la foto se pedía una vez sin sucursal y otra
+  // con la sucursal real.
+  const priceResolver = usePriceResolver({
+    storeId: register?.store_id ?? null,
+    customerId: customer?.id ?? null,
+    enabled: registerFetched,
+  });
   const resetPricingContext = usePricingContext((s) => s.reset);
   useEffect(() => () => resetPricingContext(), [resetPricingContext]);
   function priceFor(productId: string, variantId: string | null, basePrice: number, qty = 1): number {
@@ -1678,7 +1695,7 @@ function PosPageInner() {
                   title="Ventas pausadas"
                 >
                   <Pause size={18} aria-hidden />
-                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ninja-flame px-1 text-[11px] font-bold text-white">
+                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--pos-solid)] px-1 text-[11px] font-bold text-[color:var(--pos-on)]">
                     {pauser.list.length}
                   </span>
                 </button>
@@ -1700,8 +1717,10 @@ function PosPageInner() {
                   {pendingWatch.waiting + pendingWatch.attention > 0 && (
                     <span
                       className={
-                        "absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold text-white " +
-                        (pendingWatch.attention > 0 ? "bg-warning" : "bg-ninja-flame")
+                        "absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold " +
+                        (pendingWatch.attention > 0
+                          ? "bg-warning text-white"
+                          : "bg-[var(--pos-solid)] text-[color:var(--pos-on)]")
                       }
                     >
                       {pendingWatch.waiting + pendingWatch.attention}
@@ -1741,7 +1760,9 @@ function PosPageInner() {
         checkoutOpen={checkoutOpen}
       />
 
-      <PosShortcutsHelp open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <MountWhenOpened open={shortcutsOpen}>
+        <PosShortcutsHelp open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      </MountWhenOpened>
       <CustomerPickerDialog
         open={custOpen}
         onOpenChange={(o) => {

@@ -1,13 +1,20 @@
 "use client";
 
 import * as Popover from "@radix-ui/react-popover";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Keyboard, LayoutTemplate, Lock, MonitorSmartphone, Settings2, Undo2 } from "lucide-react";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { choiceClass } from "@/components/ui/ChoiceCard";
 import { POS_PRESETS, PRESET_INFO, type PosPreset } from "@/lib/pos/layout";
 import { cn } from "@/lib/utils/cn";
-import { PresetThumb } from "./PresetThumb";
+
+// Miniaturas del selector de diseño: sólo se ven con el popover abierto, así
+// que viajan en su propio chunk (con un hueco del mismo tamaño mientras llegan).
+const PresetThumb = dynamic(() => import("./PresetThumb").then((m) => m.PresetThumb), {
+  ssr: false,
+  loading: () => <span aria-hidden className="block h-[68px] w-full rounded-md bg-fg-4" />,
+});
 
 // Barra superior del POS: estado de la caja, pantalla del cliente y el
 // selector rápido de diseño (override del usuario; el del negocio se define
@@ -81,11 +88,15 @@ export function PosTopBar({
             aria-hidden
             className={cn(
               "h-2 w-2 shrink-0 rounded-full",
-              hasShift ? "bg-success shadow-[0_0_0_3px_rgb(var(--status-success)/0.18)]" : "bg-muted-foreground/60",
+              shiftPending ? "animate-pulse bg-muted-foreground/40" : hasShift ? "bg-success" : "bg-muted-foreground/60",
             )}
           />
+          {/* Mientras llega el turno no se afirma "Cerrada": el cajero veía la
+              caja cerrada un instante aunque la tuviera abierta. */}
           <span className="truncate font-medium text-foreground">
-            {location
+            {shiftPending
+              ? (registerName ?? "Caja")
+              : location
               ? hasShift
                 ? "Abierta"
                 : "Cerrada"
@@ -95,9 +106,11 @@ export function PosTopBar({
                   : "Caja abierta"
                 : "Caja cerrada"}
           </span>
-          <span className="hidden shrink-0 border-l border-border pl-2.5 text-xs font-medium text-muted-foreground sm:inline">
-            {hasShift ? "Cerrar" : "Abrir"}
-          </span>
+          {!shiftPending && (
+            <span className="hidden shrink-0 border-l border-border pl-2.5 text-xs font-medium text-muted-foreground sm:inline">
+              {hasShift ? "Cerrar" : "Abrir"}
+            </span>
+          )}
         </button>
         {pausedSlot}
         {pendingSlot}

@@ -19,6 +19,7 @@ import {
   shiftCountKey,
   snapshotKey,
   snapshotMatches,
+  snapshotWithMeta,
   type OfflineSnapshot,
 } from "@/lib/pos/offline/snapshot";
 import { classifySyncError, syncQueue, type SyncSummary } from "@/lib/pos/offline/sync";
@@ -29,6 +30,10 @@ import { writeLastPos } from "@/modules/pos/offline/offlineSession";
 
 const DEVICE_KEY = "ninja-pos-device.v1";
 const SNAPSHOT_EVERY_MS = 10 * 60_000;
+/** Primera descarga del catálogo: en el primer momento libre, a más tardar esto. */
+const FIRST_SNAPSHOT_MAX_WAIT_MS = 3_000;
+/** Ajuste de turno/política de la foto: espera a que se asiente el arranque. */
+const SNAPSHOT_META_DELAY_MS = 1_500;
 const SYNC_EVERY_MS = 30_000;
 const PING_EVERY_MS = 15_000;
 
@@ -144,35 +149,91 @@ export function useOfflinePos(ctx: {
 
   const policyRef = useRef(policy);
   policyRef.current = policy;
+  const serverPolicyRef = useRef(ctx.policy);
+  serverPolicyRef.current = ctx.policy;
+  // Turno y sucursal van por ref: durante el arranque pasan de null a su id y
+  // antes cada cambio volvía a bajar el catálogo entero (hasta 5000 productos,
+  // 2 o 3 veces por apertura del POS, compitiendo con la primera pantalla).
+  const shiftRef = useRef<{ id: string; storeId: string | null } | null>(null);
+  shiftRef.current = shiftId ? { id: shiftId, storeId } : null;
+  // Lecturas y escrituras de la foto en serie (descarga y ajuste de turno).
+  const snapIoRef = useRef<Promise<unknown>>(Promise.resolve());
+  const serialSnap = useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
+    const next = snapIoRef.current.then(fn, fn);
+    snapIoRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+
   useEffect(() => {
     if (!available || !scope || isOffline || frozenSnapshot) return;
     let alive = true;
-    const write = async () => {
+    const key = snapshotKey(scope.tenantId, scope.userId);
+    const download = async () => {
       try {
         const products = await offlineApi.catalog();
         if (!alive) return;
-        const snap = buildSnapshot({
-          tenantId: scope.tenantId,
-          userId: scope.userId,
-          products,
-          policy: policyRef.current,
-          shift: shiftId ? { id: shiftId, storeId } : null,
+        await serialSnap(async () => {
+          const snap = buildSnapshot({
+            tenantId: scope.tenantId,
+            userId: scope.userId,
+            products,
+            policy: policyRef.current,
+            shift: shiftRef.current,
+          });
+          await idbKv.set(key, snap);
+          // H65: puntero para abrir el POS sin conexión con este usuario.
+          await writeLastPos(scope.tenantId, scope.userId);
+          if (alive) setSnapshot(snap);
         });
-        await idbKv.set(snapshotKey(scope.tenantId, scope.userId), snap);
-        // H65: puntero para abrir el POS sin conexión con este usuario.
-        await writeLastPos(scope.tenantId, scope.userId);
-        if (alive) setSnapshot(snap);
       } catch {
         // Sin foto nueva: queda la anterior.
       }
     };
-    void write();
-    const t = setInterval(write, SNAPSHOT_EVERY_MS);
+    // Una descarga por apertura (así entra lo recién creado), pero cuando el
+    // navegador queda libre después de la primera pantalla y no en medio del
+    // arranque; después, cada SNAPSHOT_EVERY_MS.
+    let every: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (!alive) return;
+      void download();
+      every = setInterval(download, SNAPSHOT_EVERY_MS);
+    };
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const idle = w.requestIdleCallback ? w.requestIdleCallback(start, { timeout: FIRST_SNAPSHOT_MAX_WAIT_MS }) : null;
+    const timer = idle === null ? setTimeout(start, 1_500) : null;
     return () => {
       alive = false;
-      clearInterval(t);
+      if (idle !== null) w.cancelIdleCallback?.(idle);
+      if (timer !== null) clearTimeout(timer);
+      clearInterval(every);
     };
-  }, [available, scope, isOffline, shiftId, storeId, frozenSnapshot]);
+  }, [available, scope, isOffline, frozenSnapshot, serialSnap]);
+
+  // Cambió el turno, la sucursal o la política: se ajusta la foto guardada sin
+  // bajar el catálogo. Se espera un momento porque en el arranque el turno pasa
+  // por null antes de llegar.
+  const policyKey = ctx.policy ? JSON.stringify(ctx.policy) : null;
+  useEffect(() => {
+    if (!available || !scope || frozenSnapshot) return;
+    const key = snapshotKey(scope.tenantId, scope.userId);
+    const t = setTimeout(() => {
+      void serialSnap(async () => {
+        const cur = await idbKv.get<OfflineSnapshot<Product>>(key);
+        if (!cur || !snapshotMatches(cur, scope.tenantId, scope.userId)) return;
+        const next = snapshotWithMeta(cur, {
+          shift: shiftRef.current,
+          policy: serverPolicyRef.current ?? cur.policy,
+        });
+        if (!next) return;
+        await idbKv.set(key, next);
+        setSnapshot(next);
+      }).catch(() => undefined);
+    }, SNAPSHOT_META_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [available, scope, frozenSnapshot, shiftId, storeId, policyKey, serialSnap]);
 
   // ── Sincronización ───────────────────────────────────────────────────────
   const syncNow = useCallback(async () => {

@@ -1,8 +1,9 @@
 "use client";
 
-// Sincronización del catálogo Tiendita con el feed del scraper (ADR-107):
-// estado de la última corrida, próxima automática y "Sincronizar ahora" con
-// progreso (polling de catalog_sync_runs mientras haya una corrida abierta).
+// Sincronización del catálogo Tiendita con el feed del scraper (ADR-107,
+// ADR-109): estado de la última corrida (productos únicos y ofertas por
+// tienda), próxima automática y "Sincronizar ahora" con progreso (polling de
+// catalog_sync_runs mientras haya una corrida abierta).
 import { useEffect, useRef } from "react";
 import { AlertTriangle, CalendarClock, RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { useToast } from "@/components/ui/Toast";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { StoreLogo } from "@/components/catalog/StoreLogo";
 import { useCatalogSyncRuns, useStartCatalogSync } from "@/modules/internal/catalogsHooks";
 import { nextWeeklySync, syncProgress, type SyncRun, type SyncStatus } from "@/modules/internal/catalogSync";
 
@@ -55,6 +57,7 @@ export function CatalogSyncCard() {
     if (prevStatus.current === "running" && status && status !== "running") {
       qc.invalidateQueries({ queryKey: ["internal", "catalog-stores"] });
       qc.invalidateQueries({ queryKey: ["internal", "catalogs"] });
+      qc.invalidateQueries({ queryKey: ["internal", "catalog-dedupe-stats"] });
     }
     prevStatus.current = status;
   }, [last?.status, qc]);
@@ -74,7 +77,6 @@ export function CatalogSyncCard() {
 
   const next = nextWeeklySync();
   const progress = last ? syncProgress(last) : null;
-  const current = last?.stores.find((s) => s.key === last.currentStore && !s.done);
 
   return (
     <Card className="mt-3">
@@ -130,12 +132,21 @@ export function CatalogSyncCard() {
               <div className="h-full rounded-full bg-ninja-flame transition-all" style={{ width: `${progress.pct}%` }} />
             </div>
             <p className="text-xs text-muted-foreground">
-              {progress.total
-                ? `${progress.done} de ${progress.total} tiendas`
-                : "Leyendo las tiendas del catálogo…"}
-              {current && ` · ${current.label}: ${fmtNum(current.nuevos + current.actualizados)} productos procesados`}
+              {progress.phase === "feed"
+                ? `Leyendo el catálogo maestro: ${fmtNum(last?.feed?.recibidos ?? 0)} productos (${fmtNum(progress.done)} páginas)`
+                : `Cerrando tiendas: ${progress.done} de ${progress.total}`}
             </p>
           </div>
+        )}
+
+        {last && (last.nuevos > 0 || last.actualizados > 0 || last.ofertasNuevas > 0 || last.ofertasActualizadas > 0) && (
+          <p className="text-sm text-muted-foreground">
+            Productos únicos:{" "}
+            <span className="font-medium text-foreground">{fmtNum(last.nuevos)} nuevos</span> ·{" "}
+            <span className="font-medium text-foreground">{fmtNum(last.actualizados)} actualizados</span>. Ofertas:{" "}
+            <span className="font-medium text-foreground">{fmtNum(last.ofertasNuevas)} nuevas</span> ·{" "}
+            <span className="font-medium text-foreground">{fmtNum(last.ofertasActualizadas)} con cambios</span>.
+          </p>
         )}
 
         {last && last.stores.length > 0 && (
@@ -144,8 +155,8 @@ export function CatalogSyncCard() {
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="py-1.5 pr-3 font-medium">Tienda</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">Nuevos</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">Actualizados</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Ofertas nuevas</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Con cambios</th>
                   <th className="py-1.5 pr-3 text-right font-medium">Faltantes</th>
                   <th className="py-1.5 font-medium">Estado</th>
                 </tr>
@@ -153,7 +164,12 @@ export function CatalogSyncCard() {
               <tbody>
                 {last.stores.map((s) => (
                   <tr key={s.key} className="border-t border-border">
-                    <td className="py-1.5 pr-3 font-medium text-foreground">{s.label}</td>
+                    <td className="py-1.5 pr-3 font-medium text-foreground">
+                      <span className="flex items-center gap-2">
+                        <StoreLogo storeKey={s.key} name={s.label} size={20} />
+                        {s.label}
+                      </span>
+                    </td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(s.nuevos)}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(s.actualizados)}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(s.faltantes)}</td>
@@ -163,7 +179,7 @@ export function CatalogSyncCard() {
                           {s.done ? "Error" : "Reintentando"}
                         </span>
                       ) : s.done ? (
-                        <span className="text-success">{s.full ? "Completa" : "Al día"}</span>
+                        <span className="text-success">{last.feed?.full ? "Completa" : "Al día"}</span>
                       ) : (
                         <span className="text-muted-foreground">Pendiente</span>
                       )}
@@ -174,8 +190,8 @@ export function CatalogSyncCard() {
               <tfoot>
                 <tr className="border-t border-border font-semibold text-foreground">
                   <td className="py-1.5 pr-3">Total</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.nuevos)}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.actualizados)}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.ofertasNuevas)}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.ofertasActualizadas)}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.faltantes)}</td>
                   <td />
                 </tr>
@@ -191,9 +207,10 @@ export function CatalogSyncCard() {
         )}
 
         <p className="text-xs text-muted-foreground">
-          Lee el catálogo del scraper de NinjaSoft: las tiendas nuevas se agregan solas, los productos se
-          actualizan por tienda y EAN, y los que ya no están quedan como no disponibles (nunca se borran).
-          Sale sola los sábados a las 6, después de la corrida del viernes.
+          Lee el catálogo maestro del scraper de NinjaSoft: un producto por EAN con la mejor ficha de todas
+          las tiendas, más las ofertas de cada tienda y vendedor (de todas las tiendas, estén o no en un
+          catálogo). Las tiendas nuevas se agregan solas y las ofertas que ya no están quedan como no
+          disponibles (nunca se borran). Sale sola los sábados a las 6, después de la corrida del viernes.
         </p>
       </CardContent>
     </Card>

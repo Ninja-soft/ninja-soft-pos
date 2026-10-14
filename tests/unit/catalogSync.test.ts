@@ -1,186 +1,173 @@
-// ADR-107: sync del catálogo Tiendita desde el feed del scraper. Mapeo
-// feed → fila de catalog_products (misma semántica que import_catalog.cjs),
-// cursor por tienda, since incremental y presupuesto de tiempo.
+// ADR-107 / ADR-109: sync del catálogo Tiendita desde el feed maestro del
+// scraper (un ítem por producto con la ficha fusionada y todas sus ofertas).
+// Mapeo feed → fila de catalog_items + catalog_offers, since incremental,
+// cursor, errores, presupuesto de tiempo, conteos por tienda y panel.
 import { describe, it, expect } from "vitest";
 import {
-  applyError,
+  applyFeedError,
   applyPage,
-  dedupeByEan,
+  dedupeSavings,
   emptyStoreState,
-  feedProductsUrl,
+  feedCatalogUrl,
+  feedSince,
   hasTime,
+  initFeedState,
   initStores,
-  mapFeedItem,
-  mapFeedPage,
-  MAX_STORE_ERRORS,
+  mapCatalogPage,
+  mapFeedCatalogItem,
+  mapOffer,
+  MAX_FEED_ERRORS,
   nextPendingStore,
   parseAtributos,
   runMode,
   SINCE_MARGIN_MS,
-  storeSince,
+  storeFaltantes,
   toPrice,
-  totals,
-  type FeedItem,
-  type PreviousRun,
-  type StoreState,
+  type FeedCatalogItem,
+  type UpsertResult,
 } from "@/supabase/functions/_shared/catalogSync";
-import { nextWeeklySync, parseSyncRun, syncProgress } from "@/modules/internal/catalogSync";
+import { nextWeeklySync, parseDedupeStats, parseSyncRun, syncProgress } from "@/modules/internal/catalogSync";
 
-const item = (over: Partial<FeedItem> = {}): FeedItem => ({
-  key: "k1",
-  ean: "7790001",
-  id_origen: "p1",
-  oferta_principal: true,
-  vendedor: null,
-  titulo: "Yerba 1 kg",
-  descripcion: "Yerba mate",
-  atributos: "Contenido: 1 kg | Origen: Misiones",
-  marca: "Marca",
-  categoria: "Almacén > Infusiones",
-  precio: 3500,
-  precio_lista: 4000,
-  disponible: true,
-  estado: "ACTIVO",
-  foto: "https://fb/7790001.webp",
-  url_producto: "https://tienda/p1",
-  updated_at: "2026-10-10T10:00:00.000Z",
-  ...over,
+const item = (extra: Partial<FeedCatalogItem> = {}): FeedCatalogItem => ({
+  key: "7790070012050",
+  ean: "7790070012050",
+  scope: null,
+  titulo: "  Aceite de Girasol Cocinero 900 ml ",
+  descripcion: "Aceite refinado.",
+  marca: "Cocinero",
+  categoria: "Almacén > Aceites",
+  atributos: [
+    { key: "Origen", value: "Argentina" },
+    { key: "origen", value: "AR" },
+    { key: "", value: "x" },
+  ],
+  medidas: { contenido: { valor: 900, unidad: "ml" }, peso_kg: 0.92 },
+  foto: null,
+  fotos: ["https://fb/1.webp", "https://fb/1.webp", " "],
+  fuentes: { titulo: "JUMBO" },
+  ofertas: [
+    { tienda: "jumbo", vendedor_id: "", vendedor: "Jumbo", precio: 1800, precio_lista: 1900, disponible: true, estado: "ACTIVO", url: "https://j/1" },
+    { tienda: "BNA", vendedor_id: "55", vendedor: "Electro Sur", precio: "1500,5" as unknown as number, disponible: true },
+    { tienda: "BNA", vendedor_id: "55", vendedor: "Repetida", precio: 1, disponible: true },
+    { tienda: "", precio: 1, disponible: true },
+  ],
+  updated_at: "2026-10-11T00:00:00.000Z",
+  ...extra,
 });
 
-describe("mapFeedItem: feed → catalog_products", () => {
-  it("mapea con la semántica del import por Excel", () => {
-    expect(mapFeedItem(item())).toEqual({
-      ean: "7790001",
-      titulo: "Yerba 1 kg",
-      precio: 3500,
-      precio_lista: 4000,
-      marca: "Marca",
-      categoria_path: "Almacén > Infusiones",
-      foto_url: "https://fb/7790001.webp",
-      disponible: true,
-      estado: "ACTIVO",
-      id_origen: "p1",
-      descripcion: "Yerba mate",
-      atributos: [
-        { key: "Contenido", value: "1 kg" },
-        { key: "Origen", value: "Misiones" },
-      ],
-    });
+describe("mapFeedCatalogItem: feed maestro → catalog_items + catalog_offers", () => {
+  it("ficha limpia, fotos sin repetir, atributos sin claves repetidas", () => {
+    const r = mapFeedCatalogItem(item())!;
+    expect(r.ean).toBe("7790070012050");
+    expect(r.scope).toBe("");
+    expect(r.titulo).toBe("Aceite de Girasol Cocinero 900 ml");
+    expect(r.categoria_path).toBe("Almacén > Aceites");
+    expect(r.atributos).toEqual([{ key: "Origen", value: "Argentina" }]);
+    expect(r.fotos).toEqual(["https://fb/1.webp"]);
+    expect(r.foto_url).toBe("https://fb/1.webp");
+    expect(r.medidas).toEqual({ contenido: { valor: 900, unidad: "ml" }, peso_kg: 0.92 });
+    expect(r.feed_updated_at).toBe("2026-10-11T00:00:00.000Z");
   });
 
-  it("sin EAN o sin título no hay producto; otros vendedores tampoco", () => {
-    expect(mapFeedItem(item({ ean: null }))).toBeNull();
-    expect(mapFeedItem(item({ ean: "  " }))).toBeNull();
-    expect(mapFeedItem(item({ titulo: "" }))).toBeNull();
-    expect(mapFeedItem(item({ oferta_principal: false }))).toBeNull();
-    // un feed viejo sin el campo se toma como principal
-    expect(mapFeedItem(item({ oferta_principal: undefined }))).not.toBeNull();
+  it("ofertas: tienda en mayúsculas, una por (tienda, vendedor), sin tienda no entra", () => {
+    const r = mapFeedCatalogItem(item())!;
+    expect(r.ofertas.map((o) => [o.store_key, o.vendedor_key, o.vendedor, o.precio])).toEqual([
+      ["JUMBO", "", null, 1800],
+      ["BNA", "55", "Electro Sur", 1500.5],
+    ]);
+    expect(r.ofertas[0]!.url).toBe("https://j/1");
   });
 
-  it("faltante: no disponible y vacíos a null", () => {
-    const r = mapFeedItem(
-      item({ disponible: false, estado: "FALTANTE_EN_ULTIMA_CORRIDA", marca: "", foto: null, atributos: null }),
-    )!;
-    expect(r.disponible).toBe(false);
-    expect(r.estado).toBe("FALTANTE_EN_ULTIMA_CORRIDA");
-    expect(r.marca).toBeNull();
-    expect(r.foto_url).toBeNull();
-    expect(r.atributos).toBeNull();
+  it("sin código o sin título no hay producto; código de tienda conserva el scope", () => {
+    expect(mapFeedCatalogItem(item({ ean: "" }))).toBeNull();
+    expect(mapFeedCatalogItem(item({ titulo: "  " }))).toBeNull();
+    expect(mapFeedCatalogItem(item({ ean: "2900001000005", scope: "coto" }))!.scope).toBe("COTO");
   });
 
-  it("precios: null si no es número, negativo o no entra en numeric(12,2)", () => {
-    expect(toPrice(null)).toBeNull();
-    expect(toPrice("")).toBeNull();
-    expect(toPrice("12,5")).toBe(12.5);
+  it("atributos en texto del feed viejo y precios inválidos", () => {
+    expect(parseAtributos("Contenido: 500 g | Origen: AR | sin dos puntos")).toEqual([
+      { key: "Contenido", value: "500 g" },
+      { key: "Origen", value: "AR" },
+    ]);
+    expect(parseAtributos(null)).toBeNull();
     expect(toPrice(-1)).toBeNull();
-    expect(toPrice(1e10)).toBeNull();
-    expect(toPrice(10.555)).toBe(10.56);
+    expect(toPrice(1e11)).toBeNull();
+    expect(toPrice("12,345")).toBe(12.35);
+    expect(mapOffer({ tienda: "COTO", precio: null, disponible: false })!.precio).toBeNull();
   });
 
-  it("atributos: pares clave: valor, ignora basura", () => {
-    expect(parseAtributos("A: 1 | sin separador | B: x: y")).toEqual([
-      { key: "A", value: "1" },
-      { key: "B", value: "x: y" },
+  it("una fila por producto en la página (gana la última)", () => {
+    const rows = mapCatalogPage([item({ titulo: "A" }), item({ titulo: "B" }), item({ ean: "X", scope: "EASY" })]);
+    expect(rows.map((r) => [r.ean, r.scope, r.titulo])).toEqual([
+      ["7790070012050", "", "B"],
+      ["X", "EASY", "Aceite de Girasol Cocinero 900 ml"],
     ]);
-    expect(parseAtributos("")).toBeNull();
-  });
-
-  it("una fila por EAN en la tanda: gana la disponible y después la más barata", () => {
-    const rows = mapFeedPage([
-      item({ key: "a", id_origen: "a", disponible: false, precio: 10 }),
-      item({ key: "b", id_origen: "b", disponible: true, precio: 300 }),
-      item({ key: "c", id_origen: "c", disponible: true, precio: 200 }),
-      item({ key: "d", ean: "otro" }),
-    ]);
-    expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.ean === "7790001")!.id_origen).toBe("c");
-    // precio 0 cuenta como sin precio
-    const d = dedupeByEan([mapFeedItem(item({ precio: 0, id_origen: "x" }))!, mapFeedItem(item({ precio: 50, id_origen: "y" }))!]);
-    expect(d[0]!.id_origen).toBe("y");
   });
 });
 
-describe("since incremental por tienda", () => {
-  const prev: PreviousRun[] = [
-    { status: "ok", started_at: "2026-10-03T09:00:00.000Z", stores: { COTO: { done: true, error: null }, DIA: { done: true, error: null } } },
-    { status: "partial", started_at: "2026-10-10T09:00:00.000Z", stores: { COTO: { done: true, error: null }, DIA: { done: true, error: "feed 500" } } },
-    { status: "error", started_at: "2026-10-11T09:00:00.000Z", stores: { COTO: { done: true, error: null } } },
-    { status: "running", started_at: "2026-10-12T09:00:00.000Z", stores: { COTO: { done: true, error: null } } },
+describe("corrida: since, páginas, errores y cierre por tienda", () => {
+  const prev = [
+    { status: "ok", started_at: "2026-10-10T09:00:00Z", feed: { done: true, error: null } },
+    { status: "ok", started_at: "2026-10-17T09:00:00Z", feed: { done: true, error: "feed caído" } },
+    { status: "partial", started_at: "2026-10-03T09:00:00Z", feed: { done: true } },
+    { status: "error", started_at: "2026-10-18T09:00:00Z", feed: { done: true } },
+    // corrida de ADR-107 (sin feed maestro): no cuenta
+    { status: "ok", started_at: "2026-10-24T09:00:00Z", feed: null },
   ];
 
-  it("toma el inicio de la última corrida OK de ESA tienda, con margen", () => {
-    const coto = Date.parse("2026-10-10T09:00:00.000Z") - SINCE_MARGIN_MS;
-    expect(storeSince(prev, "COTO")).toBe(new Date(coto).toISOString());
-    const dia = Date.parse("2026-10-03T09:00:00.000Z") - SINCE_MARGIN_MS;
-    expect(storeSince(prev, "DIA")).toBe(new Date(dia).toISOString());
+  it("since = última lectura completa y sin error, menos el margen", () => {
+    expect(feedSince(prev)).toBe(new Date(Date.parse("2026-10-10T09:00:00Z") - SINCE_MARGIN_MS).toISOString());
+    expect(feedSince([])).toBeNull();
+    const st = initFeedState(prev);
+    expect(st.full).toBe(false);
+    expect(initFeedState(prev, true)).toMatchObject({ since: null, full: true });
+    expect(runMode(st)).toBe("incremental");
+    expect(runMode(null)).toBeNull();
   });
 
-  it("tienda nueva o primera corrida: completa", () => {
-    expect(storeSince(prev, "MEGATONE")).toBeNull();
-    expect(storeSince([], "COTO")).toBeNull();
-  });
-
-  it("initStores: claves en mayúscula, orden estable y forceFull", () => {
-    const feed = [
+  it("todas las tiendas del feed, en orden estable", () => {
+    const stores = initStores([
       { id: "dia", label: "Día", logo: null, productCount: 1, lastRunAt: null },
-      { id: "COTO", label: "Coto", logo: null, productCount: 1, lastRunAt: null },
-      { id: "MEGATONE", label: "", logo: null, productCount: 0, lastRunAt: null },
-    ];
-    const st = initStores(feed, prev);
-    expect(Object.keys(st)).toEqual(["COTO", "DIA", "MEGATONE"]);
-    expect(st.COTO!.full).toBe(false);
-    expect(st.MEGATONE!.full).toBe(true);
-    expect(st.MEGATONE!.label).toBe("MEGATONE");
-    expect(runMode(st)).toBe("mixed");
-    const all = initStores(feed, prev, true);
-    expect(Object.values(all).every((s) => s.full && s.since === null)).toBe(true);
-    expect(runMode(all)).toBe("full");
-  });
-});
-
-describe("cursor y presupuesto de tiempo", () => {
-  it("avanza el cursor por página y termina la tienda sin nextCursor", () => {
-    let st = emptyStoreState("Coto", null);
-    st = applyPage(st, { items: [], nextCursor: "c1" }, { nuevos: 10, actualizados: 2, faltantes: 1 });
-    expect(st.cursor).toBe("c1");
-    st = applyPage(st, { items: [], nextCursor: null }, { nuevos: 1, actualizados: 0, faltantes: 0 });
-    expect(st).toMatchObject({ cursor: null, pages: 2, nuevos: 11, actualizados: 2, faltantes: 1 });
+      { id: "COTO", label: "", logo: null, productCount: 1, lastRunAt: null },
+      { id: " ", label: "x", logo: null, productCount: 0, lastRunAt: null },
+    ]);
+    expect(Object.keys(stores)).toEqual(["COTO", "DIA"]);
+    expect(stores.COTO!.label).toBe("COTO");
+    expect(nextPendingStore(stores)).toBe("COTO");
+    expect(nextPendingStore({ ...stores, COTO: { ...stores.COTO!, done: true } })).toBe("DIA");
   });
 
-  it("un error conserva el cursor y se reintenta; tras el máximo la tienda termina con error", () => {
-    let st: StoreState = { ...emptyStoreState("Coto", null), cursor: "c5" };
-    st = applyError(st, "feed respondió 502");
-    expect(st).toMatchObject({ cursor: "c5", done: false, errores: 1, error: "feed respondió 502" });
-    // una página buena limpia el error
-    expect(applyPage(st, { items: [], nextCursor: "c6" }, { nuevos: 0, actualizados: 0, faltantes: 0 }).error).toBeNull();
-    for (let i = 1; i < MAX_STORE_ERRORS; i++) st = applyError(st, "x");
-    expect(st.done).toBe(true);
+  it("applyPage suma por tienda y totales, y avanza el cursor", () => {
+    const feed = initFeedState([]);
+    const stores = initStores([{ id: "COTO", label: "Coto", logo: null, productCount: 0, lastRunAt: null }]);
+    const result: UpsertResult = {
+      recibidos: 3, nuevos: 2, actualizados: 1, ofertas: 5, ofertas_nuevas: 4, ofertas_actualizadas: 1, faltantes: 1,
+      por_tienda: { COTO: { nuevas: 3, actualizadas: 1, faltantes: 1 }, BNA: { nuevas: 1 } },
+    };
+    const t0 = { nuevos: 0, actualizados: 0, ofertas_nuevas: 0, ofertas_actualizadas: 0 };
+    const a = applyPage(feed, stores, t0, { items: [], nextCursor: "c1" }, result);
+    expect(a.feed).toMatchObject({ cursor: "c1", done: false, pages: 1, recibidos: 3 });
+    expect(a.stores.COTO).toMatchObject({ nuevos: 3, actualizados: 1, faltantes: 1 });
+    expect(a.stores.BNA).toMatchObject({ label: "BNA", nuevos: 1 });
+    expect(a.totals).toEqual({ nuevos: 2, actualizados: 1, ofertas_nuevas: 4, ofertas_actualizadas: 1 });
+    const b = applyPage(a.feed, a.stores, a.totals, { items: [], nextCursor: null }, result);
+    expect(b.feed.done).toBe(true);
+    expect(storeFaltantes({ ...b.stores, COTO: { ...b.stores.COTO!, marcados: 4 } })).toBe(6);
   });
 
-  it("nextPendingStore recorre en orden y termina en null", () => {
-    const stores = { DIA: emptyStoreState("Día", null), COTO: { ...emptyStoreState("Coto", null), done: true } };
-    expect(nextPendingStore(stores)).toBe("DIA");
-    expect(nextPendingStore({ ...stores, DIA: { ...stores.DIA, done: true } })).toBeNull();
+  it("errores del feed: reintenta y después cierra la lectura con error", () => {
+    let st = initFeedState([]);
+    for (let i = 1; i < MAX_FEED_ERRORS; i++) {
+      st = applyFeedError(st, "feed respondió 503");
+      expect(st.done).toBe(false);
+    }
+    st = applyFeedError(st, "feed respondió 503");
+    expect(st).toMatchObject({ done: true, error: "feed respondió 503", errores: MAX_FEED_ERRORS });
+    // Una página buena resetea los errores.
+    const ok = applyPage({ ...st, done: false }, {}, { nuevos: 0, actualizados: 0, ofertas_nuevas: 0, ofertas_actualizadas: 0 }, { items: [], nextCursor: "x" }, {
+      recibidos: 0, nuevos: 0, actualizados: 0, ofertas: 0, ofertas_nuevas: 0, ofertas_actualizadas: 0, faltantes: 0, por_tienda: {},
+    });
+    expect(ok.feed).toMatchObject({ errores: 0, error: null });
   });
 
   it("hasTime deja una reserva antes del presupuesto", () => {
@@ -188,51 +175,71 @@ describe("cursor y presupuesto de tiempo", () => {
     expect(hasTime(0, 85_000, 100_000, 15_000)).toBe(false);
   });
 
-  it("URL del feed con since y cursor", () => {
-    const u = new URL(feedProductsUrl("https://x.up.railway.app/", "COTO", "2026-10-10T08:00:00.000Z", "abc"));
-    expect(u.pathname).toBe("/api/feed/products");
-    expect(u.searchParams.get("super")).toBe("COTO");
+  it("URL del feed maestro con since y cursor", () => {
+    const u = new URL(feedCatalogUrl("https://x.up.railway.app/", "2026-10-10T08:00:00.000Z", "abc"));
+    expect(u.pathname).toBe("/api/feed/catalog");
     expect(u.searchParams.get("since")).toBe("2026-10-10T08:00:00.000Z");
     expect(u.searchParams.get("cursor")).toBe("abc");
-    expect(u.searchParams.get("limit")).toBe("1000");
-    expect(new URL(feedProductsUrl("https://x", "DIA", null, null)).searchParams.has("since")).toBe(false);
+    expect(u.searchParams.get("limit")).toBe("250");
+    expect(new URL(feedCatalogUrl("https://x", null, null)).searchParams.has("since")).toBe(false);
   });
 
-  it("totales: faltantes suma los del feed y los marcados", () => {
-    const t = totals({
-      A: { ...emptyStoreState("A", null), nuevos: 2, faltantes: 1, marcados: 3 },
-      B: { ...emptyStoreState("B", null), actualizados: 5, error: "x" },
-    });
-    expect(t).toEqual({ nuevos: 2, actualizados: 5, faltantes: 4, errores: 1 });
+  it("ahorro por deduplicación", () => {
+    expect(dedupeSavings(285_356, 350_848)).toEqual({ saved: 65_492, pct: 18.7 });
+    expect(dedupeSavings(10, 0)).toEqual({ saved: 0, pct: 0 });
+    expect(emptyStoreState("X").done).toBe(false);
   });
 });
 
-describe("panel: próxima sync y progreso", () => {
+describe("panel: próxima sync, progreso y estadísticas", () => {
   it("próxima: sábado 06:00 AR (09:00 UTC)", () => {
-    // martes 13/10/2026 12:00 AR
     expect(nextWeeklySync(new Date("2026-10-13T15:00:00Z")).toISOString()).toBe("2026-10-17T09:00:00.000Z");
-    // sábado antes de las 6 AR: ese mismo día
     expect(nextWeeklySync(new Date("2026-10-17T08:00:00Z")).toISOString()).toBe("2026-10-17T09:00:00.000Z");
-    // sábado después de las 6 AR: el siguiente
     expect(nextWeeklySync(new Date("2026-10-17T09:00:00Z")).toISOString()).toBe("2026-10-24T09:00:00.000Z");
-    // viernes 23:30 AR (ya sábado en UTC): mañana
     expect(nextWeeklySync(new Date("2026-10-17T02:30:00Z")).toISOString()).toBe("2026-10-17T09:00:00.000Z");
   });
 
-  it("parseSyncRun y progreso por tiendas", () => {
-    const run = parseSyncRun({
+  it("parseSyncRun y progreso: lectura del feed y después cierre por tienda", () => {
+    const base = {
       id: "r1",
       trigger: "cron",
       status: "running",
-      mode: "incremental",
+      mode: "full",
+      nuevos: 10,
+      ofertas_nuevas: 25,
       stores: {
         DIA: { label: "Día", done: false, nuevos: 1, faltantes: 1, marcados: 2 },
-        COTO: { label: "Coto", done: true, full: true },
+        COTO: { label: "Coto", done: true },
       },
       started_at: "2026-10-17T09:00:00Z",
+    };
+    const reading = parseSyncRun({ ...base, feed: { full: true, done: false, pages: 200, recibidos: 50_000 } });
+    expect(reading.stores.map((s) => s.key)).toEqual(["COTO", "DIA"]);
+    expect(reading.stores[1]!.faltantes).toBe(3);
+    expect(reading.ofertasNuevas).toBe(25);
+    expect(reading.feed).toMatchObject({ pages: 200, recibidos: 50_000 });
+    const p1 = syncProgress(reading);
+    expect(p1.phase).toBe("feed");
+    expect(p1.pct).toBeGreaterThan(0);
+    expect(p1.pct).toBeLessThan(80);
+    const closing = parseSyncRun({ ...base, feed: { done: true, pages: 400 } });
+    expect(syncProgress(closing)).toEqual({ phase: "stores", done: 1, total: 2, pct: 90 });
+    expect(syncProgress(parseSyncRun({ ...base, feed: null })).phase).toBe("feed");
+  });
+
+  it("estadísticas de deduplicación", () => {
+    const s = parseDedupeStats({
+      items: 285_356,
+      items_globales: 246_926,
+      items_por_tienda: 38_430,
+      ofertas: 360_000,
+      ofertas_tienda: 350_848,
+      ofertas_vendedores: 9_152,
+      tiendas: [{ key: "COTO", name: "Coto", ofertas_tienda: 57_907, en_catalogo: true }],
     });
-    expect(run.stores.map((s) => s.key)).toEqual(["COTO", "DIA"]);
-    expect(run.stores[1]!.faltantes).toBe(3);
-    expect(syncProgress(run)).toEqual({ done: 1, total: 2, pct: 50 });
+    expect(s.ahorro).toBe(65_492);
+    expect(s.ahorroPct).toBe(18.7);
+    expect(s.tiendas[0]).toMatchObject({ key: "COTO", ofertasTienda: 57_907, enCatalogo: true, ofertasVendedores: 0 });
+    expect(parseDedupeStats(null)).toMatchObject({ items: 0, ahorroPct: 0, tiendas: [] });
   });
 });

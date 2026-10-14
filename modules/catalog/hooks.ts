@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { catalogPriceApi, type PriceReference } from "./priceReference";
+import { catalogPriceApi, type MarketOffer, type PriceReference } from "./priceReference";
 
 // ¿El tenant compró/recibió algún catálogo? Determina si mostramos el control de
 // configuración y las flechas de precio. staleTime alto: cambia muy rara vez.
@@ -65,4 +65,21 @@ export function useCatalogPriceReferences(
     staleTime: 60_000,
   });
   return { data: q.data, isLoading: q.isLoading };
+}
+
+// Ofertas de mercado de un EAN (tienda, vendedor, precio). Sólo corre si
+// `enabled` (el negocio tiene catálogo y no apagó la referencia de mercado):
+// apagada, el front no llama a la RPC.
+export function useCatalogPriceCompare(
+  ean: string | null | undefined,
+  enabled: boolean,
+): { data: MarketOffer[] | undefined; isLoading: boolean; isError: boolean } {
+  const clean = (ean ?? "").trim();
+  const q = useQuery({
+    queryKey: ["catalog", "price-compare", clean],
+    queryFn: () => catalogPriceApi.compare(clean),
+    enabled: enabled && clean.length >= 6,
+    staleTime: 5 * 60_000,
+  });
+  return { data: q.data, isLoading: q.isLoading && q.fetchStatus !== "idle", isError: q.isError };
 }

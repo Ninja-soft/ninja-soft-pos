@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import {
   comparePriceToReference,
+  marketFromLabel,
   type PriceReference,
 } from "@/modules/catalog/priceReference";
 
@@ -99,6 +100,14 @@ export function CatalogPriceArrow({
                 ? ` · ${reference.storeCount} tiendas`
                 : ""}
             </p>
+            {reference && marketFromLabel(reference, formatCurrency) && (
+              <p className="text-muted-foreground">
+                Precio de mercado:{" "}
+                <span className="font-medium text-foreground">
+                  {marketFromLabel(reference, formatCurrency)}
+                </span>
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground">
               Información orientativa de mercado, no vinculante.
             </p>

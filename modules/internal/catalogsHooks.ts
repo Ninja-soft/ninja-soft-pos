@@ -83,6 +83,26 @@ export function useCatalogSyncRuns() {
   });
 }
 
+// ADR-109: productos únicos vs ofertas por tienda (deduplicación).
+export function useCatalogDedupeStats() {
+  return useQuery({
+    queryKey: ["internal", "catalog-dedupe-stats"],
+    queryFn: () => catalogSyncApi.dedupeStats(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ADR-109: comparador de precios del panel interno (todas las tiendas).
+export function useInternalPriceCompare(ean: string) {
+  const clean = ean.trim();
+  return useQuery({
+    queryKey: ["internal", "catalog-price-compare", clean],
+    queryFn: () => catalogSyncApi.compare(clean),
+    enabled: clean.length >= 6,
+    staleTime: 60_000,
+  });
+}
+
 export function useStartCatalogSync() {
   const qc = useQueryClient();
   return useMutation({

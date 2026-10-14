@@ -278,8 +278,6 @@ export function quoteToInvoiceDoc(q: Quote, items: QuoteItem[], brand: QuoteBran
       ...(detail.length ? { detailLines: detail } : {}),
     };
   });
-  const hasServices = items.some((i) => i.is_service);
-  const hasGoods = items.some((i) => !i.is_service);
   const numberText = quoteNumberLabel(q.pto_vta, q.number);
   return {
     fiscal: false,
@@ -289,8 +287,10 @@ export function quoteToInvoiceDoc(q: Quote, items: QuoteItem[], brand: QuoteBran
     label: "Presupuesto",
     ptoVta: "",
     number: numberText,
-    date: `${q.issue_date.slice(0, 10)}T12:00:00-03:00`,
-    concepto: hasServices ? (hasGoods ? 3 : 2) : null,
+    // Fecha sola (sin hora) y sin concepto: un presupuesto no "factura" un
+    // período (la hoja A4 lo muestra como "Período del servicio").
+    date: q.issue_date.slice(0, 10),
+    concepto: null,
     servicePeriod: q.service_from ? { from: q.service_from, to: q.service_to ?? q.service_from } : null,
     paymentDue: null,
     saleCondition: "A convenir",

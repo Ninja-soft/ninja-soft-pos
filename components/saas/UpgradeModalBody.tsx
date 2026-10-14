@@ -21,7 +21,7 @@ import { appOrigin } from "@/lib/site";
 // upgrade self-serve no aplica (p. ej. el usuario no es dueño).
 const OWNER_PANEL_ROUTE = "/dashboard-team";
 
-interface UpgradeModalProps {
+export interface UpgradeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   // key de la feature gateada (busca el primer plan que la incluye).
@@ -42,7 +42,7 @@ function rpc(supabase: ReturnType<typeof createClient>) {
   ) => Promise<{ data: unknown; error: { message?: string } | null }>;
 }
 
-export function UpgradeModal({
+export function UpgradeModalBody({
   open,
   onOpenChange,
   featureKey,

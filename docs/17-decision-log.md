@@ -4059,7 +4059,7 @@ En "Pagos de plataforma", el Client ID tiene cargado un email.
 
 ---
 
-## ADR-112: Velocidad del POS: menos JS en el primer render, consultas del arranque sólo cuando hacen falta y catálogo offline una vez por apertura
+## ADR-114: Velocidad del POS: menos JS en el primer render, consultas del arranque sólo cuando hacen falta y catálogo offline una vez por apertura
 
 **Fecha:** 2026-10-14 · **Estado:** aceptada (código en `perf/pos-velocidad`; sin migraciones, Edges ni secrets) · **Base:** ADR-077 (venta offline y foto local), ADR-058 (resolver de precios con `price_context_snapshot`), ADR-090 y ADR-091 (auditoría de rendimiento de la base).
 

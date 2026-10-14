@@ -4,6 +4,8 @@
 export const WEBHOOK_PROVIDERS = [
   { key: "mercadopago", label: "Mercado Pago (link)", fn: "mp_webhook" },
   { key: "mercadopago_orders", label: "Mercado Pago (QR y Point)", fn: "mp_orders_webhook" },
+  // Suscripciones que cobra NinjaSoft (F20-0b): incluye firmas inválidas.
+  { key: "mercadopago_billing", label: "Mercado Pago (suscripciones NinjaSoft)", fn: "mp_billing_webhook" },
   { key: "getnet", label: "Getnet", fn: "getnet_webhook" },
   { key: "payway", label: "Payway", fn: "payway_webhook" },
   { key: "nave", label: "Nave", fn: "nave_webhook" },

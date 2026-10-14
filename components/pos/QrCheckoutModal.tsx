@@ -996,12 +996,12 @@ export function QrCheckoutModal({
           )}
 
           {phase === "creating" && (
-            <p className="text-sm text-muted-foreground">Generando el cobro con {providerName}…</p>
+            <p className="text-center text-sm text-muted-foreground md:text-left">Generando el cobro con {providerName}…</p>
           )}
 
           {phase === "waiting" && (
             <>
-              <p className={cn("text-sm text-muted-foreground", shareOpen && "md:hidden")}>
+              <p className={cn("text-center text-sm text-muted-foreground md:text-left", shareOpen && "md:hidden")}>
                 {isMpOrder
                   ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
                   : channel === "link"
@@ -1009,14 +1009,14 @@ export function QrCheckoutModal({
                     : `El cliente escanea el QR para pagar con ${providerName}. La pantalla se actualiza sola al acreditarse.`}
               </p>
               {isMpOrder ? (
-                <div>
+                <div className="flex justify-center md:justify-start">
                   <Button variant="secondary" size="sm" disabled={switching || parking} onClick={switchToLink}>
                     {switching ? <Spinner size={14} /> : <Link2 size={14} />} Enviar link
                   </Button>
                 </div>
               ) : (
                 isLink && (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start">
                     <Button
                       variant="secondary"
                       size="sm"

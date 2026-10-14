@@ -33,6 +33,12 @@ import { cn } from "@/lib/utils/cn";
 import { previewVisible, type PostSalePhase } from "@/lib/tickets/postSale";
 
 export type DetailTab = "ticket" | "cobros";
+/** ADR-119: formato del comprobante en la ventana (vista previa e impresión). */
+export type PrintFormat = "ticket" | "a4";
+const FORMATS: { value: PrintFormat; label: string }[] = [
+  { value: "ticket", label: "Ticket" },
+  { value: "a4", label: "A4" },
+];
 const TABS: { value: DetailTab; label: string }[] = [
   { value: "ticket", label: "Ticket" },
   { value: "cobros", label: "Cobros" },
@@ -64,6 +70,9 @@ export interface TicketSheetProps {
   onTab: (t: DetailTab) => void;
   /** Ticket renderizado (sin la clase de impresión). */
   preview: ReactNode;
+  /** Formato elegido (preseleccionado con el del perfil de impresión). */
+  format: PrintFormat;
+  onFormat: (f: PrintFormat) => void;
   /** Pestaña Cobros (ADR-061). */
   payments: ReactNode;
   summary: TicketSummary | null;
@@ -186,6 +195,16 @@ export function TicketSheet(p: TicketSheetProps) {
               className="w-full max-w-[240px]"
               fill
             />
+            {p.tab === "ticket" && visible && (
+              <Segmented
+                value={p.format}
+                options={FORMATS}
+                onChange={p.onFormat}
+                aria-label="Formato de la vista previa"
+                size="sm"
+                className="ml-auto"
+              />
+            )}
           </div>
           {p.tab === "cobros" ? (
             <div className="rounded-xl border border-border bg-card p-4">{p.payments}</div>
@@ -200,7 +219,16 @@ export function TicketSheet(p: TicketSheetProps) {
             <SummaryBlock summary={p.summary} badge={badge} newSale={Boolean(onNewSale)} />
 
             <div className="mt-5 space-y-2">
-              <p className={POS_EYEBROW}>Comprobante</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className={POS_EYEBROW}>Comprobante</p>
+                <Segmented
+                  value={p.format}
+                  options={FORMATS}
+                  onChange={p.onFormat}
+                  aria-label="Formato de impresión"
+                  size="sm"
+                />
+              </div>
               <button
                 type="button"
                 onClick={onPrint}
@@ -212,7 +240,7 @@ export function TicketSheet(p: TicketSheetProps) {
               >
                 <Printer size={18} aria-hidden className="shrink-0" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold">Imprimir ticket</span>
+                  <span className="block text-sm font-semibold">{p.format === "a4" ? "Imprimir A4" : "Imprimir ticket"}</span>
                   {p.printHint && <span className="block truncate text-xs text-muted-foreground">{p.printHint}</span>}
                 </span>
                 <kbd className="hidden rounded-md bg-fg-10 px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground md:inline">P</kbd>
@@ -240,7 +268,7 @@ export function TicketSheet(p: TicketSheetProps) {
               {p.emailPanel}
               {p.printFailed && (
                 <Callout tone="danger" icon={AlertTriangle} title="No se pudo imprimir">
-                  Revisá la impresora y volvé a intentar con Imprimir ticket.
+                  Revisá la impresora y volvé a intentar con Imprimir.
                 </Callout>
               )}
             </div>

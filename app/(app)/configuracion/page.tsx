@@ -128,10 +128,6 @@ const InvoiceStyleCard = dynamic(
   () => import("@/components/invoices/InvoiceStyleCard").then((m) => m.InvoiceStyleCard),
   { loading },
 );
-const TicketTemplatesCard = dynamic(
-  () => import("@/components/tickets/TicketTemplatesCard").then((m) => m.TicketTemplatesCard),
-  { loading },
-);
 const PrintSettingsCard = dynamic(
   () => import("@/components/dashboard-team/PrintSettingsCard").then((m) => m.PrintSettingsCard),
   { loading },
@@ -301,9 +297,9 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
           <ScopedSection domain="ticket" fields={TICKET_TEXT_FIELDS}>
             <TicketSettingsCard />
           </ScopedSection>
-          {/* ADR-112: modelos de factura A4 y ticket, color, logo y sello. */}
+          {/* ADR-112 / ADR-119: modelos de factura A4 y ticket, color, logo,
+              sello y opciones. Es el único diseño de comprobantes. */}
           <InvoiceStyleCard />
-          <TicketTemplatesCard />
         </div>
       );
     // Impresión por tipo de documento (F10 · H22; owner/manager).

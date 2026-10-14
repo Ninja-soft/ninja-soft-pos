@@ -95,6 +95,15 @@ describe("qrSvgDataUrl", () => {
     expect(svg).toContain('<path d="M2 2h1v1h-1z');
   });
 
+  it("trae tamaño intrínseco (html2canvas no lo recorta al exportar el PDF, ADR-119)", () => {
+    const url = qrSvgDataUrl("https://www.arca.gob.ar/fe/qr/?p=eyJ2ZXIiOjF9");
+    const svg = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+    const m = /width="(\d+)" height="(\d+)" viewBox="0 0 (\d+) (\d+)"/.exec(svg);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBe(Number(m![3]) * 8);
+    expect(m![1]).toBe(m![2]);
+  });
+
   it("texto demasiado largo devuelve cadena vacía", () => {
     expect(qrSvgDataUrl("x".repeat(5000))).toBe("");
   });

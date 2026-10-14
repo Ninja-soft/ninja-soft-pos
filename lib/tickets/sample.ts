@@ -1,4 +1,4 @@
-// Venta ficticia para el preview del editor de tickets (H9b).
+// Tipos de los datos de una venta para el comprobante (motor ADR-112) y una venta ficticia de ejemplo.
 import type { TicketFiscal } from "@/lib/arca/ticket";
 export interface SampleBrand {
   logo_url: string | null;
@@ -63,6 +63,9 @@ export interface SampleTicketData {
     line_detail?: string | null;
     line_clarifications?: string[] | null;
     line_note?: string | null;
+    /** ADR-119: foto del producto (data URL precargada) y su versión en monocromo. */
+    image_url?: string | null;
+    image_mono?: string | null;
   }[];
   payments: { id: string; method: string; amount: number }[];
   customer?: {

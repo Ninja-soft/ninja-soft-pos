@@ -28,6 +28,8 @@ export interface FeedCatalogItem {
   key: string;
   ean: string | null;
   scope: string | null;
+  /** Sin código de barras (ADR-118): código propio de la tienda (referencia/SKU). */
+  codigo_tienda?: string | null;
   titulo: string;
   descripcion?: string | null;
   marca?: string | null;
@@ -71,10 +73,14 @@ export interface OfferRow {
   last_seen_at: string | null;
 }
 
-/** Producto maestro para catalog_sync_upsert_catalog (columnas de catalog_items + ofertas). */
+/**
+ * Producto maestro para catalog_sync_upsert_catalog (columnas de catalog_items + ofertas).
+ * ADR-118: sin EAN → ean null, scope = la tienda y codigo_tienda = su código propio.
+ */
 export interface CatalogItemRow {
-  ean: string;
+  ean: string | null;
   scope: string;
+  codigo_tienda: string | null;
   titulo: string;
   descripcion: string | null;
   marca: string | null;
@@ -109,6 +115,18 @@ export interface StoreState {
   marcados: number;
   done: boolean;
   error: string | null;
+  /** ADR-118: avance del cierre por lotes (última oferta procesada). */
+  cursor?: CloseCursor | null;
+  /** Publicaciones de tienda contadas hasta acá en el cierre. */
+  contadas?: number;
+  /** Lotes seguidos que fallaron (se reintenta hasta MAX_CLOSE_RETRIES). */
+  intentos?: number;
+}
+
+/** Cursor del cierre de una tienda: keyset (item_id, vendedor_key) del índice único. */
+export interface CloseCursor {
+  item: number;
+  vendor: string;
 }
 
 export type StoresState = Record<string, StoreState>;
@@ -245,15 +263,20 @@ export function mapOffer(o: FeedOffer): OfferRow | null {
 }
 
 /**
- * Ítem del feed maestro → fila de catalog_items + ofertas. Sin código o sin
- * título no hay producto. scope null/"" = EAN global (la base vuelve a
- * normalizar el código con catalog_normalize_gtin).
+ * Ítem del feed maestro → fila de catalog_items + ofertas. Sin título no hay
+ * producto. scope null/"" = EAN global (la base vuelve a normalizar el código
+ * con catalog_normalize_gtin). ADR-118: sin EAN entra como producto de la
+ * tienda (scope) con su código propio (codigo_tienda); sin EAN y sin tienda o
+ * sin código no se puede identificar y no entra.
  */
 export function mapFeedCatalogItem(item: FeedCatalogItem): CatalogItemRow | null {
   if (!item) return null;
   const ean = cleanText(item.ean);
   const titulo = cleanText(item.titulo);
-  if (!ean || !titulo) return null;
+  const scope = cleanText(item.scope)?.toUpperCase() ?? "";
+  const codigo = ean ? null : cleanText(item.codigo_tienda);
+  if (!titulo) return null;
+  if (!ean && (!scope || !codigo)) return null;
   const fotos = Array.isArray(item.fotos) ? [...new Set(item.fotos.map(cleanText).filter((f): f is string => Boolean(f)))] : [];
   const foto = cleanText(item.foto) ?? fotos[0] ?? null;
   const medidas = item.medidas && typeof item.medidas === "object" && Object.keys(item.medidas).length ? item.medidas : null;
@@ -269,7 +292,8 @@ export function mapFeedCatalogItem(item: FeedCatalogItem): CatalogItemRow | null
   }
   return {
     ean,
-    scope: cleanText(item.scope)?.toUpperCase() ?? "",
+    scope,
+    codigo_tienda: codigo,
     titulo: titulo.slice(0, 160),
     descripcion: cleanText(item.descripcion),
     marca: cleanText(item.marca),
@@ -289,7 +313,8 @@ export function mapCatalogPage(items: FeedCatalogItem[]): CatalogItemRow[] {
   const byKey = new Map<string, CatalogItemRow>();
   for (const it of items ?? []) {
     const r = mapFeedCatalogItem(it);
-    if (r) byKey.set(`${r.scope}|${r.ean}`, r); // el último gana (el feed ordena por updated_at)
+    // El último gana (el feed ordena por updated_at). Sin EAN: clave por código de la tienda.
+    if (r) byKey.set(r.ean === null ? `${r.scope}|#${r.codigo_tienda}` : `${r.scope}|${r.ean}`, r);
   }
   return [...byKey.values()];
 }
@@ -424,4 +449,200 @@ export function dedupeSavings(items: number, storeOffers: number): { saved: numb
   if (!storeOffers || storeOffers <= 0 || items < 0) return { saved: 0, pct: 0 };
   const saved = Math.max(storeOffers - items, 0);
   return { saved, pct: Math.round((saved / storeOffers) * 1000) / 10 };
+}
+
+// =============================================================================
+// Cierre por lotes (ADR-118)
+//
+// Antes cada tienda se cerraba con UNA RPC (marcar faltantes + contar) y la
+// corrida con otra (recuento de cada catálogo, dos veces, + aviso). Con ~600k
+// ofertas el cierre final superaba el statement_timeout de PostgREST (8 s).
+// Ahora:
+//   1. Por tienda: catalog_sync_close_store_batch procesa CLOSE_BATCH_ROWS
+//      ofertas por llamada (keyset sobre el índice único) y devuelve el cursor.
+//   2. Por catálogo afectado: catalog_recount_step cuenta un rango de
+//      productos por llamada (el avance queda en catalogs.recount).
+//   3. catalog_sync_finalize: sólo aviso y estado (ya no cuenta nada).
+// El avance se guarda en la corrida después de cada lote: si se acaba el
+// presupuesto de la invocación, la próxima sigue desde ahí. Un lote que falla
+// se reintenta hasta MAX_CLOSE_RETRIES veces seguidas; después esa tienda (o
+// catálogo, o el cierre) queda con error y la corrida termina "partial".
+// =============================================================================
+
+/** Ofertas por lote del cierre de una tienda (< 2 s por lote con ~1,3 M de ofertas). */
+export const CLOSE_BATCH_ROWS = 20_000;
+/** Rango de ids de producto por lote del recuento de un catálogo. */
+export const RECOUNT_BATCH_ITEMS = 50_000;
+/** Fallos seguidos de un lote (o del cierre final) antes de darlo por perdido. */
+export const MAX_CLOSE_RETRIES = 3;
+
+/** Resultado de catalog_sync_close_store_batch. */
+export interface CloseBatchResult {
+  filas: number;
+  contadas: number;
+  marcados: number;
+  last_item: number | null;
+  last_vendor: string | null;
+  done: boolean;
+}
+
+/** Resultado de catalog_recount_step. */
+export interface RecountStepResult {
+  done: boolean;
+  product_count?: number | null;
+}
+
+/** Estado del cierre de la corrida (catalog_sync_runs.closing). */
+export interface ClosingState {
+  /** Catálogos a recontar (null = todavía no se armó la lista). */
+  catalogs: string[] | null;
+  recounted: string[];
+  /** Catálogo en curso (el primer lote de cada uno reinicia su recuento). */
+  current: string | null;
+  intentos: number;
+  errors: Record<string, string>;
+  finalize_intentos: number;
+}
+
+export function emptyClosing(): ClosingState {
+  return { catalogs: null, recounted: [], current: null, intentos: 0, errors: {}, finalize_intentos: 0 };
+}
+
+const errText = (prefix: string, message: string) => `${prefix}: ${message}`.slice(0, 500);
+
+/** Aplica un lote del cierre de una tienda. */
+export function applyCloseBatch(s: StoreState, r: CloseBatchResult): StoreState {
+  const moved = Number(r?.filas ?? 0) > 0 && r.last_item != null;
+  return {
+    ...s,
+    cursor: moved ? { item: Number(r.last_item), vendor: String(r.last_vendor ?? "") } : (s.cursor ?? null),
+    contadas: (s.contadas ?? 0) + Number(r?.contadas ?? 0),
+    marcados: (s.marcados ?? 0) + Number(r?.marcados ?? 0),
+    done: Boolean(r?.done),
+    intentos: 0,
+    error: null,
+  };
+}
+
+/** Un lote del cierre falló: se reintenta; a los MAX_CLOSE_RETRIES la tienda queda con error. */
+export function applyCloseError(s: StoreState, message: string, max = MAX_CLOSE_RETRIES): StoreState {
+  const intentos = (s.intentos ?? 0) + 1;
+  const giveUp = intentos >= max;
+  return { ...s, intentos, done: giveUp, error: giveUp ? errText("cierre", message) : (s.error ?? null) };
+}
+
+/** Próximo catálogo a recontar (ni terminado ni con error). */
+export function nextRecount(c: ClosingState): string | null {
+  for (const id of c.catalogs ?? []) {
+    if (!c.recounted.includes(id) && !c.errors[id]) return id;
+  }
+  return null;
+}
+
+export function applyRecountStep(c: ClosingState, catalogId: string, r: RecountStepResult): ClosingState {
+  if (r?.done) return { ...c, current: null, intentos: 0, recounted: [...c.recounted, catalogId] };
+  return { ...c, current: catalogId, intentos: 0 };
+}
+
+export function applyRecountError(
+  c: ClosingState,
+  catalogId: string,
+  message: string,
+  max = MAX_CLOSE_RETRIES,
+): ClosingState {
+  const intentos = c.intentos + 1;
+  // `current` no cambia: si falló el primer paso (el que reinicia), el
+  // reintento vuelve a reiniciar; si falló uno intermedio, sigue desde el avance.
+  if (intentos < max) return { ...c, intentos };
+  return { ...c, current: null, intentos: 0, errors: { ...c.errors, [catalogId]: errText("recuento", message) } };
+}
+
+/** ¿El cierre dejó algo con error? (la corrida termina "partial"). */
+export function closingHasErrors(stores: StoresState, c: ClosingState | null): boolean {
+  return Object.values(stores).some((s) => s.error) || Object.keys(c?.errors ?? {}).length > 0;
+}
+
+export interface ClosingProgress {
+  stores: StoresState;
+  closing: ClosingState;
+}
+
+/** Llamadas que hace el cierre (la Edge las implementa con RPC; los tests, con dobles). */
+export interface ClosingDeps {
+  /** Tira si la corrida se pausó o canceló (corta la tanda sin tocar nada). */
+  assertActive(): Promise<void>;
+  closeStoreBatch(store: string, cursor: CloseCursor | null, counted: number): Promise<CloseBatchResult>;
+  listCatalogs(storeKeys: string[]): Promise<string[]>;
+  recountStep(catalogId: string, restart: boolean): Promise<RecountStepResult>;
+  /** catalog_sync_finalize: aviso a los negocios y estado final (ok / partial). */
+  finalize(): Promise<void>;
+  /** El cierre final falló MAX_CLOSE_RETRIES veces: la corrida termina "partial" igual. */
+  markPartial(message: string): Promise<void>;
+  save(p: ClosingProgress, extra?: Record<string, unknown>): Promise<void>;
+}
+
+/**
+ * Cierre de la corrida por lotes mientras quede presupuesto (`hasTime`).
+ * Devuelve el avance y si la corrida terminó (OK, partial o con el cierre
+ * final perdido). Si no terminó, la próxima invocación sigue desde `progress`.
+ */
+export async function runClosing(
+  start: ClosingProgress,
+  deps: ClosingDeps,
+  hasTime: () => boolean,
+): Promise<{ progress: ClosingProgress; finished: boolean }> {
+  let p: ClosingProgress = { stores: { ...start.stores }, closing: start.closing ?? emptyClosing() };
+  while (hasTime()) {
+    await deps.assertActive();
+
+    // 1) Tiendas: faltantes + conteo, un lote por vuelta.
+    const key = nextPendingStore(p.stores);
+    if (key) {
+      const s = p.stores[key] ?? emptyStoreState(key);
+      let next: StoreState;
+      try {
+        next = applyCloseBatch(s, await deps.closeStoreBatch(key, s.cursor ?? null, s.contadas ?? 0));
+      } catch (e) {
+        next = applyCloseError(s, e instanceof Error ? e.message : String(e));
+      }
+      p = { ...p, stores: { ...p.stores, [key]: next } };
+      await deps.save(p, { current_store: key });
+      continue;
+    }
+
+    // 2) Catálogos afectados: recuento por lotes.
+    if (p.closing.catalogs === null) {
+      const ids = await deps.listCatalogs(Object.keys(p.stores));
+      p = { ...p, closing: { ...p.closing, catalogs: [...new Set(ids)].sort() } };
+      await deps.save(p, { current_store: null });
+      continue;
+    }
+    const cid = nextRecount(p.closing);
+    if (cid) {
+      try {
+        const r = await deps.recountStep(cid, p.closing.current !== cid);
+        p = { ...p, closing: applyRecountStep(p.closing, cid, r) };
+      } catch (e) {
+        p = { ...p, closing: applyRecountError(p.closing, cid, e instanceof Error ? e.message : String(e)) };
+      }
+      await deps.save(p);
+      continue;
+    }
+
+    // 3) Aviso y estado final.
+    try {
+      await deps.finalize();
+      return { progress: p, finished: true };
+    } catch (e) {
+      const msg = errText("cierre", e instanceof Error ? e.message : String(e));
+      const intentos = p.closing.finalize_intentos + 1;
+      p = { ...p, closing: { ...p.closing, finalize_intentos: intentos } };
+      if (intentos >= MAX_CLOSE_RETRIES) {
+        await deps.markPartial(msg);
+        return { progress: p, finished: true };
+      }
+      await deps.save(p, { last_error: msg });
+    }
+  }
+  return { progress: p, finished: false };
 }

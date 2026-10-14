@@ -266,7 +266,7 @@ export default async function InternalHomePage({
         </Callout>
         {!events && (
           <Callout tone="warning" icon={AlertTriangle} title="Churn y tendencias sin datos">
-            Falta aplicar la migración <code className="break-all font-mono text-xs">20261111200000_internal_saas_kpi_events</code>, que lee
+            Falta aplicar la migración <code className="break-all font-mono text-xs">20261111300000_internal_saas_kpi_events</code>, que lee
             los cambios de estado desde la auditoría.
           </Callout>
         )}

@@ -126,7 +126,7 @@ export function C360Timeline({
               type="button"
               onClick={() => toggle(k)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
+                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs transition-colors",
                 on ? "choice-on font-medium" : "border-border text-muted-foreground hover:bg-muted",
               )}
             >

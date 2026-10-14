@@ -320,6 +320,13 @@ export function usePlanAddons() {
   });
 }
 
+export function useAddonCatalog() {
+  return useQuery({
+    queryKey: ["internal", "addon-catalog"],
+    queryFn: () => internalApi.addonCatalog(),
+  });
+}
+
 export function useSetAddon(tenantId: string) {
   const qc = useQueryClient();
   return useMutation({

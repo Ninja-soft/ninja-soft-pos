@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils/cn";
 import { splitCategoryPath } from "@/lib/products/categoryPath";
 import { useStorefrontCatalogs, useCatalogSearch } from "@/modules/tiendita/hooks";
 import { startCatalogCheckout } from "@/modules/tiendita/storefront";
+import { catalogSearchBusy } from "@/modules/tiendita/searchState";
 import type { StorefrontCatalog, CatalogSearchResult } from "@/modules/tiendita/storefront";
 import { TienditaIntro } from "./TienditaIntro";
 import { ImportProductModal } from "./ImportProductModal";
@@ -211,12 +212,12 @@ function CatalogCard({
         <div className="absolute inset-x-0 bottom-0 p-4">
           <div className="flex flex-wrap gap-1.5">
             {catalog.productCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
+              <span className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
                 <Layers size={12} /> {formatInt(catalog.productCount)} productos
               </span>
             )}
             {catalog.owned && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#15111f]">
+              <span className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#15111f]">
                 {catalog.source === "granted" ? <Gift size={12} /> : <Check size={12} />}
                 {catalog.source === "granted" ? "De regalo" : "Comprado"}
               </span>
@@ -331,7 +332,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
           autoFocus
           value={query}
           onValueChange={setQuery}
-          loading={isFetching}
+          loading={catalogSearchBusy(query, debounced, isFetching)}
           placeholder="Buscar por nombre o código de barras"
           className="max-w-2xl"
         />
@@ -422,12 +423,12 @@ function ProductTile({
           </div>
         )}
         {onSale && (
-          <span className="absolute left-2.5 top-2.5 rounded-full bg-ninja-flame px-2 py-0.5 text-[10px] font-bold text-white">
+          <span className="absolute left-2.5 top-2.5 rounded-md bg-ninja-flame px-2 py-0.5 text-[10px] font-bold text-white">
             Oferta
           </span>
         )}
         {!p.disponible && (
-          <span className="absolute right-2.5 top-2.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
+          <span className="absolute right-2.5 top-2.5 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
             Sin stock en origen
           </span>
         )}

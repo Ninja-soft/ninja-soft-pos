@@ -123,6 +123,12 @@ Lista de primitives obligatorios en `components/ui/`:
 | Sidebar | collapsible | sticky |
 | Topbar | | con search + perfil |
 
+### 5.1 Radio de badges, pastillas y chips
+
+**Badges, pastillas de estado, chips/etiquetas (incluidos los chips de filtro o selección rápida) y contadores usan radio chico: `rounded-md` (~6 px).** Nunca `rounded-full` ni radios grandes tipo pill (`rounded-xl`/`2xl`). El primitive `Badge` ya lo aplica; las pastillas inline siguen la misma regla.
+
+Siguen redondos (`rounded-full`) a propósito: avatares, puntos de estado (dots), botones circulares de sólo ícono, switches, spinners, radios/checks circulares, círculos numerados de pasos, barras de progreso y elementos decorativos circulares. Las pastillas dentro de comprobantes impresos (`components/invoices`, `components/tickets`) dependen de la opción de bordes de la factura.
+
 ## 6. Iconografía
 
 - **Stroke:** 1.5px constante. Sin rellenos sólidos.

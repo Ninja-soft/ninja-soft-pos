@@ -133,12 +133,12 @@ export function SignupStepPlan({
                   Sumar Asistente IA
                 </span>
                 {aiPrice ? (
-                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                     +{formatPlanPrice(Number(aiPrice))}/mes
                   </span>
                 ) : null}
                 {aiTrialDays > 0 && (
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+                  <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-success">
                     {aiTrialDays} días gratis
                   </span>
                 )}

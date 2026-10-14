@@ -736,7 +736,7 @@ export function ConnectProviderModal({
               <>
                 <div className="rounded-lg bg-fg-4 p-4">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
                       <Check size={11} strokeWidth={3} /> Recomendado
                     </span>
                   </div>

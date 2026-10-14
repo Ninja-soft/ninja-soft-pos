@@ -8,11 +8,12 @@ import { storeIcon } from "@/lib/catalog/storeLogos";
 // (public/tiendas/iconos), después el logo_url que trajo el feed y, si no hay
 // o no carga, las iniciales.
 //
-// Siempre sobre una baldosa clara (blanca, esquinas redondeadas, padding
-// interno y borde sutil) del mismo tamaño en todos lados: los íconos oficiales
-// tienen fondo transparente y colores pensados para fondo blanco, y sobre los
-// temas oscuros se perdían. La baldosa es blanca en los 4 temas a propósito
-// (es el "papel" del logo, no un color de la interfaz).
+// Sin fondo: el ícono oficial (transparente) se muestra tal cual, grande y
+// nítido sobre la superficie del tema. Pedido explícito del dueño: nada de
+// baldosas blancas ni de color detrás de los logos. Los íconos que se pierden
+// sobre fondo oscuro (texto azul marino) se aclaran sólo en los temas oscuros.
+const DARK_THEME_LIGHTEN = new Set(["MACRO"]);
+
 export function storeInitials(name: string): string {
   const words = name.replace(/[^A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ ]/g, " ").split(/\s+/).filter(Boolean);
   const [a = "", b = ""] = words;
@@ -21,9 +22,9 @@ export function storeInitials(name: string): string {
   return (a.charAt(0) + b.charAt(0)).toUpperCase();
 }
 
-/** Padding interno de la baldosa según el tamaño (14 %, mínimo 2 px). */
+/** Margen interno mínimo del ícono (sin fondo): 4 %, mínimo 1 px. */
 export function storeTilePadding(size: number): number {
-  return Math.max(2, Math.round(size * 0.14));
+  return Math.max(1, Math.round(size * 0.04));
 }
 
 export function StoreLogo({
@@ -43,11 +44,12 @@ export function StoreLogo({
   const [idx, setIdx] = useState(0);
   const src = sources[idx];
   const tile = cn(
-    "inline-grid shrink-0 place-items-center overflow-hidden border border-black/10 bg-white",
+    "inline-grid shrink-0 place-items-center overflow-hidden",
     size >= 32 ? "rounded-lg" : "rounded-md",
     className,
   );
   const style = { width: size, height: size, padding: storeTilePadding(size) };
+  const lighten = DARK_THEME_LIGHTEN.has(storeKey.toUpperCase()) && idx === 0;
 
   if (!src) {
     return (
@@ -55,7 +57,7 @@ export function StoreLogo({
         style={{ width: size, height: size, fontSize: Math.max(8, Math.round(size * 0.36)) }}
         aria-hidden
         data-store-tile
-        className={cn(tile, "font-semibold leading-none text-neutral-600")}
+        className={cn(tile, "border border-border font-semibold leading-none text-muted-foreground")}
       >
         {storeInitials(name)}
       </span>
@@ -69,7 +71,11 @@ export function StoreLogo({
         alt=""
         loading="lazy"
         onError={() => setIdx((i) => i + 1)}
-        className="h-full w-full object-contain"
+        className={cn(
+          "h-full w-full object-contain",
+          lighten &&
+            "[[data-theme=ninja-dark]_&]:[filter:invert(1)_hue-rotate(180deg)] [[data-theme=ninja-noir]_&]:[filter:invert(1)_hue-rotate(180deg)]",
+        )}
       />
     </span>
   );

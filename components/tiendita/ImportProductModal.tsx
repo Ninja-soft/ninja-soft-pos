@@ -284,7 +284,7 @@ export function ImportProductModal({
                 </div>
               )}
               {photo && (
-                <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
+                <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
                   Nueva
                 </span>
               )}

@@ -34,9 +34,11 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(
         )}
         {...props}
       />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2">
+      {/* Zona derecha del mismo ancho que el padding (pr-11): spinner y botón
+          quedan centrados en vertical y horizontal, en el eje de la lupa. */}
+      <span className="absolute inset-y-0 right-0 flex w-11 items-center justify-center">
         {loading ? (
-          <Spinner size={17} />
+          <Spinner size={17} className="block" />
         ) : value ? (
           <button
             type="button"

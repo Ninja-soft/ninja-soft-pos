@@ -733,7 +733,7 @@ function LockedBody({
         >
           <div className="flex flex-col items-center text-center">
             <AssistantMark size={56} animated />
-            <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-[#FFD9A8]">
+            <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1 text-xs font-medium text-[#FFD9A8]">
               <Lock size={11} /> Todavía no lo tenés contratado
             </span>
             <p className="mt-3 font-display text-[21px] font-semibold leading-tight tracking-tight text-white">

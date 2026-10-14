@@ -7,6 +7,13 @@
 // regenera los tipos): accedemos vía un cliente "destipado" (cast) SÓLO para
 // estas tablas/funciones. Las funciones públicas de este módulo siguen tipadas.
 import { createClient } from "@/lib/supabase/client";
+import {
+  buildIntroShowcase,
+  type IntroCatalogRow,
+  type IntroShowcase,
+  type IntroStoreLink,
+  type IntroStoreRow,
+} from "./introShowcase";
 
 // Catálogo tal como lo ve el cliente en el storefront.
 export interface StorefrontCatalog {
@@ -92,6 +99,25 @@ function db(): AnyDb {
 }
 
 export const storefrontApi = {
+  // Portada: tiendas de origen cargadas en internal (catalog_stores) que están
+  // en algún catálogo activo + total de productos de los catálogos activos.
+  // Las tres tablas tienen lectura para authenticated por RLS (catalogs sólo
+  // las activas para el negocio); no hace falta RPC.
+  introShowcase: async (): Promise<IntroShowcase> => {
+    const supabase = db();
+    const [stores, links, cats] = await Promise.all([
+      supabase.from("catalog_stores").select("key, name, logo_url").order("name"),
+      supabase.from("catalog_store_map").select("catalog_id, store_key"),
+      supabase.from("catalogs").select("id, is_active, product_count").eq("is_active", true),
+    ]);
+    if (stores.error) throw stores.error;
+    return buildIntroShowcase(
+      (stores.data ?? []) as IntroStoreRow[],
+      (links.data ?? []) as IntroStoreLink[],
+      (cats.data ?? []) as IntroCatalogRow[],
+    );
+  },
+
   // Catálogos activos + estado de acceso del tenant (una consulta a catalogs por
   // RLS — sólo ve los activos — y otra a sus compras/grants).
   //

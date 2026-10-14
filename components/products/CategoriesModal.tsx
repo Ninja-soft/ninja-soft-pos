@@ -169,7 +169,7 @@ export function CategoriesModal({
                 <span className="shrink-0 text-muted-foreground">
                   Agregando dentro de
                 </span>
-                <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-ninja-flame/12 px-2 py-0.5 font-medium text-ninja-flameSoft">
+                <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-ninja-flame/12 px-2 py-0.5 font-medium text-ninja-flameSoft">
                   <span className="truncate">{parentPath}</span>
                   <button
                     onClick={() => setParentId("")}
@@ -344,7 +344,7 @@ function CategoryRow({
             {cat.name}
           </span>
           {hasChildren && (
-            <span className="ml-1 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            <span className="ml-1 shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
               {descendantCount}
             </span>
           )}

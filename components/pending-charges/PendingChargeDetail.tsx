@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils/cn";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { useStaffDirectory, useBranchContext } from "@/modules/branches/hooks";
 import { useTicketBranding } from "@/modules/tickets/hooks";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import {
   usePendingCharge,
   usePendingChargeEvents,
@@ -317,7 +318,7 @@ export function PendingChargeDetail({
               <SharePanel
                 url={c.share_url}
                 amountLabel={formatCurrency(c.amount)}
-                businessName={branding?.legal_name ?? null}
+                businessName={branding ? brandDisplayName(branding, "") || null : null}
                 customerName={c.customer_name}
                 customerPhone={c.customer_phone}
                 customerEmail={c.customer_email}

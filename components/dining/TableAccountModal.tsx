@@ -35,6 +35,7 @@ import { TableMoveModal } from "./TableMoveModal";
 import { VoidItemModal } from "./VoidItemModal";
 import { PendingSplits, SplitBillModal } from "./SplitBillModal";
 import { useTicketBranding } from "@/modules/tickets/hooks";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import type { DiningTable, TableOrderItem, TableStatus } from "@/modules/dining/api";
 import {
   COURSE_LABELS,
@@ -425,7 +426,7 @@ export function TableAccountModal({
         open={comandaOpen}
         onOpenChange={setComandaOpen}
         orderId={orderId}
-        businessName={brand?.legal_name ?? null}
+        businessName={brand ? brandDisplayName(brand, "") || null : null}
       />
 
       {/* Ticket separado por comensal o partes iguales (ADR-097) */}

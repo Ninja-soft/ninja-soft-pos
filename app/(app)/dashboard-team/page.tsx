@@ -41,6 +41,8 @@ import { PageContainer, PageHeader, SectionHeader } from "@/components/ui/PageHe
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Callout } from "@/components/ui/Callout";
 import { pendingAlertCount } from "@/lib/reports/paymentDisputes";
+import { businessDisplayName } from "@/lib/branding/businessName";
+import { fetchTradeName } from "@/lib/branding/tradeName";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -211,6 +213,8 @@ export default async function DashboardTeamPage() {
     (brandingRes.data as { logo_url: string | null; accent: string | null } | null) ?? null;
   const accent = brandAccent(branding?.accent);
   const tenantLogo = branding?.logo_url ?? null;
+  // ADR-124: el tile "Negocio" muestra el nombre de fantasía (si no, el de la cuenta).
+  const tenantDisplayName = businessDisplayName({ tradeName: await fetchTradeName(supabase, tenant.id), tenantName: tenant.name });
 
   const gating = (gatingRes.data ?? null) as {
     features?: Record<string, boolean>;
@@ -332,7 +336,7 @@ export default async function DashboardTeamPage() {
     <PageContainer size="lg">
       <PageHeader
         eyebrow="Panel del dueño"
-        title={tenant.name}
+        title={tenantDisplayName}
         icon={Building2}
         description="Tu centro de control: negocio, plan, equipo y configuración en un solo lugar."
         actions={
@@ -357,7 +361,7 @@ export default async function DashboardTeamPage() {
             {tenantLogo ? (
               <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={tenantLogo} alt={tenant.name} className="h-full w-full object-contain" />
+                <img src={tenantLogo} alt={tenantDisplayName} className="h-full w-full object-contain" />
               </span>
             ) : (
               <span
@@ -368,7 +372,7 @@ export default async function DashboardTeamPage() {
               </span>
             )}
             <div className="min-w-0">
-              <p className="break-words text-lg font-semibold leading-tight">{tenant.name}</p>
+              <p className="break-words text-lg font-semibold leading-tight">{tenantDisplayName}</p>
               <p className="mt-0.5 text-sm text-muted-foreground">
                 {tenant.industry ?? <NoData />}
               </p>

@@ -21,6 +21,8 @@ import {
 import { Display, Accent, Eyebrow } from "@/components/ui/Typography";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { capitalizeName } from "@/lib/utils/format";
+import { businessDisplayName } from "@/lib/branding/businessName";
+import { fetchTradeNames } from "@/lib/branding/tradeName";
 
 // Acento de marca del tenant (hex #rrggbb válido) o el flame de NinjaSoft.
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -77,6 +79,10 @@ export default async function DashboardPage() {
     string,
     { logo_url: string | null; accent: string | null }
   >();
+  // ADR-124: nombre de fantasía de cada negocio (consulta aparte, tolerante).
+  const tradeNames = await fetchTradeNames(supabase, tenantIds);
+  const displayName = (t: MembershipRow["tenants"]) =>
+    businessDisplayName({ tradeName: t?.id ? tradeNames.get(t.id) : null, tenantName: t?.name }, "Negocio");
   if (tenantIds.length > 0) {
     const { data: brandingData } = await supabase
       .from("tenant_branding")
@@ -195,7 +201,7 @@ export default async function DashboardPage() {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={logoUrl}
-                            alt={m.tenants?.name ?? "Negocio"}
+                            alt={displayName(m.tenants)}
                             className="h-full w-full object-contain"
                           />
                         </span>
@@ -208,7 +214,7 @@ export default async function DashboardPage() {
                         </span>
                       )}
                       <h3 className="mt-3 font-display text-lg font-bold">
-                        {m.tenants?.name ?? "Negocio"}
+                        {displayName(m.tenants)}
                       </h3>
                       <p className="mt-1 text-sm text-muted-foreground">
                         Rol: {ROLE_LABELS[m.role] ?? m.role}

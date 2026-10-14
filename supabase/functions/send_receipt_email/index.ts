@@ -9,6 +9,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 // @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
 import nodemailer from "npm:nodemailer@6.9.16";
+import { fetchTradeName } from "../_shared/businessName.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -453,14 +454,18 @@ Deno.serve(async (req: Request) => {
       },
       400,
     );
-  const { data: brand } = await admin
-    .from("tenant_branding")
-    .select("legal_name, logo_url, accent")
-    .eq("tenant_id", sale.tenant_id)
-    .maybeSingle();
+  const [{ data: brand }, tradeName] = await Promise.all([
+    admin
+      .from("tenant_branding")
+      .select("legal_name, logo_url, accent")
+      .eq("tenant_id", sale.tenant_id)
+      .maybeSingle(),
+    // ADR-124: el email sale con el nombre de fantasía si el negocio lo cargó.
+    fetchTradeName(admin, sale.tenant_id),
+  ]);
   // Sin caracteres de control: legal_name viaja en headers SMTP (From/Subject);
   // CR/LF permitirían inyectar headers (nodemailer no los filtra).
-  const name = (brand?.legal_name || cfg.from_name || "NinjaSoft POS")
+  const name = (tradeName || brand?.legal_name || cfg.from_name || "NinjaSoft POS")
     // deno-lint-ignore no-control-regex
     .replace(/[\x00-\x1f\x7f]+/g, " ")
     .trim() || "NinjaSoft POS";

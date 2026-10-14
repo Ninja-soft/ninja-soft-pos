@@ -36,6 +36,7 @@ import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
 import { usePaymentTerminals } from "@/modules/config/hooks";
 import { SharePanel } from "@/components/pending-charges/SharePanel";
 import { useTicketBranding } from "@/modules/tickets/hooks";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import {
   defaultTtlMinutes,
   extendOptions,
@@ -1048,7 +1049,7 @@ export function QrCheckoutModal({
                 <SharePanel
                   url={initPoint}
                   amountLabel={formatCurrency(amount)}
-                  businessName={branding?.legal_name ?? null}
+                  businessName={branding ? brandDisplayName(branding, "") || null : null}
                   customerName={park?.customerName ?? null}
                   customerPhone={park?.customerPhone ?? null}
                   customerEmail={park?.customerEmail ?? null}

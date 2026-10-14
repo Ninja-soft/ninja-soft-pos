@@ -19,6 +19,7 @@ import {
   type WaitlistEntry,
 } from "@/modules/dining/waitlist";
 import { useTicketBranding } from "@/modules/tickets/hooks";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import {
   isOverQuoted,
   isWaitlistActive,
@@ -100,7 +101,7 @@ export function WaitlistPanel() {
   // Aviso manual: abre WhatsApp en el mismo toque (sin bloqueo de ventanas) y
   // deja el aviso registrado en el servidor (ADR-097).
   function notify(e: WaitlistEntry) {
-    const link = waitlistWhatsappLink(e.customer_phone, waitlistReadyMessage(e.customer_name, brand?.legal_name));
+    const link = waitlistWhatsappLink(e.customer_phone, waitlistReadyMessage(e.customer_name, brand ? brandDisplayName(brand, "") || null : null));
     if (link) window.open(link, "_blank", "noopener,noreferrer");
     notifyEntry.mutate({ entryId: e.id, tableId: null }, { onError: (x) => err("No se pudo registrar el aviso", x) });
   }

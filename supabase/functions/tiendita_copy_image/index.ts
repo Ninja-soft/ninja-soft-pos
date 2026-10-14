@@ -17,9 +17,11 @@
 // Seguridad:
 //   • verify_jwt = true. El tenant sale SIEMPRE del JWT (current_tenant_id).
 //   • La URL de origen NO se toma del body ni de product_images (el tenant puede
-//     escribir esa tabla): se lee de catalog_products vía
-//     products.metadata.catalog_product_id (maestro administrado por NinjaSoft)
-//     y se valida (https, sin hosts privados) antes de descargar (anti SSRF).
+//     escribir esa tabla): tiene que ser una foto del producto maestro
+//     (catalog_items.foto_url / fotos, ADR-109) al que apunta
+//     products.metadata.catalog_product_id (la oferta), administrado por
+//     NinjaSoft, y se valida (https, sin hosts privados) antes de descargar
+//     (anti SSRF). Se copian todas las fotos pendientes del producto (hasta 3).
 //   • Descarga con timeout y tope de tamaño; sólo content-type de imagen.
 //
 // Degradación: si algo falla (origen caído, subida rechazada), responde
@@ -138,59 +140,82 @@ Deno.serve(async (req: Request) => {
   const meta = (product.metadata ?? {}) as { source?: string; catalog_product_id?: number };
   if (meta.source !== "tiendita" || !meta.catalog_product_id) return soft("not_from_catalog");
 
-  // Fila externa pendiente en la galería.
+  // Filas externas pendientes en la galería.
   const { data: rows } = await admin
     .from("product_images")
     .select("id, path, url, is_primary")
     .eq("product_id", productId)
     .eq("tenant_id", tenantId)
     .is("deleted_at", null);
-  const pending = (rows ?? []).find((r) => isExternalImage(r.path, r.url));
-  if (!pending) return json({ ok: true, skipped: "nothing_pending" });
+  const pendingRows = (rows ?? []).filter((r) => isExternalImage(r.path, r.url)).slice(0, 3);
+  if (!pendingRows.length) return json({ ok: true, skipped: "nothing_pending" });
 
-  // Origen confiable: el maestro del catálogo, no lo que diga la fila.
-  const { data: cp } = await admin
-    .from("catalog_products")
-    .select("foto_url")
+  // Origen confiable: las fotos del producto maestro, no lo que diga la fila.
+  const { data: offer } = await admin
+    .from("catalog_offers")
+    .select("item_id")
     .eq("id", meta.catalog_product_id)
     .maybeSingle();
-  const source = (cp?.foto_url ?? "").trim();
-  if (!source || source !== pending.url.trim()) return soft("source_mismatch");
-  if (!isAllowedSourceUrl(source)) return soft("source_not_allowed", source);
-
-  const downloaded = await download(source);
-  if (!downloaded) return soft("download_failed", source);
-  const bytes = await prepare(downloaded);
-
-  const path = productImagePath(
-    tenantId,
-    productId,
-    crypto.randomUUID(),
-    imageExtension(downloaded.type),
+  const { data: item } = offer
+    ? await admin.from("catalog_items").select("foto_url, fotos").eq("id", offer.item_id).maybeSingle()
+    : { data: null };
+  const allowed = new Set(
+    [item?.foto_url, ...(Array.isArray(item?.fotos) ? (item?.fotos as unknown[]) : [])]
+      .map((u) => String(u ?? "").trim())
+      .filter(Boolean),
   );
-  const up = await admin.storage
-    .from(PRODUCT_IMAGES_BUCKET)
-    .upload(path, bytes, { contentType: downloaded.type, upsert: false });
-  if (up.error) return soft("upload_failed", up.error.message);
-  const publicUrl = admin.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
 
-  const { error: updErr } = await admin
-    .from("product_images")
-    .update({ path, url: publicUrl })
-    .eq("id", pending.id)
-    .eq("tenant_id", tenantId);
-  if (updErr) {
-    await admin.storage.from(PRODUCT_IMAGES_BUCKET).remove([path]);
-    return soft("row_update_failed", updErr.message);
-  }
-  // La principal apunta a la copia (sólo si seguía apuntando a la externa).
-  if (pending.is_primary || product.image_url === pending.url) {
-    await admin
-      .from("products")
-      .update({ image_url: publicUrl })
-      .eq("id", productId)
+  const copied: { path: string; url: string }[] = [];
+  let firstFailure: Response | null = null;
+  let imageUrl = product.image_url;
+  for (const pending of pendingRows) {
+    const source = pending.url.trim();
+    if (!allowed.has(source)) {
+      firstFailure ??= soft("source_mismatch");
+      continue;
+    }
+    if (!isAllowedSourceUrl(source)) {
+      firstFailure ??= soft("source_not_allowed", source);
+      continue;
+    }
+    const downloaded = await download(source);
+    if (!downloaded) {
+      firstFailure ??= soft("download_failed", source);
+      continue;
+    }
+    const bytes = await prepare(downloaded);
+    const path = productImagePath(tenantId, productId, crypto.randomUUID(), imageExtension(downloaded.type));
+    const up = await admin.storage
+      .from(PRODUCT_IMAGES_BUCKET)
+      .upload(path, bytes, { contentType: downloaded.type, upsert: false });
+    if (up.error) {
+      firstFailure ??= soft("upload_failed", up.error.message);
+      continue;
+    }
+    const publicUrl = admin.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
+    const { error: updErr } = await admin
+      .from("product_images")
+      .update({ path, url: publicUrl })
+      .eq("id", pending.id)
       .eq("tenant_id", tenantId);
+    if (updErr) {
+      await admin.storage.from(PRODUCT_IMAGES_BUCKET).remove([path]);
+      firstFailure ??= soft("row_update_failed", updErr.message);
+      continue;
+    }
+    // La principal apunta a la copia (sólo si seguía apuntando a la externa).
+    if (pending.is_primary || imageUrl === pending.url) {
+      await admin
+        .from("products")
+        .update({ image_url: publicUrl })
+        .eq("id", productId)
+        .eq("tenant_id", tenantId);
+      imageUrl = publicUrl;
+    }
+    copied.push({ path, url: publicUrl });
   }
 
-  return json({ ok: true, path, url: publicUrl });
+  if (!copied.length && firstFailure) return firstFailure;
+  const first = copied[0];
+  return json({ ok: true, path: first?.path, url: first?.url, copied: copied.length });
 });

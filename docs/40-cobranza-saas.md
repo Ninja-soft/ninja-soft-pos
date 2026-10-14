@@ -1515,3 +1515,25 @@ Las que bloquean están marcadas con **(bloquea Fxx)**.
 - [`33-facturacion-arca.md`](./33-facturacion-arca.md)
 - [`specs/cuenta-corriente-v2.md`](./specs/cuenta-corriente-v2.md)
 - ADR-016, ADR-037, ADR-052, ADR-072, ADR-073, ADR-083, ADR-084 y ADR-110.
+
+## 22. Decisiones del dueño (13/10/2026)
+
+Respuestas a las preguntas de la sección 21. Mandan sobre lo propuesto arriba cuando difieren.
+
+| # | Tema | Decisión |
+|---|---|---|
+| 1 | CUIT de NinjaSoft | Todavía no tiene. Se construye todo con avisos de cobro no fiscales; la factura con CAE (F20-4 en adelante) se activa cuando exista la CUIT. |
+| 2 | IVA en los precios | Los precios de los planes **incluyen IVA**. La factura lo discrimina adentro. |
+| 3 | Plazo entre pago y factura | **Configurable libremente** por el dueño en el panel interno (sin tope fijo de 10 días). Por defecto, inmediata. |
+| 4 | Punitorios | **Todo configurable** en el panel interno (tasa, días de gracia, cálculo diario o mensual, tope). Arranca apagado. |
+| 5 | Punitorios con débito automático | **Switch configurable** en el panel interno. |
+| 6 | Mora | **Escalera configurable**. Por defecto: aviso al día 1, restricción parcial al 7, suspensión al 10. Cada paso y día editable. |
+| 7 | Negocios que no cuentan en los KPI | **Los que pertenecen a un miembro del staff** (dueño con nivel interno) no cuentan en MRR, churn, conversión, etc. Además, marca manual de "interno/prueba" para casos como el tenant QA. |
+| 8 | Permiso de cobranzas | **Sí, permiso propio "Cobranzas"**: cuentas corrientes, pagos y bonificaciones, sin administrar negocios. |
+| 9 | Topes de bonificación | **Configurables** por nivel de staff (por operación y por mes) en el panel interno. |
+| 10 | Promesa de pago | **El cliente puede cargarla**, con límites configurables (una por período, hasta X días); el staff puede ampliarla. |
+| 11 | Pago durante la prueba | El período pago **empieza al terminar la prueba**. |
+| 12 | Subir de plan a mitad de mes | La diferencia prorrateada **se suma al próximo cobro**. |
+| 13 | Datos bancarios para transferir | Los **carga el dueño en el panel interno**, con el mismo editor de cuentas que el medio de pago Transferencia (selector de bancos con logos, titular, alias, CBU/CVU, varias cuentas) y el email que recibe los comprobantes. |
+| 14 | Botón de arrepentimiento | **Se agrega**: cancelación dentro de los 10 días con reintegro, visible para el cliente. Confirmar redacción con un abogado. |
+| 15 | Base del reparto del staff (F21, futuro) | **Cobrado neto** del mes (cobrado menos comisiones, reintegros y gastos). |

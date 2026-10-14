@@ -340,11 +340,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     sections: [
       {
         key: "tickets",
-        label: "Modelos de ticket",
-        title: "Modelos de ticket",
-        description: "Diseñá cómo se imprimen tus comprobantes con bloques arrastrables.",
+        label: "Ticket",
+        title: "Ticket",
+        description:
+          "Ancho, textos y logo del comprobante, y los modelos para diseñar cómo se imprime. El QR va siempre.",
         icon: ReceiptText,
-        keywords: "ticket comprobante plantilla diseño",
+        keywords: "ticket comprobante plantilla diseño modelo ancho 58 80 mm titulo leyenda pie logo qr",
       },
       {
         key: "facturacion",
@@ -505,6 +506,8 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   "apps-delivery": "canales-delivery",
   credenciales: "api",
   conciliacion: "nubceo",
+  ticket: "tickets",
+  comprobante: "tickets",
   fiscal: "impuestos",
   iva: "impuestos",
   percepciones: "impuestos",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Link2, Trash2, Store } from "lucide-react";
+import { Check, ImagePlus, Link2, Trash2, Store } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -268,12 +268,12 @@ export function CatalogEditorModal({
                 <button
                   key={s.key}
                   type="button"
+                  role="checkbox"
+                  aria-checked={checked}
                   onClick={() => toggleStore(s.key)}
                   className={cn(
                     "flex items-center gap-3 rounded-lg border p-3 text-left transition",
-                    checked
-                      ? "choice-on choice-check"
-                      : "border-border hover:bg-muted",
+                    checked ? "choice-on" : "border-border hover:bg-muted",
                   )}
                 >
                   <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background">
@@ -296,12 +296,19 @@ export function CatalogEditorModal({
                       {s.productCount.toLocaleString("es-AR")} productos
                     </span>
                   </span>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    readOnly
-                    className="h-4 w-4 accent-ninja-flame"
-                  />
+                  {/* Único indicador de selección (sin la insignia de
+                      .choice-check, que lo duplicaba). */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition",
+                      checked
+                        ? "border-transparent bg-[var(--pos-solid)] text-white"
+                        : "border-muted-foreground/40",
+                    )}
+                  >
+                    {checked && <Check size={12} strokeWidth={3} />}
+                  </span>
                 </button>
               );
             })}

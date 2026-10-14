@@ -15,7 +15,7 @@ import {
   saleTimeline,
   summaryPeriod,
   taxBreakdown,
-  thumbsPreview,
+  thumbsMosaic,
   totalsBreakdown,
   unitsCount,
   variantLabel,
@@ -106,7 +106,6 @@ describe("cobros", () => {
 describe("ítems y estados", () => {
   it("unidades, miniaturas y estado de devolución", () => {
     expect(unitsCount([{ quantity: 2 }, { quantity: 0.35 }, { quantity: 1 }])).toBe(4);
-    expect(thumbsPreview([1, 2, 3, 4, 5], 3)).toEqual({ shown: [1, 2, 3], extra: 2 });
     expect(returnState([{ quantity: 2, returned_qty: 0 }])).toBe("none");
     expect(returnState([{ quantity: 2, returned_qty: 1 }, { quantity: 1 }])).toBe("partial");
     expect(returnState([{ quantity: 2, returned_qty: 2 }, { quantity: 1, returned_qty: 1 }])).toBe("full");
@@ -192,5 +191,26 @@ describe("línea de tiempo y período", () => {
     const r = summaryPeriod({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 5) });
     expect(r.isDefault).toBe(false);
     expect(new Date(r.toISO).getDate()).toBe(6);
+  });
+});
+
+describe("thumbsMosaic", () => {
+  const it_ = (id: string, image_url: string | null = null) => ({ id, image_url });
+
+  it("hasta 4 productos muestra todos, sin +N", () => {
+    expect(thumbsMosaic([it_("a")])).toEqual({ shown: [it_("a")], extra: 0 });
+    expect(thumbsMosaic([it_("a"), it_("b"), it_("c"), it_("d")]).extra).toBe(0);
+    expect(thumbsMosaic([]).shown).toEqual([]);
+  });
+
+  it("con más de 4 muestra 3 y la cuarta celda es +N", () => {
+    const r = thumbsMosaic(["a", "b", "c", "d", "e", "f"].map((x) => it_(x)));
+    expect(r.shown.map((x) => x.id)).toEqual(["a", "b", "c"]);
+    expect(r.extra).toBe(3);
+  });
+
+  it("los productos con foto van primero (orden estable)", () => {
+    const r = thumbsMosaic([it_("a"), it_("b", "https://x/b.webp"), it_("c", "  "), it_("d", "https://x/d.webp")]);
+    expect(r.shown.map((x) => x.id)).toEqual(["b", "d", "a", "c"]);
   });
 });

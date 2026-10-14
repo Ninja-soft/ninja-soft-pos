@@ -206,10 +206,19 @@ export function unitsCount(items: ItemLike[]): number {
   }, 0);
 }
 
-/** Miniaturas a mostrar y cuántas quedan afuera ("+N"). */
-export function thumbsPreview<T>(items: T[], max = 3): { shown: T[]; extra: number } {
-  const shown = items.slice(0, max);
-  return { shown, extra: Math.max(0, items.length - shown.length) };
+/**
+ * Celdas del mosaico de miniaturas de una venta (máximo 4). Con más de 4
+ * productos se muestran 3 y la cuarta celda es "+N". Los productos con foto
+ * van primero (orden estable) para que el mosaico muestre fotos reales.
+ */
+export function thumbsMosaic<T extends { image_url?: string | null }>(
+  items: T[],
+): { shown: T[]; extra: number } {
+  const withPhoto = items.filter((it) => Boolean(it.image_url?.trim()));
+  const without = items.filter((it) => !it.image_url?.trim());
+  const ordered = [...withPhoto, ...without];
+  if (ordered.length <= 4) return { shown: ordered, extra: 0 };
+  return { shown: ordered.slice(0, 3), extra: ordered.length - 3 };
 }
 
 export type ReturnState = "none" | "partial" | "full";

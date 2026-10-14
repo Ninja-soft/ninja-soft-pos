@@ -4249,3 +4249,110 @@ F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea l
 - Para que el padrón funcione hace falta el certificado de la plataforma con `ws_sr_constancia_inscripcion` autorizado (spec §16.1) y elegir el ambiente activo.
 - Cuando F20-1 llegue a `main`: sumar el permiso "Cobranzas" a `internal_set_billing_profile` y decidir si `tenant_billing_terms.send_to` reemplaza a `email_facturacion` o lo usa como primer destinatario.
 - Deuda: cron de revalidación del padrón (F20-11) y FCE MiPyME.
+
+## ADR-119: Comprobantes v2: un solo motor para todo comprobante, más modelos y opciones, fotos de producto, selector Ticket o A4 al imprimir, PDF del email igual a la vista previa y nota de crédito de la devolución
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/comprobantes-v2`; migración `20261115100000_comprobantes_v2` sin aplicar; Edge `ai_assistant` sin desplegar) · **Base:** ADR-112 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-072 (facturación ARCA), ADR-077 (venta offline), H9b (plantillas de ticket), H22 (perfiles de impresión). **Numeración:** 117 es la mayor en `main`; 118 puede estar tomada en una rama abierta.
+
+### Contexto
+
+El dueño pidió, sobre el motor de ADR-112:
+
+1. Borrar el ticket de bloques "Simple (anterior)" y el editor viejo de plantillas (bloques, lienzo y HTML): la ventana después de cobrar y la devolución seguían mostrando el ticket de bloques.
+2. Más personalización por modelo y más modelos A4 y de ticket.
+3. Bordes redondeados o rectos para todas las cajas.
+4. Elegir Ticket o A4 al imprimir en la caja y en la reimpresión desde Ventas, con la vista previa que cambia ahí mismo.
+5. El PDF que llega por email salía mal.
+6. La nota de crédito de la devolución con el motor nuevo (deuda de ADR-112).
+
+Después, para la misma rama: poder elegir un modelo de factura que muestre la foto de los productos.
+
+**Diagnóstico del PDF del email** (`factura-29.pdf`, renderizado con PyMuPDF): una sola página de 80 x 189,5 mm, sin texto (una imagen) y con:
+
+- el ticket de bloques viejo, con el marco redondeado de la vista previa pegado y la leyenda "IVA contenido: se discriminará al integrar la facturación electrónica" en una factura B ya autorizada;
+- **el QR recortado e ilegible**: `qrSvgDataUrl` armaba un SVG sin `width` ni `height`; Chrome le da 300 x 150 px y html2canvas dibuja sólo la esquina superior izquierda, agrandada;
+- **el renglón cortado a la mitad** ("1x Agua 2L ($ 1.800,00)"): html2canvas mide la línea base de cada fuente con un `<img>` de 1 px alineado al texto, y el preflight de Tailwind (`img { display: block }`) lo baja a otra línea; el texto queda corrido hacia abajo, se encima o se recorta. Afecta a todo PDF hecho con html2canvas en la app (en el A4 del motor, "ARCA" y la letra quedaban encimados).
+
+### Decisión
+
+1. **Un solo motor.** Venta, devolución y nota de crédito, provisorio, contingencia (CAEA), offline, reimpresión, prueba de impresora, email y PDF salen de `InvoiceDocument`. Se borran `TemplateRenderer`, `TicketRenderer`, `CanvasTicketRenderer`, `HtmlTicketRenderer`, `TicketTemplateEditor`, `TicketTemplatesCard`, `ImageCropModal`, `lib/tickets/{blocks, blockTemplates, canvasCompat, htmlTemplates, htmlVars, legal, myBrand, requiredQr, exportPng}.ts`, `modules/tickets/api.ts`, los hooks de plantillas y sus tests. La tabla `ticket_templates` queda como historial.
+2. **Migración de datos sin borrar nada** (`20261115100000_comprobantes_v2`):
+   - los negocios con plantilla activa (impresión o email) o con el modelo `simple` pasan al Clásico con el color y el logo de su marca;
+   - si la plantilla de email (o la de impresión, sin una de email) era A4, el email adjunta A4;
+   - si la de impresión era A4 y el perfil "ticket de venta" no tenía formato, el perfil queda en A4;
+   - `invoice_style.legacy_from` guarda de dónde vino;
+   - las plantillas quedan inactivas (`print_active`/`email_active` en false, sin `deleted_at`);
+   - el trigger de plan de `invoice_style` se apaga sólo durante el update, así un negocio que bajó de plan con opciones Pro guardadas no frena la migración;
+   - el paso "ticket" del onboarding pasa a "diseñó sus comprobantes" (`invoice_style` guardado) o tenía una plantilla.
+
+   Lo guardado como `simple` también se lee como Clásico en el front.
+3. **Modelos nuevos**:
+   - A4: Elegante (encabezado centrado, filetes dobles, versalitas), Bloques de color (cada sección en una tarjeta con barra de color), Compacto de una hoja (encabezado bajo y tabla densa) y Catálogo con fotos;
+   - ticket: Moderno (secciones en recuadros, tipo en pastilla, total en caja) y Minimal (sin recuadros, alineado a la izquierda).
+
+   Quedan 9 modelos A4 y 5 de ticket. Todos cubren los campos legales de cada tipo y lo verifica el test que recorre modelos por tipos, ahora también con combinaciones extremas de opciones.
+4. **Opciones** en `invoice_style`, sin columnas nuevas:
+   - **aspecto**: tipografía (la del modelo, Inter, Helvética, Serif o Monoespaciada), tamaño de letra (chica, normal o grande), densidad (compacta, normal o amplia), **bordes redondeados o rectos**, posición del logo (la del modelo, izquierda, centro o derecha), estilo del encabezado (en color, neutro o en una pastilla) y separadores (los del modelo, punteados, sólidos o ninguno);
+   - **qué se muestra**: datos de contacto, medios de pago, número interno, detalle de IVA por alícuota en la B (la C no: el monotributo no discrimina IVA; la transparencia fiscal es obligatoria y no se oculta), leyendas propias (las obligatorias van siempre) y código de barras de la venta.
+
+   Las medidas viajan como variables CSS en la raíz de la hoja o el rollo (`--inv-fs`, `--inv-sp`, `--inv-r`, `--inv-sep`): el navegador resuelve los `calc()` y la vista previa, la impresión y el PDF dibujan lo mismo.
+5. **Fotos de producto**:
+   - "Mostrar foto del producto" en los modelos A4: miniatura cuadrada a la izquierda del renglón, con placeholder neutro si no tiene, y sigue la opción de bordes;
+   - modelo **Catálogo con fotos**: foto grande y renglones más altos;
+   - en el ticket, opcional y apagado por defecto: chicas y en monocromo.
+
+   Las fotos se precargan como data URL (recorte cuadrado de 160 px, color y escala de grises en el navegador) y sólo si la opción está prendida, así salen en la impresión, el PDF y el email (html2canvas no espera imágenes remotas ni aplica filtros CSS).
+6. **Paginación A4** (`lib/invoices/paginate.ts`, puro): con muchos renglones el detalle se parte en hojas. Encabezado, emisor y receptor van en todas; totales, transparencia, pagos, leyendas y el pie fiscal (QR y CAE), en la última; las demás dicen "Continúa en la hoja siguiente" y "Hoja N de M". El alto de cada renglón se estima (no se mide el DOM: los modelos se pueden dibujar en el servidor).
+7. **Ticket o A4 al imprimir.**
+   - En la ventana del ticket, que es también la reimpresión desde Ventas y desde la ficha del cliente, hay un selector Ticket o A4 en la vista previa y otro junto a Imprimir, con el formato del perfil "ticket de venta" preseleccionado.
+   - El botón dice "Imprimir ticket" o "Imprimir A4".
+   - PDF y Compartir usan el formato elegido.
+   - La impresión automática usa el predeterminado.
+   - El rollo usa el ancho del perfil (58 u 80) o el del branding.
+   - Al imprimir, el comprobante aislado sale en el flujo normal y sin el resto de la página (`globals.css`), así se imprimen todas las hojas de una A4 (Original, Duplicado o detalle largo).
+8. **PDF igual a la vista previa** (`lib/invoices/exportPdf.ts`):
+   - A4 real: una página de 210 x 297 mm por hoja, con los márgenes de la hoja; una hoja que se estiró se achica entera y no se corta;
+   - ticket: una página del ancho del rollo y el alto del comprobante, sin marcos;
+   - se esperan las imágenes y las remotas pasan a data URL;
+   - el SVG del QR trae tamaño intrínseco (también la copia de las Edge);
+   - mientras se captura, el `<img>` de medición de html2canvas vuelve a ser inline;
+   - más de dos hojas van en JPEG a 2x (8 hojas con Original y Duplicado: 3 MB en base64, debajo del límite de 4 MB de la Edge del email).
+
+   El email adjunta el formato de su opción (ticket o A4).
+9. **Devolución con el motor.** Si la venta tenía factura, la devolución espera el CAE de su nota de crédito (`fiscal_documents` con `origin = return` y su `return_id`). Se imprime la NC con el comprobante asociado, en Ticket o A4 (con el perfil de devolución preseleccionado). Si ARCA la rechaza, avisa y sale el comprobante de devolución no fiscal. Sin factura, sale un "Comprobante de devolución" (o "Vale por devolución") no fiscal. El vale (código y código de barras) y el reintegro de Mercado Pago van debajo.
+10. **Offline y prueba de impresora.** El ticket provisorio offline usa el motor con la marca y el diseño que ya estaban en la caché (sin consultas) y la prueba de impresora usa el modelo de ticket del negocio.
+
+### Clasificación de plan (CLAUDE.md §6)
+
+- **BASE**:
+  - los modelos Clásicos;
+  - el tamaño de letra (legibilidad);
+  - los bloques que se muestran: contacto, medios de pago, número interno, detalle de IVA en B, leyendas y código de barras.
+- **OPTIONAL `tickets_pro`**:
+  - los modelos nuevos;
+  - el aspecto: tipografía, densidad, bordes rectos, posición del logo, estilo del encabezado y separadores;
+  - las fotos de producto (A4 y ticket).
+
+  No hay key nueva: se actualiza la descripción de `tickets_pro` en `features` y su copy en `lib/saas/featureInfo.ts`.
+- **OPTIONAL `comprobantes_sin_sello`**: sin cambios.
+- **Gating real**: `invoice_style_needs_pro` (la llama el trigger `tenant_branding_assert_invoice_style` de ADR-112) suma los modelos y las opciones nuevas y es el espejo exacto de `invoiceStyleNeedsPro`. `clampInvoiceStyle` vuelve al default lo que el plan ya no incluye. Probado en PGlite: rechazos sin Pro, opciones base sin Pro, migración de los cinco casos e idempotencia.
+
+### Alternativas descartadas
+
+- **Mantener las plantillas propias como opción avanzada:** el dueño pidió sacarlas, y el motor ya cubre lo legal en todos los tipos, cosa que las plantillas libres no garantizaban.
+- **Medir el DOM para paginar:** rompe el render en el servidor y no sirve para el email automático, que corre sin la ventana visible.
+- **`foreignObjectRendering` de html2canvas o una librería nueva (html-to-image):** sin las fuentes de la app embebidas, el texto cambia; la causa real del corrimiento era la medición de la línea base y se corrige sin dependencias nuevas.
+
+### Consecuencias
+
+- Migración `20261115100000_comprobantes_v2` (sin aplicar; requiere `20261112100000_comprobantes_plantillas` de ADR-112). La Edge `ai_assistant` lee el diseño de comprobantes en lugar de las plantillas (`deno check` OK, sin desplegar).
+- Tests:
+  - `tests/unit/invoiceTemplates.test.tsx`: modelos por tipos por opciones, Simple como Clásico, gating, bordes, fotos, IVA en B, código de barras y paginación de los 9 modelos;
+  - `tests/unit/invoicePdf.test.ts`: páginas A4 de 210 x 297 mm, ticket de 80 y 58 mm y achicado sin corte;
+  - `tests/unit/qrcode.test.ts`: tamaño intrínseco del QR;
+  - `tests/components/TicketModal.test.tsx`: selector Ticket o A4 y perfil A4 en la impresión automática.
+- Deuda:
+  - la paginación es una estimación (si una hoja se estira, el PDF la achica y la impresión del navegador la parte);
+  - la NC de una anulación (`origin = void`) todavía no tiene botón de reimpresión propio en el detalle fiscal;
+  - el ticket de la venta offline no tiene fotos (no hay conexión para precargarlas);
+  - las capturas del modo claro dependen del tema de la app.

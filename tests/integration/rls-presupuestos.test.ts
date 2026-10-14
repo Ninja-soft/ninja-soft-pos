@@ -43,6 +43,7 @@ type Ctx = {
   service: string;
   quoteId: string;
   token: string;
+  createdFlag?: string;
 };
 const ctx = {} as Ctx;
 
@@ -68,16 +69,22 @@ async function makeUser(admin: SupabaseClient, email: string, tenantId: string, 
   return { id, client };
 }
 
-async function subscribe(admin: SupabaseClient, tenantId: string, planKey: string) {
-  const { data: plan } = await admin.from("plans").select("id").eq("key", planKey).is("tenant_id", null).single();
-  await admin.from("subscriptions").insert({
-    tenant_id: tenantId,
-    plan_id: (plan as { id: string }).id,
-    status: "active",
-    billing_cycle: "monthly",
-    current_period_start: new Date(Date.now() - 86_400_000).toISOString(),
-    current_period_end: new Date(Date.now() + 29 * 86_400_000).toISOString(),
-  } as never);
+// La feature por negocio con un flag explícito (no depende del plan que el
+// alta le asigne al negocio de prueba): A la tiene, B no.
+async function setFeature(admin: SupabaseClient, tenantId: string, key: string, enabled: boolean): Promise<string | null> {
+  let created: string | null = null;
+  let { data: flag } = await admin.from("feature_flags").select("id").eq("key", key).maybeSingle();
+  if (!flag) {
+    const ins = await admin.from("feature_flags").insert({ key, default_enabled: false } as never).select("id").single();
+    if (ins.error) throw ins.error;
+    flag = ins.data as { id: string };
+    created = flag.id as string;
+  }
+  const { error } = await admin
+    .from("tenant_feature_flags")
+    .insert({ tenant_id: tenantId, feature_flag_id: (flag as { id: string }).id, enabled } as never);
+  if (error) throw error;
+  return created;
 }
 
 describe.skipIf(!enabled)("ADR-122 · presupuestos", () => {
@@ -96,8 +103,9 @@ describe.skipIf(!enabled)("ADR-122 · presupuestos", () => {
     if (error || !tenants) throw error ?? new Error("tenants");
     ctx.tenantA = tenants[0]!.id;
     ctx.tenantB = tenants[1]!.id;
-    await subscribe(admin, ctx.tenantA, "pro");
-    await subscribe(admin, ctx.tenantB, "start");
+    const created = await setFeature(admin, ctx.tenantA, "presupuestos", true);
+    if (created) ctx.createdFlag = created;
+    await setFeature(admin, ctx.tenantB, "presupuestos", false);
 
     const ownerA = await makeUser(admin, `qte-owner-a-${STAMP}@test.local`, ctx.tenantA, "owner");
     const cashierA = await makeUser(admin, `qte-cashier-a-${STAMP}@test.local`, ctx.tenantA, "cashier");
@@ -127,8 +135,10 @@ describe.skipIf(!enabled)("ADR-122 · presupuestos", () => {
     const { admin } = ctx;
     if (!admin) return;
     for (const t of [ctx.tenantA, ctx.tenantB].filter(Boolean)) {
+      await admin.from("tenant_feature_flags").delete().eq("tenant_id", t);
       await admin.from("tenants").delete().eq("id", t);
     }
+    if (ctx.createdFlag) await admin.from("feature_flags").delete().eq("id", ctx.createdFlag);
     for (const id of ctx.userIds) {
       await admin.from("users").delete().eq("id", id);
       await admin.auth.admin.deleteUser(id);

@@ -14,6 +14,7 @@ import {
   Compass,
   CreditCard,
   KeyRound,
+  Landmark,
   LayoutDashboard,
   LogOut,
   FileCheck2,
@@ -62,6 +63,7 @@ import {
 const NAV = [
   { href: "/internal", label: "Inicio", icon: LayoutDashboard },
   { href: "/internal/tenants", label: "Negocios", icon: Building2 },
+  { href: "/internal/cobranza", label: "Cobranzas", icon: Landmark },
   { href: "/internal/usuarios", label: "Usuarios", icon: Users },
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },

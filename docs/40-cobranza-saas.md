@@ -1,6 +1,6 @@
 # Cobranza SaaS: cómo NinjaSoft cobra, factura y gestiona la deuda de sus clientes
 
-> **Estado:** diseño (2026-10-13). Ningún punto de este documento está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
+> **Estado:** diseño (2026-10-13). **F20-1 (cuenta corriente) tiene código desde el 2026-10-14 (ADR-115), ver §23.** El resto no está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
 >
 > **Alcance.** Es la cobranza de la **plataforma**: NinjaSoft le cobra la suscripción a cada negocio (tenant). No hay que confundirla con la cuenta corriente que un negocio le da a **sus** clientes (ADR-037, `customer_account_*`) ni con la facturación ARCA de las ventas del negocio (ADR-072, `fiscal_documents`). Este diseño reutiliza patrones y código de las dos, pero sus tablas son otras.
 >
@@ -1537,3 +1537,23 @@ Respuestas a las preguntas de la sección 21. Mandan sobre lo propuesto arriba c
 | 13 | Datos bancarios para transferir | Los **carga el dueño en el panel interno**, con el mismo editor de cuentas que el medio de pago Transferencia (selector de bancos con logos, titular, alias, CBU/CVU, varias cuentas) y el email que recibe los comprobantes. |
 | 14 | Botón de arrepentimiento | **Se agrega**: cancelación dentro de los 10 días con reintegro, visible para el cliente. Confirmar redacción con un abogado. |
 | 15 | Base del reparto del staff (F21, futuro) | **Cobrado neto** del mes (cobrado menos comisiones, reintegros y gastos). |
+
+## 23. Estado de F20-1: cuenta corriente de la plataforma (2026-10-14)
+
+Código en `feat/cobranza-ledger`, decisión [ADR-115](./17-decision-log.md). Migraciones **sin aplicar**: `20261113100000_cobranza_ledger` (modelo, motor, backfill y cron) y `20261113100100_cobranza_ledger_rpc` (permisos, topes, estado de cuenta y operaciones).
+
+**Construido**
+
+| Pieza | Cómo quedó |
+|---|---|
+| Modelo §6.2 y §6.3 | `tenant_billing_terms`, `platform_billing_settings`, `platform_charges` y `_lines`, `platform_payments`, `platform_ledger` (tipos de debe y haber de §6.3, incluidos `interest` e `interest_waiver` para F20-9), `platform_allocations` y `platform_ingest_log`. Centavos `bigint`, IVA incluido (§22 #2). |
+| Inmutabilidad | Triggers que rechazan UPDATE y DELETE de importes; cargos y pagos sólo cambian estado; imputaciones sólo se liberan. Correcciones con movimientos compensatorios y motivo. |
+| Pagos | `billing_records` sigue siendo la entrada del webhook de MP y del "Registrar pago" viejo; un trigger la pasa al ledger, idempotente por billing_record y por `(mercadopago, id de pago)`. Si falla, se audita y el cron reintenta. Sin cambios en Edges. |
+| Cargos | Uno por `(suscripción, inicio del período)`. Cron `platform-billing-run` cada hora, sólo para períodos desde la fecha de aplicar la migración; con débito automático espera 1 día al webhook. Pago durante la prueba: el período arranca al terminar la prueba (§22 #11). Upgrade a mitad de período: cargo `proration` que vence con el próximo cobro (§22 #12). |
+| Descuentos | `subscription_billing_total()` aplica `tenant_discounts` (porcentajes sobre el bruto, después fijos; × 12 en el anual). |
+| Imputación | FIFO: punitorios primero, después por vencimiento; el excedente queda a favor. |
+| Exclusión §22 #7 | `tenants.is_test` (super_admin, con motivo), negocios cuyo dueño es staff, lifetime y exentos: sin cargos y fuera de los KPIs del dashboard. `ninjasoft-qa` se marca de prueba en la migración. |
+| Permisos §22 #8 y #9 | Permiso Cobranzas sumable al nivel (`platform_staff_permissions`) y topes por nivel por operación y por mes por negocio (`platform_billing_caps`), editables por super_admin. Ver `06-permissions-roles.md` §3.1b. |
+| Pantallas | Interno: pestaña **Cuenta corriente** en el detalle del negocio (saldo, vencido, a vencer, a favor, aging, movimientos, vencimientos, pagos, imputaciones, historia; registrar pago, bonificar, cargo manual, anular cargo, revertir pago, condiciones, marca de prueba) y vista **Cobranzas** (`/internal/cobranza`: aging, negocios con saldo, próximos vencimientos, topes). Cliente: **Mi suscripción > Estado de cuenta** en `/dashboard-team`, sólo lectura para dueño y encargado. |
+
+**Pendiente de F20-1 en la tabla de §19**, movido de fase: promesas y notas de gestión (F20-9 y F20-11), espejo de `tenants.status` (F20-2, como dice §5.1), contracargos automáticos desde el webhook (F20-10; hoy "Revertir pago" a mano), aprobación de operaciones que superan el tope (F20-7; hoy se rechazan), `billing_records` como vista de compatibilidad (cuando el webhook escriba directo en `platform_payments`).

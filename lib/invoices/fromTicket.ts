@@ -123,6 +123,10 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
   ];
 
   const methods = payments.map((p) => p.method);
+  // ADR-124: la razón social va en los datos fiscales; sin razón social cargada,
+  // el emisor se nombra con el nombre comercial (fantasía o el de la cuenta).
+  const issuerName =
+    brand?.legal_name?.trim() || opts.tradeName?.trim() || brand?.tenant_name?.trim() || "Mi negocio";
   const numberParts = f?.numero?.split("-") ?? [];
 
   const receiverDocType = f?.docTipo != null && f.docTipo !== 99 ? docTypeLabel(f.docTipo) : customer?.document_type ?? null;
@@ -168,8 +172,8 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
     saleCondition: saleConditionOf(methods),
     currency: { code: "ARS" },
     issuer: {
-      name: brand?.legal_name?.trim() || "Mi negocio",
-      tradeName: opts.tradeName ?? null,
+      name: issuerName,
+      tradeName: opts.tradeName && opts.tradeName !== issuerName ? opts.tradeName : null,
       cuit: brand?.cuit ?? null,
       iibb: brand?.iibb ?? null,
       activityStart: brand?.activity_start ?? null,

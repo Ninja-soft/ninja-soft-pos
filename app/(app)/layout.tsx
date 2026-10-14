@@ -2,6 +2,30 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { homePath } from "@/lib/auth/redirect";
+import { businessDisplayNameOrNull } from "@/lib/branding/businessName";
+import { fetchTradeName } from "@/lib/branding/tradeName";
+import type { Metadata } from "next";
+
+// ADR-124: el nombre del negocio en la pestaña ("Kiosco Juan · NinjaSoft POS"),
+// con el nombre de fantasía si lo tiene. Ante cualquier error, el título de siempre.
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const tenantId = (user?.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id;
+    if (!tenantId) return {};
+    const [{ data: t }, tradeName] = await Promise.all([
+      supabase.from("tenants").select("name").eq("id", tenantId).maybeSingle(),
+      fetchTradeName(supabase, tenantId),
+    ]);
+    const name = businessDisplayNameOrNull({ tradeName, tenantName: (t as { name: string | null } | null)?.name });
+    return name ? { title: `${name} · NinjaSoft POS` } : {};
+  } catch {
+    return {};
+  }
+}
 
 export default async function AppLayout({
   children,

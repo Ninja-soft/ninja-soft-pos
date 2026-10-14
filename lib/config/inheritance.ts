@@ -138,6 +138,8 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
       scopes: GS,
       hint: "Toma los datos cargados en Sucursales y cajas: no se tipean dos veces.",
     },
+    // ADR-124: nombre de fantasía por grupo o sucursal (encabezado del comprobante).
+    { key: "trade_name", type: "text", label: "Nombre de fantasía", scopes: GS },
     { key: "legal_name", type: "text", label: "Razón social", scopes: GS },
     { key: "cuit", type: "text", label: "CUIT", scopes: GS },
     { key: "phone", type: "text", label: "Teléfono", scopes: GS },

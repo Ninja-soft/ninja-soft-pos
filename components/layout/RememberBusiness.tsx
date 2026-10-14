@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { syncRememberedBusiness } from "@/lib/auth/rememberedBusiness";
+import { businessDisplayNameOrNull } from "@/lib/branding/businessName";
+import { fetchTradeName } from "@/modules/tenants/businessName";
 
 type Snapshot = { name: string | null; logoUrl: string | null } | null;
 
@@ -31,14 +33,16 @@ export function RememberBusiness() {
       if (meta.current_tenant_id) memQ = memQ.eq("tenant_id", meta.current_tenant_id);
       const { data: mem } = await memQ.limit(1).maybeSingle();
       if (!mem) return null;
-      const [{ data: t, error: tErr }, { data: b, error: bErr }] = await Promise.all([
+      const [{ data: t, error: tErr }, { data: b, error: bErr }, tradeName] = await Promise.all([
         supabase.from("tenants").select("name").eq("id", mem.tenant_id).maybeSingle(),
         supabase.from("tenant_branding").select("logo_url").eq("tenant_id", mem.tenant_id).maybeSingle(),
+        fetchTradeName(supabase, mem.tenant_id),
       ]);
       // Ante un error de red no se toca lo guardado (no es "sin logo").
       if (tErr || bErr) return null;
       return {
-        name: (t as { name: string | null } | null)?.name ?? null,
+        // ADR-124: el login saluda con el nombre de fantasía (si no, el de la cuenta).
+        name: businessDisplayNameOrNull({ tradeName, tenantName: (t as { name: string | null } | null)?.name }),
         logoUrl: (b as { logo_url: string | null } | null)?.logo_url ?? null,
       };
     },

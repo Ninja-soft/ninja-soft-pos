@@ -3,6 +3,10 @@ import type { TicketFiscal } from "@/lib/arca/ticket";
 export interface SampleBrand {
   logo_url: string | null;
   legal_name: string | null;
+  /** ADR-124: nombre de fantasía de la marca (pisable por grupo o sucursal). */
+  trade_name?: string | null;
+  /** ADR-124: nombre de la cuenta (tenants.name), fallback del encabezado comercial. */
+  tenant_name?: string | null;
   accent?: string | null;
   cuit: string | null;
   phone: string | null;

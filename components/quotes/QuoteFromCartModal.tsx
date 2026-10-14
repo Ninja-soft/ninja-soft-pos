@@ -2,7 +2,9 @@
 
 // "Presupuesto" del POS (ADR-122): guarda el carrito como presupuesto sin
 // cobrar ni mover stock. Pide validez, condiciones y el contacto para
-// mandarlo; después ofrece verlo o mandarlo por WhatsApp.
+// mandarlo; después ofrece verlo o mandarlo por WhatsApp. ADR-123: los
+// contactos son del CLIENTE (varios emails como chips, precargados de su
+// ficha) y la validez puede ser "sin vencimiento".
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -10,11 +12,15 @@ import { CheckCircle2, ExternalLink, MessageCircle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Segmented } from "@/components/ui/Segmented";
+import { EmailChipsInput } from "@/components/quotes/EmailChipsInput";
 import { useToast } from "@/components/ui/Toast";
-import { useQuoteMutations, useQuoteSettings } from "@/modules/quotes/hooks";
+import { useQuoteCustomerContact, useQuoteMutations, useQuoteSettings } from "@/modules/quotes/hooks";
 import type { QuoteSaveResult } from "@/modules/quotes/api";
 import {
+  QUOTE_NO_EXPIRY_LEGEND,
   addDaysIso,
+  parseEmails,
   cartToQuoteItems,
   publicQuoteUrl,
   quoteErrorMessage,
@@ -57,22 +63,32 @@ export function QuoteFromCartModal({
   const { data: settings } = useQuoteSettings(open);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [emails, setEmails] = useState<string[]>([]);
+  const [noExpiry, setNoExpiry] = useState(false);
   const [validUntil, setValidUntil] = useState("");
   const [terms, setTerms] = useState("");
   const [notes, setNotes] = useState("");
-  const [saved, setSaved] = useState<(QuoteSaveResult & { valid_until: string }) | null>(null);
+  const [saved, setSaved] = useState<(QuoteSaveResult & { valid_until: string | null }) | null>(null);
+  // Ficha del cliente elegido en el POS: sus emails y su WhatsApp.
+  const { data: card } = useQuoteCustomerContact(customer?.id ?? null, open);
 
   useEffect(() => {
     if (!open) return;
     setSaved(null);
     setName("");
     setPhone("");
-    setEmail("");
+    setEmails([]);
     setNotes("");
+    setNoExpiry(Boolean(settings?.no_expiry_default));
     setValidUntil(addDaysIso(todayArIso(), settings?.validity_days ?? 15));
     setTerms(settings?.default_terms ?? "");
-  }, [open, settings?.validity_days, settings?.default_terms]);
+  }, [open, settings?.validity_days, settings?.default_terms, settings?.no_expiry_default]);
+
+  useEffect(() => {
+    if (!open || !card) return;
+    setEmails((cur) => (cur.length ? cur : card.email ? parseEmails(card.email).valid : []));
+    setPhone((cur) => cur || card.phone || "");
+  }, [open, card]);
 
   const items = useMemo(() => cartToQuoteItems(lines), [lines]);
   const totals = useMemo(
@@ -95,8 +111,10 @@ export function QuoteFromCartModal({
           customer_id: customer?.id ?? null,
           customer_name: customer ? null : name.trim() || null,
           customer_phone: phone.trim() || null,
-          customer_email: email.trim() || null,
-          valid_until: validUntil,
+          customer_emails: emails,
+          customer_email: emails[0] ?? null,
+          no_expiry: noExpiry,
+          valid_until: noExpiry ? null : validUntil,
           terms: terms.trim(),
           notes: notes.trim(),
           discount_total: totals.discount,
@@ -105,7 +123,7 @@ export function QuoteFromCartModal({
         },
         items,
       });
-      setSaved({ ...r, valid_until: validUntil });
+      setSaved({ ...r, valid_until: noExpiry ? null : validUntil });
       onSaved(r);
     } catch (e) {
       toast({ title: "No se pudo guardar el presupuesto", description: quoteErrorMessage(e), variant: "error" });
@@ -187,11 +205,28 @@ export function QuoteFromCartModal({
         {!customer && (
           <Input variant="filled" label="Nombre o razón social del cliente" value={name} onChange={(e) => setName(e.target.value)} maxLength={160} />
         )}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input variant="filled" label="WhatsApp" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} />
-          <Input variant="filled" label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={160} />
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Datos del cliente para mandarle el presupuesto{customer ? " (de su ficha)" : ""}.</p>
+          <EmailChipsInput label="Email del cliente" value={emails} onChange={setEmails} hint="Podés cargar varios." />
+          <Input variant="filled" label="WhatsApp del cliente" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} />
         </div>
-        <Input variant="filled" type="date" label="Válido hasta" min={todayArIso()} value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+        <div className="space-y-2">
+          <Segmented<"date" | "none">
+            value={noExpiry ? "none" : "date"}
+            onChange={(v) => setNoExpiry(v === "none")}
+            fill
+            aria-label="Validez del presupuesto"
+            options={[
+              { value: "date", label: "Con vencimiento" },
+              { value: "none", label: "Sin vencimiento" },
+            ]}
+          />
+          {noExpiry ? (
+            <p className="rounded-lg bg-fg-4 px-3 py-2.5 text-xs text-muted-foreground">Precio de referencia: nunca vence. El documento dice «{QUOTE_NO_EXPIRY_LEGEND}»</p>
+          ) : (
+            <Input variant="filled" type="date" label="Válido hasta" min={todayArIso()} value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+          )}
+        </div>
         <label className="block text-xs font-medium text-muted-foreground">
           Condiciones
           <textarea className={textareaCls} value={terms} onChange={(e) => setTerms(e.target.value)} maxLength={2000} placeholder="Forma de pago, plazo de entrega, qué incluye" />

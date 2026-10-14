@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils/format";
+import { businessDisplayName } from "@/lib/branding/businessName";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,8 @@ type Catalog = {
     logo_url: string | null;
     accent: string | null;
     legal_name: string | null;
+    /** ADR-124: nombre de fantasía (sin la migración aplicada, no viene). */
+    trade_name?: string | null;
     phone: string | null;
     address: string | null;
   } | null;
@@ -22,6 +26,24 @@ type Catalog = {
   }[];
 };
 
+// ADR-124: el catálogo se presenta con el nombre de fantasía (si no, el de la cuenta).
+function catalogTitle(c: Catalog): string {
+  return businessDisplayName(
+    { tradeName: c.branding?.trade_name, tenantName: c.tenant.name, legalName: c.branding?.legal_name },
+    "Catálogo",
+  );
+}
+
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  try {
+    const { data } = await createClient().rpc("public_catalog", { p_slug: params.slug });
+    const catalog = data as unknown as Catalog | null;
+    return catalog ? { title: `${catalogTitle(catalog)} · Catálogo` } : {};
+  } catch {
+    return {};
+  }
+}
+
 export default async function PublicCatalogPage({
   params,
 }: {
@@ -33,7 +55,7 @@ export default async function PublicCatalogPage({
   if (!catalog) notFound();
 
   const accent = catalog.branding?.accent || "#EC3F17";
-  const title = catalog.branding?.legal_name || catalog.tenant.name;
+  const title = catalogTitle(catalog);
 
   return (
     <main className="min-h-dvh bg-neutral-50 text-neutral-900">

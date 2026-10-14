@@ -27,6 +27,7 @@ import { ComandaModal } from "@/components/dining/ComandaModal";
 import { VoidItemModal } from "@/components/dining/VoidItemModal";
 import { diningErrorMessage, isItemSent } from "@/lib/gastro/tableOps";
 import { useTicketBranding } from "@/modules/tickets/hooks";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import {
   useDeliveryOrderItems,
   useDeliveryMutations,
@@ -387,7 +388,7 @@ export function DeliveryAccountModal({
         onOpenChange={setComandaOpen}
         orderId={orderId}
         order={order}
-        businessName={brand?.legal_name ?? null}
+        businessName={brand ? brandDisplayName(brand, "") || null : null}
       />
 
       {/* Confirmación de cancelación */}

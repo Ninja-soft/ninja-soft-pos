@@ -4541,3 +4541,72 @@ El dueño pidió que "quede todo explicado, todo intuitivo y fácil": un dueño 
 - Las consultas al padrón desde Impuestos cuentan para el mismo tope por hora que Datos de facturación.
 - Sin capturas por tema en este PR: falta pasar el gate visual (`/verify`) en los 4 temas.
 - Tests: `tests/unit/billingLetterGuide.test.ts`.
+## ADR-124: Nombre de fantasía como dato de la marca del negocio, con un helper único para mostrar el nombre del negocio en toda la app
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edges sin desplegar) · **Base:** ADR-112 / ADR-119 (motor de comprobantes, `invoice_style.trade_name`), ADR-049 (herencia de configuración por grupo y sucursal), ADR-122 (presupuestos), H8 (`tenant_branding`).
+
+### Contexto
+
+El dueño pidió "agregá en Marca el nombre de fantasía, e incorporalo en la interfaz". Hasta ahora el nombre de fantasía existía sólo como opción del comprobante (`tenant_branding.invoice_style.trade_name`, Configuración > Comprobantes) y cada pantalla elegía por su cuenta qué nombre mostrar: `tenants.name` (barra lateral no lo mostraba, panel del dueño, selector de negocio, login), `legal_name` (pantalla del cliente, links de pago, email del comprobante, catálogo público) o una mezcla.
+
+### Decisión
+
+1. **Columna propia `tenant_branding.trade_name`** (texto de 1 a 120 caracteres o null), editable en Configuración > Marca junto a la razón social, el logo y el color. RLS de la tabla sin cambios (lectura miembros, escritura dueño o encargado).
+2. **BASE, sin key de plan.** Es un dato básico del negocio como la razón social: no entra en las columnas que gatea `personalizacion_marca` (logo y color, `trg_assert_branding_feature`, que es por columna), así que se edita en cualquier plan. No se agrega a `features` ni a la matriz de planes.
+3. **Un solo helper para mostrar el nombre:** `businessDisplayName()` en `lib/branding/businessName.ts` (fantasía, si no `tenants.name`, si no la razón social). Lo usan la barra lateral y el encabezado mobile (`BusinessBadge`), el panel del dueño, el selector de negocio del panel, el login "Hola de nuevo" (negocio recordado), el título de la pestaña ("Nombre · NinjaSoft POS"), la pantalla del cliente, los links de pago (WhatsApp y email), la lista de espera, el detalle de la venta, el catálogo público, el presupuesto público y las Edges `send_receipt_email`, `pending_charge_share`, `getnet_checkout` y `payway_checkout` (espejo en `supabase/functions/_shared/businessName.ts`). `useMyTenant().name` pasa a ser el nombre para mostrar (con `tenantName` y `tradeName` aparte).
+4. **Comprobantes (ticket, factura A4, presupuesto):** encabezado comercial arriba y la razón social con los datos fiscales. Prioridad del encabezado (`invoiceTradeName`): `invoice_style.trade_name` (override sólo del comprobante, sigue en Configuración > Comprobantes como "Nombre en el comprobante") > `trade_name` de la marca (con lo que pise el grupo o la sucursal) > `tenants.name`. Si coincide con la razón social no se repite; sin razón social cargada, el emisor se nombra con el nombre comercial.
+5. **Por sucursal:** `trade_name` es un campo de texto del dominio `ticket` de la herencia (ADR-049), editable por grupo o sucursal en Marca como la razón social (`config_field_type`, `lib/config/inheritance.ts`, `effectiveTicketBrand`).
+6. **Migración del dato:** `20261121200000_nombre_fantasia` mueve `invoice_style.trade_name` a la columna (sólo si la columna está vacía) y lo quita del jsonb, con el trigger de plan de `invoice_style` apagado durante el backfill (quitar una clave no cambia el plan). Dejarlo en el jsonb lo convertía en un override que tapaba lo que se edite en Marca. En producción hoy no hay ningún negocio con ese dato (verificado en sólo lectura).
+7. **Tolerante a la migración sin aplicar:** el front y las Edges leen `trade_name` en una consulta aparte y un error se toma como "sin fantasía"; Marca oculta el campo si la columna no existe.
+
+### Alternativas descartadas
+
+- **Seguir guardándolo en `invoice_style`:** es un dato de la marca, no del diseño del comprobante, y lo necesitan pantallas que no leen la personalización de comprobantes (catálogo, emails, login).
+- **Renombrar `tenants.name`:** es el nombre de la cuenta (lo ve NinjaSoft en internal, define el slug); el negocio puede tener una razón social, una cuenta y un nombre comercial distintos.
+- **Gatearlo con `personalizacion_marca`:** el nombre con el que el cliente reconoce al negocio no es branding pago; sin él, el ticket mostraría sólo la razón social.
+
+### Consecuencias
+
+- Migración `20261121200000_nombre_fantasia` (sin aplicar; probada en PGlite con 18 chequeos: backfill, limpieza de claves vacías, re-ejecución, constraint, herencia, catálogo y presupuesto público). Recrea `config_field_type`, `public_catalog` y `quote_public_get` desde sus definiciones vigentes (comparadas con producción).
+- Edges `send_receipt_email`, `pending_charge_share`, `getnet_checkout` y `payway_checkout` sin desplegar: hasta desplegarlas siguen con el nombre de antes.
+- El panel interno sigue mostrando `tenants.name` (es el nombre de la cuenta para el staff).
+- Tests: `tests/unit/businessName.test.ts`.
+
+---
+
+## ADR-123: Presupuestos v2: envío por email con el PDF, hoja como la de cobro, contactos del cliente y del negocio separados, sin vencimiento y emisor para comisiones
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-122 (presupuestos), ADR-112 y ADR-119 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-042 (hoja de cobro), ADR-083 (auditoría).
+
+### Contexto
+
+Con los presupuestos en producción, el dueño pidió: (1) mandarlos por email a uno o varios destinatarios con el PDF adjunto y una plantilla linda y editable, con registro de envíos (hoy había un `mailto:`); (2) que la creación, edición y detalle se vean "como la de cobro"; (3) que se entienda que el email y el WhatsApp que se cargan son del **cliente**, separados de los datos del negocio que salen impresos; (4) poder emitir sin fecha de validez, como precio de referencia sujeto a cambios, que nunca pase a vencido; (5) guardar quién emitió y quién modificó, mostrarlo y poder filtrar o agrupar por emisor para comisiones.
+
+### Decisión
+
+1. **Envío por email (Edge `send_quote_email`).** El PDF se genera en el navegador del mismo nodo que la vista previa (A4 o ticket, motor ADR-112/119) y viaja en base64, igual que el comprobante de una venta. La Edge llama a `quote_email_prepare` **con el JWT del usuario** (`_quote_guard`: negocio del JWT, rol no "solo lectura" y feature `presupuestos` del plan; valida hasta 10 destinatarios, asunto, tope de 200 destinatarios por negocio cada 24 h y estado: ni rechazado ni convertido), que asegura el token del link público y deja un registro `pending` por destinatario en `quote_emails`. Manda **un email por destinatario** (nadie ve a los demás) y cierra con `quote_email_finish` (sólo `service_role`): estado por destinatario, borrador → enviado si salió alguno, auditoría `quote_emailed` con el actor real y bitácora en `system_emails` (kind `quote`). La respuesta es 200 aunque fallen todos, con el resultado por destinatario.
+2. **Proveedor.** Si el negocio configuró su email (Configuración → Email: Resend o SMTP, `tenant_email_smtp`) sale desde su dominio, como el comprobante. Si no, sale por la cadena de la plataforma (`email_providers`, Resend con failover, `_shared/mailer.ts`, que ahora acepta adjuntos, texto, reply-to y nombre del remitente de forma opcional y compatible) con el **nombre del negocio** como remitente y respuesta (reply-to) a su email de contacto. Así funciona sin configurar nada.
+3. **Plantilla del email.** `lib/email/quoteTemplate.ts` (vista previa en el diálogo de envío) y `supabase/functions/_shared/quoteEmailTemplate.ts` (Edge) son el mismo bloque, verificado por test: marca del negocio (logo o inicial, acento), franja de color arriba, mensaje, resumen (total, validez, emisor), botón "Ver y responder el presupuesto" al link público y aviso del PDF adjunto; plano, sin degradados ni sombras, sólo tablas e inline. Asunto y mensaje se prellenan con la plantilla de Configuración → Presupuestos (`email_subject`, `email_message`, variables `{cliente}`, `{numero}`, `{total}`, `{validez}`, `{emisor}`, `{negocio}`) o la de NinjaSoft, y se editan al enviar. El historial del presupuesto muestra cada tanda con su estado por destinatario.
+4. **Hoja como la de cobro.** Alta, edición y detalle pasan de `Modal` a `PosSheet` xl (mismo componente y ritmo que la hoja de cobro y la ventana del ticket): en la compu, el formulario (cliente, renglones, condiciones) a la izquierda y a la derecha el total grande, la validez, a quién se manda, tus datos y el CTA sólido; en el detalle, la vista previa a la izquierda y el resumen y las acciones (enviar, documento, respuesta del cliente, historial) a la derecha con "Convertir en venta" como CTA. En el celular, apilado con la acción principal fija abajo.
+5. **Contactos.** Los campos de envío se rotulan "Email del cliente" (chips, varios, `quotes.customer_emails`, hasta 10; `customer_email` queda como el primero) y "WhatsApp del cliente", precargados de la ficha del cliente elegido. Aparte, "Tus datos en el presupuesto" (sólo lectura, con link a Configuración) muestra lo que sale impreso; el email y el teléfono del negocio para presupuestos se configuran en `quote_settings.contact_email` / `contact_phone` (vacío, el teléfono de la marca) y salen en el documento, el link público y el email.
+6. **Sin vencimiento.** `quotes.valid_until` admite `NULL` = precio de referencia. `quote_effective_status` ya devolvía el estado tal cual con `NULL`, así que nunca pasa a vencido (SQL y TS con el mismo criterio). El documento lo dice ("Presupuesto de referencia: precios sujetos a cambio sin previo aviso."), igual que el link público y el email. `quote_save` recibe `no_expiry`; `quote_settings.no_expiry_default` lo propone en cada alta; duplicar lo conserva.
+7. **Emisor.** `created_by` / `updated_by` ya existían; se suman las fotos `created_by_name` / `updated_by_name` por trigger (cualquier RPC que toque `updated_by` las mantiene), para mostrar sin exponer ids de usuarios: listado ("emitió …"), detalle (emitido y último cambio), documento y link público ("Emitido por: …"). Filtro por emisor en Presupuestos con un resumen (cantidad, monto, convertidos, conversión) y, junto a "Por cajero" en Reportes, la sección **Presupuestos por emisor** (`quote_issuer_report`, gateada por la feature; período por fecha de alta, consolidado).
+
+### Clasificación de plan (CLAUDE.md §6)
+
+Sin key nueva: todo es parte de `presupuestos` (OPTIONAL, Pro+). El gating real sigue en la base: el envío pasa por `_quote_guard` dentro de `quote_email_prepare`, `quote_email_finish` no la puede llamar un usuario y el reporte valida la feature.
+
+### Alternativas descartadas
+
+- **Generar el PDF en el servidor:** el motor de comprobantes es React y su PDF sale del DOM; duplicarlo en Deno rompería "el mismo PDF que la vista previa".
+- **Un solo email con todos en "Para":** expone los emails entre destinatarios de distintas áreas o empresas; uno por destinatario cuesta poco con el tope diario.
+- **Sólo el email del negocio (sin la plataforma):** dejaba la función rota para la mayoría, que no configuró su email.
+- **Columna `no_expiry` aparte de `valid_until`:** dos fuentes de verdad para lo mismo; `NULL` ya tiene el significado justo y el cálculo de vencido no cambia.
+- **Unirse a `users` en cada lectura para el nombre del emisor:** la RLS de `users` no deja ver a todos los miembros y el link público no debe leer usuarios; la foto del nombre resuelve las dos cosas.
+
+### Consecuencias
+
+- Migración `20261121100000_presupuestos_v2` (sin aplicar; probada en PGlite sobre la de ADR-122 con 45 chequeos, re-ejecutable). Restaura en el check de `system_emails.kind` los valores `account_reminder` y `account_statement`, que `20261014100000_cobros_en_espera` había dejado afuera, y suma `quote`.
+- Edge nueva `send_quote_email` (sin desplegar; `verify_jwt=true`). `_shared/mailer.ts` cambia de forma compatible (campos opcionales): `send_email`, `send_password_recovery` y `process_pending_emails` no necesitan redeploy, pero toman el cambio en su próximo deploy. `APP_URL` (opcional, default `https://pos.soft.ninja`) arma el link del botón.
+- Deuda: el reporte por emisor es consolidado (los presupuestos casi nunca tienen sucursal); el reenvío de un fallido es manual desde el diálogo (sin reintento automático).
+- Tests: `tests/unit/quoteEmail.test.tsx` (plantilla en espejo, reglas de email, destinatarios, plantilla editable, sin vencimiento, emisor y contratos de la migración y la Edge) y casos nuevos en `tests/integration/rls-presupuestos.test.ts`.

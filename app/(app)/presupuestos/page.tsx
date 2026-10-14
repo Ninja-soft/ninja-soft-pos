@@ -2,7 +2,8 @@
 
 // Presupuestos (ADR-122): listar, filtrar por estado, cliente, número y tipo
 // de servicio, crear, ver, duplicar, editar mientras no esté aceptado y
-// convertir en venta. OPTIONAL `presupuestos` (Pro+): la base lo exige en
+// convertir en venta. ADR-123: quién lo emitió (filtro por emisor y resumen
+// para comisiones: cantidad, monto, convertidos y tasa de conversión). OPTIONAL `presupuestos` (Pro+): la base lo exige en
 // cada RPC; acá sólo se muestra el bloqueo.
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -51,6 +52,7 @@ function PresupuestosInner() {
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
+  const [issuer, setIssuer] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -68,12 +70,32 @@ function PresupuestosInner() {
       .map((r) => ({ ...r, eff: effectiveQuoteStatus(r.status, r.valid_until, today) }))
       .filter((r) => filter === "all" || r.eff === filter)
       .filter((r) => !type || r.service_types.includes(type))
+      .filter((r) => !issuer || (r.created_by ?? "none") === issuer)
       .filter(
         (r) =>
           !term ||
           norm(`${r.customer_name ?? ""} ${r.customer_doc ?? ""} ${quoteNumberLabel(r.pto_vta, r.number)} ${r.number}`).includes(term),
       );
-  }, [list, filter, type, q, today]);
+  }, [list, filter, type, issuer, q, today]);
+
+  // Emisores del listado (para el filtro) y el resumen del emisor elegido.
+  const issuers = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of list) m.set(r.created_by ?? "none", r.created_by_name || "Sin emisor");
+    return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1], "es"));
+  }, [list]);
+  const issuerStats = useMemo(() => {
+    if (!issuer) return null;
+    const mine = list.filter((r) => (r.created_by ?? "none") === issuer);
+    const converted = mine.filter((r) => r.status === "converted");
+    return {
+      count: mine.length,
+      total: mine.reduce((a, r) => a + r.total, 0),
+      converted: converted.length,
+      convertedTotal: converted.reduce((a, r) => a + r.total, 0),
+      rate: mine.length ? Math.round((converted.length / mine.length) * 100) : 0,
+    };
+  }, [list, issuer]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: list.length };
@@ -132,6 +154,23 @@ function PresupuestosInner() {
             aria-label="Buscar presupuestos"
             className="sm:max-w-sm"
           />
+          {issuers.length > 1 && (
+            <select
+              aria-label="Emitido por"
+              value={issuer}
+              onChange={(e) => setIssuer(e.target.value)}
+              className="h-11 rounded-lg border border-border bg-background/40 px-3 text-sm text-foreground outline-none sm:w-56"
+            >
+              <option value="" className="bg-popover text-popover-foreground">
+                Todos los emisores
+              </option>
+              {issuers.map(([id, name]) => (
+                <option key={id} value={id} className="bg-popover text-popover-foreground">
+                  {name}
+                </option>
+              ))}
+            </select>
+          )}
           {types.length > 0 && (
             <select
               aria-label="Tipo de servicio"
@@ -172,6 +211,22 @@ function PresupuestosInner() {
         </div>
       </div>
 
+      {issuerStats && (
+        <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            ["Presupuestos", String(issuerStats.count)],
+            ["Monto presupuestado", formatCurrency(issuerStats.total)],
+            ["Convertidos", `${issuerStats.converted} · ${formatCurrency(issuerStats.convertedTotal)}`],
+            ["Conversión", `${issuerStats.rate} %`],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-lg border border-border bg-card px-3 py-2.5">
+              <dt className="text-xs text-muted-foreground">{k}</dt>
+              <dd className="mt-0.5 truncate font-price text-base font-semibold tabular-nums">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
       <section className="mt-5">
         {isLoading || enabled === undefined ? (
           <SpinnerBlock />
@@ -211,7 +266,9 @@ function PresupuestosInner() {
                     </div>
                     <p className="mt-0.5 truncate text-sm font-medium">{r.customer_name || "Consumidor final"}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {fmtDate(r.issue_date)} · vence {fmtDate(r.valid_until)} · {r.item_count} {r.item_count === 1 ? "renglón" : "renglones"}
+                      {fmtDate(r.issue_date)} · {r.valid_until ? `vence ${fmtDate(r.valid_until)}` : "sin vencimiento"} ·{" "}
+                      {r.item_count} {r.item_count === 1 ? "renglón" : "renglones"}
+                      {r.created_by_name ? ` · emitió ${r.created_by_name}` : ""}
                       {r.service_types.length ? ` · ${r.service_types.join(", ")}` : ""}
                     </p>
                   </div>

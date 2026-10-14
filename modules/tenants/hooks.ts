@@ -3,12 +3,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
+import { businessDisplayNameOrNull } from "@/lib/branding/businessName";
+import { fetchTradeName } from "./businessName";
 
 export interface MyTenant {
   tenantId: string;
   industry: string | null;
-  // Nombre del negocio (lo usan textos listos para enviar, p. ej. el mail a Nave).
+  // Nombre del negocio PARA MOSTRAR (ADR-124): fantasía, si no el de la cuenta.
+  // Lo usan la barra lateral, impresiones y textos listos para enviar.
   name: string | null;
+  /** tenants.name (nombre de la cuenta). */
+  tenantName: string | null;
+  /** tenant_branding.trade_name (nombre de fantasía, Configuración > Marca). */
+  tradeName: string | null;
   role: string;
   canManage: boolean;
 }
@@ -28,15 +35,17 @@ export function useMyTenant() {
       if (activeTenant) memQ = memQ.eq("tenant_id", activeTenant);
       const { data: mem } = await memQ.limit(1).maybeSingle();
       if (!mem) return null;
-      const { data: t } = await supabase
-        .from("tenants")
-        .select("industry, name")
-        .eq("id", mem.tenant_id)
-        .maybeSingle();
+      const [{ data: t }, tradeName] = await Promise.all([
+        supabase.from("tenants").select("industry, name").eq("id", mem.tenant_id).maybeSingle(),
+        fetchTradeName(supabase, mem.tenant_id),
+      ]);
+      const tenantName = t?.name ?? null;
       return {
         tenantId: mem.tenant_id,
         industry: t?.industry ?? null,
-        name: t?.name ?? null,
+        name: businessDisplayNameOrNull({ tradeName, tenantName }),
+        tenantName,
+        tradeName,
         role: mem.role,
         canManage: ["owner", "manager"].includes(mem.role),
       };

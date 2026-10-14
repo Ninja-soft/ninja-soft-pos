@@ -50,6 +50,18 @@ Permiso que **se suma al nivel** (tabla `platform_staff_permissions`, no viaja e
 
 Los **topes** (`platform_billing_caps`, por nivel: `cobranzas`, `admin`, `super_admin`) son por operación y por mes calendario por negocio, suman bonificaciones, anulaciones, ajustes a favor y condonaciones de todo el staff, y se validan en el servidor (`platform_assert_forgiveness_cap`). Defaults: $ 50.000 por operación y $ 150.000 por mes para Cobranzas y admin; super_admin sin tope.
 
+### 3.1c Participación del staff (implementado, F21 · ADR-121)
+
+| Acción | support | admin | Cobranzas | super_admin | La propia persona |
+|---|---|---|---|---|---|
+| Configurar personas, %, reglas por cliente, gastos, cotización, ajustes | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Ver gastos, liquidaciones de todos y el panel `/internal/participacion` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Cerrar liquidaciones y registrar o anular pagos | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Ver su %, sus reglas, sus liquidaciones, sus pagos y su proyección | | | | | ✅ |
+| Cargar o editar sus cuentas de cobro (CBU / CVU / alias) | | | | ✅ | ✅ |
+
+Todo con `(select internal_scope())` (panel interno) y `staff_is_owner()` (= `internal_level() = 'super_admin'`); cada persona lee sus filas por `staff_my_member_ids()`. Los insumos del cálculo (`staff_settlement_inputs`) son sólo `service_role` (Edge `staff_payouts`).
+
 ### 3.2 Roles objetivo por área
 
 Estos roles pueden implementarse como permisos granulares sobre `internal_level` o como una tabla futura `internal_staff_roles`:

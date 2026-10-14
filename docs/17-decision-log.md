@@ -4249,3 +4249,43 @@ F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea l
 - Para que el padrón funcione hace falta el certificado de la plataforma con `ws_sr_constancia_inscripcion` autorizado (spec §16.1) y elegir el ambiente activo.
 - Cuando F20-1 llegue a `main`: sumar el permiso "Cobranzas" a `internal_set_billing_profile` y decidir si `tenant_billing_terms.send_to` reemplaza a `email_facturacion` o lo usa como primer destinatario.
 - Deuda: cron de revalidación del padrón (F20-11) y FCE MiPyME.
+
+---
+
+## ADR-121: Participación del staff sobre el cobrado neto: motor puro único para borrador, cierre, proyección y simulador; cada hecho de plata se liquida una sola vez; liquidación inmutable verificada al centavo en SQL y pagos con la operación de Mercado Pago leída del servidor (F21)
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-110 y ADR-115 (ledger de la plataforma: `platform_payments`, `platform_ledger`), ADR-052 (`internal_scope`), ADR-055 (cuentas de Transferencia y catálogo de bancos), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §20 y §22 #15. **Numeración:** 118 a 120 los toman otras ramas.
+
+### Contexto
+
+El dueño pidió construir F21, que estaba como futuro: porcentaje del cobrado neto para cada persona del staff, reglas por cliente (más % para quien trajo al cliente, comisión de alta), gastos con recurrencia que se descuentan de distintas formas (proporcional, eximidos, todo a una persona, menos % de gastos), cuánto liquidaría NinjaPOS el mes próximo, pagos a cada persona (con la operación de Mercado Pago y su detalle desde la cuenta de NinjaSoft), email de acreditación y CBU de cada uno con el editor de Transferencia. Pidió robustez y ejemplos simulados. El ledger de F20-1 ya da pagos, comisiones y reversas por negocio.
+
+### Decisión
+
+1. **Base = cobrado neto** (§22 #15): pagos aprobados − comisiones − reintegros y contracargos − reserva de impuestos configurable (0 por defecto). Negocios de prueba fuera.
+2. **Un solo motor, puro**, en `supabase/functions/_shared/staff/settlement.ts`: lo usan la Edge `staff_payouts` (borrador, cierre, "mi participación", proyección), el simulador del panel y los tests. Lo que se ve en el simulador es lo que se cierra.
+3. **Cada hecho de plata se liquida una sola vez** (`staff_payout_items`, PK `(source, source_id)`): pagos y reversas sin liquidar hasta el fin del período. Lo que llega tarde (pago con fecha de un mes cerrado, contracargo de un pago repartido) entra en la próxima liquidación abierta. Nunca se reabre un mes.
+4. **Participación del día del hecho**: cada pago se reparte con los % vigentes ese día, no con un promedio del mes. Los gastos proporcionales usan pesos día por día.
+5. **Reglas por cliente** (`bonus_bp`, `override_bp`) salen de la parte de la casa; si un cliente pasa el 100 %, se reduce a todos en proporción y se avisa. Comisión de alta una sola vez, pagada por la casa, marcada en la línea.
+6. **Gastos**: recurrencia, fin, monto de un mes, USD con la cotización del mes en que ocurre (sin cotización = error que bloquea el cierre), prorrateo en N meses y asignación proporcional (con `expense_bp` propio y la casa con el resto, configurable), eximidos, una persona, casa, a medida o por cliente.
+7. **Redondeo por resto mayor** con enteros (BigInt) en cada reparto: personas + casa = a repartir, exacto al centavo. Lo verifica un test con datos al azar.
+8. **Cierre verificado en SQL**: la Edge calcula y llama a `internal_staff_close_run` con el JWT del super_admin (queda auditado a su nombre). La RPC recalcula los hechos sin liquidar y la base, y exige coherencia de cada línea, del arrastre, de los ajustes y del invariante. Después todo es inmutable (triggers); se corrige con ajustes.
+9. **Saldo negativo**: no se paga y se arrastra al mes siguiente (o lo condona la casa, configurable). Ajustes manuales: pase entre la persona y la casa.
+10. **Mercado Pago**: la Edge lee `GET /v1/payments/{id}` y `/users/me` con el access token de plataforma (`platform_secrets`), controla estado, moneda, monto (tolerancia) y que la plata haya salido de NinjaSoft, y guarda el resultado en `staff_mp_lookups` (sólo `service_role`). La RPC de pago toma el detalle de ahí, nunca del navegador. Una operación, un pago.
+11. **Email** `staff_payout_credited` por la cola del sistema (`enqueue_system_email`), editable en /internal/emails. La plantilla nueva se siembra en esta migración (`EmailTemplateDef.migration`): la migración general de emails ya está aplicada y no se regenera.
+12. **Permisos**: sólo `super_admin` en el panel interno (`staff_is_owner`), ni admin ni Cobranzas. Cada persona lee sólo sus filas (`staff_my_member_ids`) y carga sus cuentas. "Mi participación" pasa por la Edge, que devuelve sólo su línea. RLS siempre con `(select internal_scope())`.
+13. **Proyección** del mes próximo con el mismo motor: suscripciones que se cobran, con descuentos, × tasa de cobro supuesta − comisión estimada (90 días) − gastos recurrentes, con los supuestos a la vista.
+14. **`components/billing/BankAccountEditor.tsx`**: editor reutilizable (selector de bancos con logos, titular, CBU/CVU con dígitos verificadores, alias, CUIT, tipo, moneda, predeterminada) sin persistencia propia.
+
+### Alternativas descartadas
+
+- **Motor en plpgsql:** duplicaba la lógica para el simulador y era difícil de probar con casos al azar. Se dejó en SQL lo que protege la integridad (hechos, base, invariante).
+- **Prorratear la participación por días del mes:** distorsiona cuando los cobros se concentran; el día del hecho es exacto y se explica solo.
+- **Reabrir un mes ante un contracargo:** rompe lo ya pagado. Se descuenta en la próxima.
+- **Confiar en el detalle de MP que manda el navegador:** se podría falsificar.
+
+### Consecuencias
+
+- Migración `20261115200000_staff_participacion` (sin aplicar), Edge `staff_payouts` (sin desplegar, `verify_jwt` por defecto) y bucket privado `staff-payout-files`.
+- Pantallas `/internal/participacion` (super_admin) y `/internal/mi-participacion`.
+- Deuda: subir comprobantes de gastos y pagos desde la UI (el bucket y las columnas están), mínimo o tope por persona, export XLSX de liquidaciones, y confirmar con una operación real si las transferencias a CBU hechas desde la app de MP se pueden leer por `/v1/payments`.

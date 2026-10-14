@@ -2,6 +2,7 @@
 
 > **Estado:** diseño (2026-10-13). **F20-3 construida** (2026-10-14, ADR-117, sin aplicar ni desplegar): ver §8.3. Ningún punto de este documento está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
 > **Estado:** diseño (2026-10-13). **F20-1 (cuenta corriente) tiene código desde el 2026-10-14 (ADR-115), ver §23.** El resto no está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
+> **Estado F21:** participación del staff y gastos **construida** el 2026-10-14 (ADR-121, sin aplicar ni desplegar), ver §20.
 >
 > **Alcance.** Es la cobranza de la **plataforma**: NinjaSoft le cobra la suscripción a cada negocio (tenant). No hay que confundirla con la cuenta corriente que un negocio le da a **sus** clientes (ADR-037, `customer_account_*`) ni con la facturación ARCA de las ventas del negocio (ADR-072, `fiscal_documents`). Este diseño reutiliza patrones y código de las dos, pero sus tablas son otras.
 >
@@ -30,7 +31,7 @@
 17. [Casos borde](#17-casos-borde)
 18. [Permisos del staff y auditoría](#18-permisos-del-staff-y-auditoría)
 19. [Plan de entrega por fases](#19-plan-de-entrega-por-fases)
-20. [Participación del staff y gastos (futuro, no construir aún)](#20-participación-del-staff-y-gastos-futuro-no-construir-aún)
+20. [Participación del staff y gastos (F21, construido)](#20-participación-del-staff-y-gastos-f21-construido)
 21. [Preguntas abiertas para el dueño](#21-preguntas-abiertas-para-el-dueño)
 
 ---
@@ -51,7 +52,7 @@
    - ver la historia del cliente.
 
    El pedido textual: "Mapeá todo lo que se pueda hacer y armalo con una robustez profunda".
-4. **Participación del staff y gastos**: porcentaje de la facturación por persona y gastos recurrentes que se descuentan en proporción. **Va al roadmap como futuro y no se construye ahora** (§20).
+4. **Participación del staff y gastos**: porcentaje de la facturación por persona y gastos recurrentes que se descuentan en proporción. Primero quedó como futuro; el dueño pidió construirlo el 14/10 y está construido en F21 (§20, ADR-121).
 5. **Dashboard interno**: hoy no se entiende, los KPI no se explican y tiene roturas. Esta spec define qué KPI mostrar y cómo calcularlos (§15).
 
 ---
@@ -1423,82 +1424,148 @@ Cada fase es un PR chico y testeable por su cuenta. Las migraciones van **antes*
 
 ---
 
-## 20. Participación del staff y gastos (futuro, no construir aún)
+## 20. Participación del staff y gastos (F21, construido)
 
-> **ROADMAP · NO CONSTRUIR TODAVÍA.** Esta sección deja el diseño para que no se pierda. Depende de que la cobranza (F20-1, F20-2 y F20-10) dé números confiables de lo cobrado neto por mes. Hito F21 en el roadmap.
+> **Estado (2026-10-14):** construido en `feat/staff-participacion`, decisión [ADR-121](./17-decision-log.md). Migración `20261115200000_staff_participacion` **sin aplicar** y Edge `staff_payouts` **sin desplegar**. Base del reparto decidida por el dueño: **cobrado neto** del mes (§22 #15).
 
-### 20.1 Qué se quiere
+### 20.1 Qué se pidió
 
-- Configurar qué **porcentaje** de la facturación mensual le corresponde a cada persona del staff.
-- Que cada persona vea **su porcentaje** y **cuánto va a recibir el mes próximo**.
-- Cargar **gastos** (servidores, dominio, herramientas, etc.) con **recurrencia** (mensual, anual, cada X fecha) que se **descuentan** de lo que reciben las personas **en proporción a su participación**, con la posibilidad de **eximir** a ciertas personas de ciertos gastos.
+- Un **porcentaje** del cobrado neto del mes para cada persona del staff, con historia.
+- **Más % en un cliente** para una persona (el que trajo al cliente cobra más de ese negocio) y **comisión de alta**.
+- **Gastos** (servidores, dominios, servicios, empleados, impuestos, comisiones, otros) con recurrencia, que se descuentan: en proporción, eximiendo a alguien, **todo a una persona**, o con **menos % de gastos** que de participación.
+- Ver **cuánto liquidaría NinjaPOS el mes próximo**, para cada uno y en total.
+- **Registrar los pagos** a cada persona; si es por Mercado Pago, con el **id de la operación** y el detalle traído de la cuenta de NinjaSoft. **Email** al miembro avisando la acreditación. **CBU de cada persona** con el editor de Transferencia (logos de bancos).
+- Robusto, fácil de entender y **con ejemplos simulados**.
 
-### 20.2 Base de cálculo (a decidir con el dueño)
-
-Primero hay que definir la base, porque cambia todo. Opción recomendada en negrita:
-
-| Base | Ventaja | Problema |
-|---|---|---|
-| Facturado (comprobantes) | Coincide con lo fiscal | Se reparte plata que puede no haber entrado |
-| **Cobrado neto** (pagos aprobados − reversas − comisiones de MP, sin IVA) | Se reparte lo que realmente entró | Un contracargo de un mes ya repartido obliga a ajustar el siguiente |
-| MRR | Predecible | No es plata real |
-
-### 20.3 Modelo propuesto
-
-- **`staff_shares`**:
-  - columnas: `user_id`, `share_bp` (puntos básicos sobre 10.000), `valid_from`, `valid_to`, `created_by` y `reason`;
-  - historia por vigencia;
-  - una restricción garantiza que en cada día la suma de `share_bp` vigentes sea ≤ 10.000. El resto queda como "retenido por NinjaSoft".
-- **`platform_expenses`**:
-  - columnas: `name`, `category` (infraestructura, dominio, software, impuestos, otros), `amount_cents`, `currency`, `recurrence` (`once`, `monthly`, `yearly`, `every_n_days`, `custom_dates`), `recurrence_config`, `start_date`, `end_date`, `prorate_mode` (`by_month_incurred` o `amortize_yearly`: un gasto anual se reparte en 12 o se imputa entero en el mes) y `active`;
-  - los gastos en USD (servidores) necesitan una cotización por mes: tabla `fx_rates` o carga manual.
-- **`platform_expense_exemptions`**: `expense_id`, `user_id`, `valid_from` y `valid_to`. La persona eximida no absorbe ese gasto; los demás lo absorben en proporción a sus participaciones **renormalizadas** sin ella.
-- **`payout_runs`** y **`payout_lines`**: una liquidación por mes.
-  - Estados: `draft`, `approved`, `paid`.
-  - Cada línea guarda base, participación, ingreso bruto de la persona, gastos absorbidos, ajustes de meses anteriores y neto.
-  - **Inmutable una vez aprobada.** Las correcciones van como ajuste en la siguiente.
-
-### 20.4 Fórmula
-
-Para el mes *m* y la persona *i*:
+### 20.2 Base: cobrado neto
 
 ```
-B_m          = base del mes (p. ej. cobrado neto)
-s_i          = share_bp_i / 10000 (vigente en el mes; si cambió a mitad de mes, prorrata por días)
-bruto_i      = B_m × s_i
-para cada gasto g del mes con monto G_g:
-   P_g       = personas no eximidas de g
-   gasto_i,g = G_g × s_i / Σ_{j∈P_g} s_j      si i ∈ P_g, si no 0
-   (la parte de NinjaSoft, 1 − Σ s, también absorbe gastos en proporción, salvo que se decida otra cosa)
-neto_i       = bruto_i − Σ_g gasto_i,g + ajustes_i
+cobrado neto del mes = pagos aprobados del mes
+                     − comisiones de cobro de esos pagos (platform_payments.fee_cents)
+                     − reintegros y contracargos del mes (platform_ledger 'refund' y 'payment_reversal')
+a repartir           = cobrado neto − reserva de impuestos (% configurable, 0 por defecto) − gastos del mes
 ```
 
-**Proyección "cuánto vas a recibir el mes próximo":**
-- MRR al día de hoy de las cuentas pagas × tasa histórica de cobranza (efectividad de los últimos 3 meses) × s_i;
-- menos los gastos recurrentes que caen el mes próximo.
+Reglas:
 
-Se muestra como **estimado** con su rango y nunca como monto garantizado.
+1. **Cada hecho de plata se liquida una sola vez** (`staff_payout_items`, clave `(source, source_id)`). Un pago cargado con fecha de un mes ya cerrado, o un contracargo de un pago ya repartido, entra en la **próxima liquidación abierta** como "de meses ya cerrados". Nunca se reabre un mes cerrado.
+2. **Cada pago se reparte con las participaciones del día del pago** (y cada reversa, con las del día de la reversa). Un cambio a mitad de mes no promedia.
+3. Los pagos de **negocios de prueba** (`tenants.is_test`) no cuentan. Los anteriores al **mes de inicio** (configurable) tampoco, ni sus reversas.
+4. Pagos `pending_verification` o `rejected` no cuentan; los que se aprobaron y después se revirtieron cuentan en su mes y la reversa resta en el suyo.
 
-### 20.5 Pantallas futuras
+### 20.3 Modelo de datos
 
-- `/internal/participacion` (sólo super_admin): participaciones con vigencia, gastos con recurrencia y exenciones, liquidación mensual (borrador → aprobar → marcar pagada) y export.
-- `/internal/mi-participacion` (cada persona del staff, **sólo lo suyo**):
-  - su porcentaje;
-  - lo liquidado en meses anteriores;
-  - el estimado del mes próximo con el detalle de gastos;
-  - cuánto se descontó y por qué.
+| Tabla | Para qué |
+|---|---|
+| `staff_payout_settings` | Una fila: mes de inicio, nombre de la casa, si la casa absorbe gastos, arrastre de negativos, reserva de impuestos, tasa de cobro de la proyección, tolerancia del monto de MP, email en cada pago |
+| `staff_members` | Quién participa (con usuario del staff o sin él), email para avisos, activa o no. Baja lógica |
+| `staff_shares` | `share_bp` (10.000 = 100 %) y `expense_bp` opcional con `valid_from` / `valid_to`. La suma de un día nunca pasa el 100 %: lo que sobra es de la casa |
+| `staff_client_rules` | Por persona y negocio: `bonus_bp` (+X %), `override_bp` (X % en ese cliente), `signup_fixed` / `signup_bp` (comisión de alta), con vigencia |
+| `staff_expenses` | Categoría, proveedor, monto y moneda, recurrencia (`once`, `monthly`, `yearly`, `every_n_months`, `every_n_days`), fin, prorrateo en N meses, asignación (`proportional`, `single`, `custom`, `house`, `client`), comprobante. Baja lógica |
+| `staff_expense_splits` / `_exemptions` / `_period_amounts` | Porcentajes a medida, personas eximidas (con vigencia) y monto distinto en un mes puntual (0 = ese mes no hubo) |
+| `staff_fx_rates` | Pesos por dólar de cada mes (carga manual) |
+| `staff_adjustments` | Ajuste manual por persona y mes (suma o descuento), lo consume una liquidación |
+| `staff_payout_runs` / `_items` / `_lines` | Liquidación cerrada: totales, foto completa del cálculo, hechos de plata incluidos y la línea de cada persona. **Inmutable** (triggers) |
+| `staff_bank_accounts` | Cuentas de cobro de cada persona (CBU/CVU validado con `cbu_is_valid`, alias, banco del catálogo con logo), una predeterminada |
+| `staff_mp_lookups` | Operaciones de MP leídas por la Edge (la RPC de pago toma el detalle de acá, nunca del navegador) |
+| `staff_payout_payments` | Pagos a cada persona: parciales, medio, cuenta congelada, referencia u operación de MP, email encolado. Baja lógica con motivo |
 
-  RLS: `user_id = auth.uid()` más `internal_scope()`.
+### 20.4 Posibilidades cubiertas
 
-### 20.6 Preguntas que hay que responder antes de construirlo
+**Participación**
 
-1. ¿La base es el cobrado neto, el facturado o el MRR? ¿Con IVA o sin IVA?
-2. ¿La parte no asignada (la de NinjaSoft) absorbe gastos?
-3. ¿Los gastos anuales se imputan enteros en el mes del pago o se amortizan en 12?
-4. ¿Qué pasa con un contracargo de un mes ya liquidado: ajuste negativo en el siguiente?
-5. ¿Hay un mínimo garantizado o un tope por persona?
-6. ¿Cómo se paga (fuera del sistema)? ¿Hace falta comprobante (factura del staff a NinjaSoft)?
-7. Implicancias impositivas y contractuales de repartir ingresos: lo valida el contador.
+- % por persona sobre el cobrado neto, con historia: cambiar desde una fecha cierra la anterior el día antes; las programadas desde esa fecha se anulan.
+- Suma por día ≤ 100 %, validada en la base (`staff_shares_overflow`); el resto es de la casa.
+- Dejar de participar desde una fecha (0 %).
+- **% de gastos distinto del de participación** (`expense_bp`): Ana cobra 30 % y absorbe 10 % de los gastos proporcionales; la diferencia la absorbe la casa.
+- Personas sin usuario del sistema (socio externo): participan pero no ven el panel.
+- Cambios retroactivos a un mes cerrado: bloqueados (`period_closed`); se corrige con un ajuste.
+
+**Reglas por cliente**
+
+- `+X %` para una persona en un negocio (sale de la parte de la casa).
+- `X %` especial (reemplaza su % en ese negocio, más o menos).
+- Comisión de alta fija o en % del primer cobro, **una sola vez**, en la primera liquidación con un cobro del cliente dentro de la vigencia; la paga la casa.
+- Si en un cliente la suma pasa el 100 %, se reduce a todos en proporción y se avisa.
+- Reglas superpuestas del mismo tipo para la misma persona y cliente: rechazadas.
+
+**Gastos**
+
+- Única vez, mensual (el 31 cae el último día de los meses cortos), anual, cada N meses, cada N días (puede caer dos veces en un mes), con fecha de fin.
+- Monto distinto en un mes puntual, o "ese mes no hubo".
+- En dólares: con la cotización del mes en que ocurre; si falta, la del último mes cargado con aviso; si no hay ninguna, el cálculo da error y no se puede cerrar.
+- Prorrateo de cada pago en N meses (un anual en 12 cuotas exactas: los centavos que sobran van en las primeras).
+- Asignación: proporcional (con el % de gastos de cada uno y la casa con el resto), eximiendo personas (los demás lo absorben renormalizado, sin ellas), todo a una persona, todo a la casa, porcentajes a medida (suman 100 %), o **por cliente** (lo pagan quienes cobran de ese negocio, con sus reglas).
+- "La casa no absorbe gastos" (configurable): los proporcionales se reparten sólo entre las personas. Si todos están eximidos, lo absorbe la casa con aviso.
+- Asignado a alguien que ya no está: lo absorbe la casa con aviso.
+
+**Liquidación**
+
+- Borrador en vivo → cerrada (inmutable y auditada) → pagada en parte → pagada.
+- Se cierra en orden, desde el día 1 del mes siguiente. Al cerrar, la RPC recalcula en SQL los hechos sin liquidar y la base, y verifica al centavo que personas + casa = a repartir (si algo cambió mientras se miraba, `items_changed`).
+- Saldo negativo de una persona: no cobra y se le descuenta el mes siguiente (o lo condona la casa, configurable).
+- Ajustes manuales: pase entre la persona y la casa; corrigen meses cerrados en la próxima.
+- Redondeo: resto mayor en cada reparto, con enteros. **La suma siempre da exacto al centavo.**
+
+**Pagos**
+
+- Parciales, nunca más de lo liquidado (`overpayment`).
+- Transferencia (exige cuenta destino), Mercado Pago, efectivo u otro.
+- Mercado Pago: el número de operación se lee con el access token de NinjaSoft (`GET /v1/payments/{id}` y `GET /users/me`); se controla que esté aprobada, en pesos, con el mismo monto (tolerancia configurable) y que la plata haya **salido** de la cuenta de NinjaSoft. La misma operación no se registra dos veces.
+- La cuenta se congela en el pago (si después la editan, el pago conserva los datos de ese momento).
+- Email `staff_payout_credited` por la cola de emails del sistema, con monto, medio, fecha, cuenta y referencia. Se puede apagar por pago.
+- Anular un pago (baja lógica con motivo) vuelve a dejarlo pendiente.
+
+### 20.5 Ejemplos (los mismos números del simulador)
+
+**Ejemplo 1: el mes típico.** Se cobran $ 600.000 de Kiosco Centro y $ 400.000 de Cliente Z, con $ 40.000 de comisiones de Mercado Pago (se reparten en proporción: $ 24.000 y $ 16.000). Juan tiene 40 %, Ana 30 % y **+10 % en Cliente Z** porque lo trajo. El servidor (USD 25 a $ 1.450) lo absorbe **todo Ana**. El dominio anual de $ 120.000 se prorratea en 12 y **Juan está eximido**.
+
+| Paso | Juan | Ana | Casa | Total |
+|---|---|---|---|---|
+| Kiosco Centro, neto $ 576.000 (40 / 30 / 30 %) | $ 230.400 | $ 172.800 | $ 172.800 | $ 576.000 |
+| Cliente Z, neto $ 384.000 (40 / 40 / 20 %) | $ 153.600 | $ 153.600 | $ 76.800 | $ 384.000 |
+| Servidor $ 36.250 (todo Ana) | | − $ 36.250 | | − $ 36.250 |
+| Dominio $ 10.000 (Juan eximido: Ana 30, casa 30) | | − $ 5.000 | − $ 5.000 | − $ 10.000 |
+| **Neto** | **$ 384.000** | **$ 285.150** | **$ 244.600** | **$ 913.750** |
+
+$ 1.000.000 − $ 40.000 − $ 46.250 de gastos = $ 913.750 a repartir, y la tabla suma exacto.
+
+**Ejemplo 2: cambio a mitad de mes.** Juan tiene 40 % hasta el 14/10 y 50 % desde el 15/10. Entran $ 100.000 el 05/10 y $ 100.000 el 20/10: Juan cobra $ 40.000 + $ 50.000 = $ 90.000 (no un promedio).
+
+**Ejemplo 3: contracargo después de liquidar.** Septiembre ya está cerrado y Cliente Z hace un contracargo de $ 140.000 el 03/10. En octubre se resta: Juan − $ 56.000 (40 %), Ana − $ 56.000 (30 % + 10 % de Z), casa − $ 28.000. Septiembre no se toca.
+
+**Ejemplo 4: mes sin cobros.** Agosto sólo tiene el servidor (USD 25 a $ 1.400 = $ 35.000), proporcional, con Ana absorbiendo 10 % de gastos: Juan − $ 14.000, Ana − $ 3.500, casa − $ 17.500. Nadie cobra en agosto y en septiembre Juan arrastra − $ 14.000 y Ana − $ 3.500.
+
+**Ejemplo 5: anual en dólares prorrateado.** Un servicio de USD 120 por año pagado el 15/03, con la cotización de marzo de $ 1.450 y prorrateo en 12: $ 14.500 por mes de marzo a febrero, siempre con la cotización de marzo (la del pago).
+
+**Ejemplo 6: comisión de alta.** Juan tiene $ 5.000 de comisión de alta por Cliente Z entre octubre y diciembre. Z paga por primera vez en octubre: Juan + $ 5.000 y la casa − $ 5.000. En noviembre no se repite.
+
+### 20.6 Proyección del mes próximo
+
+"Cuánto te liquidaría NinjaPOS el mes próximo" se calcula con el **mismo motor** sobre cobros esperados:
+
+- Suscripciones **activas o en mora** que se cobran (excluye prueba, staff, lifetime y exentas; §22 #7), con sus **descuentos vigentes** (`platform_billing_breakdown`). Mensuales una vez; anuales sólo si renuevan ese mes. Sin pruebas que todavía no pagaron ni bajas programadas.
+- × **tasa de cobro** supuesta (configurable, 100 % por defecto).
+- − **comisión de cobro estimada** (promedio de los últimos 90 días).
+- − **gastos recurrentes** del mes (los en dólares con la última cotización).
+- \+ saldo negativo que arrastre el mes en curso. Sin ajustes manuales.
+
+Se muestra como estimado con sus supuestos, para cada persona y en total, nunca como monto garantizado.
+
+### 20.7 Pantallas y permisos
+
+- **`/internal/participacion`** (super_admin): Resumen (cobrado neto, gastos, a repartir, por persona, proyección con supuestos y detalle por cliente), Participaciones (personas, % e historial, % de gastos, reglas por cliente, cuentas de cobro, configuración), Gastos (alta y edición, monto de un mes, cotización del dólar), Liquidaciones (borrador en vivo paso a paso, ajustes, cierre, historial), Pagos (pendientes, registrar con MP, anulados) y **Simulador** (números inventados y editables, mismo motor, paso a paso).
+- **`/internal/mi-participacion`** (cualquier persona del staff con ficha): su %, sus reglas, el estimado del mes, **cuánto le liquidaría NinjaPOS el mes próximo** con el cálculo, sus liquidaciones y pagos, y sus cuentas de cobro (las puede cargar ella misma). La Edge devuelve **sólo su línea**: no ve la base ni a los demás.
+- **Permisos:** sólo `super_admin` (con `internal_scope`) configura, ve gastos, cierra y paga. Ni `admin` ni el permiso Cobranzas alcanzan. Cada persona lee sólo sus filas (RLS con `member_id in (select staff_my_member_ids())`). Todo con `(select internal_scope())`, nunca `OR is_internal()`. Toda escritura audita en `audit_logs` (`staff_*`).
+
+### 20.8 Preguntas abiertas para el dueño
+
+1. **IVA:** hoy la base es con IVA incluido porque NinjaSoft no tiene CUIT. Cuando facture como responsable inscripto, ¿se reparte sin IVA? (se puede usar la reserva de impuestos mientras tanto).
+2. **¿La casa absorbe gastos?** Quedó en sí por defecto, configurable.
+3. **¿Mínimo garantizado o tope por persona?** No está construido; se puede resolver con ajustes manuales.
+4. **¿Factura del staff a NinjaSoft?** El pago guarda referencia y medio; falta decidir si se exige comprobante del miembro (monotributo).
+5. **Transferencias a CBU desde la app de MP:** la API pública puede no exponerlas por `/v1/payments`. Si la lectura falla, hoy el pago por MP no se registra: se puede registrar como transferencia con la referencia. Confirmar con una operación real.
+6. Implicancias impositivas y contractuales del reparto: validar con el contador.
 
 ---
 
@@ -1518,7 +1585,7 @@ Las que bloquean están marcadas con **(bloquea Fxx)**.
 10. **Prorrateo de upgrade:** ¿se cobra en el momento (checkout aparte) o se suma al próximo débito (recomendado)?
 11. ¿Qué cuentas bancarias se muestran para transferir? ¿A qué email se mandan los comprobantes de pago?
 12. **Botón de arrepentimiento:** ¿se considera que los clientes pueden ser consumidores finales? Si sí, hay obligación legal; confirmar con el abogado.
-13. **Participación del staff (§20.6):** responder antes de planificar F21.
+13. **Participación del staff:** respondida la base (§22 #15) y construida (§20); quedan las preguntas de §20.8.
 
 ---
 
@@ -1549,7 +1616,7 @@ Respuestas a las preguntas de la sección 21. Mandan sobre lo propuesto arriba c
 | 12 | Subir de plan a mitad de mes | La diferencia prorrateada **se suma al próximo cobro**. |
 | 13 | Datos bancarios para transferir | Los **carga el dueño en el panel interno**, con el mismo editor de cuentas que el medio de pago Transferencia (selector de bancos con logos, titular, alias, CBU/CVU, varias cuentas) y el email que recibe los comprobantes. |
 | 14 | Botón de arrepentimiento | **Se agrega**: cancelación dentro de los 10 días con reintegro, visible para el cliente. Confirmar redacción con un abogado. |
-| 15 | Base del reparto del staff (F21, futuro) | **Cobrado neto** del mes (cobrado menos comisiones, reintegros y gastos). |
+| 15 | Base del reparto del staff (F21, construido en §20) | **Cobrado neto** del mes (cobrado menos comisiones, reintegros y gastos). |
 
 ## 23. Estado de F20-1: cuenta corriente de la plataforma (2026-10-14)
 

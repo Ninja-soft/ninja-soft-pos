@@ -32,7 +32,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
 | **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b y F20-1 con código (ADR-110, ADR-115; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
-| **F21** | Participación del staff y gastos recurrentes | a definir | ⚪ Futuro, no construir aún (diseño en spec §20; depende de F20) |
+| **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1474,12 +1474,14 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Prorrateo de upgrades, cambios de ciclo y addons.
   - [ ] Timeline unificado, lista de cobranza con cobrador asignado, permisos finos y export XLSX.
 
-### F21 · Participación del staff y gastos (futuro, no construir aún)
+### F21 · Participación del staff y gastos
 
-Objetivo: cada persona del staff tiene un porcentaje de lo que factura NinjaSoft en el mes, ve ese porcentaje y cuánto va a recibir el mes próximo. Los gastos recurrentes (servidores, dominio, etc.) se descuentan en proporción a la participación, con exenciones por persona. **Va al roadmap pero no se construye todavía:** depende de que F20 (H127, H128, H136) dé el cobrado neto mensual confiable, y de que el dueño responda las preguntas de la spec §20.6. Diseño en [`40-cobranza-saas.md` §20](./40-cobranza-saas.md#20-participación-del-staff-y-gastos-futuro-no-construir-aún).
+Objetivo: cada persona del staff tiene un porcentaje del **cobrado neto** de NinjaSoft en el mes (§22 #15), ve ese porcentaje y cuánto le liquidaría NinjaPOS el mes próximo. Los gastos (servidores, dominios, servicios, sueldos, impuestos, comisiones) se descuentan en proporción, con exenciones, asignados a una persona o con un % de gastos propio. El dueño pidió construirlo el 2026-10-14. Diseño y ejemplos en [`40-cobranza-saas.md` §20](./40-cobranza-saas.md#20-participación-del-staff-y-gastos-f21-construido); decisión ADR-121. Migración `20261115200000_staff_participacion` sin aplicar y Edge `staff_payouts` sin desplegar.
 
-- [ ] **H137 · Participaciones con vigencia y gastos recurrentes con exenciones.** Tablas `staff_shares`, `platform_expenses` y `platform_expense_exemptions`.
-- [ ] **H138 · Liquidación mensual inmutable y "Mi participación" con estimado del mes próximo.** Tablas `payout_runs` y `payout_lines`.
+- [x] **H137 · Participaciones con vigencia, reglas por cliente y gastos recurrentes con exenciones.** `staff_members`, `staff_shares` (con % de gastos), `staff_client_rules` (+%, % especial, comisión de alta), `staff_expenses` con recurrencia, USD, prorrateo, monto de un mes y asignación (proporcional, eximidos, una persona, casa, a medida, por cliente).
+- [x] **H138 · Liquidación mensual inmutable y "Mi participación" con la proyección del mes próximo.** `staff_payout_runs`, `_items` (cada hecho de plata una vez) y `_lines`; cierre verificado al centavo en SQL; motor único (`_shared/staff/settlement.ts`) para borrador, cierre, proyección y simulador.
+- [x] **H139 · Pagos al staff.** Parciales, cuentas de cobro con el editor de Transferencia, operación de Mercado Pago leída de la cuenta de NinjaSoft y email de acreditación.
+- [ ] **H140 · Puesta en marcha.** Aplicar la migración, desplegar `staff_payouts`, cargar personas, gastos y cotización, y probar una operación de MP real (§20.8 #5).
 
 ---
 
@@ -1671,7 +1673,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F18** | 42/113 | 53 | 18 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 0/61 | 0 | 61 | 0% | 0% |
-| **F21** | 0/2 | 0 | 2 | 0% | 0% |
+| **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
 | **Total** | 582/1114 | 302 | 230 | 52% | 66% |
 <!-- roadmap-progress:end -->

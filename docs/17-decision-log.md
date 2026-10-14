@@ -4056,3 +4056,33 @@ En "Pagos de plataforma", el Client ID tiene cargado un email.
 - `billing_records` pasa a vista de compatibilidad sobre `platform_payments` y `saas-dunning` se reemplaza por `platform-dunning`, en la misma migración que crea la escalera.
 - Hay deuda documentada en la spec: FCE MiPyME (se detecta y queda `requires_action`), factura E, multimoneda y la detección automática de transferencias a la cuenta de la plataforma.
 - Las preguntas abiertas al dueño están en la spec §21: condición fiscal, IVA incluido o no, la tasa y la escalera, las cuentas de prueba, el permiso de cobranzas, los topes, las promesas del cliente, el inicio del período al pagar durante el trial, el prorrateo y el botón de arrepentimiento.
+
+---
+
+## ADR-112: Velocidad del POS: menos JS en el primer render, consultas del arranque sólo cuando hacen falta y catálogo offline una vez por apertura
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `perf/pos-velocidad`; sin migraciones, Edges ni secrets) · **Base:** ADR-077 (venta offline y foto local), ADR-058 (resolver de precios con `price_context_snapshot`), ADR-090 y ADR-091 (auditoría de rendimiento de la base).
+
+### Contexto
+
+Pedido del dueño: optimizar la velocidad del POS. Medido sobre `main`: `/pos` cargaba 448 kB de JS (438 kB gzip sumando chunks: 308 kB del panel y 133 kB propios del POS); el layout raíz precargaba 11 archivos de fuentes (~276 kB en producción, más que todo el JS de `/login`); al abrir el POS salían unas 55 a 60 consultas, varias sin uso hasta abrir un modal y otras duplicadas por dependencias que cambian durante el arranque (turno, sucursal). El catálogo para vender sin conexión (`products *`, hasta 5000) se bajaba 2 o 3 veces porque el efecto dependía del turno y la sucursal.
+
+### Decisión
+
+1. **Fuentes:** se precargan sólo Inter (texto) y Sora (títulos). Las candidatas de Apariencia y la monoespaciada llevan `preload: false`: se bajan si el CSS las usa (`display: swap`).
+2. **Chunks diferidos:** `UpgradeModal` pasa a ser un envoltorio con `next/dynamic` + `MountWhenOpened` (la implementación vive en `UpgradeModalBody`; los 35 importadores no cambian). Así `lib/saas/featureInfo.ts` sale del bundle del panel y los planes (`useGlobalPlansForUpgrade`) se piden al abrir el modal y no al montar cada ítem bloqueado o el `discountGate` del POS. `InfoHint` carga el plan mínimo al abrir el popover. En el POS, los diálogos chicos, las ventas pausadas (panel y diálogos), la ayuda de atajos y las miniaturas del selector de diseño van en chunks que se precargan en idle con el resto de los modales.
+3. **Consultas del arranque:** selector de clientes con `enabled` atado a abrirlo; planes de garantía con algo en el carrito; foto de precios con `enabled: registerFetched` (antes, una vez con `storeId` null y otra con la sucursal); lista mostrador (`price_lists` + todos sus items) sólo si la foto no llega o falla; heartbeat de la caja recién con el turno resuelto; `arca_status` cada 5 min si la facturación no está activa.
+4. **Catálogo offline:** una descarga por apertura del POS, en `requestIdleCallback` (máx. 3 s) y luego cada 10 min. Turno, sucursal y política van por ref y un segundo efecto los ajusta en la foto guardada sin bajar el catálogo (`snapshotWithMeta`, con lecturas y escrituras de IndexedDB en serie y 1,5 s de espera para no escribir el `null` transitorio del arranque).
+
+### Alternativas descartadas
+
+- **Saltear la descarga si la foto tiene menos de 10 min:** un producto recién creado no estaría en la venta offline hasta el siguiente refresco.
+- **Una RPC `my_context` que reúna las 6 lecturas de `tenant_users` y las 3 de `tenants` del panel:** es el mayor ahorro pendiente (9 a 11 consultas y tres cadenas en serie), pero toca el shell, los gates y la cuenta; va en su propio PR con migración.
+- **Achicar el `select *` de productos del POS:** el tipo `Product` se usa entero en el carrito, la foto offline y los pickers; recortarlo sin un mapa de uso arriesga romper la venta.
+
+### Consecuencias
+
+- `/pos` 448 → 421 kB de First Load JS (412 kB gzip); `/caja` 305 → 289, `/ventas` 312 → 286, `/productos` 370 → 351. Fuentes precargadas 11 → 2.
+- Abrir un modal diferido por primera vez antes de la precarga en idle muestra el modal un instante después (el chunk es chico y se pide en paralelo).
+- Pendientes para otro PR: unificar el contexto del usuario y el negocio en una RPC; quitar el doble `getUser` de middleware + layout; `pending_charges` del watcher trae hasta 100 cobros completados en cada sondeo (filtrar por `completed_at` en el servidor); miniaturas de 160 px al subir fotos de productos (hoy el tile de 44 px baja el WebP de 900 px); `select` explícito en `pos_settings`, `cash_shifts`, `categories` y `warranty_plans`.
+- Tests: `tests/unit/offlineSync.test.ts` (ajuste de turno, sucursal y política de la foto sin tocar el catálogo).

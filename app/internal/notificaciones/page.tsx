@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
+import { Select } from "@/components/ui/Select";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { cn } from "@/lib/utils/cn";
@@ -82,9 +83,13 @@ const TYPE_OPTIONS: { value: NotificationType; label: string }[] = [
   { value: "support", label: "Soporte" },
 ];
 
-const TYPE_LABELS: Record<NotificationType, string> = Object.fromEntries(
-  TYPE_OPTIONS.map((o) => [o.value, o.label]),
-) as Record<NotificationType, string>;
+// Etiquetas para el listado: incluye los tipos automáticos (cobros, disputas)
+// que no se eligen desde el formulario pero sí aparecen en "Enviadas".
+const TYPE_LABELS: Record<string, string> = {
+  ...Object.fromEntries(TYPE_OPTIONS.map((o) => [o.value, o.label])),
+  cobros: "Cobros",
+  disputas: "Contracargos y devoluciones",
+};
 
 const SEVERITY_DOT: Record<NotificationSeverity, string> = {
   info: "bg-info",
@@ -136,12 +141,147 @@ function FormBlock({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="space-y-4 border-t border-border pt-5 first:border-t-0 first:pt-0">
-      <legend className="float-left mb-1 w-full text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    // min-w-0: un fieldset por defecto toma el ancho mínimo de su contenido.
+    // La leyenda flota (para no cortar el borde superior) y el contenido va en
+    // un bloque con clear: así las grillas no quedan a la derecha del float.
+    <fieldset className="min-w-0 border-t border-border pt-5 first:border-t-0 first:pt-0">
+      <legend className="float-left mb-4 w-full text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </legend>
-      {children}
+      <div className="clear-both space-y-4">{children}</div>
     </fieldset>
+  );
+}
+
+// Severidad como pastillas con el punto de su color de estado. Radiogroup
+// accesible (flechas mueven la selección); lo elegido va con relleno neutro.
+function SeverityPicker({
+  value,
+  onChange,
+}: {
+  value: NotificationSeverity;
+  onChange: (v: NotificationSeverity) => void;
+}) {
+  function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    const i = SEVERITY_VALUES.indexOf(value);
+    let next: number | null = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % SEVERITY_VALUES.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+      next = (i - 1 + SEVERITY_VALUES.length) % SEVERITY_VALUES.length;
+    if (next === null) return;
+    e.preventDefault();
+    const v = SEVERITY_VALUES[next]!;
+    onChange(v);
+    const group = e.currentTarget.parentElement;
+    (group?.children[next] as HTMLButtonElement | undefined)?.focus();
+  }
+
+  return (
+    <div role="radiogroup" aria-labelledby="notif-severity-label" className="flex flex-wrap gap-2">
+      {SEVERITY_VALUES.map((s) => {
+        const on = s === value;
+        return (
+          <button
+            key={s}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(s)}
+            onKeyDown={onKeyDown}
+            className={cn(
+              "inline-flex min-h-[40px] items-center gap-2 rounded-lg border px-3.5 py-2 text-sm transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              on
+                ? "choice-on border-transparent font-medium text-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", SEVERITY_DOT[s])} />
+            {SEVERITY_LABELS[s]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Vista previa del aviso tal como se ve en la campana del POS (mismo armado
+// que NotificationItem: punto de severidad, título, tipo, cuerpo y acciones).
+function NotificationPreview({
+  type,
+  severity,
+  title,
+  body,
+  actionLabel,
+  requiresAck,
+}: {
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  actionLabel: string;
+  requiresAck: boolean;
+}) {
+  const t = title.trim();
+  return (
+    <div className="space-y-3">
+      <span className="block text-sm font-medium text-muted-foreground">Vista previa en la campana</span>
+      <div className="overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+          <span className="text-sm font-semibold text-foreground">Notificaciones</span>
+          <Bell size={15} aria-hidden className="text-muted-foreground" />
+        </div>
+        <div className="relative bg-muted/30 py-2.5 pl-5 pr-3">
+          <span
+            aria-hidden
+            className={cn("absolute left-2 top-[18px] h-1.5 w-1.5 rounded-full", SEVERITY_DOT[severity])}
+          />
+          <div className="flex items-start gap-2">
+            <span
+              className={cn(
+                "min-w-0 flex-1 break-words text-sm font-semibold leading-snug",
+                t ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {t || "Título del aviso"}
+            </span>
+            <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {TYPE_LABELS[type] ?? type}
+            </span>
+          </div>
+          {body.trim() && (
+            <p className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground">{body.trim()}</p>
+          )}
+          <span className="mt-1 block text-[11px] text-muted-foreground">recién</span>
+          {(actionLabel.trim() || requiresAck) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {actionLabel.trim() && (
+                <span className="rounded-md bg-ninja-flame/15 px-2.5 py-1 text-xs font-medium text-ninja-flameSoft">
+                  {actionLabel.trim()}
+                </span>
+              )}
+              {requiresAck && (
+                <span className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground">
+                  Entendido
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      {severity === "blocking" && (
+        <div className="flex items-center gap-3 rounded-lg bg-danger/15 px-3 py-2.5 text-sm text-foreground">
+          <Bell size={15} aria-hidden className="shrink-0 text-danger" />
+          <span className="min-w-0 flex-1 break-words font-medium">{t || "Título del aviso"}</span>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {severity === "blocking"
+          ? "Bloqueante: además se muestra como franja arriba del POS hasta que lo confirmen."
+          : "Así aparece en la lista de la campana de cada usuario alcanzado."}
+      </p>
+    </div>
   );
 }
 
@@ -508,53 +648,34 @@ export default function InternalNotificacionesPage() {
           </FormBlock>
 
           <FormBlock title="Mensaje">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <div>
-                <label htmlFor="notif-type" className={fieldLabelCls}>
-                  Tipo
-                </label>
-                <select
-                  id="notif-type"
-                  className={selectCls}
-                  value={type}
-                  onChange={(e) => setType(e.target.value as NotificationType)}
-                >
-                  {TYPE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-0">
-                <span className={fieldLabelCls}>Severidad</span>
-                <Segmented<NotificationSeverity>
-                  aria-label="Severidad"
-                  value={severity}
-                  onChange={setSeverity}
-                  options={SEVERITY_VALUES.map((s) => ({
-                    value: s,
-                    label: SEVERITY_LABELS[s],
-                    preview: (
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          aria-hidden
-                          className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[s])}
-                        />
-                        {SEVERITY_LABELS[s]}
-                      </span>
-                    ),
-                  }))}
-                />
-              </div>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+            <div className="min-w-0 space-y-4">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)]">
+              <Input
+                label="Título"
+                placeholder="Ej. Mantenimiento programado"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <Select<NotificationType>
+                id="notif-type"
+                label="Tipo"
+                value={type}
+                onChange={setType}
+                options={TYPE_OPTIONS.map((o) => ({
+                  value: o.value,
+                  label: o.label,
+                  icon: o.value === "afip" ? <IntegrationLogo name="arca" size={16} /> : undefined,
+                }))}
+              />
             </div>
 
-            <Input
-              label="Título"
-              placeholder="Ej. Mantenimiento programado"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <div>
+              <span id="notif-severity-label" className={fieldLabelCls}>
+                Severidad
+              </span>
+              <SeverityPicker value={severity} onChange={setSeverity} />
+            </div>
 
             <div>
               <label htmlFor="notif-body" className={fieldLabelCls}>
@@ -596,6 +717,19 @@ export default function InternalNotificacionesPage() {
                       : undefined
                 }
               />
+            </div>
+            </div>
+
+            <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+              <NotificationPreview
+                type={type}
+                severity={severity}
+                title={title}
+                body={body}
+                actionLabel={actionLabel}
+                requiresAck={requiresAck}
+              />
+            </div>
             </div>
           </FormBlock>
 

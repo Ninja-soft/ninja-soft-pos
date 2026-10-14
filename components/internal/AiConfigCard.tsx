@@ -79,7 +79,9 @@ const DEFAULT_COMMERCIAL_TEXT =
   "te ayuda a decidir con datos reales y te saca las dudas de cómo usar cada pantalla.\n\n" +
   "Se activa al instante para todo tu equipo. Probalo y no vas a querer trabajar sin él.";
 
-export function AiConfigCard() {
+// `bare`: sin encabezado ni card propia, para usarlo dentro de un Modal
+// (pantalla Complementos). La lógica es la misma.
+export function AiConfigCard({ bare = false }: { bare?: boolean } = {}) {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -273,21 +275,16 @@ export function AiConfigCard() {
   const keyHelp = KEY_HELP[provider];
   const providerLabel = provider === "claude" ? "Claude" : "Gemini";
 
-  return (
-    <section>
-      <SectionHeader
-        title="Asistente IA"
-        icon={Sparkles}
-        description="Un proveedor a la vez (Gemini o Claude), cada uno con su API key. La key se guarda cifrada y nunca se vuelve a mostrar."
-      />
-      <Callout tone="info" icon={Info} className="mt-3 max-w-3xl">
-        Para regalar el asistente a un negocio, entrá a su ficha en Negocios y usá
-        &ldquo;Regalar Asistente IA&rdquo;. El email de la beta da acceso a un solo
-        tester.
-      </Callout>
+  const notice = (className: string) => (
+    <Callout tone="info" icon={Info} className={className}>
+      Para regalar el asistente a un negocio, entrá a su ficha en Negocios y usá
+      &ldquo;Regalar Asistente IA&rdquo;. El email de la beta da acceso a un solo
+      tester.
+    </Callout>
+  );
 
-      <Card className="mt-3 max-w-3xl">
-        <CardContent className="grid gap-4 p-4 sm:p-5">
+  const fields = (
+    <>
           <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/40 p-3">
             <div>
               <span className="block text-sm font-medium text-foreground">
@@ -519,7 +516,29 @@ export function AiConfigCard() {
               </span>
             )}
           </div>
-        </CardContent>
+    </>
+  );
+
+  if (bare) {
+    return (
+      <div className="grid gap-4">
+        {notice("")}
+        {fields}
+      </div>
+    );
+  }
+
+  return (
+    <section>
+      <SectionHeader
+        title="Asistente IA"
+        icon={Sparkles}
+        description="Un proveedor a la vez (Gemini o Claude), cada uno con su API key. La key se guarda cifrada y nunca se vuelve a mostrar."
+      />
+      {notice("mt-3 max-w-3xl")}
+
+      <Card className="mt-3 max-w-3xl">
+        <CardContent className="grid gap-4 p-4 sm:p-5">{fields}</CardContent>
       </Card>
     </section>
   );

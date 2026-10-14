@@ -32,16 +32,18 @@ export function useFiscalDocuments(filter: DocFilter, enabled = true) {
   });
 }
 
-export function useSaleFiscalDocuments(saleId: string | null) {
+export function useSaleFiscalDocuments(saleId: string | null, opts: { fastPoll?: boolean } = {}) {
   return useQuery({
     queryKey: [...KEY, "sale", saleId],
     queryFn: () => arcaApi.saleDocuments(saleId!),
     enabled: Boolean(saleId),
     retry: false,
-    // Mientras la factura está en camino, se refresca sola.
+    // Mientras la factura está en camino, se refresca sola. El ticket recién
+    // cobrado (ADR-109) espera el CAE para mostrarse: ahí se mira más seguido.
     refetchInterval: (q) => {
       const docs = q.state.data;
-      return docs?.some((d) => d.status === "pendiente" || d.status === "enviando") ? 8_000 : false;
+      if (!docs?.some((d) => d.status === "pendiente" || d.status === "enviando")) return false;
+      return opts.fastPoll ? 2_000 : 8_000;
     },
   });
 }

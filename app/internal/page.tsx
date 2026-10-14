@@ -1,410 +1,551 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  BarChart3,
+  Banknote,
   Building2,
-  CircleDashed,
-  ClipboardList,
-  CreditCard,
-  Mail,
-  ShieldCheck,
-  TrendingUp,
-  UserCog,
-  Users,
+  ChevronRight,
+  CircleDollarSign,
+  Gauge,
+  Hourglass,
   LayoutDashboard,
+  Percent,
+  Repeat,
+  ShieldAlert,
+  TrendingDown,
+  Users,
+  Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent } from "@/components/ui/Card";
-import { TenantSearchTable } from "@/components/internal/TenantSearchTable";
-import { formatCurrency } from "@/lib/utils/format";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { Callout } from "@/components/ui/Callout";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableWrap } from "@/components/ui/Table";
+import { KpiTile } from "@/components/internal/dashboard/KpiTile";
+import { PeriodSwitch } from "@/components/internal/dashboard/PeriodSwitch";
+import { tenantHealthScore, HEALTH_LEVEL_DOT } from "@/lib/internal/tenantHealth";
 import {
-  HEALTH_LEVEL_DOT,
-  HEALTH_LEVEL_LABELS,
-  atRiskTenants,
-  tenantHealthScore,
-} from "@/lib/internal/tenantHealth";
+  KPI_DEFINITIONS,
+  collected,
+  collectionRisk,
+  exclusionReason,
+  formatCompactArs,
+  formatExactArs,
+  formatPct,
+  logoChurn,
+  mrrSummary,
+  newTenants,
+  parsePeriodKey,
+  periodsFor,
+  stockAt,
+  trend,
+  trialConversion,
+  trialsSummary,
+  usageRisk,
+  type KpiAccount,
+  type PaymentRow,
+  type Ratio,
+  type StatusChange,
+} from "@/lib/internal/saasKpis";
 
-const STATUS_COLOR: Record<string, string> = {
-  trial: "text-warning",
-  active: "text-success",
-  past_due: "text-warning",
-  suspended: "text-danger",
-  cancelled: "text-muted-foreground",
+type PlanRel = {
+  key: string;
+  name: string;
+  monthly_price_ars: number | null;
+  yearly_price_ars: number | null;
+} | null;
+type SubRow = {
+  status: string;
+  billing_cycle: string | null;
+  is_lifetime: boolean | null;
+  past_due_since: string | null;
+  plans: PlanRel;
+};
+type TenantRaw = {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  trial_ends_at: string | null;
+  subscriptions: SubRow | SubRow[] | null;
+};
+type HealthRow = {
+  tenant_id: string;
+  active_users: number;
+  last_login_at: string | null;
+  last_sale_at: string | null;
+  sales_7d_count: number;
+};
+type KpiEvents = {
+  status_changes: StatusChange[];
+  rejected_debits: { tenant_id: string; at: string }[];
 };
 
-const PLAN_ORDER = ["start", "pro", "business", "enterprise"];
-const PLAN_COLOR: Record<string, string> = {
-  start: "bg-muted text-muted-foreground",
-  pro: "bg-ninja-flameSoft/10 text-ninja-flameSoft",
-  business: "bg-ninja-violet/10 text-ninja-violet",
-  enterprise: "bg-ninja-gold/10 text-ninja-gold",
-};
+const PERIOD_LABEL = { mes: "este mes", anterior: "el mes anterior", "12m": "los últimos 12 meses" } as const;
 
-export default async function InternalHomePage() {
+function ratioValue(r: Ratio): string | null {
+  return r.pct === null ? null : formatPct(r.pct);
+}
+function ratioSub(r: Ratio, what: string): string {
+  if (r.den === 0) return `Sin ${what} en el período`;
+  return `${r.num} de ${r.den}${r.pct === null ? " · muestra chica" : ""}`;
+}
+
+export default async function InternalHomePage({
+  searchParams,
+}: {
+  searchParams?: { periodo?: string | string[] };
+}) {
+  const periodKey = parsePeriodKey(searchParams?.periodo);
+  const now = new Date();
+  const { current, previous } = periodsFor(periodKey, now);
   const supabase = createClient({ scope: "internal" });
 
-  const [{ data: rawTenants }, { count: staffCount }, { data: rawHealth }] = await Promise.all([
+  const [tenantsRes, addonsRes, catalogRes, discountsRes, paymentsRes, healthRes, eventsRes] = await Promise.all([
     supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, created_at, trial_ends_at, subscriptions(status, billing_cycle, updated_at, plans(key, name, monthly_price_ars))",
+        "id, name, status, created_at, trial_ends_at, subscriptions(status, billing_cycle, is_lifetime, past_due_since, plans(key, name, monthly_price_ars, yearly_price_ars))",
       )
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
     supabase
-      .from("users")
-      .select("id", { count: "exact", head: true })
-      .not("internal_level", "is", null),
-    // Salud por negocio (ADR-084): agregados de internal_tenant_health.
+      .from("subscription_addons")
+      .select("tenant_id, addon_key, status, source, monthly_price_ars, cancel_at_period_end, current_period_end"),
+    supabase.from("plan_addons").select("key, monthly_price_ars"),
+    supabase
+      .from("tenant_discounts")
+      .select("tenant_id, kind, value, valid_from, valid_until, deleted_at")
+      .is("deleted_at", null),
+    supabase.from("billing_records").select("tenant_id, amount, created_at"),
     supabase.rpc("internal_tenant_health"),
+    // F20-0a: cambios de estado desde la auditoría (migración 20261111200000).
+    (supabase as unknown as {
+      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+    }).rpc("internal_saas_kpi_events", { p_since: previous.start.toISOString() }),
   ]);
 
-  type SubRow = {
+  const tenants = (tenantsRes.data ?? []) as unknown as TenantRaw[];
+  const catalog = new Map(
+    ((catalogRes.data ?? []) as { key: string; monthly_price_ars: number | null }[]).map((p) => [
+      p.key,
+      p.monthly_price_ars,
+    ]),
+  );
+  type AddonRow = {
+    tenant_id: string;
+    addon_key: string;
     status: string;
-    billing_cycle: string;
-    updated_at: string;
-    plans: { key: string; name: string; monthly_price_ars: number } | null;
+    source: string;
+    monthly_price_ars: number | null;
+    cancel_at_period_end: boolean | null;
+    current_period_end: string | null;
   };
-  type TenantRaw = {
-    id: string;
-    name: string;
-    slug: string;
-    status: string;
-    created_at: string;
-    trial_ends_at?: string | null;
-    subscriptions: SubRow | SubRow[] | null;
-  };
-
-  const list = (rawTenants ?? []) as TenantRaw[];
-
-  function sub(t: TenantRaw): SubRow | null {
-    if (!t.subscriptions) return null;
-    return Array.isArray(t.subscriptions) ? t.subscriptions[0] ?? null : t.subscriptions;
+  const addonsBy = new Map<string, AddonRow[]>();
+  for (const a of (addonsRes.data ?? []) as unknown as AddonRow[]) {
+    addonsBy.set(a.tenant_id, [...(addonsBy.get(a.tenant_id) ?? []), a]);
   }
+  type DiscountRow = {
+    tenant_id: string;
+    kind: string;
+    value: number;
+    valid_from: string | null;
+    valid_until: string | null;
+    deleted_at: string | null;
+  };
+  const discountsBy = new Map<string, DiscountRow[]>();
+  for (const d of (discountsRes.data ?? []) as unknown as DiscountRow[]) {
+    discountsBy.set(d.tenant_id, [...(discountsBy.get(d.tenant_id) ?? []), d]);
+  }
+  const payments: PaymentRow[] = ((paymentsRes.data ?? []) as {
+    tenant_id: string;
+    amount: number;
+    created_at: string;
+  }[]).map((p) => ({ tenant_id: p.tenant_id, amount: Number(p.amount), at: p.created_at }));
+  const events = eventsRes.error ? null : ((eventsRes.data ?? null) as KpiEvents | null);
+  const changes = events?.status_changes ?? [];
+  const rejected = events?.rejected_debits ?? [];
 
-  // ── Status counts ────────────────────────────────────────────────────────
-  const by = (s: string) => list.filter((t) => t.status === s).length;
-  const total = list.length;
-  const nTrial = by("trial");
-  const nActive = by("active");
-  const nPastDue = by("past_due");
-  const nSuspended = by("suspended");
-  const nCancelled = by("cancelled");
-  const nProblemas = nPastDue + nSuspended;
+  const sub = (t: TenantRaw): SubRow | null =>
+    !t.subscriptions ? null : Array.isArray(t.subscriptions) ? t.subscriptions[0] ?? null : t.subscriptions;
 
-  // ── Conversión trial→paid ────────────────────────────────────────────────
-  const convBase = nActive + nCancelled;
-  const convRate = convBase > 0 ? Math.round((nActive / convBase) * 100) : null;
-
-  // ── Nuevos registros ─────────────────────────────────────────────────────
-  const now = new Date();
-  const d7 = new Date(now.getTime() - 7 * 86_400_000).toISOString();
-  const d30 = new Date(now.getTime() - 30 * 86_400_000).toISOString();
-  const new7 = list.filter((t) => t.created_at >= d7).length;
-  const new30 = list.filter((t) => t.created_at >= d30).length;
-
-  // ── MRR / ARR ─────────────────────────────────────────────────────────────
-  // Suma el precio del plan PROPIO de cada suscripción (incluye planes custom,
-  // cuyo monthly_price_ars viaja en el join), no un mapa global por key.
-  const mrr = list.reduce((acc, t) => {
+  const accounts: KpiAccount[] = tenants.map((t) => {
     const s = sub(t);
-    if (s?.status === "active" || s?.status === "past_due") {
-      const price = s.plans?.monthly_price_ars ?? 0;
-      return acc + (s.billing_cycle === "yearly" ? price * 0.9 : price);
-    }
-    return acc;
-  }, 0);
-  const arr = mrr * 12;
-
-  // ── Churn 30d ──────────────────────────────────────────────────────────────
-  // Aproximación: una suscripción cancelada en los últimos 30 días se detecta
-  // por su updated_at (el cambio de estado bumpea updated_at vía trigger).
-  // Base = activos + past_due + suspendidos (base de cobro vigente) + las bajas
-  // de los últimos 30 días.
-  const cancelled30d = list.filter((t) => {
-    const s = sub(t);
-    return s?.status === "cancelled" && s.updated_at >= d30;
-  }).length;
-  const churnBase = nActive + nPastDue + nSuspended + cancelled30d;
-  const churnRate =
-    churnBase > 0 ? Math.round((cancelled30d / churnBase) * 100) : null;
-
-  // ── Plan breakdown ───────────────────────────────────────────────────────
-  const planCount: Record<string, number> = {};
-  list.forEach((t) => {
-    const key = sub(t)?.plans?.key ?? "sin_plan";
-    planCount[key] = (planCount[key] ?? 0) + 1;
+    return {
+      tenantId: t.id,
+      name: t.name,
+      createdAt: t.created_at,
+      trialEndsAt: t.trial_ends_at,
+      // Pendiente: tenants.is_test (spec §15.1, pregunta abierta 6). Sin marca,
+      // ningún negocio se excluye como "de prueba".
+      isTest: false,
+      status: s?.status ?? t.status,
+      billingCycle: s?.billing_cycle ?? null,
+      isLifetime: Boolean(s?.is_lifetime),
+      plan: s?.plans ?? null,
+      planKey: s?.plans?.key ?? null,
+      planName: s?.plans?.name ?? null,
+      addons: (addonsBy.get(t.id) ?? []).map((a) => ({ ...a, catalog_price_ars: catalog.get(a.addon_key) ?? null })),
+      discounts: discountsBy.get(t.id) ?? [],
+    };
   });
 
-  // ── Tabla ────────────────────────────────────────────────────────────────
-  const tableRows = list.map((t) => ({
-    id: t.id,
-    name: t.name,
-    slug: t.slug,
-    status: t.status,
-    created_at: t.created_at,
-    plan_name: sub(t)?.plans?.name ?? null,
-  }));
+  const excludedLifetime = accounts.filter((a) => exclusionReason(a) === "lifetime").length;
+  const excludedIds = new Set(accounts.filter((a) => exclusionReason(a)).map((a) => a.tenantId));
 
-  // ── Salud por negocio (ADR-084) ─────────────────────────────────────────
-  type HealthRow = {
-    tenant_id: string;
-    active_users: number;
-    last_login_at: string | null;
-    last_sale_at: string | null;
-    sales_7d_count: number;
-  };
-  const healthBy = new Map(
-    ((rawHealth ?? []) as unknown as HealthRow[]).map((h) => [h.tenant_id, h]),
+  // ── Plata ────────────────────────────────────────────────────────────────
+  const rejectedRecent = new Set(
+    rejected.filter((r) => now.getTime() - new Date(r.at).getTime() <= 30 * 86_400_000).map((r) => r.tenant_id),
   );
-  const atRisk = atRiskTenants(
-    list.map((t) => {
-      const h = healthBy.get(t.id);
-      return {
-        tenant: t,
-        health: tenantHealthScore({
-          status: sub(t)?.status ?? t.status,
-          createdAt: t.created_at,
-          trialEndsAt: t.trial_ends_at ?? null,
+  const summary = mrrSummary(accounts, rejectedRecent, now);
+  const stockEnd = periodKey === "anterior" ? stockAt(accounts, changes, current.end) : { mrr: summary.mrr, paidAccounts: summary.paidAccounts };
+  const stockStart = stockAt(accounts, changes, current.start);
+  const mrrTrend = events ? trend(stockEnd.mrr, stockStart.mrr) : null;
+  const paidTrend = events ? trend(stockEnd.paidAccounts, stockStart.paidAccounts) : null;
+  const arpaEnd = stockEnd.paidAccounts > 0 ? stockEnd.mrr / stockEnd.paidAccounts : null;
+  const arpaStart = stockStart.paidAccounts > 0 ? stockStart.mrr / stockStart.paidAccounts : null;
+  const cobrado = collected(payments, current, excludedIds);
+  const cobradoPrev = collected(payments, previous, excludedIds);
+
+  // ── Clientes ─────────────────────────────────────────────────────────────
+  const trials = trialsSummary(accounts, now);
+  const conv = trialConversion(accounts, payments, current);
+  const convPrev = trialConversion(accounts, payments, previous);
+  const churn = events ? logoChurn(accounts, changes, current) : null;
+  const churnPrev = events ? logoChurn(accounts, changes, previous) : null;
+  const nuevos = newTenants(accounts, current);
+  const nuevosPrev = newTenants(accounts, previous);
+
+  // ── Riesgo: dos ejes ─────────────────────────────────────────────────────
+  const pastDueSince = new Map(tenants.map((t) => [t.id, sub(t)?.past_due_since ?? null]));
+  const cobroRisk = collectionRisk(accounts, pastDueSince, rejected, now);
+  const healthBy = new Map(((healthRes.data ?? []) as unknown as HealthRow[]).map((h) => [h.tenant_id, h]));
+  const usoRisk = usageRisk(
+    accounts.map((a) => {
+      const h = healthBy.get(a.tenantId);
+      const health = tenantHealthScore(
+        {
+          status: a.status,
+          createdAt: a.createdAt,
+          trialEndsAt: a.trialEndsAt,
           lastLoginAt: h?.last_login_at ?? null,
           lastSaleAt: h?.last_sale_at ?? null,
           sales7dCount: Number(h?.sales_7d_count ?? 0),
           activeUsers: Number(h?.active_users ?? 0),
-        }),
-      };
+        },
+        now,
+      );
+      return { account: a, score: health.score, reasons: health.reasons, hasSales: Boolean(h?.last_sale_at) };
     }),
+    now,
   );
+
+  const vsLabel = periodKey === "12m" ? "vs. los 12 meses anteriores" : "vs. el mes anterior";
+  const stockLabel = periodKey === "anterior" ? "al cierre del mes anterior" : "hoy";
 
   return (
     <>
       <PageHeader
         eyebrow="Panel interno"
-        title="NinjaSoft"
+        title="Inicio"
         icon={LayoutDashboard}
-        description={
-          <>
-            Operá el SaaS: negocios, suscripciones, staff y comunicaciones.
-          </>
-        }
+        description="Cómo viene el negocio de NinjaSoft: ingresos recurrentes, clientes y riesgo. Cada número tiene su definición en el ícono de información."
+        actions={<PeriodSwitch value={periodKey} />}
       />
 
-      {/* ── KPIs principales ── */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Total negocios" value={total} icon={<Building2 size={18} />} />
-        <KpiCard
-          label="En prueba"
-          value={nTrial}
-          icon={<TrendingUp size={18} />}
-          color="text-warning"
-        />
-        <KpiCard
-          label="Activos"
-          value={nActive}
-          icon={<BarChart3 size={18} />}
-          color="text-success"
-        />
-        <KpiCard
-          label="Con problemas"
-          value={nProblemas}
-          icon={<AlertTriangle size={18} />}
-          color={nProblemas > 0 ? "text-warning" : undefined}
-          sub={nProblemas > 0 ? `${nPastDue} pago pend. · ${nSuspended} susp.` : undefined}
-        />
-        <KpiCard
-          label="Nuevos (7 días)"
-          value={new7}
-          icon={<TrendingUp size={18} />}
-          color="text-ninja-flameSoft"
-        />
+      <p className="mt-4 text-xs text-muted-foreground">
+        Período: {PERIOD_LABEL[periodKey]}. Los stocks (MRR, cuentas pagas) se miden {stockLabel}; los flujos (cobrado, nuevos,
+        churn, conversión) suman el período. Excluye {excludedLifetime}{" "}
+        {excludedLifetime === 1 ? "cuenta lifetime" : "cuentas lifetime"} (exentas de pago).
+      </p>
+
+      <div className="mt-3 space-y-2">
+        <Callout tone="neutral" icon={AlertTriangle} title="Falta marcar los negocios internos o de prueba">
+          Todavía no existe la marca <code className="font-mono text-xs">tenants.is_test</code> (spec de cobranza §15.1). Hasta
+          que exista, un negocio de prueba con plan activo cuenta como cuenta paga y suma al MRR.
+        </Callout>
+        {!events && (
+          <Callout tone="warning" icon={AlertTriangle} title="Churn y tendencias sin datos">
+            Falta aplicar la migración <code className="font-mono text-xs">20261111200000_internal_saas_kpi_events</code>, que lee
+            los cambios de estado desde la auditoría.
+          </Callout>
+        )}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard
-          label="Nuevos (30 días)"
-          value={new30}
-          icon={<TrendingUp size={18} />}
-        />
-        <KpiCard
-          label="Conversión trial→paid"
-          value={convRate !== null ? `${convRate}%` : null}
-          icon={<BarChart3 size={18} />}
-          color={convRate !== null && convRate >= 50 ? "text-success" : "text-warning"}
-          sub={`${nActive} activos · ${nCancelled} cancelados`}
-        />
-        <KpiCard
-          label="Churn 30d"
-          value={churnRate !== null ? `${churnRate}%` : null}
-          icon={<TrendingUp size={18} />}
-          color={churnRate !== null && churnRate > 0 ? "text-danger" : "text-success"}
-          sub={`${cancelled30d} baja${cancelled30d === 1 ? "" : "s"} · 30d`}
-          title="Aproximado: cancelaciones de los últimos 30 días sobre la base activa."
-        />
-        <KpiCard
-          label="MRR estimado"
-          value={mrr > 0 ? formatCurrency(mrr) : null}
-          icon={<CreditCard size={18} />}
-          color="text-ninja-flameSoft"
-          sub={mrr === 0 ? "Sin ingresos registrados" : undefined}
-        />
-        <KpiCard
-          label="ARR estimado"
-          value={arr > 0 ? formatCurrency(arr) : null}
-          icon={<CreditCard size={18} />}
-          color="text-ninja-violet"
-          sub={arr > 0 ? "MRR × 12" : undefined}
-        />
+      {/* ── Fila 1: plata ── */}
+      <section className="mt-8" aria-labelledby="kpi-plata">
+        <SectionHeader title={<span id="kpi-plata">Ingresos</span>} icon={CircleDollarSign} />
+        <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+          <KpiTile
+            label="MRR"
+            icon={Repeat}
+            value={formatCompactArs(stockEnd.mrr)}
+            exact={formatExactArs(stockEnd.mrr)}
+            definition={KPI_DEFINITIONS.mrr}
+            sub={`${stockEnd.paidAccounts} ${stockEnd.paidAccounts === 1 ? "cuenta paga" : "cuentas pagas"}`}
+            trendPct={mrrTrend}
+            trendLabel={`vs. el inicio del período`}
+            href="/internal/tenants"
+          />
+          <KpiTile
+            label="ARR (MRR × 12)"
+            icon={Banknote}
+            value={formatCompactArs(stockEnd.mrr * 12)}
+            exact={formatExactArs(stockEnd.mrr * 12)}
+            definition={KPI_DEFINITIONS.arr}
+            sub="Run-rate anual"
+            trendPct={mrrTrend}
+            trendLabel="vs. el inicio del período"
+          />
+          <KpiTile
+            label="Cobrado en el período"
+            icon={Wallet}
+            value={formatCompactArs(cobrado)}
+            exact={formatExactArs(cobrado)}
+            definition={KPI_DEFINITIONS.collected}
+            sub="Bruto, según pagos registrados"
+            trendPct={trend(cobrado, cobradoPrev)}
+            trendLabel={vsLabel}
+          />
+          <KpiTile
+            label="MRR en riesgo"
+            icon={ShieldAlert}
+            value={formatCompactArs(summary.mrrAtRisk)}
+            exact={formatExactArs(summary.mrrAtRisk)}
+            definition={KPI_DEFINITIONS.mrrAtRisk}
+            sub={
+              summary.mrr > 0
+                ? `${formatPct(Math.round((summary.mrrAtRisk / summary.mrr) * 1000) / 10)} del MRR`
+                : "Sin MRR"
+            }
+            tone={summary.mrrAtRisk > 0 ? "warning" : "default"}
+            goodWhen="down"
+          />
+        </div>
+      </section>
+
+      {/* ── Fila 2: clientes ── */}
+      <section className="mt-8" aria-labelledby="kpi-clientes">
+        <SectionHeader title={<span id="kpi-clientes">Clientes</span>} icon={Users} />
+        <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+          <KpiTile
+            label="Cuentas pagas"
+            icon={Users}
+            value={String(stockEnd.paidAccounts)}
+            definition={KPI_DEFINITIONS.paidAccounts}
+            trendPct={paidTrend}
+            trendLabel="vs. el inicio del período"
+          />
+          <KpiTile
+            label="ARPA"
+            icon={Gauge}
+            value={arpaEnd === null ? null : formatCompactArs(arpaEnd)}
+            exact={arpaEnd === null ? undefined : formatExactArs(arpaEnd)}
+            definition={KPI_DEFINITIONS.arpa}
+            sub="Ingreso promedio por cuenta"
+            trendPct={events && arpaEnd !== null && arpaStart !== null ? trend(arpaEnd, arpaStart) : null}
+            trendLabel="vs. el inicio del período"
+          />
+          <KpiTile
+            label="Trials activos"
+            icon={Hourglass}
+            value={String(trials.active)}
+            definition={KPI_DEFINITIONS.trials}
+            sub={`${trials.endingIn7d} vencen en 7 días`}
+            tone={trials.endingIn7d > 0 ? "warning" : "default"}
+          />
+          <KpiTile
+            label="Conversión trial → pago"
+            icon={Percent}
+            value={ratioValue(conv)}
+            definition={KPI_DEFINITIONS.conversion}
+            sub={ratioSub(conv, "trials que terminaran")}
+            trendPct={conv.pct !== null && convPrev.pct !== null ? trend(conv.pct, convPrev.pct) : null}
+            trendLabel={vsLabel}
+          />
+          <KpiTile
+            label="Churn de clientes"
+            icon={TrendingDown}
+            value={churn ? ratioValue(churn) : null}
+            definition={KPI_DEFINITIONS.churn}
+            sub={churn ? ratioSub(churn, "cuentas pagas al inicio") : "Falta la migración de eventos"}
+            trendPct={churn?.pct != null && churnPrev?.pct != null ? trend(churn.pct, churnPrev.pct) : null}
+            goodWhen="down"
+            trendLabel={vsLabel}
+            tone={churn && churn.num > 0 ? "danger" : "default"}
+          />
+        </div>
+      </section>
+
+      {/* ── Fila 3: operación ── */}
+      <section className="mt-8" aria-labelledby="kpi-operacion">
+        <SectionHeader title={<span id="kpi-operacion">Operación</span>} icon={Building2} />
+        <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
+          <KpiTile
+            label="Negocios nuevos"
+            icon={Building2}
+            value={String(nuevos)}
+            definition={KPI_DEFINITIONS.newTenants}
+            sub={`Creados en ${PERIOD_LABEL[periodKey]}`}
+            trendPct={trend(nuevos, nuevosPrev)}
+            trendLabel={vsLabel}
+            href="/internal/tenants"
+          />
+          <KpiTile
+            label="Riesgo de cobro"
+            icon={ShieldAlert}
+            value={String(cobroRisk.length)}
+            definition={KPI_DEFINITIONS.collectionRisk}
+            sub={cobroRisk.length === 1 ? "negocio" : "negocios"}
+            tone={cobroRisk.length > 0 ? "warning" : "default"}
+            href="#riesgo-cobro"
+          />
+          <KpiTile
+            label="Riesgo de uso"
+            icon={AlertTriangle}
+            value={String(usoRisk.length)}
+            definition={KPI_DEFINITIONS.usageRisk}
+            sub={`${usoRisk.filter((r) => r.kind === "conversion").length} de conversión`}
+            tone={usoRisk.length > 0 ? "warning" : "default"}
+            href="#riesgo-uso"
+          />
+        </div>
+      </section>
+
+      {/* ── Listas de riesgo ── */}
+      <div className="mt-10 grid gap-6 lg:grid-cols-2">
+        <section id="riesgo-cobro" className="min-w-0 scroll-mt-6">
+          <SectionHeader
+            title="Riesgo de cobro"
+            icon={ShieldAlert}
+            description="Pago vencido, suspendidos por falta de pago o débito rechazado."
+          />
+          <RiskList
+            empty="Nadie debe ni tiene débitos rechazados."
+            rows={cobroRisk.slice(0, 10).map((r) => ({
+              id: r.tenantId,
+              name: r.name,
+              detail: r.reasons.join(" · "),
+              right: r.mrr > 0 ? formatCompactArs(r.mrr) : null,
+              dot: r.daysOverdue > 3 ? "bg-danger" : "bg-warning",
+            }))}
+          />
+        </section>
+        <section id="riesgo-uso" className="min-w-0 scroll-mt-6">
+          <SectionHeader
+            title="Riesgo de uso"
+            icon={AlertTriangle}
+            description="Salud menor a 60 en cuentas pagas o trials, y trials sin ventas."
+          />
+          <RiskList
+            empty="Todas las cuentas pagas y los trials vienen usando el sistema."
+            rows={usoRisk.slice(0, 10).map((r) => ({
+              id: r.tenantId,
+              name: r.name,
+              detail: r.reasons.join(" · ") || "Sin actividad registrada",
+              right: `${r.score}/100`,
+              badge: r.kind === "conversion" ? "Conversión" : undefined,
+              dot: r.score < 40 ? HEALTH_LEVEL_DOT.risk : HEALTH_LEVEL_DOT.attention,
+            }))}
+          />
+        </section>
       </div>
 
-      {/* ── Breakdown por plan ── */}
-      {Object.keys(planCount).length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {PLAN_ORDER.map((key) =>
-            planCount[key] ? (
-              <span
-                key={key}
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${PLAN_COLOR[key] ?? "bg-muted text-muted-foreground"}`}
-              >
-                {key.charAt(0).toUpperCase() + key.slice(1)}: {planCount[key]}
-              </span>
-            ) : null,
-          )}
-          {planCount["sin_plan"] ? (
-            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-              Sin plan: {planCount["sin_plan"]}
-            </span>
-          ) : null}
-        </div>
-      )}
+      {/* ── Desglose por plan ── */}
+      <section className="mt-10" aria-labelledby="por-plan">
+        <SectionHeader
+          title={<span id="por-plan">MRR por plan</span>}
+          icon={Repeat}
+          description="Sólo cuentas pagas (sin lifetime). Precio normalizado a mes con addons y descuentos."
+        />
+        <TableWrap className="mt-3">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <th className="px-4 py-2.5">Plan</th>
+                <th className="px-4 py-2.5 text-right">Cuentas</th>
+                <th className="px-4 py-2.5 text-right">MRR</th>
+                <th className="px-4 py-2.5 text-right">% del MRR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.byPlan.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <EmptyState
+                      compact
+                      icon={Repeat}
+                      title="Todavía no hay cuentas pagas"
+                      description="Acá vas a ver cuánto aporta cada plan cuando haya suscripciones cobradas."
+                    />
+                  </td>
+                </tr>
+              ) : (
+                summary.byPlan.map((p) => (
+                  <tr key={p.key} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 font-medium">{p.name}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{p.accounts}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums" title={formatExactArs(p.mrr)}>
+                      {formatCompactArs(p.mrr)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
+                      {summary.mrr > 0 ? formatPct(Math.round((p.mrr / summary.mrr) * 1000) / 10) : "0 %"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </TableWrap>
+      </section>
 
-      {/* ── Quick links ── */}
-      <div className="mt-6 flex flex-wrap gap-2">
-        {(
-          [
-            ["/internal/tenants", <Building2 key="b" size={15} />, `Negocios (${total})`],
-            ["/internal/usuarios", <Users key="u" size={15} />, "Usuarios"],
-            ["/internal/staff", <ShieldCheck key="s" size={15} />, `Staff (${staffCount ?? 0})`],
-            ["/internal/audit", <ClipboardList key="a" size={15} />, "Auditoría"],
-            ["/internal/pagos", <CreditCard key="p" size={15} />, "Pagos"],
-            ["/internal/emails", <Mail key="m" size={15} />, "Emails"],
-          ] as const
-        ).map(([href, icon, label]) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:bg-muted"
-          >
-            {icon} {label}
-          </Link>
-        ))}
-      </div>
-
-      {/* ── Alertas ── */}
-      {nProblemas > 0 && (
-        <div className="mt-4 flex items-start gap-3 rounded-xl bg-warning/10 p-4 text-sm text-warning">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-          <div>
-            <span className="font-semibold">
-              {nProblemas} negocio{nProblemas > 1 ? "s" : ""} con problemas de facturación.
-            </span>{" "}
-            {nPastDue > 0 && `${nPastDue} con pago pendiente. `}
-            {nSuspended > 0 && `${nSuspended} suspendido${nSuspended > 1 ? "s" : ""}. `}
-            <Link href="/internal/tenants" className="underline hover:text-foreground">
-              Ver negocios
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* ── Negocios en riesgo (salud por negocio, ADR-084) ── */}
-      {atRisk.length > 0 && (
-        <div className="mt-8">
-          <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-muted-foreground" />
-            <h2 className="font-display text-base font-bold">Negocios en riesgo</h2>
-          </div>
-          <Card>
-            <CardContent className="p-0">
-              <ul className="divide-y divide-border">
-                {atRisk.map(({ tenant: t, health: h }) => (
-                  <li key={t.id}>
-                    <Link
-                      href={`/internal/tenants/${t.id}`}
-                      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm transition hover:bg-muted"
-                    >
-                      <span className="inline-flex min-w-[9rem] items-center gap-2 font-medium text-foreground">
-                        <span aria-hidden className={`h-2 w-2 rounded-full ${HEALTH_LEVEL_DOT[h.level]}`} />
-                        {t.name}
-                      </span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {HEALTH_LEVEL_LABELS[h.level]} · {h.score}/100
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-muted-foreground">{h.reasons.join(" · ")}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Tabla de negocios con búsqueda ── */}
       <div className="mt-8">
-        <div className="mb-3 flex items-center gap-2">
-          <UserCog size={16} className="text-muted-foreground" />
-          <h2 className="font-display text-base font-bold">Negocios</h2>
-        </div>
-        <TenantSearchTable tenants={tableRows} />
+        <Link
+          href="/internal/tenants"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:bg-muted"
+        >
+          <Building2 size={15} aria-hidden /> Ver todos los negocios ({tenants.length})
+          <ChevronRight size={15} aria-hidden />
+        </Link>
       </div>
     </>
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  icon,
-  color,
-  sub,
-  title,
+function RiskList({
+  rows,
+  empty,
 }: {
-  label: string;
-  // null = sin datos / no disponible → se muestra un estado "n/d" con ícono.
-  value: string | number | null;
-  icon: React.ReactNode;
-  color?: string;
-  sub?: string;
-  title?: string;
+  rows: { id: string; name: string; detail: string; right: string | null; dot: string; badge?: string }[];
+  empty: string;
 }) {
-  const noData = value === null;
+  if (rows.length === 0) {
+    return (
+      <div className="mt-3 rounded-lg border border-border bg-card">
+        <EmptyState compact icon={ShieldAlert} title="Sin negocios en esta lista" description={empty} />
+      </div>
+    );
+  }
   return (
-    <Card>
-      <CardContent className="p-4" title={title}>
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          {icon}
-          <span className="text-xs">{label}</span>
-        </div>
-        {noData ? (
-          <p className="mt-1 inline-flex items-center gap-1.5 text-muted-foreground/70">
-            <CircleDashed
-              size={18}
-              className="text-muted-foreground/50"
-              aria-hidden
-            />
-            <span className="text-sm font-semibold text-muted-foreground/70">
-              Sin datos
-            </span>
-          </p>
-        ) : (
-          <p
-            className={`mt-1 font-display text-2xl font-black ${color ?? "text-foreground"}`}
+    <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-card">
+      {rows.map((r) => (
+        <li key={r.id}>
+          <Link
+            href={`/internal/tenants/${r.id}`}
+            className="flex min-w-0 items-start gap-3 px-4 py-3 text-sm transition hover:bg-muted"
           >
-            {value}
-          </p>
-        )}
-        {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
-      </CardContent>
-    </Card>
+            <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${r.dot}`} />
+            <span className="min-w-0 flex-1">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-medium text-foreground">{r.name}</span>
+                {r.badge && <Badge tone="info">{r.badge}</Badge>}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{r.detail}</span>
+            </span>
+            {r.right && <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{r.right}</span>}
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

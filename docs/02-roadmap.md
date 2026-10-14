@@ -31,7 +31,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
-| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b y F20-1 con código (ADR-110, ADR-115; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
+| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | a definir | ⚪ Futuro, no construir aún (diseño en spec §20; depende de F20) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
@@ -1459,11 +1459,12 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Refacturación, también por letra equivocada.
   - [ ] Bonificaciones: sobre el próximo cargo, crédito a cuenta, meses sin cargo y condonación. Todas con topes por nivel y aprobación.
   - [ ] Baja con devolución y botón de arrepentimiento.
-- [ ] **H134 · F20-8: suscripción por cuenta corriente.**
-  - [ ] Avisos de cobro periódicos (`statement_frequency`).
-  - [ ] Cuentas bancarias con CBU validado.
-  - [ ] "Ya transferí" con comprobante, más la bandeja de verificación del staff.
-  - [ ] Pagar el saldo con Checkout Pro.
+- [ ] **H134 · F20-8: suscripción por cuenta corriente.** Código en `feat/cobranza-cta-cte` ([ADR-120](./17-decision-log.md)); migración `20261115200000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar.
+  - [x] Avisos de cobro periódicos (`statement_frequency`): una vez por cuota, cada N días hasta que pague o resumen mensual, días antes del vencimiento y destinatarios por negocio; cron diario `platform-payment-notices` y envío manual.
+  - [x] Cuentas bancarias con CBU validado, cargadas con el editor de Transferencia (logos de bancos), y email y WhatsApp para comprobantes.
+  - [x] "Ya transferí" con comprobante, más la bandeja de verificación del staff.
+  - [x] Cambio de modalidad en cualquier sentido (cancela el débito de MP o pide el checkout) y códigos de invitación de cuenta corriente.
+  - [ ] Pagar el saldo con Checkout Pro (`platform_checkout`): queda para una fase siguiente.
 - [ ] **H135 · F20-9: punitorios, mora y promesas.**
   - [ ] Políticas de punitorios con tasa, gracia, cálculo diario o por mes empezado, tope y mínimo.
   - [ ] Condonar o saldar punitorios, y ND al cobrarlos.

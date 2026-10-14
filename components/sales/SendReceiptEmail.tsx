@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Mail } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { exportNodePdfBase64 } from "@/lib/tickets/exportPng";
+import { exportInvoicePdfBase64 } from "@/lib/invoices/exportPdf";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { NoData } from "@/components/ui/NoData";
@@ -21,7 +21,7 @@ export async function sendReceiptEmail(
   node: HTMLElement,
 ): Promise<void> {
   const supabase = createClient();
-  const pdf = await exportNodePdfBase64(node);
+  const pdf = await exportInvoicePdfBase64(node);
   const { data, error } = await supabase.functions.invoke("send_receipt_email", {
     body: { sale_id: saleId, to, pdf },
   });

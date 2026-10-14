@@ -86,9 +86,25 @@ function fiscal(tipo: number, label: string, letter: string, nro: number, total:
   };
 }
 
+/**
+ * Fotos de ejemplo (ADR-119): ilustraciones SVG livianas, en color y en
+ * monocromo, para la vista previa de "Mostrar foto del producto". El tercer
+ * producto no tiene foto (muestra el placeholder).
+ */
+function demoPhoto(bg: string, fg: string, path: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 64 64"><rect width="64" height="64" fill="${bg}"/><path d="${path}" fill="${fg}"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+const SHIRT = "M22 12l-12 7 5 9 5-3v27h24V25l5 3 5-9-12-7c-1 4-5 6-10 6s-9-2-10-6z";
+const CAP = "M10 40c0-13 10-22 22-22s22 9 22 22H10zm-4 2h40c6 0 12 2 12 5H6v-5z";
+export const DEMO_PHOTOS = [
+  { color: demoPhoto("#E8EEF7", "#1f2937", SHIRT), mono: demoPhoto("#eeeeee", "#222222", SHIRT) },
+  { color: demoPhoto("#FDECE6", "#c2410c", CAP), mono: demoPhoto("#eeeeee", "#444444", CAP) },
+];
+
 const ITEMS = [
-  { id: "s1", product_name: "Remera básica algodón negra talle M", quantity: 2, unit_price: 18150, subtotal: 36300 },
-  { id: "s2", product_name: "Gorra trucker bordada", quantity: 1, unit_price: 12100, subtotal: 12100 },
+  { id: "s1", product_name: "Remera básica algodón negra talle M", quantity: 2, unit_price: 18150, subtotal: 36300, image_url: DEMO_PHOTOS[0]!.color, image_mono: DEMO_PHOTOS[0]!.mono },
+  { id: "s2", product_name: "Gorra trucker bordada", quantity: 1, unit_price: 12100, subtotal: 12100, image_url: DEMO_PHOTOS[1]!.color, image_mono: DEMO_PHOTOS[1]!.mono },
   { id: "s3", product_name: "Medias deportivas pack x3", quantity: 1, unit_price: 6050, subtotal: 6050 },
 ];
 
@@ -144,6 +160,7 @@ export function sampleSale(kind: SampleKind, brand: SampleBrand | null | undefin
         sale: {
           ...base.sale,
           transparency: { iva: 9024.79, others: 0 },
+          ivaLines: [{ rate: 21, base: 42975.21, amount: 9024.79 }],
           fiscal: fiscal(6, "Factura B", "B", 1837, 52000, cuit),
         },
       };

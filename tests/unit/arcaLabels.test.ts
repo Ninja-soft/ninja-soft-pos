@@ -16,7 +16,7 @@ import {
   type WizardConfigLike,
 } from "@/lib/arca/labels";
 import { FISCAL_PENDING_TEXT, fiscalApproved, ticketFiscal } from "@/lib/arca/ticket";
-import { buildHtmlVars } from "@/lib/tickets/htmlVars";
+import { invoiceFromTicket } from "@/lib/invoices/fromTicket";
 import { sampleTicketData } from "@/lib/tickets/sample";
 
 const NOW = new Date("2026-10-13T12:00:00Z");
@@ -133,18 +133,17 @@ describe("arca ticket", () => {
     expect(ticketFiscal({ ...doc, status: "cancelado" })).toBeNull();
   });
 
-  it("las variables HTML usan la factura autorizada", () => {
+  it("el comprobante del motor usa la factura autorizada", () => {
     const d = sampleTicketData(null);
     d.sale.fiscal = ticketFiscal(doc);
-    const v = buildHtmlVars(d);
-    expect(v.comprobante_letra).toBe("B");
-    expect(v.comprobante_cod).toBe("006");
-    expect(v.punto_venta).toBe("00003");
-    expect(v.comprobante_nro).toBe("00000012");
-    expect(v.cae).toBe("76123456789012");
-    expect(v.cae_vto).toBe("23/10/2026");
-    const sinFactura = buildHtmlVars(sampleTicketData(null));
-    expect(sinFactura.cae).toBe("s/d");
-    expect(sinFactura.comprobante_letra).toBe("X");
+    const v = invoiceFromTicket(d);
+    expect(v.letter).toBe("B");
+    expect(v.cbteCode).toBe("006");
+    expect(v.ptoVta).toBe("00003");
+    expect(v.number).toBe("00000012");
+    expect(v.authorization).toMatchObject({ code: "76123456789012", due: "23/10/2026" });
+    const sinFactura = invoiceFromTicket(sampleTicketData(null));
+    expect(sinFactura.authorization).toBeNull();
+    expect(sinFactura.letter).toBe("X");
   });
 });

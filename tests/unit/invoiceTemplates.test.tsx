@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { InvoiceDocument, a4Copies } from "@/components/invoices/InvoiceDocument";
-import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { A4_MODELS, TICKET_MODELS } from "@/lib/invoices/models";
 import { legalRequirements, receiverIdRequired, RECEIVER_ID_THRESHOLD } from "@/lib/invoices/legal";
 import {
@@ -19,7 +18,8 @@ import {
 import { sampleInvoice, samplePlatformInvoice, sampleSale, type SampleKind } from "@/lib/invoices/samples";
 import { invoiceFromTicket } from "@/lib/invoices/fromTicket";
 import type { InvoiceDoc } from "@/lib/invoices/types";
-import { defaultSaleBlocks } from "@/lib/tickets/blocks";
+import { paginateLines } from "@/lib/invoices/paginate";
+import { docOptions } from "@/lib/invoices/fromTicket";
 import { decodeQrUrl } from "@/supabase/functions/_shared/arca/qr";
 
 const FULL = { pro: true, unbranded: true };
@@ -59,7 +59,7 @@ describe("modelos A4: campos obligatorios por tipo", () => {
 });
 
 describe("modelos de ticket 80 y 58 mm: campos obligatorios por tipo", () => {
-  for (const m of TICKET_MODELS.filter((x) => x.key !== "simple")) {
+  for (const m of TICKET_MODELS) {
     for (const paper of ["80", "58"] as const) {
       for (const kind of KINDS) {
         it(`${m.name} ${paper} mm · ${kind}`, () => {
@@ -195,6 +195,13 @@ describe("personalización: colores, logo y sello", () => {
   it("qué pide tickets_pro (espejo de invoice_style_needs_pro)", () => {
     expect(invoiceStyleNeedsPro(DEFAULT_INVOICE_STYLE)).toBe(false);
     expect(invoiceStyleNeedsPro(normalizeInvoiceStyle({ ticket_model: "simple", show_ninja_seal: false }))).toBe(false);
+    // ADR-119: el aspecto pide Pro; el tamaño de letra y los bloques no.
+    for (const o of [{ font_family: "serif" }, { density: "amplia" }, { corners: "square" }, { logo_position: "center" }, { header_style: "filled" }, { separators: "none" }, { show_photos: true }, { ticket_photos: true }, { a4_model: "catalogo" }, { ticket_model: "minimal" }]) {
+      expect(invoiceStyleNeedsPro(normalizeInvoiceStyle(o)), JSON.stringify(o)).toBe(true);
+    }
+    for (const o of [{ font_size: "lg" }, { show_contact: false }, { show_iva_breakdown: true }, { show_legends: false }, { show_sale_barcode: true }, { show_payments: false }]) {
+      expect(invoiceStyleNeedsPro(normalizeInvoiceStyle(o)), JSON.stringify(o)).toBe(false);
+    }
     expect(invoiceStyleNeedsPro(normalizeInvoiceStyle({ a4_model: "moderno" }))).toBe(true);
     expect(invoiceStyleNeedsPro(normalizeInvoiceStyle({ ticket_model: "destacado" }))).toBe(true);
     expect(invoiceStyleNeedsPro(normalizeInvoiceStyle({ accent_mode: "custom", accent_custom: "#123456" }))).toBe(true);
@@ -205,21 +212,175 @@ describe("personalización: colores, logo y sello", () => {
   });
 });
 
-describe("TemplateRenderer con el motor de comprobantes", () => {
-  const data = sampleSale("B", null);
-  it("sin plantilla propia usa el modelo de ticket elegido", () => {
-    const style = resolveInvoiceStyle({ ticket_model: "destacado" }, null, FULL);
-    const { container } = render(<TemplateRenderer template={null} fallbackBlocks={defaultSaleBlocks()} data={data} invoice={{ style }} />);
-    expect(container.querySelector('[data-model="destacado"]')).not.toBeNull();
+// ---------------------------------------------------------------------------
+// ADR-119
+// ---------------------------------------------------------------------------
+
+/** Combinaciones extremas de opciones: ninguna puede dejar afuera un campo legal. */
+const OPTION_SETS: Record<string, Record<string, unknown>> = {
+  "rectos, fotos y todo oculto": {
+    corners: "square",
+    show_photos: true,
+    ticket_photos: true,
+    show_contact: false,
+    show_payments: false,
+    show_internal_ref: false,
+    show_legends: false,
+    separators: "none",
+    logo_mode: "none",
+  },
+  "letra grande, amplia, serif, logo centrado y pastilla": {
+    font_size: "lg",
+    density: "amplia",
+    font_family: "serif",
+    logo_position: "center",
+    header_style: "filled",
+    separators: "dotted",
+    show_iva_breakdown: true,
+    show_sale_barcode: true,
+  },
+};
+
+describe("ADR-119: modelos × tipos × opciones mantienen lo obligatorio", () => {
+  for (const [name, opts] of Object.entries(OPTION_SETS)) {
+    for (const m of A4_MODELS) {
+      it(`A4 ${m.name} · ${name}`, () => {
+        const style = resolveInvoiceStyle({ ...opts, a4_model: m.key }, STORE, FULL);
+        for (const kind of KINDS) {
+          const doc = sampleInvoice(kind, null, docOptions(style));
+          const { container, unmount } = render(<InvoiceDocument doc={doc} style={style} format="a4" />);
+          expect(missing(doc, "a4", container), kind).toEqual([]);
+          unmount();
+        }
+      });
+    }
+    for (const m of TICKET_MODELS) {
+      it(`ticket ${m.name} · ${name}`, () => {
+        const style = resolveInvoiceStyle({ ...opts, ticket_model: m.key }, STORE, FULL);
+        for (const paper of ["80", "58"] as const) {
+          for (const kind of KINDS) {
+            const doc = sampleInvoice(kind, null, docOptions(style));
+            const { container, unmount } = render(<InvoiceDocument doc={doc} style={style} format={paper} />);
+            expect(missing(doc, "ticket", container), `${paper} ${kind}`).toEqual([]);
+            unmount();
+          }
+        }
+      });
+    }
+  }
+});
+
+describe("ADR-119: sin el ticket de bloques", () => {
+  it("lo guardado como Simple se lee como Clásico", () => {
+    expect(normalizeInvoiceStyle({ ticket_model: "simple" }).ticket_model).toBe("clasico");
+    expect(TICKET_MODELS.some((m) => (m.key as string) === "simple")).toBe(false);
   });
-  it("modelo Simple: el ticket de bloques de siempre", () => {
-    const style = resolveInvoiceStyle({ ticket_model: "simple" }, null, FULL);
-    const { container } = render(<TemplateRenderer template={null} fallbackBlocks={defaultSaleBlocks()} data={data} invoice={{ style }} />);
-    expect(container.querySelector("[data-invoice-ticket]")).toBeNull();
-    expect(container.querySelector('img[alt="QR fiscal de ARCA"]')).not.toBeNull();
+  it("hay 9 modelos A4 y 5 de ticket; sólo Clásico es base", () => {
+    expect(A4_MODELS.map((m) => m.key)).toEqual(expect.arrayContaining(["elegante", "bloques", "compacto", "catalogo"]));
+    expect(TICKET_MODELS.map((m) => m.key)).toEqual(expect.arrayContaining(["moderno", "minimal"]));
+    expect([...A4_MODELS, ...TICKET_MODELS].filter((m) => !m.pro).map((m) => m.key)).toEqual(["clasico", "clasico"]);
   });
-  it("sin estilo (otros usos) no cambia nada", () => {
-    const { container } = render(<TemplateRenderer template={null} fallbackBlocks={defaultSaleBlocks()} data={data} />);
-    expect(container.querySelector("[data-invoice-ticket]")).toBeNull();
+  it("sin tickets_pro el aspecto vuelve al default", () => {
+    const s = resolveInvoiceStyle({ corners: "square", font_family: "mono", density: "compacta", show_photos: true, font_size: "lg" }, null, { pro: false, unbranded: false });
+    expect(s.rounded).toBe(true);
+    expect(s.fontFamily).toBeNull();
+    expect(s.density).toBe(1);
+    expect(s.showPhotos).toBe(false);
+    // El tamaño de letra es base.
+    expect(s.fontScale).toBeGreaterThan(1);
   });
+});
+
+describe("ADR-119: bordes, fotos y bloques", () => {
+  const doc = sampleInvoice("B", null);
+  it("bordes redondeados o rectos en la raíz de la hoja y del rollo", () => {
+    const round = resolveInvoiceStyle({}, null, FULL);
+    const square = resolveInvoiceStyle({ corners: "square" }, null, FULL);
+    for (const format of ["a4", "80"] as const) {
+      const a = render(<InvoiceDocument doc={doc} style={round} format={format} />);
+      const root = a.container.querySelector<HTMLElement>("[data-invoice-page],[data-invoice-ticket]")!;
+      expect(root.style.getPropertyValue("--inv-r")).toBe("1");
+      a.unmount();
+      const b = render(<InvoiceDocument doc={doc} style={square} format={format} />);
+      const root2 = b.container.querySelector<HTMLElement>("[data-invoice-page],[data-invoice-ticket]")!;
+      expect(root2.style.getPropertyValue("--inv-r")).toBe("0");
+      b.unmount();
+    }
+  });
+  it("Catálogo: foto grande en cada renglón y placeholder si no tiene", () => {
+    const style = resolveInvoiceStyle({ a4_model: "catalogo" }, null, FULL);
+    const { container } = render(<InvoiceDocument doc={doc} style={style} format="a4" />);
+    expect(container.querySelectorAll('[data-product-photo="color"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-product-photo="none"]')).toHaveLength(1);
+  });
+  it("foto en A4 sólo con la opción; en el ticket, monocromo y apagada por defecto", () => {
+    const off = render(<InvoiceDocument doc={doc} style={resolveInvoiceStyle({}, null, FULL)} format="a4" />);
+    expect(off.container.querySelector("[data-product-photo]")).toBeNull();
+    off.unmount();
+    const on = render(<InvoiceDocument doc={doc} style={resolveInvoiceStyle({ show_photos: true }, null, FULL)} format="a4" />);
+    expect(on.container.querySelectorAll('[data-product-photo="color"]')).toHaveLength(2);
+    on.unmount();
+    const tOff = render(<InvoiceDocument doc={doc} style={resolveInvoiceStyle({ show_photos: true }, null, FULL)} format="80" />);
+    expect(tOff.container.querySelector("[data-product-photo]")).toBeNull();
+    tOff.unmount();
+    const tOn = render(<InvoiceDocument doc={doc} style={resolveInvoiceStyle({ ticket_photos: true }, null, FULL)} format="80" />);
+    expect(tOn.container.querySelectorAll('[data-product-photo="mono"]')).toHaveLength(2);
+  });
+  it("detalle de IVA en la B (no en la C) y contacto ocultable", () => {
+    const style = resolveInvoiceStyle({ show_iva_breakdown: true, show_contact: false }, null, FULL);
+    const b = sampleInvoice("B", null, docOptions(style));
+    expect(b.issuer.phone).toBeNull();
+    const { container } = render(<InvoiceDocument doc={b} style={style} format="a4" />);
+    expect(container.textContent).toContain("IVA 21 % contenido");
+    const c = sampleInvoice("C", null, docOptions(style));
+    expect(c.transparencyBreakdown).toBeNull();
+  });
+  it("código de barras de la venta sólo con la opción", () => {
+    const style = resolveInvoiceStyle({ show_sale_barcode: true }, null, FULL);
+    const d = sampleInvoice("X", null, docOptions(style));
+    const { container } = render(<InvoiceDocument doc={d} style={style} format="80" />);
+    expect(container.querySelector("[data-sale-barcode]")).not.toBeNull();
+    expect(sampleInvoice("X", null).saleCode).toBeNull();
+  });
+});
+
+describe("ADR-119: paginación A4", () => {
+  const many = (n: number): InvoiceDoc => {
+    const base = sampleInvoice("A", null);
+    const line = base.lines[0]!;
+    return { ...base, lines: Array.from({ length: n }, (_, i) => ({ ...line, code: String(i + 1), description: `Artículo ${i + 1}` })) };
+  };
+  it("pocos renglones: una hoja", () => {
+    expect(paginateLines(sampleInvoice("B", null).lines)).toEqual([[0, 3]]);
+  });
+  it("muchos renglones: varias hojas sin perder ninguno", () => {
+    const d = many(70);
+    const pages = paginateLines(d.lines);
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages[0]![0]).toBe(0);
+    expect(pages[pages.length - 1]![1]).toBe(70);
+    for (let i = 1; i < pages.length; i++) expect(pages[i]![0]).toBe(pages[i - 1]![1]);
+  });
+  for (const m of A4_MODELS) {
+    it(`${m.name}: encabezado en cada hoja, totales y CAE sólo en la última`, () => {
+      const d = many(70);
+      const style = resolveInvoiceStyle({ a4_model: m.key }, null, FULL);
+      const { container } = render(<InvoiceDocument doc={d} style={style} format="a4" />);
+      const sheets = Array.from(container.querySelectorAll<HTMLElement>("[data-invoice-page]"));
+      expect(sheets.length).toBeGreaterThan(1);
+      sheets.forEach((sh, i) => {
+        const keys = legalKeys(sh);
+        expect(keys.has("tipo") && keys.has("numero") && keys.has("emisor_cuit") && keys.has("receptor")).toBe(true);
+        expect(sh.textContent).toContain(`Hoja ${i + 1} de ${sheets.length}`);
+        if (i < sheets.length - 1) {
+          expect(keys.has("total")).toBe(false);
+          expect(sh.textContent).toContain("Continúa en la hoja siguiente");
+        }
+      });
+      const last = sheets[sheets.length - 1]!;
+      expect(legalRequirements(d, "a4").filter((k) => !legalKeys(last).has(k))).toEqual([]);
+      const rows = sheets.reduce((a, sh) => a + sh.querySelectorAll("tbody tr").length, 0);
+      expect(rows).toBe(70);
+    });
+  }
 });

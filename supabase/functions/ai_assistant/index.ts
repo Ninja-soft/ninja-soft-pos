@@ -1988,14 +1988,15 @@ async function buildContext(
 
   // ── Estado de configuración ───────────────────────────────────────────────
   try {
-    const { data: ticket } = await admin
-      .from("ticket_templates")
-      .select("id")
+    // ADR-119: el diseño de comprobantes vive en tenant_branding.invoice_style
+    // (las plantillas de ticket se retiraron).
+    const { data: brandRow } = await admin
+      .from("tenant_branding")
+      .select("invoice_style")
       .eq("tenant_id", tenantId)
-      .is("deleted_at", null)
-      .eq("is_default", true)
-      .limit(1)
       .maybeSingle();
+    const style = (brandRow as { invoice_style?: Record<string, unknown> } | null)?.invoice_style;
+    const ticket = style && Object.keys(style).length > 0 ? style : null;
     const { data: mp } = await admin
       .from("tenant_payment_methods")
       .select("enabled")
@@ -2008,7 +2009,7 @@ async function buildContext(
       .eq("tenant_id", tenantId)
       .maybeSingle();
     lines.push(
-      `Config: ticket de impresión ${ticket ? "configurado" : "sin configurar"}; ` +
+      `Config: diseño de comprobantes ${ticket ? "personalizado" : "por defecto (modelo Clásico)"}; ` +
         `Mercado Pago ${mp?.enabled ? "habilitado" : "deshabilitado"}; ` +
         `email de comprobantes ${smtp?.host ? "configurado" : "sin configurar"}.`,
     );

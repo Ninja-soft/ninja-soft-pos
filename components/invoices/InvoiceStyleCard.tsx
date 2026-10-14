@@ -1,9 +1,12 @@
 "use client";
 
-// Configuración › Ticket › Diseño de facturas y comprobantes (ADR-112).
-// Elegir modelo A4 y ticket, color de resalte, logo, sello de Ninja Soft,
-// datos fiscales del emisor, leyendas y opciones, con vista previa en vivo de
-// cada tipo (A, B, C, NC, no fiscal) con datos de ejemplo. Se guarda en
+// Configuración › Ticket › Diseño de facturas y comprobantes (ADR-112,
+// ADR-119). Es el ÚNICO diseño de comprobantes (ya no hay plantillas de
+// bloques, lienzo ni HTML). Elegir modelo A4 y ticket, color de resalte, logo,
+// sello de Ninja Soft, aspecto (tipografía, tamaño, densidad, esquinas, logo,
+// encabezado, separadores), qué bloques se muestran, fotos de producto, datos
+// fiscales del emisor y leyendas, con vista previa en vivo de cada tipo (A, B,
+// C, NC, no fiscal) con datos de ejemplo. Se guarda en
 // tenant_branding (invoice_style, iibb, activity_start); la base exige el plan
 // (trigger trg_assert_invoice_style_feature), acá sólo se muestra el candado.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
+import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { Badge } from "@/components/ui/Badge";
 import { choiceClass } from "@/components/ui/ChoiceCard";
@@ -33,6 +37,7 @@ import { previewBrand, sampleInvoice, SAMPLE_KINDS, type SampleKind } from "@/li
 import { uploadTicketImage } from "@/lib/tickets/uploadTicketImage";
 import { InvoiceDocument, type InvoiceFormat } from "@/components/invoices/InvoiceDocument";
 import { InvoiceFit } from "@/components/invoices/InvoiceFit";
+import { docOptions } from "@/lib/invoices/fromTicket";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -106,12 +111,7 @@ export function InvoiceStyleCard() {
       kind,
     );
     const style = resolveInvoiceStyle(form.style, b, ent);
-    const doc = sampleInvoice(kind, b, {
-      tradeName: style.tradeName,
-      legends: style.legends,
-      showPayments: style.showPayments,
-      showInternalRef: style.showInternalRef,
-    });
+    const doc = sampleInvoice(kind, b, docOptions(style));
     return { style, doc };
   }, [form, brand, kind, ent]);
 
@@ -155,6 +155,12 @@ export function InvoiceStyleCard() {
   const s = form.style;
   const brandAccent = brand?.accent && HEX.test(brand.accent) ? brand.accent : null;
 
+  /** Opción de aspecto: volver al default es libre; lo demás pide tickets_pro. */
+  function setLook(patch: Partial<InvoiceStyleSettings>, isDefault: boolean) {
+    if (isDefault) setStyle(patch);
+    else proGate.run(() => setStyle(patch));
+  }
+
   function pickModel<K extends string>(m: ModelInfo<K>, apply: () => void) {
     if (m.pro) proGate.run(apply);
     else apply();
@@ -186,7 +192,7 @@ export function InvoiceStyleCard() {
             <h3 className="text-base font-semibold text-foreground">Diseño de facturas y comprobantes</h3>
             <p className="text-sm text-muted-foreground">
               Modelos A4 y de ticket con todo lo que pide ARCA: letra y código, CAE, QR, IVA y transparencia
-              fiscal. Se usan cuando no tenés un modelo propio activo.
+              fiscal. Valen para todo comprobante: venta, devolución, provisorio, reimpresión, email y PDF.
             </p>
           </div>
         </div>
@@ -215,7 +221,7 @@ export function InvoiceStyleCard() {
                 onPick={(m) =>
                   pickModel(m, () => {
                     setStyle({ ticket_model: m.key });
-                    if (m.key !== "simple") setFormat((f) => (f === "a4" ? "80" : f));
+                    setFormat((f) => (f === "a4" ? "80" : f));
                   })
                 }
               />
@@ -309,6 +315,129 @@ export function InvoiceStyleCard() {
               </div>
             </Field>
 
+            <Field title="Aspecto" hint="Vale para todos los modelos A4 y de ticket." locked={proLocked}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select
+                  label="Tipografía"
+                  value={s.font_family}
+                  onChange={(v) => setLook({ font_family: v }, v === "auto")}
+                  options={[
+                    { value: "auto", label: "La del modelo" },
+                    { value: "inter", label: "Inter (moderna)" },
+                    { value: "helvetica", label: "Helvética (clásica)" },
+                    { value: "serif", label: "Serif (Georgia)" },
+                    { value: "mono", label: "Monoespaciada" },
+                  ]}
+                />
+                <Select
+                  label="Posición del logo"
+                  value={s.logo_position}
+                  onChange={(v) => setLook({ logo_position: v }, v === "auto")}
+                  options={[
+                    { value: "auto", label: "La del modelo" },
+                    { value: "left", label: "Arriba a la izquierda" },
+                    { value: "center", label: "Arriba al centro" },
+                    { value: "right", label: "Arriba a la derecha" },
+                  ]}
+                />
+                <Select
+                  label="Separadores"
+                  value={s.separators}
+                  onChange={(v) => setLook({ separators: v }, v === "auto")}
+                  options={[
+                    { value: "auto", label: "Los del modelo" },
+                    { value: "dotted", label: "Punteados" },
+                    { value: "solid", label: "Sólidos" },
+                    { value: "none", label: "Sin separadores" },
+                  ]}
+                />
+                <Select
+                  label="Encabezado"
+                  value={s.header_style}
+                  onChange={(v) => setLook({ header_style: v }, v === "color")}
+                  options={[
+                    { value: "color", label: "Tipo de comprobante en color" },
+                    { value: "neutral", label: "Neutro (todo en negro)" },
+                    { value: "filled", label: "En una pastilla de color" },
+                  ]}
+                />
+              </div>
+              <div className="mt-4 space-y-4">
+                <Row title="Tamaño de letra" hint="Disponible en cualquier plan.">
+                  <Segmented
+                    value={s.font_size}
+                    onChange={(v) => setStyle({ font_size: v })}
+                    options={[
+                      { value: "sm", label: "Chica" },
+                      { value: "md", label: "Normal" },
+                      { value: "lg", label: "Grande" },
+                    ]}
+                    size="sm"
+                  />
+                </Row>
+                <Row title="Densidad">
+                  <Segmented
+                    value={s.density}
+                    onChange={(v) => setLook({ density: v }, v === "normal")}
+                    options={[
+                      { value: "compacta", label: "Compacta" },
+                      { value: "normal", label: "Normal" },
+                      { value: "amplia", label: "Amplia" },
+                    ]}
+                    size="sm"
+                  />
+                </Row>
+                <Row title="Bordes de las cajas">
+                  <Segmented
+                    value={s.corners}
+                    onChange={(v) => setLook({ corners: v }, v === "rounded")}
+                    options={[
+                      { value: "rounded", label: "Redondeados" },
+                      { value: "square", label: "Rectos" },
+                    ]}
+                    size="sm"
+                  />
+                </Row>
+              </div>
+            </Field>
+
+            <Field title="Qué se muestra" hint="Lo obligatorio de ARCA va siempre: estas opciones no lo ocultan.">
+              <div className="space-y-4">
+                <Row title="Datos de contacto" hint="Teléfono y email del negocio.">
+                  <Switch checked={s.show_contact} onCheckedChange={(v) => setStyle({ show_contact: v })} label="Mostrar datos de contacto" />
+                </Row>
+                <Row title="Medios de pago">
+                  <Switch checked={s.show_payments} onCheckedChange={(v) => setStyle({ show_payments: v })} label="Mostrar medios de pago" />
+                </Row>
+                <Row title="Número interno de la venta" hint="Además del número fiscal.">
+                  <Switch checked={s.show_internal_ref} onCheckedChange={(v) => setStyle({ show_internal_ref: v })} label="Mostrar el número interno" />
+                </Row>
+                <Row title="Detalle de IVA en la factura B" hint="IVA contenido por alícuota, además de la transparencia fiscal. La C no lo lleva: el monotributo no discrimina IVA.">
+                  <Switch checked={s.show_iva_breakdown} onCheckedChange={(v) => setStyle({ show_iva_breakdown: v })} label="Mostrar el detalle de IVA" />
+                </Row>
+                <Row title="Leyendas" hint="Las tuyas y la del ticket. Las obligatorias salen siempre.">
+                  <Switch checked={s.show_legends} onCheckedChange={(v) => setStyle({ show_legends: v })} label="Mostrar leyendas" />
+                </Row>
+                <Row title="Código de barras de la venta" hint="Con el número interno, para buscarla rápido en una devolución.">
+                  <Switch checked={s.show_sale_barcode} onCheckedChange={(v) => setStyle({ show_sale_barcode: v })} label="Mostrar el código de barras" />
+                </Row>
+                <Row title="Foto del producto en la hoja A4" hint="Miniatura a la izquierda de cada renglón. El modelo Catálogo la muestra siempre, más grande." locked={proLocked}>
+                  <Switch
+                    checked={s.show_photos}
+                    onCheckedChange={(v) => setLook({ show_photos: v }, !v)}
+                    label="Mostrar la foto del producto"
+                  />
+                </Row>
+                <Row title="Fotos en el ticket" hint="Chicas y en blanco y negro. Gastan más papel." locked={proLocked}>
+                  <Switch
+                    checked={s.ticket_photos}
+                    onCheckedChange={(v) => setLook({ ticket_photos: v }, !v)}
+                    label="Mostrar fotos en el ticket"
+                  />
+                </Row>
+              </div>
+            </Field>
+
             <Row
               title="Sello “Un software de Ninja Soft”"
               hint={ent.unbranded ? "Con el logo de Ninja Soft al pie." : "Ocultarlo es parte de los planes Business y Enterprise."}
@@ -360,12 +489,6 @@ export function InvoiceStyleCard() {
             </Field>
 
             <div className="space-y-4">
-              <Row title="Mostrar medios de pago">
-                <Switch checked={s.show_payments} onCheckedChange={(v) => setStyle({ show_payments: v })} label="Mostrar medios de pago" />
-              </Row>
-              <Row title="Mostrar el número interno de la venta" hint="Además del número fiscal.">
-                <Switch checked={s.show_internal_ref} onCheckedChange={(v) => setStyle({ show_internal_ref: v })} label="Mostrar el número interno" />
-              </Row>
               <Row title="Copias de la hoja A4">
                 <Segmented
                   value={String(s.a4_copies) as "1" | "2"}
@@ -414,10 +537,6 @@ export function InvoiceStyleCard() {
                       <InvoiceDocument doc={preview.doc} style={preview.style} format="a4" />
                     </InvoiceFit>
                   </div>
-                ) : s.ticket_model === "simple" ? (
-                  <p className="p-6 text-center text-sm text-neutral-600">
-                    El modelo Simple es el ticket de bloques de siempre: no cambia.
-                  </p>
                 ) : (
                   <div className="flex justify-center bg-neutral-100 py-4">
                     <InvoiceDocument doc={preview.doc} style={preview.style} format={format} />

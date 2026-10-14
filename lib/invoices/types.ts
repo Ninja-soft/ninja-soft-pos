@@ -8,7 +8,11 @@
 export type InvoiceLetter = "A" | "B" | "C" | "M" | "E" | "X";
 
 /** Clase del comprobante. */
-export type InvoiceClass = "factura" | "nota_credito" | "nota_debito" | "no_fiscal";
+export type InvoiceClass =
+  | "factura"
+  | "nota_credito"
+  | "nota_debito"
+  | "no_fiscal";
 
 /** Condición frente al IVA (mismas claves que tenant_branding.iva_condition y customers). */
 export type IvaCondition =
@@ -58,6 +62,10 @@ export interface InvoiceLine {
    * aclaraciones predefinidas y aclaración libre del renglón), línea por línea.
    */
   detailLines?: { bullet: boolean; text: string }[] | null;
+  /** ADR-119: foto del producto (idealmente data URL, para que salga en el PDF). */
+  imageUrl?: string | null;
+  /** Versión en monocromo para el ticket térmico. */
+  imageMono?: string | null;
 }
 
 export interface InvoiceIvaRow {
@@ -141,6 +149,11 @@ export interface InvoiceDoc {
   totals: InvoiceTotals;
   /** Régimen de Transparencia Fiscal al Consumidor (Ley 27.743), B y C. */
   transparency?: { iva: number; others: number } | null;
+  /**
+   * ADR-119: IVA contenido por alícuota (sólo B, opción del negocio). La C
+   * no lo informa: el monotributista no discrimina IVA.
+   */
+  transparencyBreakdown?: InvoiceIvaRow[] | null;
   authorization?: InvoiceAuthorization | null;
   /** URL del QR fiscal de ARCA (RG 4892). */
   qrUrl?: string | null;
@@ -155,6 +168,8 @@ export interface InvoiceDoc {
   legends?: string[];
   /** Número interno de la venta (#0001042). */
   internalRef?: string | null;
+  /** ADR-119: valor del código de barras de la venta (opcional). */
+  saleCode?: string | null;
   /** Sucursal y caja (multi-sucursal). */
   branchText?: string | null;
   voided?: boolean;

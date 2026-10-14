@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 
 const toast = vi.fn();
 let docs: { data: unknown[]; isSuccess: boolean; isError: boolean };
+let profilePaper = "80";
 
 const sale = {
   sale: {
@@ -49,13 +50,11 @@ vi.mock("@/modules/sales/hooks", () => ({
   useSaleNumberFormat: () => ({ data: undefined }),
 }));
 vi.mock("@/modules/tickets/hooks", () => ({
-  useActiveTemplate: () => ({ data: null }),
-  usePrintProfiles: () => ({ data: { sale: { paper: "80", copies: 1, auto: false } }, isFetched: true, isLoading: false }),
+  usePrintProfiles: () => ({ data: { sale: { paper: profilePaper, copies: 1, auto: false } }, isFetched: true, isLoading: false }),
   usePrintTarget: () => null,
   useTenantSmtpStatus: () => ({ data: { allowed: false, configured: false } }),
   useTicketBranding: () => ({ data: null }),
 }));
-vi.mock("@/modules/tickets/api", () => ({ emailTemplateDiffers: () => false }));
 vi.mock("@/modules/branches/hooks", () => ({ useBranches: () => ({ data: [] }) }));
 vi.mock("@/modules/tax/hooks", () => ({ useSaleTaxLines: () => ({ data: [] }) }));
 vi.mock("@/modules/promotions/hooks", () => ({ useSalePromotions: () => ({ data: [] }) }));
@@ -67,17 +66,14 @@ vi.mock("@/modules/arca/hooks", () => ({
 vi.mock("@/modules/arca/api", () => ({ arcaApi: { emitirVenta: vi.fn(async () => ({ ok: true })) } }));
 vi.mock("@/components/arca/FiscalStatus", () => ({ FiscalStatus: () => <div>detalle fiscal</div> }));
 vi.mock("@/components/sales/SalePayments", () => ({ SalePayments: () => <div>cobros</div> }));
-vi.mock("@/components/tickets/TemplateRenderer", () => ({
-  TemplateRenderer: ({ className, invoice }: { className?: string; invoice?: { style?: { ticketModel?: string } } }) => (
-    <div className={className} data-testid="ticket" data-invoice-model={invoice?.style?.ticketModel ?? ""}>
+// ADR-119: todo comprobante sale del motor; acá sólo importa qué formato y
+// qué modelo se dibuja (vista previa, nodo que se imprime y nodo del email).
+vi.mock("@/components/invoices/InvoiceDocument", () => ({
+  InvoiceDocument: ({ format, style }: { format: string; style: { ticketModel: string; a4Model: string } }) => (
+    <div data-testid="ticket" data-format={format} data-invoice-model={format === "a4" ? style.a4Model : style.ticketModel}>
       TICKET
     </div>
   ),
-}));
-
-// ADR-112: la hoja A4 oculta (PDF y email) no es parte de lo que se prueba acá.
-vi.mock("@/components/invoices/InvoiceDocument", () => ({
-  InvoiceDocument: () => <div data-testid="invoice-a4" />,
 }));
 
 import { TicketModal } from "@/components/sales/TicketModal";
@@ -118,6 +114,7 @@ beforeEach(() => {
   window.print = print as unknown as typeof window.print;
   toast.mockReset();
   docs = { data: [], isSuccess: true, isError: false };
+  profilePaper = "80";
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -184,11 +181,25 @@ describe("TicketModal · ventana visible", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("ADR-112: la vista previa y la impresión usan el modelo de comprobante y hay hoja A4 para el PDF", async () => {
+  it("ADR-119: todo sale del motor, en ticket por defecto, y se puede cambiar a A4 ahí mismo", async () => {
     setup({});
     const tickets = await screen.findAllByTestId("ticket");
-    expect(tickets.every((t) => t.getAttribute("data-invoice-model") === "clasico")).toBe(true);
-    expect(await screen.findByTestId("invoice-a4")).toBeInTheDocument();
+    // Vista previa, nodo que se imprime y nodo del email: modelo Clásico, rollo de 80 mm.
+    expect(tickets.length).toBeGreaterThanOrEqual(3);
+    expect(tickets.every((t) => t.getAttribute("data-format") === "80" && t.getAttribute("data-invoice-model") === "clasico")).toBe(true);
+    screen.getAllByRole("radio", { name: "A4" })[0]!.click();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Imprimir A4/ })).toBeInTheDocument());
+    const after = screen.getAllByTestId("ticket");
+    // La vista previa y la impresión pasan a A4; el email sigue con su formato.
+    expect(after.filter((t) => t.getAttribute("data-format") === "a4")).toHaveLength(2);
+    expect(after.filter((t) => t.getAttribute("data-format") === "80")).toHaveLength(1);
+  });
+
+  it("ADR-119: el perfil en A4 preselecciona A4 y la impresión automática lo usa", async () => {
+    profilePaper = "a4";
+    setup({ silent: true, autoPrint: true });
+    await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByTestId("ticket").some((t) => t.getAttribute("data-format") === "a4")).toBe(true);
   });
 
   it("sin auto-imprimir no imprime solo; Imprimir ticket imprime", async () => {

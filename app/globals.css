@@ -503,6 +503,27 @@ html {
   body[data-print-isolate] [data-print-active] .ticket-print * {
     visibility: visible;
   }
+  /* ADR-119: el comprobante aislado sale en el flujo normal (no fijo) y sin
+   * el resto de la página, así una factura A4 de varias hojas (Original,
+   * Duplicado o detalle largo) imprime todas sus páginas y el rollo de
+   * ticket sale a su ancho, sin márgenes agregados. */
+  html:has(body[data-print-isolate]),
+  body[data-print-isolate] {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  body[data-print-isolate] > *:not([data-print-active]) {
+    display: none !important;
+  }
+  body[data-print-isolate] > [data-print-active] {
+    position: static !important;
+    left: auto !important;
+  }
+  body[data-print-isolate] [data-print-active] .ticket-print {
+    position: static;
+    padding: 0;
+  }
 }
 
 /* -----------------------------------------------------------------------------

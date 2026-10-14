@@ -3,7 +3,6 @@
 import { describe, it, expect } from "vitest";
 import {
   buildIntroShowcase,
-  iconInk,
   introCountLabel,
   marqueeRows,
   roundDownNice,
@@ -32,11 +31,16 @@ describe("toIntroStore", () => {
     expect(s.logoUrl).toBe("https://x/nueva.png");
     expect(s.initials).toBe("NU");
   });
-  it("marca la tinta de los íconos que se pierden en un tema", () => {
-    expect(iconInk("BANCOR")).toBe("light");
-    expect(iconInk("provincia")).toBe("light");
-    expect(iconInk("MACRO")).toBe("dark");
-    expect(iconInk("COTO")).toBeNull();
+  it("trae la variante de ícono por tono de fondo (sin placa blanca)", () => {
+    const macro = toIntroStore({ key: "MACRO", name: "Tienda Macro", logo_url: null });
+    expect(macro.iconOnDark).toBe("/tiendas/iconos/macro-claro.webp");
+    expect(macro.iconOnLight).toBe("/tiendas/iconos/macro.webp");
+    const bancor = toIntroStore({ key: "bancor", name: "Tienda Bancor", logo_url: null });
+    expect(bancor.iconOnLight).toBe("/tiendas/iconos/bancor-oscuro.webp");
+    expect(bancor.iconOnDark).toBe("/tiendas/iconos/bancor.webp");
+    const coto = toIntroStore(STORES[0]!);
+    expect(coto.iconOnDark).toBe(coto.icon);
+    expect(coto.iconOnLight).toBe(coto.icon);
   });
 });
 

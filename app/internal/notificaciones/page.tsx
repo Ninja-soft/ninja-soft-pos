@@ -25,8 +25,10 @@ import type {
   NotificationSeverity,
   NotificationType,
 } from "@/modules/notifications/api";
-import { SpinnerBlock } from "@/components/ui/Spinner";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { Switch } from "@/components/ui/Switch";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
+import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
@@ -58,9 +60,9 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
       aria-pressed={on}
       onClick={onClick}
       className={cn(
-        "rounded-md border px-2.5 py-1 text-xs transition",
+        "min-h-[32px] rounded-md border px-2.5 py-1 text-xs transition",
         on
-          ? "border-ninja-flameSoft bg-ninja-flame/10 text-ninja-flameSoft"
+          ? "choice-on border-transparent font-medium text-foreground"
           : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
@@ -85,11 +87,11 @@ const TYPE_LABELS: Record<NotificationType, string> = Object.fromEntries(
 ) as Record<NotificationType, string>;
 
 const SEVERITY_DOT: Record<NotificationSeverity, string> = {
-  info: "bg-blue-500",
-  success: "bg-emerald-500",
-  warning: "bg-amber-500",
-  critical: "bg-red-500",
-  blocking: "bg-red-700",
+  info: "bg-info",
+  success: "bg-success",
+  warning: "bg-warning",
+  critical: "bg-danger",
+  blocking: "bg-danger ring-2 ring-danger/30",
 };
 
 const SEVERITY_LABELS: Record<NotificationSeverity, string> = {
@@ -121,7 +123,27 @@ function isHttpUrl(url: string): boolean {
 }
 
 const selectCls =
-  "h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
+  "h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-foreground/30";
+
+const fieldLabelCls = "mb-2 block text-sm font-medium text-muted-foreground";
+
+// Bloque del formulario con su propio título (Audiencia, Mensaje, Opciones).
+function FormBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <fieldset className="space-y-4 border-t border-border pt-5 first:border-t-0 first:pt-0">
+      <legend className="float-left mb-1 w-full text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </legend>
+      {children}
+    </fieldset>
+  );
+}
 
 export default function InternalNotificacionesPage() {
   const { toast } = useToast();
@@ -311,18 +333,18 @@ export default function InternalNotificacionesPage() {
       />
 
       {/* Nueva notificación */}
-      <Card className="mt-6">
-        <CardContent className="space-y-5 p-5">
-          <div className="flex items-center gap-2 font-semibold">
-            <Send size={16} /> Nueva notificación
-          </div>
-
+      <section className="mt-8">
+      <SectionHeader
+        title="Nueva notificación"
+        icon={Send}
+        description="Elegí a quién le llega, escribí el aviso y revisá el resumen antes de enviar."
+      />
+      <Card className="mt-4">
+        <CardContent className="space-y-5 p-4 sm:p-5">
           {/* Audiencia */}
-          <div className="space-y-3">
-            <span className="block text-sm font-medium text-muted-foreground">
-              Audiencia
-            </span>
+          <FormBlock title="Audiencia">
             <Segmented<Audience>
+              aria-label="Audiencia"
               value={audience}
               onChange={setAudience}
               options={[
@@ -332,9 +354,9 @@ export default function InternalNotificacionesPage() {
               ]}
             />
             {audience === "segment" && (
-              <div className="space-y-3 rounded-md border border-border p-4">
+              <div className="space-y-4 rounded-lg bg-muted/50 p-4">
                 <div>
-                  <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <span className="mb-2 block text-xs font-semibold text-muted-foreground">
                     Plan
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -349,7 +371,7 @@ export default function InternalNotificacionesPage() {
                   </div>
                 </div>
                 <div>
-                  <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <span className="mb-2 block text-xs font-semibold text-muted-foreground">
                     Estado
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -364,7 +386,7 @@ export default function InternalNotificacionesPage() {
                   </div>
                 </div>
                 <div>
-                  <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <span className="mb-2 block text-xs font-semibold text-muted-foreground">
                     Rubro
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -392,7 +414,7 @@ export default function InternalNotificacionesPage() {
                     onChange={(e) => setSegment((s) => ({ ...s, createdTo: e.target.value }))}
                   />
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-muted-foreground">Rol (opcional)</label>
+                    <label className={fieldLabelCls}>Rol (opcional)</label>
                     <select className={selectCls} value={role} onChange={(e) => setRole(e.target.value)}>
                       {ROLE_OPTIONS.map((r) => (
                         <option key={r.value} value={r.value}>
@@ -448,7 +470,7 @@ export default function InternalNotificacionesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                  <label className={fieldLabelCls}>
                     Rol (opcional)
                   </label>
                   <select
@@ -467,7 +489,7 @@ export default function InternalNotificacionesPage() {
             )}
             {broadcast && (
               <div className="sm:max-w-xs">
-                <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                <label className={fieldLabelCls}>
                   Rol (opcional)
                 </label>
                 <select
@@ -483,248 +505,261 @@ export default function InternalNotificacionesPage() {
                 </select>
               </div>
             )}
-          </div>
+          </FormBlock>
 
-          {/* Tipo + Severidad */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-muted-foreground">
-                Tipo
-              </label>
-              <select
-                className={selectCls}
-                value={type}
-                onChange={(e) => setType(e.target.value as NotificationType)}
-              >
-                {TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <span className="mb-2 block text-sm font-medium text-muted-foreground">
-                Severidad
-              </span>
-              <Segmented<NotificationSeverity>
-                value={severity}
-                onChange={setSeverity}
-                options={SEVERITY_VALUES.map((s) => ({
-                  value: s,
-                  label: SEVERITY_LABELS[s],
-                  preview: (
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[s])}
-                      />
-                      {SEVERITY_LABELS[s]}
-                    </span>
-                  ),
-                }))}
-              />
-            </div>
-          </div>
-
-          <Input
-            label="Título"
-            placeholder="Ej. Mantenimiento programado"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Cuerpo (opcional)
-            </label>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={4}
-              placeholder="Detalle del aviso…"
-              className="w-full rounded-lg border border-input bg-background p-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
-            />
-          </div>
-
-          {/* Acción opcional */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              label="Etiqueta del botón (opcional)"
-              placeholder="Ej. Ver detalles"
-              value={actionLabel}
-              onChange={(e) => setActionLabel(e.target.value)}
-              error={
-                actionMismatch && hasUrl && !hasLabel
-                  ? "Completá la etiqueta"
-                  : undefined
-              }
-            />
-            <Input
-              label="URL de la acción (opcional)"
-              placeholder="https://…"
-              value={actionUrl}
-              onChange={(e) => setActionUrl(e.target.value)}
-              error={
-                actionUrlInvalid
-                  ? "Debe empezar con http:// o https://"
-                  : actionMismatch && hasLabel && !hasUrl
-                    ? "Completá la URL"
-                    : undefined
-              }
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div className="flex items-center gap-1.5">
-              <label className="flex items-center gap-2 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  className="accent-ninja-flame"
-                  checked={requiresAck}
-                  onChange={(e) => setRequiresAck(e.target.checked)}
+          <FormBlock title="Mensaje">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <div>
+                <label htmlFor="notif-type" className={fieldLabelCls}>
+                  Tipo
+                </label>
+                <select
+                  id="notif-type"
+                  className={selectCls}
+                  value={type}
+                  onChange={(e) => setType(e.target.value as NotificationType)}
+                >
+                  {TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0">
+                <span className={fieldLabelCls}>Severidad</span>
+                <Segmented<NotificationSeverity>
+                  aria-label="Severidad"
+                  value={severity}
+                  onChange={setSeverity}
+                  options={SEVERITY_VALUES.map((s) => ({
+                    value: s,
+                    label: SEVERITY_LABELS[s],
+                    preview: (
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          aria-hidden
+                          className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[s])}
+                        />
+                        {SEVERITY_LABELS[s]}
+                      </span>
+                    ),
+                  }))}
                 />
-                Requiere confirmación
-              </label>
-              <InfoHint title="Requiere confirmación" label="Qué es requiere confirmación">
-                Si está activado, el usuario debe confirmar/marcar como leída la
-                notificación para cerrarla (acuse de recibo); queda registrado que
-                la vio. Si está desactivado, es informativa y se puede descartar sin
-                confirmar.
-              </InfoHint>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground" htmlFor="expires">
-                Vence (opcional)
-              </label>
-              <input
-                id="expires"
-                type="datetime-local"
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
-              />
-            </div>
-          </div>
 
-          {/* Ventana de captación: límite para mostrarla a nuevos registros. */}
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <label
-                className="text-sm text-muted-foreground"
-                htmlFor="display-until"
-              >
-                Mostrar hasta (captación de nuevos registros)
+            <Input
+              label="Título"
+              placeholder="Ej. Mantenimiento programado"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+
+            <div>
+              <label htmlFor="notif-body" className={fieldLabelCls}>
+                Cuerpo (opcional)
               </label>
-              <input
-                id="display-until"
-                type="datetime-local"
-                value={displayUntil}
-                onChange={(e) => setDisplayUntil(e.target.value)}
-                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+              <textarea
+                id="notif-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={4}
+                placeholder="Detalle del aviso"
+                className="w-full rounded-lg border border-input bg-background p-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-foreground/30"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Quien se registre después del envío la verá solo si esta fecha
-              todavía no pasó. Los ya registrados la ven igual. Vacío = sin
-              corte.
+
+            {/* Acción opcional */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Etiqueta del botón (opcional)"
+                placeholder="Ej. Ver detalles"
+                value={actionLabel}
+                onChange={(e) => setActionLabel(e.target.value)}
+                error={
+                  actionMismatch && hasUrl && !hasLabel
+                    ? "Completá la etiqueta"
+                    : undefined
+                }
+              />
+              <Input
+                label="URL de la acción (opcional)"
+                placeholder="https://"
+                value={actionUrl}
+                onChange={(e) => setActionUrl(e.target.value)}
+                error={
+                  actionUrlInvalid
+                    ? "Debe empezar con http:// o https://"
+                    : actionMismatch && hasLabel && !hasUrl
+                      ? "Completá la URL"
+                      : undefined
+                }
+              />
+            </div>
+          </FormBlock>
+
+          <FormBlock title="Opciones">
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-3.5 py-3">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="text-sm font-medium text-foreground">Requiere confirmación</span>
+                <InfoHint title="Requiere confirmación" label="Qué es requiere confirmación">
+                  Si está activado, el usuario debe confirmar/marcar como leída la
+                  notificación para cerrarla (acuse de recibo); queda registrado que
+                  la vio. Si está desactivado, es informativa y se puede descartar sin
+                  confirmar.
+                </InfoHint>
+              </div>
+              <Switch
+                checked={requiresAck}
+                onCheckedChange={setRequiresAck}
+                label="Requiere confirmación"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={fieldLabelCls} htmlFor="expires">
+                  Vence (opcional)
+                </label>
+                <input
+                  id="expires"
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className={selectCls}
+                />
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Después de esta fecha deja de mostrarse a todos.
+                </p>
+              </div>
+              {/* Ventana de captación: límite para mostrarla a nuevos registros. */}
+              <div>
+                <label className={fieldLabelCls} htmlFor="display-until">
+                  Mostrar a nuevos registros hasta
+                </label>
+                <input
+                  id="display-until"
+                  type="datetime-local"
+                  value={displayUntil}
+                  onChange={(e) => setDisplayUntil(e.target.value)}
+                  className={selectCls}
+                />
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Quien se registre después del envío la ve sólo si esta fecha todavía
+                  no pasó. Los ya registrados la ven igual. Vacío: sin corte.
+                </p>
+              </div>
+            </div>
+          </FormBlock>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="min-w-0 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Llega a:</span> {audienceSummary}
             </p>
-          </div>
-
-          <div className="flex justify-end">
             <Button
               onClick={() => setConfirmOpen(true)}
               disabled={!canSend}
               loading={sending}
+              className="shrink-0"
             >
               <Send size={16} /> Enviar
             </Button>
           </div>
         </CardContent>
       </Card>
+      </section>
 
       {/* Enviadas */}
-      <Card className="mt-6">
-        <CardContent className="space-y-4 p-5">
-          <div className="flex items-center gap-2 font-semibold">
-            <Bell size={16} /> Enviadas
-          </div>
-          {sentLoading ? (
-            <SpinnerBlock className="py-6" />
-          ) : sent.length === 0 ? (
-            <EmptyState compact icon={Bell} title="Todavía no enviaste notificaciones" />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Fecha</th>
-                    <th className="py-2 pr-4 font-medium">Audiencia</th>
-                    <th className="py-2 pr-4 font-medium">Severidad</th>
-                    <th className="py-2 pr-4 font-medium">Tipo</th>
-                    <th className="py-2 pr-4 font-medium">Título</th>
-                    <th className="py-2 pr-4 font-medium">Conf.</th>
-                    {canDelete && (
-                      <th className="py-2 pr-2 text-right font-medium">
-                        Acción
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {groupByBatch(sent).map(({ row: n, count }) => (
-                    <tr key={n.id}>
-                      <td className="whitespace-nowrap py-2.5 pr-4 text-muted-foreground">
-                        {formatRelative(n.createdAt)}
+      <section className="mt-10">
+        <SectionHeader
+          title="Enviadas"
+          icon={Bell}
+          description="Los envíos a un segmento se agrupan en una sola fila."
+        />
+        <TableWrap className="mt-4">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Aviso</th>
+                <th className="hidden px-4 py-3 font-semibold md:table-cell">Audiencia</th>
+                <th className="px-4 py-3 font-semibold">Severidad</th>
+                <th className="hidden px-4 py-3 font-semibold lg:table-cell">Tipo</th>
+                <th className="hidden px-4 py-3 font-semibold sm:table-cell">Confirmación</th>
+                {canDelete && (
+                  <th className="px-4 py-3 text-right font-semibold">
+                    <span className="sr-only">Acciones</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {sentLoading && <TableStateRow colSpan={canDelete ? 6 : 5} loading />}
+              {!sentLoading && sent.length === 0 && (
+                <TableStateRow colSpan={canDelete ? 6 : 5}>
+                  <EmptyState
+                    compact
+                    icon={Bell}
+                    title="Acá vas a ver los avisos que mandes"
+                    description="Llegan a la campana del POS de los usuarios alcanzados."
+                  />
+                </TableStateRow>
+              )}
+              {!sentLoading &&
+                groupByBatch(sent).map(({ row: n, count }) => {
+                  const audienceText = n.segmentBatchId
+                    ? `Segmento: ${segmentSummary(fromRpcSegment(n.segment), INDUSTRY_LABELS)} (${count} negocios)`
+                    : n.audience;
+                  return (
+                    <tr key={n.id} className="align-top transition hover:bg-muted/40">
+                      <td className="max-w-[20rem] px-4 py-3">
+                        <div className="font-medium text-foreground">{n.title}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatRelative(n.createdAt)}
+                          <span className="md:hidden"> · {audienceText}</span>
+                        </div>
                       </td>
-                      <td className="py-2.5 pr-4">
-                        {n.segmentBatchId
-                          ? `Segmento: ${segmentSummary(fromRpcSegment(n.segment), INDUSTRY_LABELS)} (${count} negocios)`
-                          : n.audience}
+                      <td className="hidden max-w-[16rem] px-4 py-3 text-muted-foreground md:table-cell">
+                        {audienceText}
                       </td>
-                      <td className="py-2.5 pr-4">
-                        <span className="flex items-center gap-1.5">
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5">
                           <span
-                            className={cn(
-                              "h-2 w-2 rounded-full",
-                              SEVERITY_DOT[n.severity] ?? "bg-blue-500",
-                            )}
+                            aria-hidden
+                            className={cn("h-2 w-2 rounded-full", SEVERITY_DOT[n.severity] ?? "bg-info")}
                           />
                           {SEVERITY_LABELS[n.severity] ?? n.severity}
                         </span>
                       </td>
-                      <td className="py-2.5 pr-4 text-muted-foreground">
+                      <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
                         <span className="inline-flex items-center gap-1.5">
                           {n.type === "afip" && <IntegrationLogo name="arca" size={16} />}
                           {TYPE_LABELS[n.type] ?? n.type}
                         </span>
                       </td>
-                      <td className="py-2.5 pr-4 font-medium text-foreground">
-                        {n.title}
-                      </td>
-                      <td className="py-2.5 pr-4 text-muted-foreground">
-                        {n.requiresAck ? "Sí" : "No"}
+                      <td className="hidden px-4 py-3 sm:table-cell">
+                        {n.requiresAck ? <Badge tone="info">Requiere</Badge> : <Badge>No</Badge>}
                       </td>
                       {canDelete && (
-                        <td className="py-2.5 pr-2 text-right">
+                        <td className="px-4 py-2.5 text-right">
                           <button
                             type="button"
                             title="Borrar notificación"
                             aria-label="Borrar notificación"
                             onClick={() => setToDelete({ row: n, count })}
-                            className="inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-red-500/10 hover:text-danger"
+                            className="inline-grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition hover:bg-danger/10 hover:text-danger"
                           >
                             <Trash2 size={15} />
                           </button>
                         </td>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  );
+                })}
+            </tbody>
+          </table>
+        </TableWrap>
+      </section>
 
       <ConfirmDialog
         open={confirmOpen}

@@ -4,7 +4,7 @@
 // audiencia, prioridad, cooldown, máximo de impresiones, vigencia, botón y
 // ayuda de soporte; límite global por sesión y por día ("no molestar").
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Lightbulb, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SpinnerBlock } from "@/components/ui/Spinner";
+import { ListSkeleton } from "@/components/internal/onboarding/ListSkeleton";
 import { ReasonDialog } from "@/components/internal/ReasonDialog";
 import { useToast } from "@/components/ui/Toast";
 import { VERTICAL_LABELS } from "@/lib/verticals/config";
@@ -49,7 +49,7 @@ const LABELS = {
 };
 
 const TEXTAREA =
-  "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
+  "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-foreground/30";
 
 // datetime-local <-> ISO (en la zona del navegador del staff).
 function toLocal(iso: string | null): string {
@@ -75,7 +75,7 @@ export function NudgesPanel({ canEdit }: { canEdit: boolean }) {
   const setStatus = useSetNudgeStatus();
   const { toast } = useToast();
 
-  if (isLoading) return <SpinnerBlock />;
+  if (isLoading) return <ListSkeleton />;
 
   return (
     <div className="space-y-4">
@@ -94,9 +94,15 @@ export function NudgesPanel({ canEdit }: { canEdit: boolean }) {
       </div>
 
       {!nudges?.length ? (
-        <EmptyState title="Sin sugerencias" />
+        <div className="rounded-lg border border-border bg-card">
+          <EmptyState
+            icon={Lightbulb}
+            title="Acá van a aparecer las sugerencias por evento"
+            description="Creá una para sugerir un paso cuando el negocio hace algo puntual."
+          />
+        </div>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border bg-card">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
           {nudges.map((n) => {
             const m = metrics?.get(n.id);
             const ctr = m && m.shown > 0 ? Math.round((m.clicked / m.shown) * 100) : null;

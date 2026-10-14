@@ -227,11 +227,16 @@ export async function openCheckout(page: Page): Promise<Locator> {
  * de venta si el ticket lo muestra ("#123").
  */
 export async function closeTicket(page: Page): Promise<string | null> {
-  const ticket = dialog(page, "Ticket");
+  // ADR-111: la ventana se titula "Venta <número>" ("Ticket" mientras no hay resumen).
+  const ticket = dialog(page, /^(Ticket|Venta\b)/);
   await expect(ticket).toBeVisible({ timeout: 30_000 });
   const text = (await ticket.innerText().catch(() => "")) ?? "";
-  const n = text.match(/#\s?(\d+)/)?.[1] ?? null;
-  await ticket.getByRole("button", { name: "Cerrar" }).first().click();
+  const n = text.match(/#\s?(\d+)/)?.[1] ?? text.match(/Venta(?: cobrada)?\s+(\d+)/i)?.[1] ?? null;
+  // "Nueva venta" es la acción principal y cierra la ventana; si no está, Escape.
+  const next = ticket.getByRole("button", { name: /Nueva venta/ }).first();
+  if (await appears(next, 2_000)) await next.click();
+  else await page.keyboard.press("Escape");
+  await expect(ticket).toBeHidden();
   return n;
 }
 

@@ -6,8 +6,11 @@
  * El Excel es ENORME (cientos de miles de filas) y NO entra en memoria: el
  * `wb.xlsx.readFile()` normal hace OOM. Por eso usamos el lector STREAMING de
  * exceljs (ExcelJS.stream.xlsx.WorkbookReader), recorremos cada hoja de tienda
- * fila por fila y hacemos UPSERT batcheado (1000 filas) en `catalog_products`
- * con on conflict (store_key, ean).
+ * fila por fila y mandamos lotes de 1000 filas a la RPC
+ * `catalog_sync_upsert_products(null, tienda, false, filas)` (ADR-109: cada
+ * fila completa el producto maestro `catalog_items` sin pisar la ficha
+ * fusionada y actualiza la publicación de la tienda en `catalog_offers`;
+ * `catalog_products` quedó congelada).
  *
  * Cada HOJA del Excel es una tienda de origen (CARREFOUR, COTO, DIA, EASY,
  * JUMBO). La hoja "Resumen" se ignora. Las columnas esperadas (header en la
@@ -17,7 +20,7 @@
  *   FIRST_SEEN, LAST_SEEN, MISSING_SINCE
  *
  * Al terminar cada tienda actualiza catalog_stores.product_count /
- * last_import_at, y al final llama notify_catalog_update(catalog_id) para cada
+ * last_import_at (`catalog_sync_finish_store(null, tienda, false)`), y al final llama notify_catalog_update(catalog_id) para cada
  * catálogo afectado (avisa a los tenants "+N productos nuevos").
  *
  * USO:
@@ -165,9 +168,12 @@ async function main() {
       if (batch.length === 0) return;
       const rows = batch;
       batch = [];
-      const { error } = await supabase
-        .from("catalog_products")
-        .upsert(rows, { onConflict: "store_key,ean", ignoreDuplicates: false });
+      const { error } = await supabase.rpc("catalog_sync_upsert_products", {
+        p_run: null,
+        p_store: storeKey,
+        p_full: false,
+        p_rows: rows,
+      });
       if (error) {
         die(
           `upsert falló en ${storeKey} (lote de ${rows.length}, ~fila ${rowNum}): ${error.message}`,
@@ -196,7 +202,6 @@ async function main() {
       if (!ean || !titulo) continue;
 
       batch.push({
-        store_key: storeKey,
         ean,
         titulo,
         precio: toNumOrNull(get("PRECIO")),
@@ -207,7 +212,6 @@ async function main() {
         disponible: siNo(get("DISPONIBLE")),
         estado: toTextOrNull(get("ESTADO")),
         id_origen: toTextOrNull(get("ID_ORIGEN")),
-        updated_at: new Date().toISOString(),
       });
 
       if (batch.length >= BATCH_SIZE) await flush();
@@ -215,19 +219,14 @@ async function main() {
     await flush();
     process.stdout.write("\n");
 
-    // product_count real (post-upsert) por si el archivo tenía duplicados de EAN.
-    const { count } = await supabase
-      .from("catalog_products")
-      .select("id", { count: "exact", head: true })
-      .eq("store_key", storeKey);
-
-    await supabase
-      .from("catalog_stores")
-      .update({
-        product_count: count ?? imported,
-        last_import_at: new Date().toISOString(),
-      })
-      .eq("key", storeKey);
+    // product_count real (publicaciones de la tienda) y last_import_at.
+    const { data: fin, error: finErr } = await supabase.rpc("catalog_sync_finish_store", {
+      p_run: null,
+      p_store: storeKey,
+      p_full: false,
+    });
+    if (finErr) die(`cierre de ${storeKey} falló: ${finErr.message}`);
+    const count = fin?.product_count;
 
     console.log(
       `[import_catalog] ${storeKey}: ${imported} filas procesadas, ${count ?? "?"} productos en total.`,

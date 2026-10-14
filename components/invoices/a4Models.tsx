@@ -118,8 +118,9 @@ function FiscalFooter({ doc, view, style: s, variant, narrow = false }: ModelPro
           minWidth: narrow ? 200 : 250,
           padding: variant === "plain" ? "4px 0" : "12px 16px",
           background: variant === "card" ? "#f6f7f9" : variant === "band" ? s.accentSoft : undefined,
-          borderLeft: variant === "plain" ? undefined : `3px solid ${s.accent}`,
-          borderRadius: 2,
+          // Borde completo fino del color de resalte (sin barra lateral).
+          border: variant === "plain" ? undefined : `1px solid ${variant === "card" ? HAIR : s.accent}`,
+          borderRadius: 4,
         }}
       >
         {view.authRows.map((r, i) => (

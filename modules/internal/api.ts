@@ -346,10 +346,18 @@ export const internalApi = {
       created_at: string;
       trial_ends_at: string | null;
       deleted_at: string | null;
-      subscriptions: {
-        status: string;
-        plans: { key: string; name: string; base_plan_key: string | null } | null;
-      }[];
+      // subscriptions es 1:1 con tenants (tenant_id único): PostgREST la
+      // devuelve como objeto, no como array. Se aceptan las dos formas.
+      subscriptions:
+        | {
+            status: string;
+            plans: { key: string; name: string; base_plan_key: string | null } | null;
+          }
+        | {
+            status: string;
+            plans: { key: string; name: string; base_plan_key: string | null } | null;
+          }[]
+        | null;
       tenant_users: {
         role: string;
         users: { full_name: string | null; email: string } | null;
@@ -360,7 +368,9 @@ export const internalApi = {
         | null;
     };
     return ((data ?? []) as unknown as Row[]).map((t) => {
-      const sub = t.subscriptions?.[0];
+      const sub = Array.isArray(t.subscriptions)
+        ? t.subscriptions[0]
+        : t.subscriptions;
       const owner =
         t.tenant_users?.find((x) => x.role === "owner") ?? t.tenant_users?.[0];
       const brand = Array.isArray(t.tenant_branding)

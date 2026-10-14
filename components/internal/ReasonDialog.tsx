@@ -85,10 +85,10 @@ export function ReasonDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Ej.: pedido del dueño por WhatsApp, deuda de 2 meses…"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+            className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Mínimo {MIN_REASON_LENGTH} caracteres. {r.length}/{MAX_REASON_LENGTH}
+            Mínimo {MIN_REASON_LENGTH} caracteres. <span className="tabular-nums">{r.length}/{MAX_REASON_LENGTH}</span>
           </p>
         </div>
         {typeToConfirm && (

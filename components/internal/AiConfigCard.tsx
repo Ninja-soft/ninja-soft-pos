@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Check, Play, ExternalLink, ImagePlus, Link2 } from "lucide-react";
+import { Sparkles, Check, Play, ExternalLink, ImagePlus, Info, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
+import { SectionHeader } from "@/components/ui/PageHeader";
+import { Callout } from "@/components/ui/Callout";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
@@ -274,22 +275,20 @@ export function AiConfigCard() {
 
   return (
     <section>
-      <Heading as="h2" className="flex items-center gap-2 text-base">
-        <Sparkles size={18} /> Asistente IA
-      </Heading>
-      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        Configurás <strong>un proveedor a la vez</strong> (Gemini o Claude) con su
-        propia API key. La key se guarda cifrada y nunca se devuelve. Si cambiás de
-        proveedor, pegá la API key de ese proveedor. El{" "}
-        <strong>email de la beta</strong> es un atajo para darle acceso a{" "}
-        <strong>un único tester</strong> por email. Para{" "}
-        <strong>regalar el Asistente IA a un negocio concreto</strong>, entrá al
-        detalle de ese negocio (Negocios → el negocio → “Regalar Asistente IA”).
-      </p>
+      <SectionHeader
+        title="Asistente IA"
+        icon={Sparkles}
+        description="Un proveedor a la vez (Gemini o Claude), cada uno con su API key. La key se guarda cifrada y nunca se vuelve a mostrar."
+      />
+      <Callout tone="info" icon={Info} className="mt-3 max-w-3xl">
+        Para regalar el asistente a un negocio, entrá a su ficha en Negocios y usá
+        &ldquo;Regalar Asistente IA&rdquo;. El email de la beta da acceso a un solo
+        tester.
+      </Callout>
 
-      <Card className="mt-3">
-        <CardContent className="grid max-w-2xl gap-4 p-5">
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background/40 p-3">
+      <Card className="mt-3 max-w-3xl">
+        <CardContent className="grid gap-4 p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/40 p-3">
             <div>
               <span className="block text-sm font-medium text-foreground">
                 Asistente IA activo

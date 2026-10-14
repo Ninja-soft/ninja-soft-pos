@@ -1,9 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import type { Route } from "next";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Check, ExternalLink, Sparkles, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CreditCard,
+  ExternalLink,
+  LayoutGrid,
+  ScrollText,
+  SlidersHorizontal,
+  Sparkles,
+  StickyNote,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { PlanCard } from "@/components/internal/PlanCard";
 import { ImpersonationCard } from "@/components/internal/ImpersonationCard";
@@ -14,7 +28,14 @@ import { TenantLifecycleCard } from "@/components/internal/TenantLifecycleCard";
 import { ActivationCard } from "@/components/internal/ActivationCard";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Display, Heading } from "@/components/ui/Typography";
+import { Display } from "@/components/ui/Typography";
+import { SectionHeader } from "@/components/ui/PageHeader";
+import { Segmented } from "@/components/ui/Segmented";
+import { Select } from "@/components/ui/Select";
+import { Switch } from "@/components/ui/Switch";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Skeleton, SkeletonLines } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -46,8 +67,24 @@ const STATUSES = [
   { key: "suspended", name: "Suspendido" },
   { key: "cancelled", name: "Cancelado" },
 ];
-const selectCls =
-  "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
+const STATUS_TONE: Record<string, BadgeTone> = {
+  trial: "info",
+  active: "success",
+  past_due: "warning",
+  suspended: "danger",
+  cancelled: "neutral",
+  deleted: "neutral",
+};
+
+const TABS = [
+  { value: "resumen", label: "Resumen", icon: <LayoutGrid size={15} /> },
+  { value: "plan", label: "Plan y cobro", icon: <CreditCard size={15} /> },
+  { value: "miembros", label: "Miembros y acceso", icon: <Users size={15} /> },
+  { value: "config", label: "Configuración", icon: <SlidersHorizontal size={15} /> },
+  { value: "auditoria", label: "Auditoría", icon: <ScrollText size={15} /> },
+] as const;
+type Tab = (typeof TABS)[number]["value"];
+const isTab = (v: string | null): v is Tab => TABS.some((t) => t.value === v);
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "Sin datos";
@@ -64,12 +101,25 @@ export default function InternalTenantDetail({
   params: { id: string };
 }) {
   const { toast } = useToast();
-  const { data: tenants } = useInternalTenants();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: Tab = isTab(tabParam) ? tabParam : "resumen";
+  function setTab(next: Tab) {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (next === "resumen") sp.delete("tab");
+    else sp.set("tab", next);
+    const qs = sp.toString();
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false });
+  }
+
+  const { data: tenants, isLoading: tenantsLoading } = useInternalTenants();
   const tenant = tenants?.find((t) => t.id === params.id);
-  const { data: flags } = useTenantFlags(params.id);
+  const { data: flags, isLoading: flagsLoading } = useTenantFlags(params.id);
   const { data: healthMap } = useTenantHealth();
   const health = healthMap?.get(params.id);
-  const { data: notes } = useTenantNotes(params.id);
+  const { data: notes, isLoading: notesLoading } = useTenantNotes(params.id);
   const noteMut = useTenantNoteMutations(params.id);
   const [noteBody, setNoteBody] = useState("");
   const { setStatus, setFlag, setIndustry } = useInternalMutations(
@@ -126,425 +176,477 @@ export default function InternalTenantDetail({
     );
   }
 
+  const stKey = tenant?.deletedAt ? "deleted" : tenant?.subStatus ?? tenant?.status;
+  const stLabel =
+    stKey === "deleted"
+      ? "Dado de baja"
+      : STATUSES.find((s) => s.key === stKey)?.name ?? stKey;
+  const currentStatus = tenant?.subStatus ?? tenant?.status ?? "trial";
+  const statusOptions = [
+    ...(lcState !== "operating"
+      ? [
+          {
+            value: currentStatus,
+            label:
+              STATUSES.find((s) => s.key === currentStatus)?.name ?? "Fuera de operación",
+          },
+        ]
+      : []),
+    ...EDITABLE_STATUSES.map((s) => ({ value: s.key as string, label: s.name })),
+  ];
+
+  const healthKpis = [
+    { label: "Último login", value: health ? formatRelative(health.last_login_at) : null },
+    { label: "Última venta", value: health ? formatRelative(health.last_sale_at) : null },
+    {
+      label: "Ventas (7 días)",
+      value: health ? String(health.sales_7d_count) : null,
+      sub: health ? formatCurrency(health.sales_7d_total) : undefined,
+    },
+    { label: "Usuarios activos", value: health ? String(health.active_users) : null },
+  ];
+
   return (
     <>
       <Link
         href="/internal/tenants"
-        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
-        <ArrowLeft size={15} /> Volver a negocios
+        <ArrowLeft size={15} /> Negocios
       </Link>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <Display className="text-3xl md:text-4xl">
-          {tenant?.name ?? "…"}
-        </Display>
-        {(() => {
-          const st = tenant?.deletedAt
-            ? "deleted"
-            : tenant?.subStatus ?? tenant?.status;
-          return st ? (
-            <span className="rounded-md bg-ninja-flame/12 px-2.5 py-1 text-xs font-semibold text-ninja-flameSoft">
-              {st === "deleted"
-                ? "Dado de baja"
-                : STATUSES.find((s) => s.key === st)?.name ?? st}
-            </span>
-          ) : null;
-        })()}
-      </div>
-      <p className="mt-1.5 text-sm text-muted-foreground">{tenant?.slug}</p>
-
-      {/* ── Ficha 360: info básica ───────────────────────────────────────── */}
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
-        {tenant?.ownerEmail && (
-          <span>
-            <span className="font-medium text-foreground">
-              {tenant.ownerName ?? tenant.ownerEmail}
-            </span>
-            {tenant.ownerName && (
-              <span className="ml-1 opacity-60">{tenant.ownerEmail}</span>
-            )}
-          </span>
-        )}
-        <span>Alta: {fmtDate(tenant?.created_at)}</span>
-        {tenant?.trial_ends_at && (
-          <span>
-            Trial hasta:{" "}
-            <span
-              className={
-                new Date(tenant.trial_ends_at) < new Date()
-                  ? "font-medium text-destructive"
-                  : "font-medium text-foreground"
-              }
-            >
-              {fmtDate(tenant.trial_ends_at)}
-            </span>
-          </span>
-        )}
-      </div>
-
-      {tenant && (
-        <div className="mt-6">
-          <TenantLifecycleCard
-            tenant={{
-              id: tenant.id,
-              slug: tenant.slug,
-              status: tenant.status,
-              deletedAt: tenant.deletedAt,
-            }}
-            level={myLevel}
-          />
-        </div>
-      )}
-
-      <div className="mt-4">
-        <PlanCard tenantId={params.id} />
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="p-5">
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Estado de suscripción
-            </label>
-            <select
-              className={selectCls}
-              value={tenant?.subStatus ?? tenant?.status ?? "trial"}
-              disabled={lcState !== "operating"}
-              onChange={(e) =>
-                wrap(setStatus.mutateAsync(e.target.value), "Estado actualizado")
-              }
-            >
-              {lcState !== "operating" && (
-                <option
-                  value={tenant?.subStatus ?? tenant?.status ?? ""}
-                  className="bg-popover text-popover-foreground"
-                >
-                  {STATUSES.find((s) => s.key === (tenant?.subStatus ?? tenant?.status))?.name ??
-                    "Fuera de operación"}
-                </option>
-              )}
-              {EDITABLE_STATUSES.map((s) => (
-                <option key={s.key} value={s.key} className="bg-popover text-popover-foreground">
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {lcState === "operating"
-                ? "Suspender, cancelar o reactivar se hace desde Ciclo de vida (pide motivo)."
-                : "Reactivá el negocio desde Ciclo de vida para cambiar el estado."}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Rubro
-            </label>
-            <select
-              className={selectCls}
-              value={tenant?.industry ?? "otro"}
-              onChange={(e) =>
-                wrap(setIndustry.mutateAsync(e.target.value), "Rubro actualizado")
-              }
-            >
-              {VERTICALS.map((v) => (
-                <option key={v} value={v} className="bg-popover text-popover-foreground">
-                  {VERTICAL_LABELS[v]}
-                </option>
-              ))}
-            </select>
-          </CardContent>
-        </Card>
-        <TenantProfileCard tenantId={params.id} />
-      </div>
-
-      <Heading className="mt-8" as="h2">
-        Ficha 360
-      </Heading>
-      <Tenant360Card
-        tenantId={params.id}
-        status={tenant?.deletedAt ? "cancelled" : tenant?.subStatus ?? tenant?.status ?? null}
-        createdAt={tenant?.created_at ?? null}
-        trialEndsAt={tenant?.trial_ends_at ?? null}
-      />
-
-      <Heading className="mt-8" as="h2">
-        Miembros
-      </Heading>
-      <TenantMembersCard tenantId={params.id} />
-
-      <Heading className="mt-8" as="h2">
-        Salud operativa
-      </Heading>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          {
-            label: "Último login",
-            value: formatRelative(health?.last_login_at),
-          },
-          {
-            label: "Última venta",
-            value: formatRelative(health?.last_sale_at),
-          },
-          {
-            label: "Ventas (7 días)",
-            value: health ? String(health.sales_7d_count) : "…",
-            sub: health ? formatCurrency(health.sales_7d_total) : undefined,
-          },
-          {
-            label: "Usuarios activos",
-            value: health ? String(health.active_users) : "…",
-          },
-        ].map((kpi) => (
-          <Card key={kpi.label}>
-            <CardContent className="p-5">
-              <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                {kpi.label}
-              </div>
-              <div className="mt-1.5 text-xl font-semibold text-foreground">
-                {kpi.value}
-              </div>
-              {kpi.sub && (
-                <div className="text-sm text-muted-foreground">{kpi.sub}</div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Heading className="mt-8" as="h2">
-        Activación
-      </Heading>
-      <ActivationCard tenantId={params.id} />
-
-      <Heading className="mt-8" as="h2">
-        Cobro de suscripción
-      </Heading>
-      <Card className="mt-3">
-        <CardContent className="flex flex-wrap items-center gap-4 p-5">
-          <Button disabled={checkout.isPending} onClick={() => checkout.mutate()}>
-            {checkout.isPending ? "Generando…" : "Generar link de cobro (Mercado Pago)"}
-          </Button>
-          {checkoutUrl && (
-            <a
-              href={checkoutUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-ninja-flameSoft hover:underline"
-            >
-              <ExternalLink size={15} /> Abrir link de pago
-            </a>
-          )}
-          <p className="w-full text-xs text-muted-foreground">
-            Crea una suscripción mensual en Mercado Pago con la cuenta de NinjaSoft
-            por el plan del negocio. El estado se actualiza solo cuando el cliente
-            paga.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* ── Regalar el Asistente IA a ESTE negocio ───────────────────────── */}
-      <Heading className="mt-8" as="h2">
-        Asistente IA
-      </Heading>
-      <Card className="mt-3">
-        <CardContent className="flex flex-wrap items-center gap-4 p-5">
-          {hasAiAddon ? (
-            <>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-400/10 px-2.5 py-1 text-sm font-semibold text-success">
-                <Check size={15} /> Asistente IA activo (regalado)
-              </span>
-              <Button
-                variant="secondary"
-                loading={giftAi.revoke.isPending}
-                disabled={giftAi.grant.isPending}
-                onClick={() =>
-                  giftAi.revoke.mutate(undefined, {
-                    onSuccess: () =>
-                      toast({ title: "Asistente IA quitado", variant: "success" }),
-                    onError: (e) =>
-                      toast({
-                        title: "No se pudo quitar",
-                        description: e instanceof Error ? e.message : undefined,
-                        variant: "error",
-                      }),
-                  })
-                }
-              >
-                Quitar Asistente IA
-              </Button>
-            </>
+      {/* ── Encabezado ───────────────────────────────────────────────────── */}
+      <header className="mt-3 flex items-start gap-3">
+        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted text-base font-bold text-muted-foreground">
+          {tenant?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={tenant.logoUrl} alt="" className="h-full w-full object-contain" />
+          ) : tenant ? (
+            (tenant.name[0] ?? "?").toUpperCase()
           ) : (
-            <Button
-              loading={giftAi.grant.isPending}
-              disabled={giftAi.revoke.isPending}
-              onClick={() =>
-                giftAi.grant.mutate(undefined, {
-                  onSuccess: () =>
-                    toast({ title: "Asistente IA regalado", variant: "success" }),
-                  onError: (e) =>
-                    toast({
-                      title: "No se pudo regalar",
-                      description: e instanceof Error ? e.message : undefined,
-                      variant: "error",
-                    }),
-                })
-              }
-            >
-              <Sparkles size={15} /> Regalar Asistente IA
-            </Button>
+            <Skeleton className="h-full w-full" />
           )}
-          <p className="w-full text-xs text-muted-foreground">
-            Activa el complemento del Asistente IA para este negocio sin cobro
-            (bonificado). El dueño y su equipo pueden usarlo al instante. Para un
-            único tester/beta global, usá el “Email de la beta” en la configuración
-            interna de IA.
-          </p>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="min-w-0 flex-1">
+          {tenant ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Display className="break-words text-2xl md:text-3xl">{tenant.name}</Display>
+              {stKey && <Badge tone={STATUS_TONE[stKey] ?? "neutral"}>{stLabel}</Badge>}
+              {tenant.planName && <Badge tone="brand">{tenant.planName}</Badge>}
+            </div>
+          ) : tenantsLoading ? (
+            <Skeleton className="h-8 w-56" />
+          ) : (
+            <Display className="text-2xl md:text-3xl">Negocio no encontrado</Display>
+          )}
+          <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+            {tenant?.slug && (
+              <div>
+                <dt className="sr-only">Slug</dt>
+                <dd className="font-mono text-xs leading-5">{tenant.slug}</dd>
+              </div>
+            )}
+            {tenant?.ownerEmail && (
+              <div className="min-w-0">
+                <dt className="sr-only">Dueño</dt>
+                <dd className="truncate">
+                  <span className="font-medium text-foreground">
+                    {tenant.ownerName ?? tenant.ownerEmail}
+                  </span>
+                  {tenant.ownerName && <span className="ml-1">{tenant.ownerEmail}</span>}
+                </dd>
+              </div>
+            )}
+            {tenant && (
+              <div>
+                <dt className="inline">Alta </dt>
+                <dd className="inline text-foreground">{fmtDate(tenant.created_at)}</dd>
+              </div>
+            )}
+            {tenant?.trial_ends_at && (
+              <div>
+                <dt className="inline">Trial hasta </dt>
+                <dd
+                  className={
+                    new Date(tenant.trial_ends_at) < new Date()
+                      ? "inline font-medium text-danger"
+                      : "inline font-medium text-foreground"
+                  }
+                >
+                  {fmtDate(tenant.trial_ends_at)}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      </header>
 
-      <div className="mt-8">
-        <BillingCard
-          tenantId={params.id}
-          trialEndsAt={tenant?.trial_ends_at ?? null}
-          subStatus={tenant?.subStatus ?? null}
-          planKey={tenant?.planKey ?? null}
+      {/* ── Pestañas ─────────────────────────────────────────────────────── */}
+      <div className="slim-scrollbar -mx-4 mt-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <Segmented<Tab>
+          aria-label="Secciones del negocio"
+          value={tab}
+          onChange={setTab}
+          options={TABS.map((t) => ({ value: t.value, label: t.label, icon: t.icon }))}
+          className="flex-nowrap"
         />
       </div>
 
-      {/* ── Acceso como el negocio (admin / super_admin, ADR-084) ────────── */}
-      {canImpersonate && (
-        <>
-          <Heading className="mt-8" as="h2">
-            Acceder como este negocio
-          </Heading>
-          <ImpersonationCard tenantId={params.id} />
-        </>
-      )}
-
-      <Heading className="mt-8" as="h2">
-        Notas internas
-      </Heading>
-      <Card className="mt-3">
-        <CardContent className="p-5">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const body = noteBody.trim();
-              if (!body) return;
-              wrap(
-                noteMut.add.mutateAsync(body).then(() => setNoteBody("")),
-                "Nota agregada",
-              );
-            }}
-            className="flex flex-col gap-2 sm:flex-row"
-          >
-            <textarea
-              value={noteBody}
-              onChange={(e) => setNoteBody(e.target.value)}
-              placeholder="Nota de soporte (solo visible para staff NinjaSoft)…"
-              rows={2}
-              className="min-h-[44px] flex-1 rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
-            />
-            <Button
-              type="submit"
-              loading={noteMut.add.isPending}
-              disabled={!noteBody.trim()}
-              className="sm:self-end"
-            >
-              Agregar
-            </Button>
-          </form>
-
-          <ul className="mt-4 divide-y divide-border">
-            {notes?.length === 0 && (
-              <li className="py-3 text-sm text-muted-foreground">
-                Sin notas todavía.
-              </li>
+      <div className="mt-6 space-y-8">
+        {/* ── Resumen ───────────────────────────────────────────────────── */}
+        {tab === "resumen" && (
+          <>
+            {tenant && (
+              <TenantLifecycleCard
+                tenant={{
+                  id: tenant.id,
+                  slug: tenant.slug,
+                  status: tenant.status,
+                  deletedAt: tenant.deletedAt,
+                }}
+                level={myLevel}
+              />
             )}
-            {notes?.map((n) => (
-              <li key={n.id} className="flex items-start gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="whitespace-pre-wrap text-sm text-foreground">
-                    {n.body}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {n.authorName ?? n.authorEmail ?? "Staff"} ·{" "}
-                    {formatRelative(n.created_at)}
-                  </p>
-                </div>
-                <button
-                  onClick={() =>
-                    wrap(noteMut.remove.mutateAsync(n.id), "Nota eliminada")
-                  }
-                  title="Eliminar nota"
-                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
 
-      <Heading className="mt-8" as="h2">
-        Feature flags
-      </Heading>
-      <Card className="mt-3">
-        <CardContent className="p-0">
-          <ul className="divide-y divide-border">
-            {flags?.map((f) => {
-              const effective = f.enabled ?? f.defaultEnabled;
-              return (
-                <li
-                  key={f.key}
-                  className="flex items-center justify-between gap-4 px-4 py-3"
-                >
-                  <div>
-                    <div className="font-mono text-sm">{f.key}</div>
-                    {f.description && (
-                      <div className="text-xs text-muted-foreground">
-                        {f.description}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() =>
-                      wrap(
-                        setFlag.mutateAsync({ flagKey: f.key, enabled: !effective }),
-                        "Flag actualizada",
-                      )
-                    }
-                    className={
-                      effective
-                        ? "h-6 w-11 rounded-full bg-ninja-flame px-0.5 transition"
-                        : "h-6 w-11 rounded-full bg-muted px-0.5 transition"
-                    }
-                    aria-label={`Toggle ${f.key}`}
-                  >
-                    <span
-                      className={
-                        effective
-                          ? "block h-5 w-5 translate-x-5 rounded-full bg-white transition"
-                          : "block h-5 w-5 translate-x-0 rounded-full bg-white transition"
-                      }
+            <section>
+              <SectionHeader
+                title="Salud operativa"
+                description="Último uso real del sistema por parte del negocio."
+              />
+              <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {healthKpis.map((kpi) => (
+                  <Card key={kpi.label}>
+                    <CardContent className="p-4">
+                      <div className="text-xs font-medium text-muted-foreground">{kpi.label}</div>
+                      {kpi.value === null ? (
+                        <Skeleton className="mt-2 h-6 w-20" />
+                      ) : (
+                        <div className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">
+                          {kpi.value}
+                        </div>
+                      )}
+                      {kpi.sub && (
+                        <div className="truncate text-xs tabular-nums text-muted-foreground">
+                          {kpi.sub}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <SectionHeader
+                title="Ficha 360"
+                description="Uso, módulos efectivos y últimos errores del negocio."
+              />
+              <Tenant360Card
+                tenantId={params.id}
+                status={tenant?.deletedAt ? "cancelled" : tenant?.subStatus ?? tenant?.status ?? null}
+                createdAt={tenant?.created_at ?? null}
+                trialEndsAt={tenant?.trial_ends_at ?? null}
+              />
+            </section>
+
+            <section>
+              <SectionHeader
+                title="Activación"
+                description="Hitos de puesta en marcha desde el alta."
+              />
+              <ActivationCard tenantId={params.id} />
+            </section>
+
+            <section>
+              <SectionHeader title="Rubro y perfil" />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Card>
+                  <CardContent className="p-5">
+                    <Select
+                      label="Rubro"
+                      value={tenant?.industry ?? "otro"}
+                      options={VERTICALS.map((v) => ({ value: v as string, label: VERTICAL_LABELS[v] }))}
+                      onChange={(v) => wrap(setIndustry.mutateAsync(v), "Rubro actualizado")}
                     />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </CardContent>
-      </Card>
+                  </CardContent>
+                </Card>
+                <TenantProfileCard tenantId={params.id} />
+              </div>
+            </section>
+          </>
+        )}
 
-      {/* ── Auditoría del negocio (timeline filtrable, ADR-073) ───────────── */}
-      <Heading className="mt-8" as="h2">
-        Auditoría
-      </Heading>
-      <TenantAuditTimeline tenantId={params.id} />
+        {/* ── Plan y cobro ──────────────────────────────────────────────── */}
+        {tab === "plan" && (
+          <>
+            <PlanCard tenantId={params.id} />
+
+            <Card>
+              <CardContent className="grid gap-2 p-5 sm:grid-cols-[minmax(0,320px)_1fr] sm:items-start sm:gap-5">
+                <Select
+                  label="Estado de suscripción"
+                  value={currentStatus}
+                  options={statusOptions}
+                  disabled={lcState !== "operating"}
+                  onChange={(v) => wrap(setStatus.mutateAsync(v), "Estado actualizado")}
+                />
+                <p className="text-xs leading-relaxed text-muted-foreground sm:pt-8">
+                  {lcState === "operating"
+                    ? "Suspender, cancelar o reactivar se hace desde Ciclo de vida, en Resumen (pide motivo)."
+                    : "Reactivá el negocio desde Ciclo de vida, en Resumen, para cambiar el estado."}
+                </p>
+              </CardContent>
+            </Card>
+
+            <BillingCard
+              tenantId={params.id}
+              trialEndsAt={tenant?.trial_ends_at ?? null}
+              subStatus={tenant?.subStatus ?? null}
+              planKey={tenant?.planKey ?? null}
+            />
+
+            <section>
+              <SectionHeader
+                title="Cobro de suscripción"
+                description="Crea una suscripción mensual en Mercado Pago con la cuenta de NinjaSoft por el plan del negocio. El estado se actualiza solo cuando el cliente paga."
+              />
+              <Card className="mt-3">
+                <CardContent className="flex flex-wrap items-center gap-3 p-5">
+                  <Button loading={checkout.isPending} onClick={() => checkout.mutate()}>
+                    Generar link de cobro
+                  </Button>
+                  {checkoutUrl && (
+                    <a
+                      href={checkoutUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-ninja-flameSoft hover:underline"
+                    >
+                      <ExternalLink size={15} /> Abrir link de pago
+                    </a>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+
+            <section>
+              <SectionHeader
+                title="Asistente IA"
+                description="Activa el complemento sin cobro (bonificado) para este negocio. Para un único tester global, usá el email de la beta en la configuración interna de IA."
+              />
+              <Card className="mt-3">
+                <CardContent className="flex flex-wrap items-center gap-3 p-5">
+                  {hasAiAddon ? (
+                    <>
+                      <Badge tone="success">
+                        <Check size={13} /> Activo (regalado)
+                      </Badge>
+                      <Button
+                        variant="secondary"
+                        loading={giftAi.revoke.isPending}
+                        disabled={giftAi.grant.isPending}
+                        onClick={() =>
+                          giftAi.revoke.mutate(undefined, {
+                            onSuccess: () =>
+                              toast({ title: "Asistente IA quitado", variant: "success" }),
+                            onError: (e) =>
+                              toast({
+                                title: "No se pudo quitar",
+                                description: e instanceof Error ? e.message : undefined,
+                                variant: "error",
+                              }),
+                          })
+                        }
+                      >
+                        Quitar Asistente IA
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      loading={giftAi.grant.isPending}
+                      disabled={giftAi.revoke.isPending}
+                      onClick={() =>
+                        giftAi.grant.mutate(undefined, {
+                          onSuccess: () =>
+                            toast({ title: "Asistente IA regalado", variant: "success" }),
+                          onError: (e) =>
+                            toast({
+                              title: "No se pudo regalar",
+                              description: e instanceof Error ? e.message : undefined,
+                              variant: "error",
+                            }),
+                        })
+                      }
+                    >
+                      <Sparkles size={15} /> Regalar Asistente IA
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+          </>
+        )}
+
+        {/* ── Miembros y acceso ─────────────────────────────────────────── */}
+        {tab === "miembros" && (
+          <>
+            <section>
+              <SectionHeader title="Miembros" />
+              <TenantMembersCard tenantId={params.id} />
+            </section>
+
+            {canImpersonate && (
+              <section>
+                <SectionHeader title="Acceder como este negocio" />
+                <ImpersonationCard tenantId={params.id} />
+              </section>
+            )}
+
+            <section>
+              <SectionHeader
+                title="Notas internas"
+                description="Sólo las ve el staff de NinjaSoft."
+              />
+              <Card className="mt-3">
+                <CardContent className="p-5">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const body = noteBody.trim();
+                      if (!body) return;
+                      wrap(
+                        noteMut.add.mutateAsync(body).then(() => setNoteBody("")),
+                        "Nota agregada",
+                      );
+                    }}
+                    className="flex flex-col gap-2 sm:flex-row"
+                  >
+                    <label htmlFor="tenant-note" className="sr-only">
+                      Nueva nota
+                    </label>
+                    <textarea
+                      id="tenant-note"
+                      value={noteBody}
+                      onChange={(e) => setNoteBody(e.target.value)}
+                      placeholder="Nota de soporte"
+                      rows={2}
+                      className="min-h-[44px] flex-1 rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft"
+                    />
+                    <Button
+                      type="submit"
+                      loading={noteMut.add.isPending}
+                      disabled={!noteBody.trim()}
+                      className="sm:self-end"
+                    >
+                      Agregar
+                    </Button>
+                  </form>
+
+                  {notesLoading ? (
+                    <SkeletonLines lines={3} className="mt-5" />
+                  ) : notes?.length === 0 ? (
+                    <EmptyState
+                      compact
+                      icon={StickyNote}
+                      title="Sin notas todavía"
+                      description="Dejá contexto para el resto del equipo: acuerdos, reclamos o pendientes."
+                      className="mt-2"
+                    />
+                  ) : (
+                    <ul className="mt-4 divide-y divide-border">
+                      {notes?.map((n) => (
+                        <li key={n.id} className="flex items-start gap-3 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                              {n.body}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {n.authorName ?? n.authorEmail ?? "Staff"} ·{" "}
+                              {formatRelative(n.created_at)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              wrap(noteMut.remove.mutateAsync(n.id), "Nota eliminada")
+                            }
+                            aria-label="Eliminar nota"
+                            title="Eliminar nota"
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-danger/15 hover:text-danger"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+          </>
+        )}
+
+        {/* ── Configuración: feature flags ──────────────────────────────── */}
+        {tab === "config" && (
+          <section>
+            <SectionHeader
+              title="Feature flags"
+              description="Overrides por negocio. Si no hay override, vale el default de la plataforma."
+            />
+            <Card className="mt-3 overflow-hidden">
+              {flagsLoading ? (
+                <div className="p-5">
+                  <SkeletonLines lines={6} />
+                </div>
+              ) : !flags || flags.length === 0 ? (
+                <EmptyState compact icon={SlidersHorizontal} title="Sin feature flags" />
+              ) : (
+                <ul className="divide-y divide-border">
+                  {flags.map((f) => {
+                    const effective = f.enabled ?? f.defaultEnabled;
+                    return (
+                      <li
+                        key={f.key}
+                        className="flex items-center justify-between gap-4 px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="break-all font-mono text-sm">{f.key}</span>
+                            {f.enabled !== null && f.enabled !== undefined && (
+                              <Badge tone="neutral">Override</Badge>
+                            )}
+                          </div>
+                          {f.description && (
+                            <div className="text-xs text-muted-foreground">{f.description}</div>
+                          )}
+                        </div>
+                        <Switch
+                          checked={effective}
+                          label={`Activar ${f.key}`}
+                          onCheckedChange={(v) =>
+                            wrap(
+                              setFlag.mutateAsync({ flagKey: f.key, enabled: v }),
+                              "Flag actualizada",
+                            )
+                          }
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          </section>
+        )}
+
+        {/* ── Auditoría del negocio (timeline filtrable, ADR-073) ───────── */}
+        {tab === "auditoria" && (
+          <section>
+            <SectionHeader title="Auditoría" description="Todo lo que pasó en este negocio, filtrable." />
+            <TenantAuditTimeline tenantId={params.id} />
+          </section>
+        )}
+      </div>
     </>
   );
 }

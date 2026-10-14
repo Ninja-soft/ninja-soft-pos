@@ -255,8 +255,22 @@ function PosPageInner() {
   const [checkoutTender, setCheckoutTender] = useState<string | null>(null);
   // Garantía pre-seleccionada por la oferta contextual (H28).
   const [offeredWarrantyId, setOfferedWarrantyId] = useState("");
-  const [ticketId, setTicketId] = useState<string | null>(null);
-  const [ticketOpen, setTicketOpen] = useState(false);
+  // Tickets abiertos (ADR-111). Con "Imprimir ticket al cobrar" el de la venta
+  // recién cobrada es silencioso (imprime solo, con CAE si es fiscal) y puede
+  // seguir esperando a ARCA mientras se cobra la siguiente: por eso es una
+  // lista y no un único ticket.
+  const [tickets, setTickets] = useState<{ key: number; saleId: string; silent: boolean; open: boolean }[]>([]);
+  const ticketSeq = useRef(0);
+  const openTicket = useCallback((saleId: string, silent = false) => {
+    ticketSeq.current += 1;
+    const key = ticketSeq.current;
+    setTickets((list) => [...list.filter((t) => t.saleId !== saleId), { key, saleId, silent, open: true }]);
+  }, []);
+  const closeTicket = useCallback((key: number) => {
+    setTickets((list) => list.map((t) => (t.key === key ? { ...t, open: false } : t)));
+    // Se desmonta después de la animación de cierre.
+    setTimeout(() => setTickets((list) => list.filter((t) => t.key !== key)), 400);
+  }, []);
   // Cobros en espera (ADR-048): hoja de la pestaña y cobro en edición.
   const [pendingOpen, setPendingOpen] = useState(false);
   const [pendingInitialId, setPendingInitialId] = useState<string | null>(null);
@@ -954,15 +968,11 @@ function PosPageInner() {
     // Siempre: aunque el plan ya no incluya la función, los cobros que quedaron
     // abiertos se tienen que poder ver, cobrar y decidir al cerrar la caja.
     enabled: true,
-    onPrint: (saleId) => {
-      setTicketId(saleId);
-      setTicketOpen(true);
-    },
+    onPrint: (saleId) => openTicket(saleId),
     // Factura electrónica todavía no disponible: se abre el comprobante (con
     // email y PDF). Cuando exista AFIP, este es el punto de entrada.
     onInvoice: (saleId) => {
-      setTicketId(saleId);
-      setTicketOpen(true);
+      openTicket(saleId);
       toast({ title: "La factura electrónica llega con la integración con ARCA. Por ahora enviá o imprimí el comprobante.", variant: "info" });
     },
     onOpen: (id) => {
@@ -1076,8 +1086,7 @@ function PosPageInner() {
       // ADR-106: si era una venta pausada retomada, queda completada.
       pauseRef.current.onSaleDone(saleId);
       flashPaidScreen(change);
-      setTicketId(saleId);
-      setTicketOpen(true);
+      openTicket(saleId, autoPrint);
     },
     // ADR-077: sin conexión la venta va a la cola local con ticket provisorio.
     offline,
@@ -1782,10 +1791,7 @@ function PosPageInner() {
             storeId={register?.store_id ?? null}
             initialId={pendingInitialId}
             onEditInPos={editPendingCharge}
-            onPrint={(saleId) => {
-              setTicketId(saleId);
-              setTicketOpen(true);
-            }}
+            onPrint={(saleId) => openTicket(saleId)}
             canForce={role === "owner" || role === "manager"}
             compact
           />
@@ -1909,9 +1915,17 @@ function PosPageInner() {
       </MountWhenOpened>
 
       <OfflineTicketModal entry={offlineTicket} onOpenChange={(o) => !o && setOfflineTicket(null)} />
-      <MountWhenOpened open={ticketOpen}>
-        <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} autoPrint={autoPrint} />
-      </MountWhenOpened>
+      {tickets.map((t) => (
+        <TicketModal
+          key={t.key}
+          open={t.open}
+          onOpenChange={(o) => !o && closeTicket(t.key)}
+          saleId={t.saleId}
+          autoPrint={autoPrint}
+          silent={t.silent}
+          onNewSale={() => searchRef.current?.focus()}
+        />
+      ))}
       <MountWhenOpened open={voucherOpen}>
         <VoucherRedeemModal open={voucherOpen} onOpenChange={setVoucherOpen} customer={customer} storeId={register?.store_id ?? null} />
       </MountWhenOpened>

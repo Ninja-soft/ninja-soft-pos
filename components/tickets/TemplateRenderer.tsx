@@ -26,7 +26,14 @@ interface Props {
    * el comprobante sale con el modelo elegido (factura A4 o ticket) en vez de
    * los bloques clásicos; con el modelo de ticket "simple", igual que antes.
    */
-  invoice?: { style: ResolvedInvoiceStyle } | null;
+  invoice?: {
+    style: ResolvedInvoiceStyle;
+    /**
+     * A4 achicado al ancho disponible (vista previa, default). `false` en el
+     * nodo que se imprime o exporta: tamaño real y reglas @page de A4.
+     */
+    fit?: boolean;
+  } | null;
 }
 
 export function TemplateRenderer({
@@ -68,9 +75,13 @@ export function TemplateRenderer({
       if (paper === "a4") {
         return (
           <div className={className}>
-            <InvoiceFit>
+            {invoice.fit === false ? (
               <InvoiceDocument doc={doc} style={style} format="a4" printable />
-            </InvoiceFit>
+            ) : (
+              <InvoiceFit>
+                <InvoiceDocument doc={doc} style={style} format="a4" />
+              </InvoiceFit>
+            )}
           </div>
         );
       }

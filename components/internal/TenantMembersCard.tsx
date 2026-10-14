@@ -2,10 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { SkeletonLines } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Callout } from "@/components/ui/Callout";
+import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { ReasonDialog } from "@/components/internal/ReasonDialog";
 import { createClient } from "@/lib/supabase/client";
@@ -25,9 +30,6 @@ import {
   type MemberRole,
   type MemberRow,
 } from "@/supabase/functions/_shared/tenantMembers";
-
-const selectCls =
-  "h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft";
 
 const STATE_DOT: Record<string, string> = {
   active: "bg-success",
@@ -146,14 +148,16 @@ export function TenantMembersCard({ tenantId }: { tenantId: string }) {
               </Button>
             )}
           </div>
-          {isLoading && <p className="px-5 pb-4 text-sm text-muted-foreground">Cargando miembros…</p>}
+          {isLoading && <SkeletonLines lines={4} className="border-t border-border px-5 py-4" />}
           {error && (
-            <p className="px-5 pb-4 text-sm text-muted-foreground">
-              No se pudieron cargar los miembros ({error instanceof Error ? error.message : "error"}).
-            </p>
+            <div className="px-5 pb-4">
+              <Callout tone="danger" title="No se pudieron cargar los miembros">
+                {error instanceof Error ? error.message : "Probá de nuevo en un rato."}
+              </Callout>
+            </div>
           )}
           {members && members.length === 0 && (
-            <p className="px-5 pb-4 text-sm text-muted-foreground">Este negocio no tiene miembros.</p>
+            <EmptyState compact icon={Users} title="Este negocio no tiene miembros" className="border-t border-border" />
           )}
           <ul className="divide-y divide-border border-t border-border">
             {(members ?? []).map((m) => {
@@ -164,7 +168,11 @@ export function TenantMembersCard({ tenantId }: { tenantId: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium text-foreground">
                       {m.display_name || m.full_name || m.email}
-                      {m.is_staff && <span className="ml-2 text-xs text-ninja-flameSoft">staff NinjaSoft</span>}
+                      {m.is_staff && (
+                        <Badge tone="brand" className="ml-2 align-middle">
+                          Staff NinjaSoft
+                        </Badge>
+                      )}
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
                       {m.email} · {MEMBER_ROLE_LABELS[m.role] ?? m.role} · último ingreso{" "}
@@ -211,21 +219,12 @@ export function TenantMembersCard({ tenantId }: { tenantId: string }) {
         extra={
           pending?.action === "set_role" ? (
             <div>
-              <label htmlFor="member-role" className="mb-2 block text-sm font-medium text-muted-foreground">
-                Rol nuevo
-              </label>
-              <select
-                id="member-role"
-                className={selectCls}
+              <Select<MemberRole>
+                label="Rol nuevo"
                 value={newRole}
-                onChange={(e) => setNewRole(e.target.value as MemberRole)}
-              >
-                {roleOptions.map((r) => (
-                  <option key={r} value={r} className="bg-popover text-popover-foreground">
-                    {MEMBER_ROLE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
+                options={roleOptions.map((r) => ({ value: r, label: MEMBER_ROLE_LABELS[r] ?? r }))}
+                onChange={setNewRole}
+              />
             </div>
           ) : undefined
         }
@@ -255,21 +254,12 @@ export function TenantMembersCard({ tenantId }: { tenantId: string }) {
               maxLength={80}
             />
             <div>
-              <label htmlFor="invite-role" className="mb-2 block text-sm font-medium text-muted-foreground">
-                Rol
-              </label>
-              <select
-                id="invite-role"
-                className={selectCls}
+              <Select<MemberRole>
+                label="Rol"
                 value={invRole}
-                onChange={(e) => setInvRole(e.target.value as MemberRole)}
-              >
-                {inviteRoles.map((r) => (
-                  <option key={r} value={r} className="bg-popover text-popover-foreground">
-                    {MEMBER_ROLE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
+                options={inviteRoles.map((r) => ({ value: r, label: MEMBER_ROLE_LABELS[r] ?? r }))}
+                onChange={setInvRole}
+              />
             </div>
           </div>
         }

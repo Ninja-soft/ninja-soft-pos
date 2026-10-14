@@ -1,7 +1,8 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Callout } from "@/components/ui/Callout";
 import { useTenant360 } from "@/modules/internal/opsHooks";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
 import { describeAuditAction } from "@/lib/internal/auditTimeline";
@@ -14,10 +15,10 @@ import {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-md border border-border p-4">
-      <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold text-foreground">{value}</div>
-      {sub && <div className="text-sm text-muted-foreground">{sub}</div>}
+    <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">{value}</div>
+      {sub && <div className="text-xs leading-relaxed text-muted-foreground">{sub}</div>}
     </div>
   );
 }
@@ -38,13 +39,22 @@ export function Tenant360Card({
   const { data, isLoading, error } = useTenant360(tenantId);
 
   if (isLoading) {
-    return <p className="mt-3 text-sm text-muted-foreground">Cargando ficha 360…</p>;
+    return (
+      <div className="mt-3 space-y-3" aria-busy>
+        <Skeleton className="h-16 w-full" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+      </div>
+    );
   }
   if (error || !data) {
     return (
-      <p className="mt-3 text-sm text-muted-foreground">
-        No se pudo cargar la ficha 360{error instanceof Error ? ` (${error.message})` : ""}.
-      </p>
+      <Callout tone="danger" className="mt-3" title="No se pudo cargar la ficha 360">
+        {error instanceof Error ? error.message : "Probá de nuevo en un rato."}
+      </Callout>
     );
   }
 
@@ -63,12 +73,12 @@ export function Tenant360Card({
 
   return (
     <div className="mt-3 space-y-4">
-      <Card>
-        <CardContent
-          className={`flex flex-wrap items-center gap-x-6 gap-y-2 border-t-2 p-5 ${
-            health.level === "ok" ? "border-success" : health.level === "attention" ? "border-warning" : "border-danger"
-          }`}
-        >
+      <Card
+        className={`rounded-t-none border-t-2 ${
+          health.level === "ok" ? "border-t-success" : health.level === "attention" ? "border-t-warning" : "border-t-danger"
+        }`}
+      >
+        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 p-5">
           <span className="inline-flex items-center gap-2 text-lg font-semibold text-foreground">
             <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${HEALTH_LEVEL_DOT[health.level]}`} />
             {HEALTH_LEVEL_LABELS[health.level]} · {health.score}/100
@@ -109,9 +119,9 @@ export function Tenant360Card({
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardContent className="p-5">
-            <Heading as="h3" className="text-base md:text-base">
+            <h3 className="font-display text-base font-bold">
               Módulos efectivos ({enabledModules} de {data.modules.length})
-            </Heading>
+            </h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Plan, complementos y overrides combinados, igual que el gating del servidor.
               {data.flagOverrides ? ` ${data.flagOverrides} overrides de flags.` : ""}
@@ -143,9 +153,9 @@ export function Tenant360Card({
 
         <Card>
           <CardContent className="p-5">
-            <Heading as="h3" className="text-base md:text-base">
+            <h3 className="font-display text-base font-bold">
               Últimos errores
-            </Heading>
+            </h3>
             {data.errors.length === 0 ? (
               <p className="mt-2 text-sm text-muted-foreground">Sin errores recientes de cobros, fiscales ni emails.</p>
             ) : (
@@ -163,9 +173,9 @@ export function Tenant360Card({
               </ul>
             )}
 
-            <Heading as="h3" className="mt-5 text-base md:text-base">
+            <h3 className="mt-5 font-display text-base font-bold">
               Actividad reciente
-            </Heading>
+            </h3>
             {data.activity.length === 0 ? (
               <p className="mt-2 text-sm text-muted-foreground">Sin actividad auditada.</p>
             ) : (

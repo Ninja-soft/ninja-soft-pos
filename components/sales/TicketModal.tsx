@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FileDown, Printer, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
@@ -21,51 +19,65 @@ import {
   useTicketBranding,
 } from "@/modules/tickets/hooks";
 import { emailTemplateDiffers } from "@/modules/tickets/api";
-import { webPrintCopies } from "@/lib/print/webPrint";
+import { printTicketIsolated } from "@/lib/print/webPrint";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
-import { downloadA4FromNode, downloadInvoiceA4 } from "@/lib/tickets/exportPng";
+import { downloadA4FromNode, downloadInvoiceA4, exportNodePdfBase64 } from "@/lib/tickets/exportPng";
 import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { type TicketData } from "@/components/tickets/TicketRenderer";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { useBranches } from "@/modules/branches/hooks";
 import { ticketLocation } from "@/lib/tickets/location";
 import { printTargetLabel } from "@/lib/print/printers";
-import { SpinnerBlock } from "@/components/ui/Spinner";
-import { Segmented } from "@/components/ui/Segmented";
-import { cn } from "@/lib/utils/cn";
 import { SalePayments } from "@/components/sales/SalePayments";
 import { useSaleTaxLines } from "@/modules/tax/hooks";
 import { saleTaxTicket } from "@/lib/tax/ticket";
-import { useSaleFiscalDocuments } from "@/modules/arca/hooks";
+import { useArcaStatus, useSaleFiscalDocuments } from "@/modules/arca/hooks";
+import { arcaApi } from "@/modules/arca/api";
 import { ticketFiscal } from "@/lib/arca/ticket";
+import { arcaErrorMessage } from "@/lib/arca/labels";
+import { humanError } from "@/supabase/functions/_shared/arca/errors";
 import { FiscalStatus } from "@/components/arca/FiscalStatus";
 import { useSalePromotions } from "@/modules/promotions/hooks";
 import type { SalePromotion } from "@/modules/promotions/api";
+import { useMyTenant } from "@/modules/tenants/hooks";
+import {
+  AUTHORIZING_SLOW_MS,
+  postSalePhase,
+  previewVisible,
+  silentStep,
+} from "@/lib/tickets/postSale";
+import { TicketSheet, type DetailTab } from "@/components/sales/ticket/TicketSheet";
 import { useInvoiceStyle } from "@/modules/invoices/hooks";
 import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
 import { invoiceFromTicket } from "@/lib/invoices/fromTicket";
 
-export type DetailTab = "ticket" | "cobros";
-const TABS: { value: DetailTab; label: string }[] = [
-  { value: "ticket", label: "Ticket" },
-  { value: "cobros", label: "Cobros" },
-];
+export type { DetailTab };
 
 interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   saleId: string | null;
+  /** Preferencia del equipo "Imprimir ticket al cobrar". */
   autoPrint?: boolean;
   /** Pestaña con la que abre (los avisos de contracargo abren en Cobros, ADR-064). */
   initialTab?: DetailTab;
+  /**
+   * Recién cobrada con "Imprimir ticket al cobrar" (ADR-111): imprime sola
+   * (con CAE si es fiscal) y no abre la ventana; la abre sólo si ARCA falla,
+   * tarda demasiado o la impresión falla.
+   */
+  silent?: boolean;
+  /** Desde el POS: botón "Nueva venta" (Enter) que cierra y vuelve a vender. */
+  onNewSale?: () => void;
 }
 
-export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab }: Props) {
-  const { data, isLoading } = useSaleDetail(saleId, open);
+export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab, silent, onNewSale }: Props) {
+  const { data } = useSaleDetail(saleId, open);
   // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
   const taxLines = useSaleTaxLines(open ? saleId : null);
   // F3 · ADR-072: factura electrónica de la venta (CAE + QR en el ticket).
-  const fiscalDocs = useSaleFiscalDocuments(open ? saleId : null);
+  // Mientras se espera el CAE se refresca seguido (ADR-111).
+  const fiscalDocs = useSaleFiscalDocuments(open ? saleId : null, { fastPoll: true });
   const saleFiscalDoc = (fiscalDocs.data ?? []).find((d) => d.origin === "sale") ?? null;
   // ADR-074: promociones aplicadas, una línea por promo en el ticket.
   const salePromos = useSalePromotions(open ? saleId : null);
@@ -91,13 +103,19 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
   // auto/manual configurados por el negocio en Configuración → Impresión.
   // F17 · ADR-049: perfil efectivo de la caja e impresora registrada (o la
   // del equipo) donde sale el ticket.
-  const { data: printProfiles } = usePrintProfiles(open);
+  const printProfilesQ = usePrintProfiles(open);
+  const printProfiles = printProfilesQ.data;
   const printTarget = usePrintTarget("sale", open);
   const saleProfile = printTarget?.profile ?? printProfiles?.sale;
+  const { data: me } = useMyTenant();
+  const canFix = me?.role === "owner" || me?.role === "manager";
+  const arcaStatus = useArcaStatus(open);
   const { toast } = useToast();
   const qc = useQueryClient();
   const [emailOpen, setEmailOpen] = useState(false);
-  const ticketRef = useRef<HTMLDivElement>(null);
+  // Nodo que se imprime, exporta a PDF y manda por email: fuera de la hoja
+  // (portal al body) para que la impresión no la recorte el scroll del diálogo.
+  const printRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLDivElement>(null);
   // ADR-112: hoja A4 del motor de comprobantes (oculta) para el PDF y el email.
   const a4Ref = useRef<HTMLDivElement>(null);
@@ -105,16 +123,47 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
   // Espejo de `emailDiffers` para leerlo dentro del setTimeout del auto-envío
   // sin re-disparar el efecto cuando las plantillas cargan tarde.
   const emailDiffersRef = useRef(false);
-  const printedRef = useRef(false);
-  const emailedRef = useRef(false);
+  const autoDoneRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
-  // Detalle de la venta (ADR-061): el ticket queda montado aunque se vea la
-  // pestaña Cobros (imprimir y el email lo usan). Cada apertura arranca en Ticket
-  // (o en la pestaña pedida).
+  const [sharing, setSharing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  // Detalle de la venta (ADR-061). Cada apertura arranca en Ticket (o en la
+  // pestaña pedida).
   const [tab, setTab] = useState<DetailTab>(initialTab ?? "ticket");
+  // ADR-111: comprobante provisorio (sin CAE) pedido a mano, ventana visible
+  // en modo silencioso, falla de impresión y detalle fiscal desplegado.
+  const [provisional, setProvisional] = useState(false);
+  const [printProvisional, setPrintProvisional] = useState(false);
+  const [shown, setShown] = useState(!silent);
+  const shownRef = useRef(!silent);
+  shownRef.current = shown;
+  const [printFailed, setPrintFailed] = useState(false);
+  const [fiscalOpen, setFiscalOpen] = useState(false);
+  const [openedAt, setOpenedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (open) setTab(initialTab ?? "ticket");
-  }, [open, saleId, initialTab]);
+    if (!open) return;
+    setTab(initialTab ?? "ticket");
+    setProvisional(false);
+    setPrintProvisional(false);
+    setShown(!silent);
+    setPrintFailed(false);
+    setFiscalOpen(false);
+    const t0 = Date.now();
+    setOpenedAt(t0);
+    setNow(t0);
+    // Re-evalúa "ARCA está tardando" al cumplirse el plazo.
+    const t = setTimeout(() => setNow(Date.now()), AUTHORIZING_SLOW_MS + 50);
+    return () => clearTimeout(t);
+  }, [open, saleId, initialTab, silent]);
+
+  const phase = postSalePhase({
+    saleLoaded: Boolean(data),
+    docsSettled: !open || !saleId || fiscalDocs.isSuccess || fiscalDocs.isError,
+    doc: saleFiscalDoc,
+    elapsedMs: now - openedAt,
+  });
+  const visible = previewVisible(phase, provisional);
 
   // Sucursal y caja de la venta (F17 · H90): sólo con 2+ sucursales.
   const { data: branches } = useBranches();
@@ -140,7 +189,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
   );
 
   // Preferencia del POS: enviar comprobante por email automáticamente.
-  const { data: autoEmailEnabled } = useQuery({
+  const autoEmailQ = useQuery({
     queryKey: ["pos-settings", "auto-email-receipt"],
     enabled: open,
     queryFn: async (): Promise<boolean> => {
@@ -152,66 +201,98 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
       return Boolean(data?.auto_email_receipt);
     },
   });
+  const autoEmailEnabled = autoEmailQ.data;
 
-  // Auto-imprimir al abrir, una sola vez por apertura. Se dispara si lo pide el
-  // perfil del negocio (Impresión → ticket de venta en automático) o la
-  // preferencia por dispositivo "Imprimir al cobrar". Respeta la cantidad de
-  // copias del perfil (web print: N llamadas a window.print()).
-  const autoPrintEnabled = Boolean(autoPrint) || Boolean(saleProfile?.auto);
+  // Auto-imprimir: lo pide el perfil del negocio (Impresión → ticket de venta
+  // en automático) o la preferencia del equipo "Imprimir ticket al cobrar".
+  // Respeta la cantidad de copias del perfil (web print: N window.print()).
+  const autoPrintEnabled = Boolean(autoPrint) || Boolean(silent) || Boolean(saleProfile?.auto);
   const saleCopies = saleProfile?.copies ?? 1;
-  useEffect(() => {
-    if (!open) {
-      printedRef.current = false;
-      return;
-    }
-    if (autoPrintEnabled && data && !printedRef.current) {
-      printedRef.current = true;
-      const t = setTimeout(() => webPrintCopies(saleCopies), 300);
-      return () => clearTimeout(t);
-    }
-  }, [open, autoPrintEnabled, saleCopies, data]);
 
-  // Auto-envío del comprobante por email (preferencia del POS), una sola vez
-  // por apertura. Nunca debe bloquear ni molestar el flujo de venta: ante
-  // cualquier fallo, solo console.warn.
+  const printNow = useCallback((): boolean => {
+    const ok = printTicketIsolated(printRef.current, saleCopies);
+    setPrintFailed(!ok);
+    return ok;
+  }, [saleCopies]);
+
+  // Modo silencioso: si ARCA falla o tarda, o la impresión falló, se abre.
+  const step = silent && !shown ? silentStep(phase, { printFailed }) : null;
+  useEffect(() => {
+    if (open && step === "show") setShown(true);
+  }, [open, step]);
+
+  // Auto-imprimir y auto-email, una sola vez por apertura y recién con el
+  // comprobante listo: si la venta es fiscal, con el CAE (ADR-111). Nunca
+  // bloquean ni molestan el flujo de venta: el email falla en silencio.
+  const prefsReady = printProfilesQ.isFetched && !autoEmailQ.isPending;
+  const ready = open && phase.kind === "ready" && Boolean(data) && prefsReady;
   useEffect(() => {
     if (!open) {
-      emailedRef.current = false;
+      autoDoneRef.current = false;
       return;
     }
-    const to = data?.sale.customers?.email;
-    if (
-      !data ||
-      emailedRef.current ||
-      !autoEmailEnabled ||
-      data.sale.receipt_emailed_at ||
-      !to ||
-      data.sale.status !== "completed" ||
-      // El dueño aún no configuró el SMTP: evitamos una llamada que fallaría.
-      smtpMissing
-    ) {
+    if (!ready || !data || autoDoneRef.current) return;
+    const to = data.sale.customers?.email;
+    const shouldEmail = Boolean(
+      autoEmailEnabled &&
+        !data.sale.receipt_emailed_at &&
+        to &&
+        data.sale.status === "completed" &&
+        // El dueño aún no configuró el SMTP: evitamos una llamada que fallaría.
+        !smtpMissing,
+    );
+    if (!autoPrintEnabled && !shouldEmail) {
+      autoDoneRef.current = true;
       return;
     }
-    emailedRef.current = true;
-    const saleId = data.sale.id;
+    autoDoneRef.current = true;
+    let cancelled = false;
+    let fired = false;
+    const sid = data.sale.id;
+    const t = setTimeout(async () => {
+      fired = true;
+      const printOk = autoPrintEnabled ? printNow() : true;
+      if (shouldEmail && to) {
+        // Misma resolución de nodo que el botón manual: nodo de email oculto
+        // si la plantilla de email difiere de la de impresión.
+        const node = emailDiffersRef.current
+          ? emailRef.current
+          : emailA4Ref.current
+            ? a4Ref.current
+            : printRef.current;
+        if (node) {
+          await sendReceiptEmail(sid, to, node)
+            .then(() => {
+              qc.invalidateQueries({ queryKey: ["sales", "detail", sid] });
+              qc.invalidateQueries({ queryKey: ["sales", "list"] });
+            })
+            .catch((e) => console.warn("auto-email comprobante falló:", e));
+        }
+      }
+      if (cancelled) return;
+      if (silent && !shownRef.current) {
+        if (printOk) onOpenChange(false);
+        else toast({ title: "No se pudo imprimir el ticket", variant: "error" });
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      // Si se cortó antes de correr, que la próxima pasada lo intente.
+      if (!fired) autoDoneRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ready]);
+
+  // "Imprimir provisorio": se imprime apenas el comprobante está montado.
+  useEffect(() => {
+    if (!printProvisional || !visible) return;
     const t = setTimeout(() => {
-      // Misma resolución de nodo que el botón manual: nodo de email oculto si
-      // la plantilla de email difiere de la de impresión, si no el visible.
-      const node = emailDiffersRef.current
-        ? emailRef.current
-        : emailA4Ref.current
-          ? a4Ref.current
-          : ticketRef.current;
-      if (!node) return;
-      sendReceiptEmail(saleId, to, node)
-        .then(() => {
-          qc.invalidateQueries({ queryKey: ["sales", "detail", saleId] });
-          qc.invalidateQueries({ queryKey: ["sales", "list"] });
-        })
-        .catch((e) => console.warn("auto-email comprobante falló:", e));
-    }, 500);
+      printNow();
+      setPrintProvisional(false);
+    }, 150);
     return () => clearTimeout(t);
-  }, [open, data, autoEmailEnabled, smtpMissing, qc]);
+  }, [printProvisional, visible, printNow]);
 
   // Fallback de bloques (legacy-compat): si no hay plantilla, replica el ticket
   // clásico respetando el flag de logo del branding. El QR es obligatorio
@@ -223,6 +304,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
     });
   }, [brand]);
 
+  const fiscal = ticketFiscal(saleFiscalDoc);
   const ticketData: TicketData | null = data
     ? {
         sale: {
@@ -234,7 +316,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           total: data.sale.total,
           status: data.sale.status,
           ...saleTaxTicket(data.sale, taxLines.data ?? []),
-          fiscal: ticketFiscal(saleFiscalDoc),
+          fiscal,
           promotions: salePromotionsForTicket(data.sale, salePromos.data ?? []),
         },
         items: data.items.map((it) => ({
@@ -269,21 +351,17 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
     (brand?.ticket_width === "58" ? "58" : "80");
 
   // El email usa la plantilla de email si difiere de la de impresión. Cuando
-  // coincide (o no hay plantilla de email), reutiliza el ticket visible.
+  // coincide (o no hay plantilla de email), reutiliza el ticket de impresión.
   const emailDiffers = emailTemplateDiffers(printTpl, emailTpl);
   emailDiffersRef.current = emailDiffers;
   const emailPaper = (emailTpl?.paper as "58" | "80" | "a4" | undefined) ?? paper;
-
-  // Resolución única del nodo a exportar a PNG para email: nodo oculto si la
-  // plantilla de email difiere, si no el ticket visible. Usado por el botón
-  // manual y por el auto-envío.
   // ADR-112: sin plantillas propias, "Email: A4" (o el formato A4 del perfil)
   // adjunta la hoja A4 oculta, a tamaño real.
   const emailA4 =
     !emailDiffers && !emailTpl && !printTpl && (invoice.style.emailFormat === "a4" || paper === "a4");
   emailA4Ref.current = emailA4;
   const getEmailNode = (): HTMLElement | null =>
-    emailDiffers ? emailRef.current : emailA4 ? a4Ref.current : ticketRef.current;
+    emailDiffers ? emailRef.current : emailA4 ? a4Ref.current : printRef.current;
 
   async function handleA4() {
     if (!data) return;
@@ -291,8 +369,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
     try {
       // Plantilla propia activa: se respeta (su A4 o su ticket en la hoja).
       // Si no, la factura A4 del motor de comprobantes (ADR-112).
-      if (printTpl && ticketRef.current) {
-        await downloadA4FromNode(ticketRef.current, data.sale.number);
+      if (printTpl && printRef.current) {
+        await downloadA4FromNode(printRef.current, data.sale.number);
       } else if (a4Ref.current) {
         await downloadInvoiceA4(a4Ref.current, `comprobante-${data.sale.number}.pdf`);
       }
@@ -303,95 +381,199 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
     }
   }
 
-  return (
-    <Modal
-      open={open}
-      onOpenChange={onOpenChange}
-      title={tab === "cobros" ? "Cobros de la venta" : "Ticket"}
-      className={tab === "cobros" ? "max-w-2xl" : "max-w-sm"}
-    >
-      {isLoading || !data || !ticketData ? (
-        <SpinnerBlock className="py-6" />
-      ) : (
-        <>
-          <Segmented
-            value={tab}
-            options={TABS}
-            onChange={setTab}
-            aria-label="Vista del detalle"
-            size="sm"
-            fill
-            className="no-print mb-3"
-          />
-          {/* En Cobros el ticket sale de pantalla pero sigue montado: imprimir
-              (visibility) y el PNG del email lo necesitan. */}
-          <div
-            ref={ticketRef}
-            aria-hidden={tab === "cobros" || undefined}
-            className={cn(tab === "cobros" && "pointer-events-none fixed -left-[9999px] top-0")}
-          >
-            <TemplateRenderer
-              template={printTpl ?? null}
-              fallbackBlocks={fallbackBlocks}
-              data={ticketData}
-              paperOverride={paper}
-              className="ticket-print"
-              invoice={invoice}
-            />
-          </div>
+  // Compartir (Web Share con el PDF): en el celular abre WhatsApp, mail, etc.
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => {
+    try {
+      const probe = new File(["x"], "comprobante.pdf", { type: "application/pdf" });
+      setCanShare(typeof navigator !== "undefined" && Boolean(navigator.canShare?.({ files: [probe] })));
+    } catch {
+      setCanShare(false);
+    }
+  }, []);
+  async function handleShare() {
+    const node = printRef.current;
+    if (!node || !data) return;
+    setSharing(true);
+    try {
+      const b64 = await exportNodePdfBase64(node);
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const label = formatSaleNumber(data.sale.number, numFmt);
+      const file = new File([bytes], `comprobante-${label}.pdf`, { type: "application/pdf" });
+      await navigator.share({ files: [file], title: `Comprobante ${label}` });
+    } catch (e) {
+      if ((e as { name?: string })?.name !== "AbortError") {
+        toast({ title: "No se pudo compartir el comprobante", variant: "error" });
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
 
-          {/* Nodo de email oculto cuando la plantilla de email difiere de la de
-              impresión. SIN clase `ticket-print`: no debe verse al imprimir. */}
-          {emailDiffers && (
-            <div
-              ref={emailRef}
-              aria-hidden
-              className="pointer-events-none fixed -left-[9999px] top-0"
-            >
+  async function handleRetry() {
+    if (!data) return;
+    setRetrying(true);
+    try {
+      await arcaApi.emitirVenta(data.sale.id);
+    } catch (e) {
+      toast({ title: "No se pudo reintentar", description: arcaErrorMessage(e), variant: "error" });
+    } finally {
+      setRetrying(false);
+      void qc.invalidateQueries({ queryKey: ["arca", "sale", data.sale.id] });
+    }
+  }
+
+  const docs = fiscalDocs.data ?? [];
+  const showFiscalDetail =
+    docs.length > 0 || Boolean(arcaStatus.data?.enabled && canFix && data?.sale.status === "completed");
+  const errorText =
+    phase.kind === "retrying" || phase.kind === "failed" ? humanError(phase.errorCode, phase.errorMsg) : null;
+  const nextAttemptLabel =
+    phase.kind === "retrying" && phase.nextAttemptAt
+      ? new Date(phase.nextAttemptAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+      : null;
+  const printHint = [
+    paper === "a4" ? "A4" : `${paper} mm`,
+    saleCopies > 1 ? `${saleCopies} copias` : null,
+    printTarget ? printTargetLabel(printTarget) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const preview = ticketData ? (
+    <TemplateRenderer
+      template={printTpl ?? null}
+      fallbackBlocks={fallbackBlocks}
+      data={ticketData}
+      paperOverride={paper}
+      invoice={invoice}
+    />
+  ) : null;
+
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+  const offscreen =
+    open && ticketData && visible && portalTarget
+      ? createPortal(
+          <>
+            <div ref={printRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
               <TemplateRenderer
-                template={emailTpl ?? null}
+                template={printTpl ?? null}
                 fallbackBlocks={fallbackBlocks}
                 data={ticketData}
-                paperOverride={emailPaper}
-                invoice={invoice}
+                paperOverride={paper}
+                className="ticket-print"
+                invoice={{ style: invoice.style, fit: false }}
               />
             </div>
-          )}
+            {/* Nodo de email cuando la plantilla de email difiere de la de
+                impresión. SIN clase `ticket-print`: no debe verse al imprimir. */}
+            {emailDiffers && (
+              <div ref={emailRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
+                <TemplateRenderer
+                  template={emailTpl ?? null}
+                  fallbackBlocks={fallbackBlocks}
+                  data={ticketData}
+                  paperOverride={emailPaper}
+                  invoice={{ style: invoice.style, fit: false }}
+                />
+              </div>
+            )}
+            {/* ADR-112: hoja A4 del comprobante (sin ticket-print, no se
+                imprime) para descargar el PDF y adjuntarlo al email. */}
+            {!printTpl && (
+              <div ref={a4Ref} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
+                <InvoiceDocument
+                  doc={invoiceFromTicket(ticketData, {
+                    tradeName: invoice.style.tradeName,
+                    legends: invoice.style.legends,
+                    showPayments: invoice.style.showPayments,
+                    showInternalRef: invoice.style.showInternalRef,
+                  })}
+                  style={invoice.style}
+                  format="a4"
+                />
+              </div>
+            )}
+          </>,
+          portalTarget,
+        )
+      : null;
 
-          {/* ADR-112: hoja A4 del comprobante (oculta y sin ticket-print, no se
-              imprime) para descargar el PDF y adjuntarlo al email. */}
-          {!printTpl && (
-            <div ref={a4Ref} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
-              <InvoiceDocument
-                doc={invoiceFromTicket(ticketData, {
-                  tradeName: invoice.style.tradeName,
-                  legends: invoice.style.legends,
-                  showPayments: invoice.style.showPayments,
-                  showInternalRef: invoice.style.showInternalRef,
-                })}
-                style={invoice.style}
-                format="a4"
-              />
-            </div>
-          )}
+  const close = (o: boolean) => {
+    if (!o) setEmailOpen(false);
+    onOpenChange(o);
+  };
 
-          {/* Cobros (ADR-061): procesador, tarjeta, cupón, ids, conciliación y
-              datos del procesador. Reemplaza el bloque de voucher (H27). */}
-          {tab === "cobros" && (
-            <div className="no-print">
-              <SalePayments
-                saleId={data.sale.id}
-                saleCreatedAt={data.sale.created_at}
-                initialPayments={data.payments}
-                active={open && tab === "cobros"}
-              />
-            </div>
-          )}
-
-          <div className="no-print mt-4 space-y-3">
-            {/* Estado fiscal (ADR-072): factura, CAE, QR y reproceso. */}
-            <FiscalStatus saleId={data.sale.id} docs={fiscalDocs.data ?? []} saleStatus={data.sale.status} />
-            {/* Estado de envío + hint SMTP + formulario inline (bloque propio). */}
+  return (
+    <>
+      {offscreen}
+      <TicketSheet
+        open={open && shown}
+        onOpenChange={close}
+        phase={phase}
+        provisional={provisional}
+        onShowProvisional={() => setProvisional(true)}
+        onPrintProvisional={() => {
+          setProvisional(true);
+          setPrintProvisional(true);
+        }}
+        tab={tab}
+        onTab={setTab}
+        preview={preview}
+        payments={
+          data ? (
+            <SalePayments
+              saleId={data.sale.id}
+              saleCreatedAt={data.sale.created_at}
+              initialPayments={data.payments}
+              active={open && tab === "cobros"}
+            />
+          ) : null
+        }
+        summary={
+          data
+            ? {
+                numberLabel: formatSaleNumber(data.sale.number, numFmt),
+                total: Number(data.sale.total) || 0,
+                createdAt: data.sale.created_at,
+                customerName: data.sale.customers?.name ?? null,
+                itemsCount: data.items.length,
+                fiscalLabel:
+                  phase.kind === "ready" && fiscal?.numero ? `${fiscal.cbteLabel} N° ${fiscal.numero}` : null,
+                homologacion: Boolean(fiscal?.homologacion),
+                statusLabel: data.sale.status === "voided" ? "Anulada" : null,
+              }
+            : null
+        }
+        onNewSale={
+          onNewSale
+            ? () => {
+                close(false);
+                onNewSale();
+              }
+            : undefined
+        }
+        onPrint={() => {
+          if (!printNow()) toast({ title: "No se pudo imprimir el ticket", variant: "error" });
+        }}
+        printHint={printHint}
+        printFailed={printFailed}
+        onPdf={handleA4}
+        pdfBusy={downloading}
+        onShare={canShare ? handleShare : undefined}
+        shareBusy={sharing}
+        emailButton={
+          <SendReceiptEmailButton
+            open={emailOpen}
+            onToggle={() => setEmailOpen((v) => !v)}
+            sentAt={data?.sale.receipt_emailed_at}
+            smtpMissing={smtpMissing}
+            busy={!visible}
+            short
+          />
+        }
+        emailPanel={
+          data ? (
             <SendReceiptEmail
               saleId={data.sale.id}
               getTicketNode={getEmailNode}
@@ -400,55 +582,26 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
               sentTo={data.sale.receipt_email_to}
               sentAt={data.sale.receipt_emailed_at}
               smtpMissing={smtpMissing}
-              open={emailOpen}
+              open={emailOpen && visible}
               onOpenChange={setEmailOpen}
             />
-
-            {/* Fila compacta solo-ícono: Cerrar a la izquierda; acciones a la
-                derecha (Mail / A4 / Imprimir). Tooltips via title + aria-label. */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => onOpenChange(false)}
-                className="h-10 w-10 p-0"
-                title="Cerrar"
-                aria-label="Cerrar"
-              >
-                <X size={18} />
-              </Button>
-              <div className="ml-auto flex items-center gap-2">
-                <SendReceiptEmailButton
-                  open={emailOpen}
-                  onToggle={() => setEmailOpen((v) => !v)}
-                  sentAt={data.sale.receipt_emailed_at}
-                  smtpMissing={smtpMissing}
-                  className="h-10 w-10 p-0"
-                  iconOnly
-                />
-                <Button
-                  variant="secondary"
-                  onClick={handleA4}
-                  disabled={downloading}
-                  className="h-10 w-10 p-0"
-                  title="Descargar A4"
-                  aria-label="Descargar A4"
-                >
-                  <FileDown size={18} />
-                </Button>
-                <Button
-                  onClick={() => webPrintCopies(saleCopies)}
-                  className="h-10 w-10 p-0"
-                  title={`${saleCopies > 1 ? `Imprimir (${saleCopies} copias)` : "Imprimir"}${printTarget ? ` · ${printTargetLabel(printTarget)}` : ""}`}
-                  aria-label="Imprimir"
-                >
-                  <Printer size={18} />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </Modal>
+          ) : null
+        }
+        saleHref={data ? `/ventas?venta=${data.sale.id}` : "/ventas"}
+        fiscalDetail={
+          data && showFiscalDetail ? (
+            <FiscalStatus saleId={data.sale.id} docs={docs} saleStatus={data.sale.status} />
+          ) : null
+        }
+        fiscalDetailOpen={fiscalOpen}
+        onFiscalDetail={setFiscalOpen}
+        onRetry={phase.kind === "retrying" ? handleRetry : undefined}
+        retryBusy={retrying}
+        errorText={errorText}
+        nextAttemptLabel={nextAttemptLabel}
+        canFix={canFix}
+      />
+    </>
   );
 }
 

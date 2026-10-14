@@ -23,7 +23,7 @@ export default function InternalPlanesPage() {
         <PlansManager />
       </div>
 
-      <div className="mt-12">
+      <div className="mt-10">
         <InviteCodesCard />
       </div>
     </>

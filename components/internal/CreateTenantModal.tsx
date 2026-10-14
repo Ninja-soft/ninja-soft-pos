@@ -158,7 +158,7 @@ export function CreateTenantModal({
           label="Plan"
           value={planKey}
           onChange={setPlanKey}
-          placeholder="Cargando planes…"
+          placeholder={plans ? "Elegí un plan" : "Buscando planes"}
           options={(plans ?? []).map((p) => ({ value: p.key, label: p.name }))}
         />
         <div>
@@ -184,11 +184,11 @@ export function CreateTenantModal({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Ej.: venta cerrada por teléfono, migración desde otro sistema…"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+            className="w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft"
           />
         </div>
         {error && (
-          <p role="alert" className="text-sm text-danger">
+          <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-sm font-medium text-danger">
             {error}
           </p>
         )}

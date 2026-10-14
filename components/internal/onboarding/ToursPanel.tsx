@@ -4,7 +4,7 @@
 // publicación con versión, pausa, archivo y métricas por paso. Sin deploy:
 // lo publicado le llega al negocio en el próximo ingreso.
 import { useState } from "react";
-import { ArrowDown, ArrowUp, BarChart3, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, BarChart3, Plus, Signpost, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -12,7 +12,10 @@ import { Select } from "@/components/ui/Select";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SpinnerBlock } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonLines } from "@/components/ui/Skeleton";
+import { Callout } from "@/components/ui/Callout";
+import { TableWrap } from "@/components/ui/Table";
+import { ListSkeleton } from "@/components/internal/onboarding/ListSkeleton";
 import { ReasonDialog } from "@/components/internal/ReasonDialog";
 import { useToast } from "@/components/ui/Toast";
 import { formatRelative } from "@/lib/utils/format";
@@ -60,7 +63,7 @@ const LABELS = {
 };
 
 const TEXTAREA =
-  "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
+  "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-foreground/30";
 
 export function ToursPanel({ canEdit }: { canEdit: boolean }) {
   const { data: tours, isLoading } = useInternalTours();
@@ -71,7 +74,7 @@ export function ToursPanel({ canEdit }: { canEdit: boolean }) {
   const setStatus = useSetTourStatus();
   const { toast } = useToast();
 
-  if (isLoading) return <SpinnerBlock />;
+  if (isLoading) return <ListSkeleton />;
 
   return (
     <div className="space-y-4">
@@ -88,9 +91,15 @@ export function ToursPanel({ canEdit }: { canEdit: boolean }) {
       </div>
 
       {!tours?.length ? (
-        <EmptyState title="Sin recorridos" description="Creá el primero o aplicá la migración con los recorridos sembrados." />
+        <div className="rounded-lg border border-border bg-card">
+          <EmptyState
+            icon={Signpost}
+            title="Acá van a aparecer los recorridos guiados"
+            description="Creá el primero o aplicá la migración con los recorridos sembrados."
+          />
+        </div>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border bg-card">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
           {tours.map((t) => (
             <li key={t.id} className="flex flex-wrap items-start gap-3 p-4">
               <div className="min-w-0 flex-1">
@@ -330,7 +339,7 @@ function TourEditor({ tour, onClose }: { tour: TourRow | null; onClose: () => vo
           </div>
           <ol className="space-y-3">
             {draft.steps.map((s, i) => (
-              <li key={i} className="space-y-3 rounded-md border border-border p-3">
+              <li key={i} className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-muted-foreground">Paso {i + 1}</span>
                   <div className="ml-auto flex gap-1">
@@ -442,9 +451,12 @@ function TourMetricsModal({ tour, onClose }: { tour: TourRow; onClose: () => voi
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} title={`Métricas: ${tour.title}`} className="max-w-2xl">
       {isLoading ? (
-        <SpinnerBlock />
+        <div className="space-y-3" aria-busy="true" aria-label="Cargando métricas">
+          <Skeleton className="h-4 w-3/4" />
+          <SkeletonLines lines={4} />
+        </div>
       ) : error || !data ? (
-        <p className="text-sm text-destructive">No se pudieron cargar las métricas.</p>
+        <Callout tone="danger" icon={AlertTriangle} title="No se pudieron cargar las métricas." />
       ) : (
         <div className="space-y-5 text-sm">
           <p className="text-muted-foreground">
@@ -462,26 +474,28 @@ function TourMetricsModal({ tour, onClose }: { tour: TourRow; onClose: () => voi
                     Versión {v.version}: {v.starts} inicios · {v.completed} completos ({pct(v.completion_rate)}) ·{" "}
                     {v.dismissed} abandonos
                   </h3>
-                  <table className="w-full text-left text-xs">
-                    <thead className="text-muted-foreground">
-                      <tr>
-                        <th className="py-1 pr-2 font-medium">Paso</th>
-                        <th className="py-1 pr-2 font-medium">Vistas</th>
-                        <th className="py-1 font-medium">Abandonaron acá</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {steps.map((s) => (
-                        <tr key={s.step_index}>
-                          <td className="py-1 pr-2">
-                            {s.step_index + 1}. {s.step_id ?? ""}
-                          </td>
-                          <td className="py-1 pr-2 tabular-nums">{s.views}</td>
-                          <td className="py-1 tabular-nums">{s.abandoned}</td>
+                  <TableWrap className="rounded-lg">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-muted/60 uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-semibold">Paso</th>
+                          <th className="px-3 py-2 text-right font-semibold">Vistas</th>
+                          <th className="px-3 py-2 text-right font-semibold">Abandonaron acá</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {steps.map((s) => (
+                          <tr key={s.step_index}>
+                            <td className="px-3 py-2">
+                              {s.step_index + 1}. {s.step_id ?? ""}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">{s.views}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{s.abandoned}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </TableWrap>
                 </section>
               );
             })

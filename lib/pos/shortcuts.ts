@@ -78,6 +78,9 @@ export const POS_PASSIVE_SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["Esc"], label: "Cerrar el diálogo o la hoja abierta" },
   { keys: ["Enter"], label: "Agregar el producto buscado o confirmar" },
   { keys: ["Tab", "Shift + Tab"], label: "Moverse entre botones y campos" },
+  // Ventana del ticket después de cobrar (ADR-111).
+  { keys: ["Enter"], label: "En el ticket: nueva venta" },
+  { keys: ["P"], label: "En el ticket: imprimir" },
 ];
 
 const SHIFT_KEYS: Record<string, PosShortcutAction> = {

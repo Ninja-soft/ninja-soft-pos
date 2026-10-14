@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, ImagePlus, ReceiptText } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Segmented } from "@/components/ui/Segmented";
 import { resizeToWebp } from "@/lib/utils/image";
 import { cn } from "@/lib/utils/cn";
 
@@ -27,12 +27,6 @@ type Branding = {
   cuit: string | null;
   phone: string | null;
   address: string | null;
-  ticket_footer: string | null;
-  ticket_width: string;
-  ticket_title: string | null;
-  ticket_legend: string | null;
-  ticket_show_qr: boolean;
-  ticket_show_logo: boolean;
 };
 const EMPTY: Branding = {
   logo_path: null,
@@ -42,12 +36,6 @@ const EMPTY: Branding = {
   cuit: null,
   phone: null,
   address: null,
-  ticket_footer: null,
-  ticket_width: "80",
-  ticket_title: null,
-  ticket_legend: null,
-  ticket_show_qr: false,
-  ticket_show_logo: true,
 };
 
 type BrandingRow = { [K in keyof Branding]?: string | boolean | null };
@@ -81,7 +69,7 @@ export function BrandingCard() {
       const { data: b } = await supabase
         .from("tenant_branding")
         .select(
-          "logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo",
+          "logo_path, logo_url, accent, legal_name, cuit, phone, address",
         )
         .eq("tenant_id", mem.tenant_id)
         .maybeSingle();
@@ -101,12 +89,6 @@ export function BrandingCard() {
       cuit: (b.cuit as string | null) ?? null,
       phone: (b.phone as string | null) ?? null,
       address: (b.address as string | null) ?? null,
-      ticket_footer: (b.ticket_footer as string | null) ?? null,
-      ticket_width: (b.ticket_width as string | null) ?? EMPTY.ticket_width,
-      ticket_title: (b.ticket_title as string | null) ?? null,
-      ticket_legend: (b.ticket_legend as string | null) ?? null,
-      ticket_show_qr: Boolean(b.ticket_show_qr),
-      ticket_show_logo: b.ticket_show_logo == null ? true : Boolean(b.ticket_show_logo),
     });
   }, [ctx]);
 
@@ -248,67 +230,27 @@ export function BrandingCard() {
           <Input label="Teléfono" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
           <Input label="Dirección" value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
         </div>
-        <Input
-          label="Pie de ticket"
-          placeholder="¡Gracias por su compra!"
-          value={form.ticket_footer ?? ""}
-          onChange={(e) => set("ticket_footer", e.target.value)}
-        />
-
-        <div>
-          <span className="mb-2 block text-sm font-medium text-muted-foreground">Ancho de ticket</span>
-          <Segmented
-            value={form.ticket_width}
-            onChange={(v) => set("ticket_width", v)}
-            options={[
-              { value: "80", label: "80 mm" },
-              { value: "58", label: "58 mm" },
-            ]}
-          />
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="Título del comprobante"
-            placeholder="Comprobante no fiscal"
-            value={form.ticket_title ?? ""}
-            onChange={(e) => set("ticket_title", e.target.value)}
-          />
-          <Input
-            label="Leyenda extra (pie)"
-            placeholder="Cambios dentro de 30 días con ticket"
-            value={form.ticket_legend ?? ""}
-            onChange={(e) => set("ticket_legend", e.target.value)}
-          />
-        </div>
-        <label className="flex items-start gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="mt-0.5 accent-ninja-flame"
-            checked={form.ticket_show_qr}
-            onChange={(e) => set("ticket_show_qr", e.target.checked)}
-          />
-          <span>
-            Mostrar QR en el ticket
-            <span className="block text-xs text-muted-foreground">
-              Imprime un QR con los datos de la venta (negocio, número, total, fecha).
+        {/* Las opciones del ticket (ancho, textos, logo) viven en su propia
+            sección: Configuración › Ticket. Acá sólo marca y datos. */}
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-ninja-flameSoft">
+              <ReceiptText size={17} aria-hidden />
             </span>
-          </span>
-        </label>
-        <label className="flex items-start gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="mt-0.5 accent-ninja-flame"
-            checked={form.ticket_show_logo}
-            onChange={(e) => set("ticket_show_logo", e.target.checked)}
-          />
-          <span>
-            Mostrar logo en el ticket
-            <span className="block text-xs text-muted-foreground">
-              Si lo desactivás, el ticket no imprime el logo (ahorra tinta en térmica).
-            </span>
-          </span>
-        </label>
+            <div>
+              <span className="block text-sm font-medium text-foreground">Ticket</span>
+              <span className="block text-xs text-muted-foreground">
+                Ancho del papel, título, leyenda, pie y logo del comprobante.
+              </span>
+            </div>
+          </div>
+          <Link
+            href="/configuracion?seccion=tickets"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            Configurar ticket <ChevronRight size={15} aria-hidden />
+          </Link>
+        </div>
 
         <div className="flex justify-end">
           <Button onClick={() => save.mutate()} loading={save.isPending}>

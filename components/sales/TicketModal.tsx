@@ -283,11 +283,10 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   }, [printProvisional, visible, printNow]);
 
   // Fallback de bloques (legacy-compat): si no hay plantilla, replica el ticket
-  // clásico respetando los flags viejos del branding. El despacho por modo lo
-  // resuelve TemplateRenderer.
+  // clásico respetando el flag de logo del branding. El QR es obligatorio
+  // (ticket_show_qr se ignora). El despacho por modo lo resuelve TemplateRenderer.
   const fallbackBlocks = useMemo(() => {
     return defaultSaleBlocks().filter((b) => {
-      if (b.type === "qr") return brand?.ticket_show_qr === true;
       if (b.type === "logo") return brand?.ticket_show_logo !== false;
       return true;
     });

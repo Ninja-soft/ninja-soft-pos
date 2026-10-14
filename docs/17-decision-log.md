@@ -3943,3 +3943,89 @@ El catálogo precargado se cargaba con un Excel gigante que el dueño bajaba del
 - La primera corrida completa con 1M de publicaciones son ~4.000 páginas de 250 productos: varias horas en tandas de ~100 s (el cron la continúa sola). Las incrementales son chicas.
 - Riesgos: el conteo de un catálogo puede cambiar levemente al migrar (UPC fusionados bajan, pesables separados suben); el `catalog_product_id` de una publicación que se fusionó con otra del mismo producto en la misma tienda deja de existir (la copia de foto de ese producto viejo responde "no pendiente"); el panel interno calcula las estadísticas con `count(*)` sobre las tablas (aceptable a este volumen; si crece, materializarlas al cerrar la corrida).
 - Tests: scraper `tests/catalog.test.js` (EAN, reglas de fusión, índice, feed con keyset y since); POS `tests/unit/catalogSync.test.ts` (mapeo feed → maestro + ofertas, since, cursor, errores, conteos, panel), `tests/unit/marketReference.test.ts`, `tests/components/MarketReferencePanel.test.tsx` (switch apagado = sin RPC), RLS `tests/integration/rls-catalog-maestro.test.ts`, `rls-catalog-search.test.ts` y `rls-catalog-sync.test.ts` actualizadas. Migración probada en PGlite con stubs (backfill, mismas columnas y resultados de las funciones viejas, RLS por entitlement, import sin precio con medidas y fotos, sync con vendedores, compatibilidad ADR-107).
+---
+
+## ADR-110: Cobranza SaaS: el ledger económico de la plataforma separado de la capa fiscal, comprobantes propios con CAE en una cola, datos fiscales verificados con el padrón de ARCA y KPIs desde snapshots (F20, diseño)
+
+**Fecha:** 2026-10-13 · **Estado:** propuesta (sólo diseño, nada construido) · **Hitos:** F20 (H125 a H136) y F21 futuro (H137 y H138) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) · **Base:** ADR-016, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-072 (cola ARCA), ADR-073 y ADR-084 (panel interno), ADR-083 (auditoría inmutable). **Numeración:** 109 la toma `feat/catalogo-maestro-ean`.
+
+### Contexto
+
+El dueño pidió cuatro cosas sobre la cobranza de la plataforma, más un pedido aparte para el staff:
+- facturar automáticamente la suscripción, con los datos fiscales del cliente verificados en ARCA y el PDF por email;
+- una pantalla de Mercado Pago de plataforma bien diseñada;
+- notas de crédito y de débito, cuenta corriente, punitorios, bonificaciones e historia del cliente;
+- un dashboard interno con KPIs que se entiendan;
+- la participación del staff con gastos proporcionales, que va al roadmap pero no se construye todavía.
+
+Lo que existe hoy:
+- `billing_records`: pagos sin deuda, sin imputación y sin comprobante fiscal;
+- `tenant_discounts`: se guarda, pero el monto cobrado no lo aplica;
+- un dunning fijo de 3 días;
+- un webhook de Mercado Pago sin validación de firma;
+- `fiscal_documents`, atado a ventas (`sale_id NOT NULL`);
+- `arca_platform`, modelado pero sin la CUIT de NinjaSoft;
+- un dashboard que mezcla `tenants.status` con `subscriptions.status` y cuenta lifetimes en el MRR. Su "conversión" es activos / (activos + cancelados).
+
+En "Pagos de plataforma", el Client ID tiene cargado un email.
+
+### Decisión
+
+1. **El ledger es económico y los comprobantes son la capa fiscal.**
+   - `platform_ledger` registra los hechos económicos: cargo, punitorio, pago, bonificación, reintegro y contracargo. El saldo es la suma de los movimientos.
+   - Las facturas, notas de crédito y notas de débito documentan esos hechos y nunca los crean. Así una factura rechazada o atrasada no cambia la deuda, un contracargo reabre la deuda sin tocar la factura y refacturar no toca el ledger.
+   - Las imputaciones van en `platform_allocations` (FIFO, punitorio primero) y la anulación es por movimiento inverso, con el mismo patrón que ADR-037.
+   - Importes en centavos `bigint`.
+2. **Cargos por período idempotentes** (`platform_charges`, una clave por suscripción, período y tipo), con las líneas de precio congeladas. El débito automático de Mercado Pago crea el cargo al cobrar; si el pago no llega, lo crea el cron.
+3. **Tablas fiscales propias de la plataforma** (`platform_documents`, sus líneas y eventos) en lugar de extender `fiscal_documents`, que está atada a ventas y a la RLS del negocio.
+   - Se reutilizan el código de `_shared/arca` y las garantías de ADR-072: lease, número reservado antes de mandar, recuperación con `FECompConsultar`, backoff y dead-letter.
+   - Se usa el certificado de `arca_platform` con NinjaSoft como emisora, no delegada.
+   - Sin CAEA: la suscripción puede esperar.
+   - Punto de venta exclusivo de la plataforma.
+4. **Facturación automática** con interruptor de plataforma y override por negocio. Factura al cobrar o al generar el cargo, con una demora de 0 a 10 días desde el pago (para absorber los contracargos tempranos sin salir de la ventana de fechas de ARCA para servicios). Es una cola programada.
+5. **La letra no la elige el cliente**: sale de la condición del emisor y del receptor. El cliente elige a nombre de quién se factura y ve la letra antes de confirmar. Los datos fiscales se verifican con `ws_sr_constancia_inscripcion` (padrón A5): A13 no devuelve la condición de IVA. Hay cache de 30 días, rate limit y carga manual de respaldo marcada, y no se emite factura A con datos sin verificar.
+6. **NC y ND siempre asociadas** (`CbtesAsoc`) y con la misma letra que el comprobante que corrigen. La suma de las NC de una factura no supera lo facturado. Los punitorios se facturan con ND al cobrarlos (configurable a cierre mensual) y su condonación lleva NC sólo si ya había ND.
+7. **PDF en el servidor con `pdf-lib`**, a partir de una plantilla estructurada y versionada (`platform_invoice_templates`). No se usa HTML libre ni Chrome headless. Los bloques fiscales obligatorios no se pueden ocultar.
+   - La cola `system_emails` suma adjuntos desde Storage privado.
+   - Si el email pasa los 5 MB, va un link firmado en lugar del adjunto.
+8. **Modalidad de cobro por negocio** (`tenant_billing_terms`): débito automático MP, cuenta corriente (aviso o factura con vencimiento, transferencia con comprobante y verificación del staff, o pago único con Checkout Pro), manual o exento. Las cuentas lifetime pasan a exento. Cambiar de modalidad pausa el preapproval.
+9. **Punitorios configurables** (`platform_interest_policies`): tasa mensual, gracia, cálculo diario prorrateado o por mes empezado, tope y mínimo. Se devengan con un movimiento por cargo y por mes (upsert idempotente, como el addendum de ADR-037), pero con el capital recalculado cada día. Condonación total o parcial con motivo, tope por nivel y auditoría.
+10. **Escalera de mora configurable** (`platform_dunning_steps`) que reemplaza el dunning fijo de 3 días. La propuesta es:
+    - `past_due` a +1 día;
+    - restricción blanda a +7;
+    - suspensión a +10.
+
+    Las promesas de pago frenan la restricción y la suspensión. Un negocio recibe un aviso por paso y no uno por cargo.
+11. **Seguridad.**
+    - Todas las tablas son de plataforma. El staff accede con `(select internal_scope())` y el negocio sólo ve lo suyo con `tenant_id = (select current_tenant_id())` y el rol de dueño o encargado.
+    - El ledger del negocio sólo se lee por RPC (estado de cuenta).
+    - Escritura sólo por RPC `security definer` o `service_role`.
+    - El webhook de Mercado Pago valida `x-signature` y sigue releyendo el recurso.
+    - Topes de bonificación por nivel de staff, con aprobación de super_admin por encima del tope.
+12. **No es una feature de plan.** Es operación de la plataforma; lo que ve el cliente (comprobantes, estado de cuenta, pagar) es BASE. El checklist de CLAUDE.md §6 no aplica.
+13. **KPIs desde snapshots diarios** (`platform_mrr_snapshots`).
+    - Definiciones exactas en la spec §15: MRR normalizado con addons y descuentos, ARR = MRR × 12, churn de clientes y de ingresos, NRR, conversión trial → pago por cohorte, cobrado neto de comisiones, deuda vencida con aging y DSO.
+    - Base excluida: cuentas exentas, de prueba (`tenants.is_test`) y dadas de baja.
+    - "En riesgo" se separa en riesgo de cobro y riesgo de uso.
+    - `tenants.status` pasa a ser un espejo de `subscriptions.status`. El dashboard actual se corrige antes (F20-0a) con los datos de hoy.
+14. **Participación del staff y gastos: sólo diseño** (spec §20, F21). Requiere el cobrado neto confiable y que el dueño responda las preguntas de §20.6.
+
+### Alternativas descartadas
+
+- **Extender `fiscal_documents` con `origin = 'platform'`:** mezcla la RLS del negocio con la de la plataforma, rompe `sale_id NOT NULL` y la serie del negocio con la de NinjaSoft.
+- **Que la factura sea la deuda (ledger fiscal):** un rechazo de ARCA o una refacturación cambiarían la deuda, y los contracargos obligarían a emitir NC falsas.
+- **Usar las facturas de Mercado Pago o un facturador externo:** no hay control de letra, receptor ni plantilla, y la historia del cliente queda partida.
+- **HTML a PDF con Chrome headless:** no corre en Edge Functions y agrega un servicio externo.
+- **Cobrar prorrateos y punitorios dentro del preapproval:** el preapproval cobra un monto fijo por ciclo; cambiarlo para un cobro puntual altera los ciclos siguientes.
+- **Padrón A13:** no devuelve la condición frente al IVA, que es lo que define la letra.
+
+### Consecuencias
+
+- **Bloqueos externos:**
+  - para emitir: la CUIT de NinjaSoft, la condición fiscal, el punto de venta web service y el certificado con `wsfe` y `ws_sr_constancia_inscripcion`;
+  - para la letra y las alícuotas: la validación del contador.
+
+  Hasta tenerlos se pueden construir F20-0 a F20-3, F20-8 y F20-9 (con avisos de cobro no fiscales y la carga manual de datos).
+- `billing_records` pasa a vista de compatibilidad sobre `platform_payments` y `saas-dunning` se reemplaza por `platform-dunning`, en la misma migración que crea la escalera.
+- Hay deuda documentada en la spec: FCE MiPyME (se detecta y queda `requires_action`), factura E, multimoneda y la detección automática de transferencias a la cuenta de la plataforma.
+- Las preguntas abiertas al dueño están en la spec §21: condición fiscal, IVA incluido o no, la tasa y la escalera, las cuentas de prueba, el permiso de cobranzas, los topes, las promesas del cliente, el inicio del período al pagar durante el trial, el prorrateo y el botón de arrepentimiento.

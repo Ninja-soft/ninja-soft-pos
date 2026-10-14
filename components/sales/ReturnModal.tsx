@@ -1357,7 +1357,6 @@ function ReturnResult({
   const fallbackBlocks = useMemo(
     () =>
       defaultSaleBlocks().filter((b) => {
-        if (b.type === "qr") return brand?.ticket_show_qr === true;
         if (b.type === "logo") return brand?.ticket_show_logo !== false;
         return true;
       }),

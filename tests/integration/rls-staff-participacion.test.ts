@@ -1,7 +1,7 @@
 // @vitest-environment node
 // =============================================================================
 // F21 · ADR-121: participación del staff (migración
-// 20261115200000_staff_participacion).
+// 20261116300000_staff_participacion).
 //   · Sólo super_admin (en el panel interno) configura, ve gastos y cierra;
 //     un admin, uno de soporte y el permiso Cobranzas no alcanzan.
 //   · Cada persona ve sólo SU participación, reglas, líneas, pagos y cuentas;

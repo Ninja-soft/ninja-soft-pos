@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261115200000_staff_participacion  (F21 · ADR-121)
+-- 20261116300000_staff_participacion  (F21 · ADR-121)
 --
 -- Participación del staff y gastos (spec docs/40-cobranza-saas.md §20; base
 -- del reparto = COBRADO NETO del mes, decisión §22 #15).

@@ -4286,6 +4286,6 @@ El dueño pidió construir F21, que estaba como futuro: porcentaje del cobrado n
 
 ### Consecuencias
 
-- Migración `20261115200000_staff_participacion` (sin aplicar), Edge `staff_payouts` (sin desplegar, `verify_jwt` por defecto) y bucket privado `staff-payout-files`.
+- Migración `20261116300000_staff_participacion` (sin aplicar), Edge `staff_payouts` (sin desplegar, `verify_jwt` por defecto) y bucket privado `staff-payout-files`.
 - Pantallas `/internal/participacion` (super_admin) y `/internal/mi-participacion`.
 - Deuda: subir comprobantes de gastos y pagos desde la UI (el bucket y las columnas están), mínimo o tope por persona, export XLSX de liquidaciones, y confirmar con una operación real si las transferencias a CBU hechas desde la app de MP se pueden leer por `/v1/payments`.

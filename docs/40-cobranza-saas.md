@@ -1426,7 +1426,7 @@ Cada fase es un PR chico y testeable por su cuenta. Las migraciones van **antes*
 
 ## 20. Participación del staff y gastos (F21, construido)
 
-> **Estado (2026-10-14):** construido en `feat/staff-participacion`, decisión [ADR-121](./17-decision-log.md). Migración `20261115200000_staff_participacion` **sin aplicar** y Edge `staff_payouts` **sin desplegar**. Base del reparto decidida por el dueño: **cobrado neto** del mes (§22 #15).
+> **Estado (2026-10-14):** construido en `feat/staff-participacion`, decisión [ADR-121](./17-decision-log.md). Migración `20261116300000_staff_participacion` **sin aplicar** y Edge `staff_payouts` **sin desplegar**. Base del reparto decidida por el dueño: **cobrado neto** del mes (§22 #15).
 
 ### 20.1 Qué se pidió
 

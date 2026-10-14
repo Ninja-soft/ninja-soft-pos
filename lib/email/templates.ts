@@ -394,7 +394,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       note: "Si algo no coincide con lo que te llegó, respondé este email.",
       reason: "Recibiste este email porque participás de la facturación de NinjaSoft.",
     }),
-    migration: "supabase/migrations/20261115200000_staff_participacion.sql",
+    migration: "supabase/migrations/20261116300000_staff_participacion.sql",
   },
 ];
 

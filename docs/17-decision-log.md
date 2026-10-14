@@ -3945,6 +3945,33 @@ El catálogo precargado se cargaba con un Excel gigante que el dueño bajaba del
 - Tests: scraper `tests/catalog.test.js` (EAN, reglas de fusión, índice, feed con keyset y since); POS `tests/unit/catalogSync.test.ts` (mapeo feed → maestro + ofertas, since, cursor, errores, conteos, panel), `tests/unit/marketReference.test.ts`, `tests/components/MarketReferencePanel.test.tsx` (switch apagado = sin RPC), RLS `tests/integration/rls-catalog-maestro.test.ts`, `rls-catalog-search.test.ts` y `rls-catalog-sync.test.ts` actualizadas. Migración probada en PGlite con stubs (backfill, mismas columnas y resultados de las funciones viejas, RLS por entitlement, import sin precio con medidas y fotos, sync con vendedores, compatibilidad ADR-107).
 ---
 
+## ADR-111: Ticket después de cobrar: ventana ancha, comprobante fiscal recién con CAE y auto-imprimir sin ventana
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/ticket-post-venta`; sin migraciones ni cambios de SQL o Edge) · **Base:** ADR-072 (facturación ARCA, cola fiscal y CAEA), ADR-061 (pestaña Cobros), H22 (perfiles de impresión), ADR-049 (impresora por caja).
+
+### Contexto
+
+Pedido del dueño: la ventana "Ticket" que aparece después de cobrar era angosta (`max-w-sm`) y en una venta fiscal mostraba el ticket con "Comprobante pendiente de autorización ARCA" mientras se pedía el CAE. Con el switch "Imprimir ticket al cobrar" prendido, además de imprimir se abría la ventana igual, y en una venta fiscal se imprimía el comprobante sin CAE.
+
+### Decisión
+
+1. **Ventana con el ancho y el lenguaje de la hoja de cobro** (`PosSheet` xl, `md:max-w-4xl`): en la compu, vista previa del comprobante a la izquierda (con las pestañas Ticket y Cobros) y panel de acciones a la derecha (venta, total, estado fiscal, Imprimir con formato, copias e impresora, Email, PDF, Compartir, Ver venta, detalle de la factura y "Nueva venta" como acción principal); en el celular, resumen y acciones arriba, vista previa abajo y "Nueva venta" fija abajo. Presentación en `components/sales/ticket/TicketSheet.tsx`; datos en `TicketModal`.
+2. **Estados (puro, `lib/tickets/postSale.ts`)** a partir del comprobante de `fiscal_documents` de la venta, sin tocar la emisión: sin comprobante (o cancelado) = no fiscal, se muestra directo; `pendiente`/`enviando` sin error = **Autorizando en ARCA** (silueta del ticket, barra de progreso y pasos; a los 20 s "ARCA está tardando" con "Ver provisorio"); `pendiente` con error del worker = **ARCA no responde** (motivo en lenguaje simple, hora del próximo intento automático, **Reintentar ahora** con `emitir_venta`, que ya podía llamar cualquier miembro, e **Imprimir provisorio**); `rechazado`/`requiere_accion` = **falla** (motivo, "Avisale al encargado" o qué corregir; el reproceso sigue en el detalle fiscal para dueño y encargado); `aprobado` con CAE o CAEA = se muestra (CAEA con la pastilla de contingencia). El error `presupuesto` (sólo se reprogramó) no cuenta como falla. Mientras se espera el CAE, la ventana consulta el comprobante cada 2 s (antes 8 s).
+3. **Auto-imprimir sin ventana:** con "Imprimir ticket al cobrar" la venta recién cobrada abre el ticket en modo silencioso: espera el comprobante (con CAE si es fiscal), imprime por la misma vía de siempre (`window.print()` con las copias del perfil) y se cierra sin mostrarse. La ventana se abre sólo si ARCA rechaza, no responde o tarda más de 20 s, o si la impresión falla. El POS guarda una lista de tickets abiertos, así el de una venta que espera el CAE no se pierde si se cobra la siguiente; la impresión se aísla al ticket de esa venta (`printTicketIsolated` + `data-print-active` en `globals.css`) y sale de un nodo fuera del diálogo (portal) para que el scroll no la recorte. El perfil "automático" del negocio sigue imprimiendo solo con la ventana visible, también recién con el CAE.
+4. **El email automático también espera el CAE** (antes podía salir con el aviso de pendiente). Si la venta queda en error, no se manda solo (se puede mandar a mano con el provisorio).
+5. **Atajos dentro de la ventana:** Enter = Nueva venta (vuelve al buscador), P = Imprimir. Figuran en la ayuda "?" del POS.
+
+### Alternativas descartadas
+
+- **Esperar el CAE dentro del cobro (bloquear la hoja):** ADR-072 pide que el cajero nunca quede bloqueado por ARCA.
+- **Imprimir el provisorio solo y reimprimir con el CAE:** dos papeles por venta y el cliente se puede llevar el que no vale.
+- **Link público del comprobante y envío por WhatsApp con texto:** no existe una página pública del ticket; "Compartir" usa el menú del equipo (Web Share con el PDF), que en el celular incluye WhatsApp. Sólo aparece si el navegador puede compartir archivos.
+
+### Consecuencias
+
+- Sin migraciones, Edges ni secrets. No cambia `create_sale`, la cola fiscal, los reintentos ni la contingencia CAEA.
+- `window.print()` no informa si el usuario cancela el diálogo: "falla de impresión" es sólo cuando el navegador no puede imprimir.
+- Tests: `tests/unit/ticketPostSale.test.ts` (estados y paso del modo silencioso) y `tests/components/TicketModal.test.tsx` (no fiscal imprime y cierra sin ventana, fiscal espera el CAE, rechazo y ARCA caído abren la ventana sin imprimir, autorizando no muestra el comprobante, Nueva venta y Ver venta).
 ## ADR-110: Cobranza SaaS: el ledger económico de la plataforma separado de la capa fiscal, comprobantes propios con CAE en una cola, datos fiscales verificados con el padrón de ARCA y KPIs desde snapshots (F20, diseño)
 
 **Fecha:** 2026-10-13 · **Estado:** propuesta (sólo diseño, nada construido) · **Hitos:** F20 (H125 a H136) y F21 futuro (H137 y H138) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) · **Base:** ADR-016, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-072 (cola ARCA), ADR-073 y ADR-084 (panel interno), ADR-083 (auditoría inmutable). **Numeración:** 109 la toma `feat/catalogo-maestro-ean`.

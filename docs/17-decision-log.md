@@ -4252,7 +4252,7 @@ F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea l
 
 ## ADR-119: Comprobantes v2: un solo motor para todo comprobante, más modelos y opciones, fotos de producto, selector Ticket o A4 al imprimir, PDF del email igual a la vista previa y nota de crédito de la devolución
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/comprobantes-v2`; migración `20261115100000_comprobantes_v2` sin aplicar; Edge `ai_assistant` sin desplegar) · **Base:** ADR-112 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-072 (facturación ARCA), ADR-077 (venta offline), H9b (plantillas de ticket), H22 (perfiles de impresión). **Numeración:** 117 es la mayor en `main`; 118 puede estar tomada en una rama abierta.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/comprobantes-v2`; migración `20261116200000_comprobantes_v2` sin aplicar; Edge `ai_assistant` sin desplegar) · **Base:** ADR-112 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-072 (facturación ARCA), ADR-077 (venta offline), H9b (plantillas de ticket), H22 (perfiles de impresión). **Numeración:** 117 es la mayor en `main`; 118 puede estar tomada en una rama abierta.
 
 ### Contexto
 
@@ -4276,7 +4276,7 @@ Después, para la misma rama: poder elegir un modelo de factura que muestre la f
 ### Decisión
 
 1. **Un solo motor.** Venta, devolución y nota de crédito, provisorio, contingencia (CAEA), offline, reimpresión, prueba de impresora, email y PDF salen de `InvoiceDocument`. Se borran `TemplateRenderer`, `TicketRenderer`, `CanvasTicketRenderer`, `HtmlTicketRenderer`, `TicketTemplateEditor`, `TicketTemplatesCard`, `ImageCropModal`, `lib/tickets/{blocks, blockTemplates, canvasCompat, htmlTemplates, htmlVars, legal, myBrand, requiredQr, exportPng}.ts`, `modules/tickets/api.ts`, los hooks de plantillas y sus tests. La tabla `ticket_templates` queda como historial.
-2. **Migración de datos sin borrar nada** (`20261115100000_comprobantes_v2`):
+2. **Migración de datos sin borrar nada** (`20261116200000_comprobantes_v2`):
    - los negocios con plantilla activa (impresión o email) o con el modelo `simple` pasan al Clásico con el color y el logo de su marca;
    - si la plantilla de email (o la de impresión, sin una de email) era A4, el email adjunta A4;
    - si la de impresión era A4 y el perfil "ticket de venta" no tenía formato, el perfil queda en A4;
@@ -4345,7 +4345,7 @@ Después, para la misma rama: poder elegir un modelo de factura que muestre la f
 
 ### Consecuencias
 
-- Migración `20261115100000_comprobantes_v2` (sin aplicar; requiere `20261112100000_comprobantes_plantillas` de ADR-112). La Edge `ai_assistant` lee el diseño de comprobantes en lugar de las plantillas (`deno check` OK, sin desplegar).
+- Migración `20261116200000_comprobantes_v2` (sin aplicar; requiere `20261112100000_comprobantes_plantillas` de ADR-112). La Edge `ai_assistant` lee el diseño de comprobantes en lugar de las plantillas (`deno check` OK, sin desplegar).
 - Tests:
   - `tests/unit/invoiceTemplates.test.tsx`: modelos por tipos por opciones, Simple como Clásico, gating, bordes, fotos, IVA en B, código de barras y paginación de los 9 modelos;
   - `tests/unit/invoicePdf.test.ts`: páginas A4 de 210 x 297 mm, ticket de 80 y 58 mm y achicado sin corte;

@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261115100000_comprobantes_v2  (ADR-119 · comprobantes v2)
+-- 20261116200000_comprobantes_v2  (ADR-119 · comprobantes v2)
 --
 -- Todo comprobante (venta, devolución / nota de crédito, provisorio,
 -- contingencia, offline, reimpresión, email y PDF) sale del motor ADR-112.
@@ -138,7 +138,7 @@ update ticket_templates
 drop table if exists _cv2_targets;
 
 comment on table ticket_templates is
-  'H9b: plantillas de ticket (bloques, lienzo, HTML). RETIRADAS por ADR-119: la UI ya no las usa ni las activa; quedan como historial (print_active/email_active en false desde 20261115100000). Todo comprobante sale del motor ADR-112 (tenant_branding.invoice_style).';
+  'H9b: plantillas de ticket (bloques, lienzo, HTML). RETIRADAS por ADR-119: la UI ya no las usa ni las activa; quedan como historial (print_active/email_active en false desde 20261116200000). Todo comprobante sale del motor ADR-112 (tenant_branding.invoice_style).';
 
 comment on column tenant_branding.invoice_style is
   'ADR-112 / ADR-119: personalización de comprobantes. Modelos (a4_model, ticket_model), color y logo (accent_mode/custom, logo_mode/custom_url), sello, leyendas, trade_name, bloques (show_payments, show_internal_ref, show_contact, show_iva_breakdown, show_legends, show_sale_barcode), aspecto (font_family, font_size, density, corners, logo_position, header_style, separators), fotos (show_photos, ticket_photos), a4_copies, email_format y legacy_from (migración). {} = defaults.';

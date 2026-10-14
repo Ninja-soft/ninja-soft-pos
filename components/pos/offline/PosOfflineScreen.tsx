@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloudOff, Lock, Minus, Plus, Search, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { OfflineTicketModal } from "@/components/pos/offline/OfflineTicketModal";
 import { SwUpdateBanner } from "@/components/pwa/SwUpdateBanner";
@@ -172,7 +173,7 @@ export function PosOfflineScreen() {
       </div>
 
       {boot.status === "loading" || !mode ? (
-        <p className="px-4 py-10 text-center text-sm text-muted-foreground">Cargando datos del dispositivo</p>
+        <SpinnerBlock label="Cargando datos del dispositivo" />
       ) : (
         <>
           {mode.mode === "readonly" && (
@@ -251,7 +252,7 @@ function ShellSeller({
     [offline, q],
   );
   const total = shellTotal(lines);
-  const at = new Date(snapshot.at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+  const at = new Date(snapshot.at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short", hourCycle: "h23" });
 
   async function charge() {
     const built = buildShellSale(lines, {
@@ -292,7 +293,8 @@ function ShellSeller({
       onPointerDown={onActivity}
       onKeyDown={onActivity}
     >
-      <section className="flex min-w-0 flex-1 flex-col gap-3">
+      {/* En el celular la lista no estira: el carrito queda pegado debajo. */}
+      <section className="flex min-w-0 flex-col gap-3 md:flex-1">
         <p className="text-xs text-muted-foreground" data-testid="pos-offline-status">
           Catálogo del {at}. {offline.pending === 1 ? "1 venta" : `${offline.pending} ventas`} por sincronizar.
           {offline.held > 0 ? ` ${offline.held} retenidas en este dispositivo.` : ""}

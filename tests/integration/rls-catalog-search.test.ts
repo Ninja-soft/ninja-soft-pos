@@ -1,6 +1,9 @@
 // @vitest-environment node
 // =============================================================================
-// ADR-093 (F4): catalog_search sobre catalog_products con el índice trigram.
+// ADR-093 (F4): catalog_search con el índice trigram. Desde ADR-109 lee el
+// producto maestro (catalog_items, trigram en titulo) y las publicaciones de
+// tienda (catalog_offers); los datos se cargan con la RPC de service_role
+// catalog_sync_upsert_products (catalog_products quedó congelada).
 //
 // La RPC valida lo mismo que la policy catalog_products_read: el negocio actual
 // compró o recibió el catálogo y está activo, o es staff interno en el panel
@@ -26,6 +29,18 @@ const PASSWORD = "Rls-test-1234!";
 const S1 = `${STAMP.toUpperCase()}_S1`;
 const S2 = `${STAMP.toUpperCase()}_S2`;
 const S3 = `${STAMP.toUpperCase()}_S3`;
+// EAN-13 válidos y únicos por corrida (los inválidos quedan por tienda y no se
+// deduplicarían entre S1 y S2).
+const BASE = `77${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
+function ean13(n: number): string {
+  const body = `${BASE}${String(n).padStart(4, "0")}`;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(body[11 - i]) * (i % 2 === 0 ? 3 : 1);
+  return body + ((10 - (sum % 10)) % 10);
+}
+const E1 = ean13(1);
+const E2 = ean13(2);
+const E3 = ean13(3);
 
 type Ctx = {
   admin: SupabaseClient;
@@ -153,21 +168,28 @@ describe.skipIf(!enabled)("ADR-093 · catalog_search con índice trigram y permi
 
     // Super: la misma leche (mismo EAN) en las dos tiendas, más relleno.
     const products: Record<string, unknown>[] = [
-      { store_key: S1, ean: `${STAMP}0001`, titulo: `Leche entera ${STAMP}`, precio: 100, disponible: true },
-      { store_key: S2, ean: `${STAMP}0001`, titulo: `Leche entera ${STAMP} (dos)`, precio: 110, disponible: true },
-      { store_key: S1, ean: `${STAMP}0002`, titulo: `Leche descremada ${STAMP}`, precio: 95, disponible: false },
-      { store_key: S3, ean: `${STAMP}0003`, titulo: `Tornillo ${STAMP} 6mm`, precio: 5, disponible: true },
+      { store_key: S1, ean: E1, titulo: `Leche entera ${STAMP}`, precio: 100, disponible: true },
+      { store_key: S2, ean: E1, titulo: `Leche entera ${STAMP} (dos)`, precio: 110, disponible: true },
+      { store_key: S1, ean: E2, titulo: `Leche descremada ${STAMP}`, precio: 95, disponible: false },
+      { store_key: S3, ean: E3, titulo: `Tornillo ${STAMP} 6mm`, precio: 5, disponible: true },
     ];
     for (let i = 0; i < 45; i++)
       products.push({
         store_key: S3,
-        ean: `${STAMP}9${String(i).padStart(3, "0")}`,
+        ean: ean13(100 + i),
         titulo: `Clavo ${STAMP} ${String(i).padStart(2, "0")}`,
         precio: 1,
         disponible: true,
       });
-    const cp = await admin.from("catalog_products").insert(products as never);
-    if (cp.error) throw cp.error;
+    for (const store of [S1, S2, S3]) {
+      const up = await admin.rpc("catalog_sync_upsert_products" as never, {
+        p_run: null,
+        p_store: store,
+        p_full: false,
+        p_rows: products.filter((x) => x.store_key === store),
+      } as never);
+      if (up.error) throw up.error;
+    }
 
     const tcp = await admin.from("tenant_catalog_purchases").insert([
       { tenant_id: ctx.tenant, catalog_id: ctx.super_, source: "granted" },
@@ -183,6 +205,7 @@ describe.skipIf(!enabled)("ADR-093 · catalog_search con índice trigram y permi
     await admin.from("tenant_catalog_purchases").delete().in("tenant_id", [ctx.tenant, ctx.tenantB]);
     await admin.from("catalogs").delete().like("key", `${STAMP}-%`);
     await admin.from("catalog_stores").delete().in("key", [S1, S2, S3]);
+    await admin.from("catalog_items").delete().like("ean", `${BASE}%`);
     for (const t of [ctx.tenant, ctx.tenantB]) await admin.from("tenants").delete().eq("id", t);
     for (const id of ctx.userIds) {
       await admin.from("users").delete().eq("id", id);
@@ -194,14 +217,14 @@ describe.skipIf(!enabled)("ADR-093 · catalog_search con índice trigram y permi
     const r = await search(ctx.cashier, ctx.super_, `leche entera ${STAMP}`);
     expect(r.error).toBeNull();
     // dedupe_by_ean: una fila por EAN.
-    expect(rows(r).map((x) => x.ean)).toEqual([`${STAMP}0001`]);
+    expect(rows(r).map((x) => x.ean)).toEqual([E1]);
 
     const all = await search(ctx.cashier, ctx.super_, STAMP);
     expect(all.error).toBeNull();
     // Disponibles primero; el Tornillo es de otra tienda (otro catálogo).
-    expect(rows(all).map((x) => x.ean)).toEqual([`${STAMP}0001`, `${STAMP}0002`]);
+    expect(rows(all).map((x) => x.ean)).toEqual([E1, E2]);
 
-    const ean = await search(ctx.cashier, ctx.ferre, `${STAMP}0003`);
+    const ean = await search(ctx.cashier, ctx.ferre, E3);
     expect(ean.error).toBeNull();
     expect(rows(ean).map((x) => x.titulo)).toEqual([`Tornillo ${STAMP} 6mm`]);
 
@@ -253,7 +276,9 @@ describe.skipIf(!enabled)("ADR-093 · catalog_search con índice trigram y permi
     const anon = createClient(URL_!, ANON!, { auth: { persistSession: false } });
     const r = await search(anon, ctx.super_, "leche");
     expect(r.error).not.toBeNull();
-    const { data } = await ctx.ownerB.from("catalog_products").select("id").in("store_key", [S1, S2, S3]);
+    const { data } = await ctx.ownerB.from("catalog_offers").select("id").in("store_key", [S1, S2, S3]);
     expect(data ?? []).toEqual([]);
+    const { data: items } = await ctx.ownerB.from("catalog_items").select("id").like("ean", `${BASE}%`);
+    expect(items ?? []).toEqual([]);
   });
 });

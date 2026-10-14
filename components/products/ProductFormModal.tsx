@@ -58,6 +58,7 @@ import { PackagesEditor } from "@/components/products/PackagesEditor";
 import { Barcode } from "@/components/products/Barcode";
 import { ProductCostsPanel } from "@/components/purchases/ProductCostsPanel";
 import { FeatureGate } from "@/components/saas/FeatureGate";
+import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
 import { diffPackages, type ProductPackage } from "@/lib/products/packages";
 import {
@@ -623,6 +624,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 {...register("price", { onChange: () => setMarginDraft(null) })}
               />
             </div>
+            {/* Referencia de mercado (ADR-109): sólo con catálogo y el switch del dueño prendido. */}
+            <MarketReferencePanel ean={barcodeVal} myPrice={price} className="pt-2" />
           </Group>
 
           <Group

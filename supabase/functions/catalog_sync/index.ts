@@ -1,7 +1,14 @@
 // =============================================================================
-// Edge Function: catalog_sync (ADR-107). Sincroniza el catálogo precargado
-// "Tiendita" (catalog_stores / catalog_products) desde el feed del scraper del
-// dueño en Railway (GET /api/feed/stores y /api/feed/products, Bearer).
+// Edge Function: catalog_sync (ADR-107, ADR-109). Sincroniza el catálogo
+// precargado "Tiendita" desde el feed del scraper del dueño en Railway.
+//
+// ADR-109: lee el CATÁLOGO MAESTRO (GET /api/feed/catalog): un ítem por
+// producto (EAN canónico o código propio de una tienda) con la ficha
+// fusionada de todas las tiendas y TODAS sus ofertas (cada tienda y cada
+// vendedor). Upsert batcheado en catalog_items + catalog_offers
+// (catalog_sync_upsert_catalog). Se sincronizan todas las tiendas del feed
+// (estén o no en un catálogo): las ofertas sirven para comparar precios; lo
+// que ve cada negocio sigue dependiendo de sus catálogos.
 // Lógica pura en ../_shared/catalogSync.ts (con tests).
 //
 // Secrets: CATALOG_FEED_URL (base, p. ej. https://<app>.up.railway.app) y
@@ -18,38 +25,41 @@
 //      responder) y procesa la primera tanda.
 //
 // UNA INVOCACIÓN = UNA TANDA: toma la corrida con lease (catalog_sync_claim,
-// 170 s), responde 202 al toque y sigue en segundo plano (EdgeRuntime.waitUntil)
-// hasta ~100 s: por tienda pide páginas de 1000 con su cursor, upsert batcheado
-// (catalog_sync_upsert_products) y guarda el cursor en catalog_sync_runs después
-// de CADA página. Al terminar una tienda: faltantes si fue completa + conteo
-// (catalog_sync_finish_store). Si se acaba el tiempo, suelta el lease y el cron
-// de cada minuto la continúa desde el cursor guardado; si la invocación muere,
-// el lease vence y pasa lo mismo. Al final, recuento y aviso a los negocios
-// por catálogo afectado (catalog_sync_finalize).
+// 170 s), responde 202 y sigue en segundo plano (EdgeRuntime.waitUntil) hasta
+// ~100 s: pide páginas del feed maestro con su cursor y guarda el avance en
+// catalog_sync_runs.feed después de CADA página. Terminada la lectura, cierra
+// tienda por tienda (catalog_sync_finish_store: si fue completa, las ofertas
+// que no vinieron quedan no disponibles, nunca se borran; conteo) y al final
+// recuento y aviso a los negocios por catálogo afectado (catalog_sync_finalize).
+// Si se acaba el tiempo, suelta el lease y el cron de cada minuto continúa;
+// si la invocación muere, el lease vence y pasa lo mismo.
 //
-// Primera corrida: completa. Siguientes: incremental por tienda con `since` =
-// inicio de la última corrida OK de esa tienda (menos 1 h de margen).
+// Primera corrida (y la primera después de ADR-109): completa. Siguientes:
+// incremental con `since` = inicio de la última corrida OK (menos 1 h).
 //
 // Deploy: verify_jwt = true (el cron manda el anon key como Bearer para pasar
 // el gateway; la autenticación real es el X-Cron-Secret o el JWT del staff).
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
-  applyError,
+  applyFeedError,
   applyPage,
-  feedProductsUrl,
+  feedCatalogUrl,
   feedStoresUrl,
   hasTime,
+  initFeedState,
   initStores,
   LEASE_SECONDS,
-  MAX_STORE_ERRORS,
-  mapFeedPage,
+  MAX_FEED_ERRORS,
+  mapCatalogPage,
   nextPendingStore,
   runMode,
-  totals,
-  type FeedPage,
+  storeFaltantes,
+  type FeedCatalogPage,
+  type FeedState,
   type FeedStore,
   type PreviousRun,
+  type RunTotals,
   type StoresState,
   type UpsertResult,
 } from "../_shared/catalogSync.ts";
@@ -78,6 +88,11 @@ interface RunRow {
   force_full: boolean;
   invocations: number;
   stores: StoresState;
+  feed: FeedState | null;
+  nuevos: number;
+  actualizados: number;
+  ofertas_nuevas: number;
+  ofertas_actualizadas: number;
   started_at: string;
 }
 
@@ -91,21 +106,36 @@ async function feedGet<T>(feed: Feed, url: string): Promise<T> {
     headers: { Authorization: `Bearer ${feed.token}`, Accept: "application/json" },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
+  // 503 catalog_index_building: el scraper está armando el índice; se reintenta.
   if (!res.ok) throw new Error(`feed respondió ${res.status}`);
   return (await res.json()) as T;
 }
 
-async function saveRun(admin: SupabaseClient, runId: string, stores: StoresState, extra: Record<string, unknown> = {}) {
-  const t = totals(stores);
+interface Progress {
+  stores: StoresState;
+  feed: FeedState | null;
+  totals: RunTotals;
+}
+
+async function saveRun(admin: SupabaseClient, runId: string, p: Progress, extra: Record<string, unknown> = {}) {
   const { error } = await admin
     .from("catalog_sync_runs")
-    .update({ stores, ...t, mode: runMode(stores), heartbeat_at: new Date().toISOString(), ...extra })
+    .update({
+      stores: p.stores,
+      feed: p.feed,
+      ...p.totals,
+      faltantes: storeFaltantes(p.stores),
+      errores: (p.feed?.error ? 1 : 0) + Object.values(p.stores).filter((s) => s.error).length,
+      mode: runMode(p.feed),
+      heartbeat_at: new Date().toISOString(),
+      ...extra,
+    })
     .eq("id", runId);
   if (error) throw new Error(`no se pudo guardar el avance: ${error.message}`);
 }
 
-/** Primera invocación de la corrida: tiendas del feed, alta de las nuevas y since por tienda. */
-async function initRun(admin: SupabaseClient, feed: Feed, run: RunRow): Promise<StoresState> {
+/** Primera invocación de la corrida: tiendas del feed (alta de las nuevas) y since. */
+async function initRun(admin: SupabaseClient, feed: Feed, run: RunRow, totals: RunTotals): Promise<Progress> {
   const feedStores = await feedGet<FeedStore[]>(feed, feedStoresUrl(feed.url));
   if (!Array.isArray(feedStores) || feedStores.length === 0) throw new Error("el feed no devolvió tiendas");
   const { error: stErr } = await admin.rpc("catalog_sync_upsert_stores", {
@@ -114,79 +144,113 @@ async function initRun(admin: SupabaseClient, feed: Feed, run: RunRow): Promise<
   if (stErr) throw new Error(`alta de tiendas: ${stErr.message}`);
   const { data: prev, error: prevErr } = await admin
     .from("catalog_sync_runs")
-    .select("status, started_at, stores")
+    .select("status, started_at, feed")
     .in("status", ["ok", "partial"])
     .neq("id", run.id)
     .order("started_at", { ascending: false })
-    .limit(50);
+    .limit(20);
   if (prevErr) throw new Error(`corridas anteriores: ${prevErr.message}`);
-  const stores = initStores(feedStores, (prev ?? []) as PreviousRun[], run.force_full);
-  await saveRun(admin, run.id, stores);
-  return stores;
+  const progress: Progress = {
+    stores: initStores(feedStores),
+    feed: initFeedState((prev ?? []) as PreviousRun[], run.force_full),
+    totals,
+  };
+  await saveRun(admin, run.id, progress);
+  return progress;
 }
+
+const EMPTY_RESULT: UpsertResult = {
+  recibidos: 0,
+  nuevos: 0,
+  actualizados: 0,
+  ofertas: 0,
+  ofertas_nuevas: 0,
+  ofertas_actualizadas: 0,
+  faltantes: 0,
+  por_tienda: {},
+};
 
 /** Una tanda con presupuesto de tiempo. Devuelve si la corrida terminó. */
 async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Promise<{ finished: boolean; pages: number }> {
   const t0 = Date.now();
-  let stores = run.stores ?? {};
+  let p: Progress = {
+    stores: run.stores ?? {},
+    feed: run.feed ?? null,
+    totals: {
+      nuevos: run.nuevos ?? 0,
+      actualizados: run.actualizados ?? 0,
+      ofertas_nuevas: run.ofertas_nuevas ?? 0,
+      ofertas_actualizadas: run.ofertas_actualizadas ?? 0,
+    },
+  };
   let pages = 0;
 
   try {
-    if (Object.keys(stores).length === 0) stores = await initRun(admin, feed, run);
+    if (!p.feed) p = await initRun(admin, feed, run, p.totals);
 
     while (hasTime(t0, Date.now())) {
-      const key = nextPendingStore(stores);
-      if (!key) {
-        await saveRun(admin, run.id, stores);
-        const { error } = await admin.rpc("catalog_sync_finalize", { p_run: run.id });
-        if (error) throw new Error(`cierre: ${error.message}`);
-        return { finished: true, pages };
-      }
-      const st = stores[key];
-      try {
-        const page = await feedGet<FeedPage>(feed, feedProductsUrl(feed.url, key, st.since, st.cursor));
-        if (!page || !Array.isArray(page.items)) throw new Error("respuesta del feed inválida");
-        const rows = mapFeedPage(page.items);
-        let result: UpsertResult = { nuevos: 0, actualizados: 0, faltantes: 0 };
-        if (rows.length) {
-          const { data, error } = await admin.rpc("catalog_sync_upsert_products", {
-            p_run: run.id,
-            p_store: key,
-            p_full: st.full,
-            p_rows: rows,
-          });
-          if (error) throw new Error(`upsert: ${error.message}`);
-          result = data as UpsertResult;
+      const st = p.feed as FeedState;
+      // 1) Lectura del feed maestro, página por página.
+      if (!st.done) {
+        try {
+          const page = await feedGet<FeedCatalogPage>(feed, feedCatalogUrl(feed.url, st.since, st.cursor));
+          if (!page || !Array.isArray(page.items)) throw new Error("respuesta del feed inválida");
+          const rows = mapCatalogPage(page.items);
+          let result: UpsertResult = EMPTY_RESULT;
+          if (rows.length) {
+            const { data, error } = await admin.rpc("catalog_sync_upsert_catalog", { p_run: run.id, p_items: rows });
+            if (error) throw new Error(`upsert: ${error.message}`);
+            result = data as UpsertResult;
+          }
+          p = { ...p, ...applyPage(st, p.stores, p.totals, page, result) };
+          pages++;
+          await saveRun(admin, run.id, p, { current_store: null });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(JSON.stringify({ fn: "catalog_sync", run: run.id, error: msg }));
+          p = { ...p, feed: applyFeedError(st, msg) };
+          await saveRun(admin, run.id, p, { last_error: msg.slice(0, 500) });
+          // Con reintentos pendientes se corta la tanda: el cron reintenta al minuto.
+          if (!(p.feed as FeedState).done) break;
         }
-        let next = applyPage(st, page, result);
-        if (!page.nextCursor) {
-          const { data: fin, error: finErr } = await admin.rpc("catalog_sync_finish_store", {
-            p_run: run.id,
-            p_store: key,
-            p_full: st.full,
-          });
-          if (finErr) throw new Error(`cierre de ${key}: ${finErr.message}`);
-          next = { ...next, done: true, marcados: Number((fin as { marcados?: number } | null)?.marcados ?? 0) };
-        }
-        stores = { ...stores, [key]: next };
-        pages++;
-        await saveRun(admin, run.id, stores, { current_store: key });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error(JSON.stringify({ fn: "catalog_sync", run: run.id, store: key, error: msg }));
-        stores = { ...stores, [key]: applyError(st, msg) };
-        await saveRun(admin, run.id, stores, { last_error: `${key}: ${msg}`.slice(0, 500) });
-        // Si la tienda todavía tiene reintentos, se corta la tanda: el cron
-        // reintenta al minuto. Si quedó terminada con error, se sigue con otra.
-        if (!stores[key].done) break;
+        continue;
       }
+
+      // 2) Cierre por tienda: faltantes (sólo si la lectura fue completa y sin
+      //    error) + conteo. Una RPC por tienda: ninguna toca la tabla entera.
+      const key = nextPendingStore(p.stores);
+      if (key) {
+        const { data: fin, error: finErr } = await admin.rpc("catalog_sync_finish_store", {
+          p_run: run.id,
+          p_store: key,
+          p_full: st.full && !st.error,
+        });
+        const s = p.stores[key];
+        p = {
+          ...p,
+          stores: {
+            ...p.stores,
+            [key]: finErr
+              ? { ...s, done: true, error: `cierre: ${finErr.message}`.slice(0, 500) }
+              : { ...s, done: true, marcados: Number((fin as { marcados?: number } | null)?.marcados ?? 0) },
+          },
+        };
+        await saveRun(admin, run.id, p, { current_store: key });
+        continue;
+      }
+
+      // 3) Fin: recuento y aviso por catálogo.
+      await saveRun(admin, run.id, p, { current_store: null });
+      const { error } = await admin.rpc("catalog_sync_finalize", { p_run: run.id });
+      if (error) throw new Error(`cierre: ${error.message}`);
+      return { finished: true, pages };
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(JSON.stringify({ fn: "catalog_sync", run: run.id, error: msg }));
     // Si ni siquiera se pudo leer la lista de tiendas tras varios intentos, la
     // corrida se cierra con error (no queda reintentando hasta el timeout).
-    const giveUp = Object.keys(stores).length === 0 && (run.invocations ?? 0) >= MAX_STORE_ERRORS;
+    const giveUp = !p.feed && (run.invocations ?? 0) >= MAX_FEED_ERRORS;
     await admin
       .from("catalog_sync_runs")
       .update({

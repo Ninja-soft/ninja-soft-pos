@@ -32,6 +32,7 @@ import { CATALOG_ASSETS_BUCKET, type Catalog } from "@/modules/internal/catalogs
 import { CatalogEditorModal } from "./CatalogEditorModal";
 import { CatalogGrantsModal } from "./CatalogGrantsModal";
 import { CatalogSyncCard } from "./CatalogSyncCard";
+import { CatalogMasterCard } from "./CatalogMasterCard";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 
@@ -315,6 +316,7 @@ export function CatalogsManager() {
           <RefreshCw size={18} /> Sincronización con el catálogo
         </Heading>
         <CatalogSyncCard />
+        <CatalogMasterCard />
 
         {/* Plan B si el feed está caído: Excel a mano por script */}
         <Disclosure

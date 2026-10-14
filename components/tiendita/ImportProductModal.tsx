@@ -12,7 +12,6 @@ import { useToast } from "@/components/ui/Toast";
 import { CategoryPathEditor } from "@/components/products/CategoryPathEditor";
 import { AttributesEditor } from "@/components/products/AttributesEditor";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
 import {
@@ -25,6 +24,7 @@ import {
 import { uploadProductImage } from "@/modules/products/images";
 import { useCategories } from "@/modules/products/hooks";
 import { useImportCatalogProduct } from "@/modules/tiendita/hooks";
+import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
 import type { CatalogSearchResult } from "@/modules/tiendita/storefront";
 
 const ADD_ERRORS: Record<string, string> = {
@@ -97,7 +97,9 @@ function initialDraft(p: CatalogSearchResult, cats: CategoryLike[]): Draft {
     model: "",
     barcode: p.ean ?? "",
     sku: "",
-    price: toInput(p.precio),
+    // Precio de venta SIEMPRE vacío: lo pone el negocio. El de las tiendas se
+    // muestra abajo como referencia de mercado, nunca se copia (ADR-109).
+    price: "",
     cost: "",
     trackStock: false,
     stock: "",
@@ -322,14 +324,6 @@ export function ImportProductModal({
                   e.target.value = "";
                 }}
               />
-              {product.precioLista != null && product.precioLista !== product.precio && (
-                <p className="text-xs text-muted-foreground">
-                  Precio de lista en el catálogo{" "}
-                  <span className="font-semibold text-foreground">
-                    {formatCurrency(product.precioLista)}
-                  </span>
-                </p>
-              )}
             </div>
           </div>
 
@@ -400,6 +394,7 @@ export function ImportProductModal({
                 variant="filled"
                 label="Precio de venta"
                 inputMode="decimal"
+                placeholder="Poné tu precio"
                 value={draft.price}
                 onChange={(e) => set("price", e.target.value)}
               />
@@ -412,6 +407,7 @@ export function ImportProductModal({
                 onChange={(e) => set("cost", e.target.value)}
               />
             </div>
+            <MarketReferencePanel ean={product.ean} myPrice={price} />
             <div className={cn("rounded-xl bg-muted px-3 py-2.5", draft.trackStock && "space-y-3 pb-3")}>
               <label className="flex items-center justify-between gap-3 text-sm">
                 <span>
@@ -464,7 +460,14 @@ export function ImportProductModal({
             )}
           </Section>
 
-          <Section title="Atributos">
+          <Section
+            title="Atributos"
+            aside={
+              <span className="text-xs text-muted-foreground">
+                Medidas primero; las del catálogo también se cargan como bultos
+              </span>
+            }
+          >
             <AttributesEditor
               value={draft.attributes}
               onChange={(a) => set("attributes", a)}

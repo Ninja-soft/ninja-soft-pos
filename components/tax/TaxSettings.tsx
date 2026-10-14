@@ -28,6 +28,7 @@ import { PadronImport } from "./PadronImport";
 import { RetentionScales, RetentionValues } from "./RetentionValues";
 import { IvaRatesCard, ParametersCard } from "./custom/TaxValueCards";
 import { IibbActivitiesCard, SufferedRulesCard } from "./custom/IibbAndRulesCards";
+import { CertificateIsNotTheLetter, LetterGuide, PadronConditionCheck } from "@/components/arca/InvoiceLettersGuide";
 
 // Configuración > Impuestos (ADR-068, ADR-105), por secciones. Todo valor
 // impositivo es del negocio: cada uno muestra si rige la plantilla de
@@ -130,16 +131,17 @@ function FiscalCard({ settings }: { settings: Settings }) {
   const cuitBad = cuit.trim() !== "" && !isValidCuit(cuit);
   const ri = cond === "responsable_inscripto";
 
-  const onSave = () =>
+  // `withCond`: guardar con otra condición (la que informa ARCA) sin perder el resto.
+  const onSave = (withCond?: EmitterCondition) =>
     save.mutate(
       {
-        iva_condition: cond || null,
+        iva_condition: (withCond ?? cond) || null,
         cuit: cuit.trim() || null,
         iibb_number: iibb.trim() || null,
         iibb_jurisdiction: jur || null,
         convenio_multilateral: cm,
         default_rate_code: rate,
-        issues_cbte_m: ri && m,
+        issues_cbte_m: (withCond ?? cond) === "responsable_inscripto" && m,
       },
       {
         onSuccess: () => toast({ title: "Datos fiscales guardados", variant: "success" }),
@@ -154,7 +156,7 @@ function FiscalCard({ settings }: { settings: Settings }) {
       icon={Building2}
       actions={
         !ro && (
-          <Button size="sm" onClick={onSave} loading={save.isPending} disabled={cuitBad}>
+          <Button size="sm" onClick={() => onSave()} loading={save.isPending} disabled={cuitBad}>
             <Save size={15} /> Guardar
           </Button>
         )
@@ -168,7 +170,10 @@ function FiscalCard({ settings }: { settings: Settings }) {
           </Callout>
         </SettingsNotice>
       )}
-      <SettingRow label="Condición frente al IVA" description="Responsable inscripto emite A o B; el resto, C.">
+      <SettingRow
+        label="Condición frente al IVA"
+        description="Elegí la misma que figura en tu constancia de ARCA: de esto sale la letra de tus facturas."
+      >
         <Select
           value={cond}
           disabled={ro}
@@ -189,6 +194,26 @@ function FiscalCard({ settings }: { settings: Settings }) {
           error={cuitBad ? "CUIT inválido" : undefined}
           onChange={(e) => setCuit(e.target.value)}
         />
+      </SettingRow>
+      <SettingRow
+        label="Qué facturas vas a emitir"
+        description="Cambia en vivo según la condición que elijas."
+        stacked
+      >
+        <div className="space-y-3">
+          <LetterGuide condition={cond || null} issuesM={ri && m} />
+          <CertificateIsNotTheLetter />
+          <PadronConditionCheck
+            cuit={cuit}
+            condition={cond || null}
+            canWrite={!ro}
+            fixing={save.isPending}
+            onUseArca={(a) => {
+              setCond(a as EmitterCondition);
+              onSave(a as EmitterCondition);
+            }}
+          />
+        </div>
       </SettingRow>
       <SettingRow label="Ingresos Brutos" description="Número de inscripción y jurisdicción sede.">
         <div className="grid gap-3 sm:grid-cols-2">

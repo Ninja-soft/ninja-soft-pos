@@ -15,6 +15,8 @@ import {
 } from "@/modules/internal/catalogsHooks";
 import type { Catalog } from "@/modules/internal/catalogs";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export function CatalogGrantsModal({
   open,
@@ -152,9 +154,13 @@ export function CatalogGrantsModal({
           {isLoading ? (
             <SpinnerBlock className="py-6" />
           ) : (grants?.length ?? 0) === 0 ? (
-            <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-              Todavía nadie compró ni recibió este catálogo.
-            </p>
+            <EmptyState
+              compact
+              icon={Gift}
+              title="Todavía nadie tiene este catálogo"
+              description="Bonificalo a un negocio con el buscador de arriba."
+              className="rounded-lg bg-muted/40"
+            />
           ) : (
             <div className="space-y-2">
               {(grants ?? []).map((g) => (
@@ -168,14 +174,14 @@ export function CatalogGrantsModal({
                     </span>
                     <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs">
                       {g.source === "granted" ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-ninja-flame/15 px-1.5 py-0.5 font-medium text-ninja-flameSoft">
-                          <Gift size={11} /> Bonificado
-                        </span>
+                        <Badge tone="brand">
+                          <Gift size={11} aria-hidden /> Bonificado
+                        </Badge>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-success">
-                          <BadgeCheck size={11} /> Pagado
+                        <Badge tone="success">
+                          <BadgeCheck size={11} aria-hidden /> Pagado
                           {g.pricePaid != null && ` · ${formatCurrency(g.pricePaid)}`}
-                        </span>
+                        </Badge>
                       )}
                       <span className="text-muted-foreground">
                         {new Date(g.purchasedAt).toLocaleDateString("es-AR")}

@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Dices, Plus, Power, Trash2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Dices, Plus, Power, Ticket, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Segmented";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Heading } from "@/components/ui/Typography";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SectionHeader } from "@/components/ui/PageHeader";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import {
   useGlobalPlans,
@@ -16,7 +18,6 @@ import {
   useInviteCodeMutations,
 } from "@/modules/internal/hooks";
 import type { InviteCode, InviteKind } from "@/modules/internal/api";
-import { Spinner } from "@/components/ui/Spinner";
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
@@ -35,7 +36,7 @@ function randomCode(len = 8): string {
 // Estado del código: vencido (valid_until pasó) tiene prioridad sobre inactivo.
 function codeStatus(c: InviteCode): {
   label: string;
-  cls: string;
+  tone: BadgeTone;
   expired: boolean;
 } {
   const expired =
@@ -43,18 +44,18 @@ function codeStatus(c: InviteCode): {
   if (expired)
     return {
       label: "Vencido",
-      cls: "border-border bg-muted text-muted-foreground",
+      tone: "neutral",
       expired: true,
     };
   if (!c.is_active)
     return {
       label: "Inactivo",
-      cls: "border-border bg-muted text-muted-foreground",
+      tone: "neutral",
       expired: false,
     };
   return {
     label: "Activo",
-    cls: "border-transparent bg-emerald-400/10 text-success",
+    tone: "success",
     expired: false,
   };
 }
@@ -157,112 +158,105 @@ export function InviteCodesCard() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Heading as="h2">Códigos de invitación</Heading>
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus size={15} /> Nuevo código
-        </Button>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Códigos canjeables en el registro: acceso vitalicio o días de prueba
-        extendidos sobre un plan.
-      </p>
+      <SectionHeader
+        title="Códigos de invitación"
+        icon={Ticket}
+        description="Se canjean al registrarse: dan acceso vitalicio o más días de prueba sobre un plan."
+        actions={
+          <Button size="sm" onClick={() => setOpen(true)}>
+            <Plus size={15} /> Nuevo código
+          </Button>
+        }
+      />
 
-      <Card className="mt-3">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead className="border-b border-border text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Código</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Plan</th>
-                  <th className="px-4 py-3">Usos</th>
-                  <th className="px-4 py-3">Vigencia</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3 text-right">Acción</th>
+      <TableWrap className="mt-3">
+        <table className="w-full min-w-[620px] text-sm">
+          <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3">Código</th>
+              <th className="px-4 py-3">Tipo</th>
+              <th className="hidden px-4 py-3 md:table-cell">Plan</th>
+              <th className="px-4 py-3 text-right">Usos</th>
+              <th className="hidden px-4 py-3 lg:table-cell">Vigencia</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3 text-right">
+                <span className="sr-only">Acciones</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border text-foreground">
+            {isLoading && <TableStateRow colSpan={7} loading />}
+            {!isLoading && (codes?.length ?? 0) === 0 && (
+              <TableStateRow colSpan={7}>
+                <EmptyState
+                  compact
+                  icon={Ticket}
+                  title="Todavía no hay códigos"
+                  description="Creá uno para regalar acceso vitalicio o extender la prueba de un plan."
+                  action={
+                    <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+                      <Plus size={15} /> Nuevo código
+                    </Button>
+                  }
+                />
+              </TableStateRow>
+            )}
+            {(codes ?? []).map((c) => {
+              const st = codeStatus(c);
+              const planName = plans?.find((p) => p.key === c.plan_key)?.name ?? c.plan_key;
+              return (
+                <tr key={c.id} className="transition hover:bg-muted/40">
+                  <td className="px-4 py-3">
+                    <div className="font-mono text-sm font-semibold text-foreground">{c.code}</div>
+                    <div className="text-xs text-muted-foreground md:hidden">{planName}</div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                    {c.kind === "lifetime" ? "Vitalicio" : `Prueba de ${c.trial_days ?? 0} días`}
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                    {planName}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
+                    {c.used_count}
+                    {c.max_uses != null ? ` de ${c.max_uses}` : " (sin tope)"}
+                  </td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-xs text-muted-foreground lg:table-cell">
+                    {c.valid_from || c.valid_until
+                      ? `${fmtDate(c.valid_from)} → ${fmtDate(c.valid_until)}`
+                      : "Sin límite"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={st.tone}>{st.label}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleActive(c)}
+                        disabled={st.expired || setActive.isPending}
+                        aria-label={`${c.is_active ? "Desactivar" : "Activar"} ${c.code}`}
+                        title={c.is_active ? "Desactivar" : "Activar"}
+                        className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+                      >
+                        <Power size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(c)}
+                        aria-label={`Eliminar ${c.code}`}
+                        title="Eliminar"
+                        className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-danger/15 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border text-foreground">
-                {isLoading && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-muted-foreground"
-                    >
-                      <Spinner />
-                    </td>
-                  </tr>
-                )}
-                {!isLoading && (codes?.length ?? 0) === 0 && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-muted-foreground"
-                    >
-                      Sin códigos todavía.
-                    </td>
-                  </tr>
-                )}
-                {(codes ?? []).map((c) => {
-                  const st = codeStatus(c);
-                  return (
-                    <tr key={c.id} className="transition hover:bg-muted/40">
-                      <td className="px-4 py-3 font-mono text-sm font-semibold text-foreground">
-                        {c.code}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {c.kind === "lifetime"
-                          ? "Vitalicio"
-                          : `Trial · ${c.trial_days ?? 0} días`}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {plans?.find((p) => p.key === c.plan_key)?.name ??
-                          c.plan_key}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {c.used_count}
-                        {c.max_uses != null ? ` / ${c.max_uses}` : " / ∞"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {c.valid_from || c.valid_until
-                          ? `${fmtDate(c.valid_from)} → ${fmtDate(c.valid_until)}`
-                          : "Sin límite"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
-                        >
-                          {st.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => toggleActive(c)}
-                            disabled={st.expired || setActive.isPending}
-                            title={c.is_active ? "Desactivar" : "Activar"}
-                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-40"
-                          >
-                            <Power size={15} />
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(c)}
-                            title="Eliminar"
-                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              );
+            })}
+          </tbody>
+        </table>
+      </TableWrap>
 
       {/* Modal: nuevo código */}
       <Modal
@@ -270,6 +264,16 @@ export function InviteCodesCard() {
         onOpenChange={setOpen}
         title="Nuevo código de invitación"
         className="max-w-md"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button loading={create.isPending} onClick={handleCreate}>
+              Crear código
+            </Button>
+          </div>
+        }
       >
         <div className="space-y-4">
           <div>
@@ -339,15 +343,15 @@ export function InviteCodesCard() {
           )}
 
           <Input
-            label="Cupo de usos (vacío = ilimitado)"
+            label="Cupo de usos (vacío = sin tope)"
             type="number"
             min="1"
-            placeholder="∞"
+            placeholder="Sin tope"
             value={maxUses}
             onChange={(e) => setMaxUses(e.target.value)}
           />
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <Input
               label="Vigente desde (opcional)"
               type="date"
@@ -361,15 +365,6 @@ export function InviteCodesCard() {
               onChange={(e) => setValidUntil(e.target.value)}
             />
           </div>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button loading={create.isPending} onClick={handleCreate}>
-              Crear código
-            </Button>
-          </div>
         </div>
       </Modal>
 
@@ -379,7 +374,7 @@ export function InviteCodesCard() {
         title="Eliminar código"
         description={
           deleteTarget
-            ? `¿Eliminar el código ${deleteTarget.code}? No se podrá canjear más.`
+            ? `El código ${deleteTarget.code} no se va a poder canjear más.`
             : undefined
         }
         confirmLabel="Eliminar"

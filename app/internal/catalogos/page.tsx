@@ -11,10 +11,9 @@ export default function InternalCatalogosPage() {
         icon={Boxes}
         description={
           <>
-            El addon <strong>Tiendita</strong>: catálogos con cientos de miles de
-            productos de supermercados y retailers. Subís el Excel, armás catálogos
-            vendibles agrupando tiendas, les ponés precio único y los bonificás a los
-            negocios que quieras.
+            El complemento Tiendita: catálogos con cientos de miles de productos de
+            supermercados y comercios. Armás catálogos agrupando tiendas, les ponés
+            un precio y los bonificás a los negocios que quieras.
           </>
         }
       />

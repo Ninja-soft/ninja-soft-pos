@@ -9,9 +9,12 @@ import { useInternalUsers, useSetUserActive } from "@/modules/internal/hooks";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
-import { Spinner } from "@/components/ui/Spinner";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { TableStateRow } from "@/components/ui/Table";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { SearchField } from "@/components/ui/SearchField";
+import { Segmented } from "@/components/ui/Segmented";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -105,67 +108,60 @@ export default function InternalUsersPage() {
         description={
           <>
             Todas las cuentas de la plataforma, con sus membresías por negocio.
-            {isAdmin && " Podés suspender/reactivar cuentas (queda auditado)."}
+            {isAdmin && " Podés suspender y reactivar cuentas; queda auditado."}
           </>
         }
       />
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto">
-          <Search
-            size={15}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, email o negocio…"
-            className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-          />
-        </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={onlySuspended}
-            onChange={(e) => setOnlySuspended(e.target.checked)}
-            className="h-4 w-4 accent-ninja-flame"
-          />
-          Solo suspendidos
-        </label>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SearchField
+          value={search}
+          onValueChange={setSearch}
+          placeholder="Buscar por nombre, email o negocio"
+          aria-label="Buscar usuarios"
+          className="sm:max-w-sm"
+        />
+        <Segmented<"all" | "suspended">
+          aria-label="Estado"
+          value={onlySuspended ? "suspended" : "all"}
+          onChange={(v) => setOnlySuspended(v === "suspended")}
+          options={[
+            { value: "all", label: "Todos" },
+            { value: "suspended", label: "Suspendidos" },
+          ]}
+        />
         {!isLoading && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs tabular-nums text-muted-foreground sm:ml-auto">
             {filtered.length} de {users?.length ?? 0}
           </span>
         )}
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full min-w-[840px] text-sm">
-          <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
+      <TableWrap className="mt-4">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Persona</th>
               <th className="px-4 py-3">Negocios</th>
-              <th className="px-4 py-3">Staff</th>
+              <th className="hidden px-4 py-3 md:table-cell">Staff</th>
               <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Alta</th>
-              {isAdmin && <th className="px-4 py-3 text-right">Acciones</th>}
+              <th className="hidden px-4 py-3 lg:table-cell">Alta</th>
+              {isAdmin && (
+                <th className="px-4 py-3 text-right">
+                  <span className="sr-only">Acciones</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border text-foreground">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  <Spinner />
-                </td>
-              </tr>
-            )}
+            {isLoading && <TableStateRow colSpan={6} loading />}
             {!isLoading && filtered.length === 0 && (
               <TableStateRow colSpan={6}>
                 <EmptyState
                   compact
                   icon={Search}
-                  title="Sin resultados"
-                  description="Probá con otro nombre o email."
+                  title={onlySuspended && !search ? "No hay cuentas suspendidas" : "Sin resultados"}
+                  description={onlySuspended && !search ? undefined : "Probá con otro nombre, email o negocio."}
                 />
               </TableStateRow>
             )}
@@ -175,8 +171,13 @@ export default function InternalUsersPage() {
               return (
                 <tr key={u.id} className="transition hover:bg-muted/40">
                   <td className="px-4 py-3">
-                    <div className="font-medium">{u.full_name ?? <NoData />}</div>
-                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar name={u.full_name || u.email} size={32} />
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{u.full_name ?? <NoData />}</div>
+                        <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {u.memberships.length === 0 ? (
@@ -184,44 +185,40 @@ export default function InternalUsersPage() {
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {u.memberships.map((m, i) => (
-                          <span
+                          <Badge
                             key={i}
-                            className="inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-xs"
+                            tone="neutral"
+                            className="font-medium text-foreground"
                             title={`${ROLE_LABELS[m.role] ?? m.role} · ${m.status}`}
                           >
                             {m.tenantName}
-                            <span className="ml-1 text-muted-foreground">
-                              ({ROLE_LABELS[m.role] ?? m.role})
+                            <span className="text-muted-foreground">
+                              {ROLE_LABELS[m.role] ?? m.role}
                             </span>
-                          </span>
+                          </Badge>
                         ))}
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 md:table-cell">
                     {u.internal_level ? (
-                      <span className="inline-flex rounded-full bg-ninja-flame/12 px-2.5 py-0.5 text-xs font-semibold text-ninja-flameSoft">
+                      <Badge tone="brand">
                         {LEVEL_LABELS[u.internal_level] ?? u.internal_level}
-                      </span>
+                      </Badge>
                     ) : (
                       <NoData />
                     )}
                   </td>
                   <td className="px-4 py-3">
                     {u.suspended_at ? (
-                      <span
-                        className="inline-flex rounded-full bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger"
-                        title={`Suspendido ${formatRelative(u.suspended_at)}`}
-                      >
+                      <Badge tone="danger" title={`Suspendido ${formatRelative(u.suspended_at)}`}>
                         Suspendido
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-success">
-                        Activo
-                      </span>
+                      <Badge tone="success">Activa</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="hidden whitespace-nowrap px-4 py-3 tabular-nums text-muted-foreground lg:table-cell">
                     {new Date(u.created_at).toLocaleDateString("es-AR")}
                   </td>
                   {isAdmin && (
@@ -229,13 +226,15 @@ export default function InternalUsersPage() {
                       <div className="flex justify-end">
                         {canTouch && (
                           <button
+                            type="button"
                             onClick={() => toggle(u)}
                             disabled={setActive.isPending}
+                            aria-label={u.suspended_at ? `Reactivar ${u.email}` : `Suspender ${u.email}`}
                             title={u.suspended_at ? "Reactivar cuenta" : "Suspender cuenta"}
                             className={
                               u.suspended_at
-                                ? "rounded-md p-2 text-muted-foreground transition hover:bg-emerald-500/15 hover:text-success"
-                                : "rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
+                                ? "grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-success/15 hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                                : "grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-danger/15 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                             }
                           >
                             {u.suspended_at ? <RotateCcw size={16} /> : <Ban size={16} />}
@@ -249,7 +248,7 @@ export default function InternalUsersPage() {
             })}
           </tbody>
         </table>
-      </div>
+      </TableWrap>
 
       <ConfirmDialog
         open={toSuspend !== null}
@@ -257,7 +256,7 @@ export default function InternalUsersPage() {
         title="Suspender cuenta"
         description={
           toSuspend
-            ? `¿Suspender la cuenta ${toSuspend.email}? No va a poder iniciar sesión.`
+            ? `${toSuspend.email} no va a poder iniciar sesión hasta que la reactives.`
             : undefined
         }
         confirmLabel="Suspender"

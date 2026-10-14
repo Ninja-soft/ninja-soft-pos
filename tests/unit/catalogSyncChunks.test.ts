@@ -14,7 +14,7 @@ describe("catalog sync por lotes", () => {
     const empty: UpsertResult = { recibidos: 0, nuevos: 0, actualizados: 0, ofertas: 0, ofertas_nuevas: 0, ofertas_actualizadas: 0, faltantes: 0, por_tienda: {} };
     const m = [r(50, "COTO"), r(50, "COTO"), r(20, "JUMBO")].reduce(mergeUpsertResults, empty);
     expect(m.recibidos).toBe(120);
-    expect(m.por_tienda.COTO.nuevas).toBe(100);
-    expect(m.por_tienda.JUMBO.nuevas).toBe(20);
+    expect(m.por_tienda.COTO?.nuevas).toBe(100);
+    expect(m.por_tienda.JUMBO?.nuevas).toBe(20);
   });
 });

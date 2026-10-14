@@ -3,15 +3,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { presetsApi } from "./api";
 import type { PresetKey, SellsMode } from "./presets";
+import { servicesApi } from "@/modules/services/api";
+import { CATALOG_MODE_KEY } from "@/modules/services/hooks";
 
 // Aplica un preset de rubro y refresca productos/categorías/onboarding para que
 // la grilla rápida del POS (H36) y el checklist reflejen el catálogo sembrado.
 export function useApplyPreset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { preset: PresetKey; sells: SellsMode; seedCatalog: boolean }) =>
-      presetsApi.apply(v.preset, v.sells, v.seedCatalog),
+    mutationFn: async (v: { preset: PresetKey; sells: SellsMode; seedCatalog: boolean }) => {
+      const out = await presetsApi.apply(v.preset, v.sells, v.seedCatalog);
+      // ADR-116: lo que vende el negocio define el vocabulario del catálogo
+      // ("Servicios", "Productos y servicios"). Sin la migración, sigue igual.
+      await servicesApi
+        .setCatalogMode(v.sells === "ambos" ? "mixto" : v.sells)
+        .catch(() => undefined);
+      return out;
+    },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CATALOG_MODE_KEY });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["pos-settings"] });

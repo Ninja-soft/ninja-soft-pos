@@ -13,6 +13,7 @@ import {
   professionalsApi,
   type PaymentPlanInput,
   type SaleItemInput,
+  type SaleServiceInput,
   type SalePaymentInput,
   type SaleExtraInput,
 } from "./api";
@@ -271,6 +272,8 @@ export function usePosMutations() {
         promo?: { discount: number; id: string | null; name: string | null } | null;
         // Cupón aplicado (F9 · H54): sólo el id; create_sale valida y consume.
         couponId?: string | null;
+        // ADR-116: período del servicio y vencimiento del pago.
+        service?: SaleServiceInput | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -282,6 +285,7 @@ export function usePosMutations() {
           vars.deliveryOrderId,
           vars.promo,
           vars.couponId,
+          vars.service,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

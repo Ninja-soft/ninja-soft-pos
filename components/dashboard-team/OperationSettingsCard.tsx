@@ -26,6 +26,7 @@ import {
   Utensils,
   Bike,
   ChevronDown,
+  BriefcaseBusiness,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -38,7 +39,15 @@ import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
-import { ChoiceDot } from "@/components/ui/ChoiceCard";
+import { ChoiceCard, ChoiceDot } from "@/components/ui/ChoiceCard";
+import {
+  CATALOG_MODES,
+  CATALOG_MODE_INFO,
+  effectiveCatalogMode,
+  type CatalogMode,
+} from "@/lib/catalog/mode";
+import { useMyTenant } from "@/modules/tenants/hooks";
+import { CATALOG_MODE_KEY } from "@/modules/services/hooks";
 
 type PluMode = "random" | "incremental";
 
@@ -69,6 +78,8 @@ type Settings = {
   staff_sees_own_only: boolean;
   dining_enabled: boolean;
   delivery_enabled: boolean;
+  // ADR-116: qué vende el negocio (null = según el rubro).
+  catalog_mode?: string | null;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -191,6 +202,9 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [staffSeesOwnOnly, setStaffSeesOwnOnly] = useState(false);
   const [diningEnabled, setDiningEnabled] = useState(false);
   const [deliveryEnabled, setDeliveryEnabled] = useState(false);
+  // ADR-116: modo del catálogo (FLAG-OPERATIVO). Sin elegir, el del rubro.
+  const { data: myTenant } = useMyTenant();
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>("productos");
 
   // Acordeón de la vista "operacion": cada grupo se colapsa para que la página
   // no sea un scroll infinito. Por defecto sólo "Modo de operación" (lo nuevo e
@@ -245,7 +259,8 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setStaffSeesOwnOnly(settings.staff_sees_own_only ?? false);
     setDiningEnabled(settings.dining_enabled ?? false);
     setDeliveryEnabled(settings.delivery_enabled ?? false);
-  }, [settings]);
+    setCatalogMode(effectiveCatalogMode(settings.catalog_mode, myTenant?.industry));
+  }, [settings, myTenant?.industry]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -282,6 +297,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           staff_sees_own_only: staffSeesOwnOnly,
           dining_enabled: diningEnabled,
           delivery_enabled: deliveryEnabled,
+          catalog_mode: catalogMode,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -305,6 +321,8 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       qc.invalidateQueries({ queryKey: ["dining", "enabled"] });
       // Delivery (H49): el nav del POS y la vista /delivery leen este flag.
       qc.invalidateQueries({ queryKey: ["delivery", "enabled"] });
+      // ADR-116: menú, catálogo y POS leen el modo del catálogo.
+      qc.invalidateQueries({ queryKey: CATALOG_MODE_KEY });
     },
     onError: (e) =>
       toast({
@@ -327,6 +345,34 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
             open={openGroups.operacion ?? false}
             onToggle={() => toggleGroup("operacion")}
           >
+
+      {/* Qué vende el negocio (ADR-116, FLAG-OPERATIVO): cambia el vocabulario
+          del catálogo ("Productos" → "Servicios"), los campos del editor y la
+          aclaración por renglón y el período del servicio en el POS. */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 font-semibold">
+            <BriefcaseBusiness size={16} className="text-ninja-flameSoft" /> Qué vende el negocio
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Con servicios, el catálogo pasa a decir{" "}
+            <span className="font-medium text-foreground">Servicios</span>, cada renglón de la venta admite una
+            aclaración y la factura sale como servicios con el período facturado y el vencimiento del pago.
+          </p>
+          <div role="radiogroup" aria-label="Qué vende el negocio" className="mt-3 grid gap-2 sm:grid-cols-3">
+            {CATALOG_MODES.map((m) => (
+              <ChoiceCard
+                key={m}
+                indicator
+                selected={catalogMode === m}
+                onClick={() => setCatalogMode(m)}
+                title={CATALOG_MODE_INFO[m].label}
+                description={CATALOG_MODE_INFO[m].help}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Modo gastronómico (F13 · H43): habilita salones y mesas (vista de Salón).
           ADITIVO: con off, el POS mostrador queda idéntico. Con on, aparece la

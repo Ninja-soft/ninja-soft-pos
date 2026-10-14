@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
+import type { ServicePeriod } from "@/lib/catalog/mode";
 
 export interface CartLine {
   lineId: string; // id local de la línea (estable; soporta ítems sin producto)
@@ -42,11 +43,32 @@ export interface CartLine {
   priceOverride?: boolean;
   overrideReason?: string | null;
   listPrice?: number | null;
+  // Servicios profesionales (ADR-116). undefined = lo del servicio (detalle y
+  // aclaraciones por defecto, los completa create_sale); un valor = lo que
+  // eligió el cajero para este renglón.
+  lineDetail?: string | null;
+  clarificationIds?: string[];
+  // Aclaración libre del renglón (lote, dirección, N° de muestra, normativa).
+  lineNote?: string | null;
+}
+
+/** ¿El renglón tiene datos de servicio propios? (no se fusiona con otro). */
+export function lineHasServiceEdits(l: CartLine): boolean {
+  return Boolean(l.lineNote) || l.lineDetail !== undefined || l.clarificationIds !== undefined;
 }
 
 interface CartState {
   lines: CartLine[];
   discountTotal: number; // descuento global (monto)
+  // ADR-116: período del servicio y vencimiento del pago (venta con servicios).
+  // null = el de hoy.
+  servicePeriod: ServicePeriod | null;
+  setServicePeriod: (p: ServicePeriod | null) => void;
+  // ADR-116: detalle, aclaraciones y nota del renglón.
+  setLineService: (
+    lineId: string,
+    v: { lineDetail?: string | null; clarificationIds?: string[]; lineNote?: string | null },
+  ) => void;
   addProduct: (
     p: {
       id: string;
@@ -136,13 +158,19 @@ interface CartState {
 export const useCartStore = create<CartState>((set) => ({
   lines: [],
   discountTotal: 0,
+  servicePeriod: null,
+  setServicePeriod: (servicePeriod) => set({ servicePeriod }),
+  setLineService: (lineId, v) =>
+    set((state) => ({
+      lines: state.lines.map((l) => (l.lineId === lineId ? { ...l, ...v } : l)),
+    })),
   addProduct: (p, qty = 1) =>
     set((state) => {
       const add = qty > 0 ? qty : 1;
       // Línea sin variante: identidad por producto. No fusiona con líneas de
       // variante del mismo producto (esas llevan variantId).
       const existing = state.lines.find(
-        (l) => l.productId === p.id && !l.variantId && l.unit !== "kg" && !l.serial,
+        (l) => l.productId === p.id && !l.variantId && l.unit !== "kg" && !l.serial && !lineHasServiceEdits(l),
       );
       if (existing) {
         return {
@@ -403,7 +431,7 @@ export const useCartStore = create<CartState>((set) => ({
       }
       return { lines: next };
     }),
-  clear: () => set({ lines: [], discountTotal: 0 }),
+  clear: () => set({ lines: [], discountTotal: 0, servicePeriod: null }),
 }));
 
 export function lineSubtotal(l: CartLine): number {

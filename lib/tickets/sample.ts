@@ -47,8 +47,23 @@ export interface SampleTicketData {
     promotions?: { label: string; kind: "discount" | "gift"; amount: number }[];
     /** ADR-112: IVA discriminado por alícuota (sale_tax_lines kind iva), para la factura A. */
     ivaLines?: { rate: number; base: number; amount: number }[];
+    /** ADR-116: período del servicio y vencimiento del pago (AAAA-MM-DD). */
+    service_from?: string | null;
+    service_to?: string | null;
+    payment_due?: string | null;
   };
-  items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
+  items: {
+    id: string;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    subtotal: number;
+    /** ADR-116: renglón de servicio (unidad, descripción ampliada, aclaraciones y nota). */
+    unit_label?: string | null;
+    line_detail?: string | null;
+    line_clarifications?: string[] | null;
+    line_note?: string | null;
+  }[];
   payments: { id: string; method: string; amount: number }[];
   customer?: {
     name: string;

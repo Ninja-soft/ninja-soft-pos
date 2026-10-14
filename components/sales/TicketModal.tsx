@@ -50,6 +50,7 @@ import { TicketSheet, type DetailTab } from "@/components/sales/ticket/TicketShe
 import { useInvoiceStyle } from "@/modules/invoices/hooks";
 import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
 import { invoiceFromTicket } from "@/lib/invoices/fromTicket";
+import { serviceOfItem, serviceOfSale } from "@/lib/invoices/serviceFields";
 
 export type { DetailTab };
 
@@ -318,6 +319,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
           ...saleTaxTicket(data.sale, taxLines.data ?? []),
           fiscal,
           promotions: salePromotionsForTicket(data.sale, salePromos.data ?? []),
+          // ADR-116: período del servicio y vencimiento del pago.
+          ...serviceOfSale(data.sale),
         },
         items: data.items.map((it) => ({
           id: it.id,
@@ -325,6 +328,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
           quantity: it.quantity,
           unit_price: it.unit_price,
           subtotal: it.subtotal,
+          ...serviceOfItem(it),
         })),
         payments: data.payments.map((p) => ({ id: p.id, method: p.method, amount: p.amount })),
         customer: data.sale.customers

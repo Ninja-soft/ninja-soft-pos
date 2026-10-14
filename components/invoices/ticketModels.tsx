@@ -8,6 +8,7 @@ import {
   FONT_SANS,
   Legends,
   LetterBox,
+  LineDetail,
   Logo,
   MUTED,
   NUM,
@@ -70,15 +71,19 @@ function Items({ doc, view, compact }: ModelProps & { compact?: boolean }) {
       )}
       {doc.lines.map((l, i) =>
         compact ? (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
-            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-              {fmtQty(l.quantity)} x {l.description}
-            </span>
-            <span style={{ ...NUM }}>{view.money(l.subtotal)}</span>
+          <div key={i}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+              <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                {fmtQty(l.quantity)} x {l.description}
+              </span>
+              <span style={{ ...NUM }}>{view.money(l.subtotal)}</span>
+            </div>
+            <LineDetail lines={l.detailLines} fontSize="0.85em" color="#333" style={{ marginTop: 1, marginBottom: 2 }} />
           </div>
         ) : (
           <div key={i} style={{ marginBottom: 3 }}>
             <div style={{ fontWeight: 600 }}>{l.description}</div>
+            <LineDetail lines={l.detailLines} fontSize="0.85em" color="#333" style={{ marginTop: 1, marginBottom: 1 }} />
             <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
               <span style={{ color: "#333", ...NUM }}>
                 {fmtQty(l.quantity)} {l.unit && l.unit !== "unidad" ? l.unit : "u."} x {view.money(l.unitPrice)}

@@ -6,6 +6,7 @@ import {
   CreditCard,
   Gift,
   Lock,
+  MessageSquareText,
   Minus,
   Package,
   Plus,
@@ -58,6 +59,9 @@ export interface CartLinesProps {
   emptyHint?: string;
   /** Promos que tocan cada línea (F9, ADR-074): etiqueta y monto. */
   promoByLine?: Record<string, { label: string; amount: number }[]>;
+  /** ADR-116: renglones de servicio (admiten aclaraciones para la factura). */
+  isServiceLine?: (l: CartLine) => boolean;
+  onEditService?: (lineId: string) => void;
 }
 
 export function CartLines({
@@ -71,6 +75,8 @@ export function CartLines({
   onEditPrice,
   emptyHint = "Tocá un producto o escaneá un código para empezar.",
   promoByLine,
+  isServiceLine,
+  onEditService,
 }: CartLinesProps) {
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -89,6 +95,8 @@ export function CartLines({
         const free = Boolean(l.packCreditId || l.giftPromoId);
         const credit = !l.packCreditId ? creditForLine(l) : null;
         const editable = !l.giftPromoId;
+        // ADR-116: aclaración del renglón de servicio (se ve sin abrir la línea).
+        const service = Boolean(onEditService && isServiceLine?.(l));
         const meta =
           [
             l.variantLabel,
@@ -135,6 +143,12 @@ export function CartLines({
                   )}
                 </span>
                 <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>
+                {service && l.lineNote && (
+                  <span className="mt-0.5 flex min-w-0 items-start gap-1 text-xs text-muted-foreground">
+                    <MessageSquareText size={12} className="mt-[2px] shrink-0" aria-hidden />
+                    <span className="line-clamp-2 whitespace-pre-line break-words">{l.lineNote}</span>
+                  </span>
+                )}
                 {(promoByLine?.[l.lineId] ?? []).map((pr) => (
                   <span
                     key={pr.label}
@@ -209,6 +223,15 @@ export function CartLines({
                       <Package size={14} aria-hidden /> Usar sesión ({credit.sessions_left})
                     </button>
                   )
+                )}
+                {service && (
+                  <button
+                    type="button"
+                    onClick={() => onEditService?.(l.lineId)}
+                    className={cn(lineAction, "bg-card text-foreground hover:bg-fg-10")}
+                  >
+                    <MessageSquareText size={14} aria-hidden /> {l.lineNote ? "Editar aclaración" : "Aclaración"}
+                  </button>
                 )}
                 {editable && !free && l.productId && onEditPrice && (
                   <button
@@ -287,6 +310,8 @@ export interface CartSummaryProps {
   warrantySlot?: React.ReactNode;
   /** Lista y condición de pago (ADR-058). */
   priceSlot?: React.ReactNode;
+  /** ADR-116: período del servicio y vencimiento del pago (con servicios). */
+  serviceSlot?: React.ReactNode;
   /** Pausar y Limpiar la venta en curso (ADR-106). */
   actionsSlot?: React.ReactNode;
   compact?: boolean;
@@ -302,6 +327,7 @@ export function CartSummary(p: CartSummaryProps) {
     <div className="space-y-3">
       {p.warrantySlot}
       {p.priceSlot}
+      {p.serviceSlot}
 
       {/* Cliente + acciones de cuenta */}
       <div className="flex items-center gap-1.5">

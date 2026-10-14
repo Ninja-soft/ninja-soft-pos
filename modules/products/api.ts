@@ -42,6 +42,9 @@ export type Product = Tables<"products"> & {
   commission_pct: number | null;
   // Estación de preparación (F13 · H45): a qué pantalla del KDS rutea. null = sin estación.
   station: string | null;
+  // Servicios profesionales (ADR-116).
+  invoice_detail?: string | null;
+  service_clarification_ids?: string[] | null;
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
@@ -369,6 +372,11 @@ export const productsApi = {
         commission_pct: input.commission_pct ?? null,
         // Estación de preparación (F13 · H45): ruteo al KDS (null = sin estación).
         station: input.station ?? null,
+        // Servicios profesionales (ADR-116). Un servicio no lleva stock (el
+        // trigger products_service_no_stock también lo fuerza).
+        invoice_detail: input.invoice_detail ?? null,
+        service_clarification_ids: input.service_clarification_ids ?? [],
+        ...(input.is_service ? { track_stock: false } : {}),
         // `plu`/`is_favorite` aún no están en los tipos generados: casteamos el payload.
       } as never)
       .select("*")
@@ -425,6 +433,11 @@ export const productsApi = {
         commission_pct: input.commission_pct ?? null,
         // Estación de preparación (F13 · H45): ruteo al KDS (null = sin estación).
         station: input.station ?? null,
+        // Servicios profesionales (ADR-116). Un servicio no lleva stock (el
+        // trigger products_service_no_stock también lo fuerza).
+        invoice_detail: input.invoice_detail ?? null,
+        service_clarification_ids: input.service_clarification_ids ?? [],
+        ...(input.is_service ? { track_stock: false } : {}),
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       } as never)

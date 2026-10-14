@@ -96,6 +96,18 @@ export interface SaleItemInput {
   // de la línea que cubre).
   warranty_plan_id?: string;
   warranty_for?: number;
+  // ADR-116: aclaración libre, descripción ampliada y aclaraciones elegidas
+  // del renglón (sin la clave, create_sale toma las del servicio).
+  line_note?: string;
+  line_detail?: string;
+  clarification_ids?: string[];
+}
+
+/** ADR-116: período del servicio y vencimiento del pago (AAAA-MM-DD). */
+export interface SaleServiceInput {
+  from: string;
+  to: string;
+  due: string;
 }
 export interface CreateSaleResult {
   sale_id: string;
@@ -1583,6 +1595,10 @@ export const posApi = {
     // (bypass del gating de 'descuentos' y del tope por rol) y registra el canje
     // (used_count + redemption) EN LA MISMA transacción — a prueba de concurrencia.
     couponId?: string | null,
+    // Servicios profesionales (ADR-116): período del servicio y vencimiento del
+    // pago. create_sale los guarda si la venta tiene servicios y la factura de
+    // ARCA los manda (concepto 2 o 3). Sin él, la fecha de la venta.
+    service?: SaleServiceInput | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
@@ -1622,6 +1638,7 @@ export const posApi = {
       // F17 · H90: turno de la caja de este dispositivo. La venta queda en la
       // sucursal de ese turno (no en la sucursal principal).
       ...(getActiveShiftId() ? { p_cash_shift_id: getActiveShiftId() } : {}),
+      ...(service ? { p_service: service } : {}),
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

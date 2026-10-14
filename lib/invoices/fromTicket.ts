@@ -12,6 +12,7 @@ import { ticketPromoLabel, ticketPromoLines } from "@/lib/promotions/ticket";
 import { ticketLocationText } from "@/lib/tickets/location";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { formatCurrency } from "@/lib/utils/format";
+import { serviceLineBlocks, unitLabel } from "@/lib/catalog/mode";
 import { discriminatesIva, docTypeLabel } from "./legal";
 import type { InvoiceAmountRow, InvoiceClass, InvoiceCopy, InvoiceDoc, InvoiceLetter, InvoiceLine } from "./types";
 
@@ -63,15 +64,24 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
   const factor = discriminates && gross > 0 && ivaSum > 0 ? Math.max(0, 1 - (ivaSum + internals) / gross) : 1;
   const singleRate = ivaLines.length === 1 ? ivaLines[0]!.rate : null;
 
-  const lines: InvoiceLine[] = items.map((it, i) => ({
-    code: String(i + 1).padStart(3, "0"),
-    description: it.product_name,
-    quantity: it.quantity,
-    unit: "unidad",
-    unitPrice: r2(it.unit_price * factor),
-    ivaRate: discriminates ? singleRate : null,
-    subtotal: r2(it.subtotal * factor),
-  }));
+  const lines: InvoiceLine[] = items.map((it, i) => {
+    // ADR-116: unidad del servicio y texto debajo del nombre.
+    const detailLines = serviceLineBlocks({
+      detail: it.line_detail,
+      clarifications: it.line_clarifications,
+      note: it.line_note,
+    });
+    return {
+      code: String(i + 1).padStart(3, "0"),
+      description: it.product_name,
+      quantity: it.quantity,
+      unit: it.unit_label ? unitLabel(it.unit_label) : "unidad",
+      unitPrice: r2(it.unit_price * factor),
+      ivaRate: discriminates ? singleRate : null,
+      subtotal: r2(it.subtotal * factor),
+      ...(detailLines.length > 0 ? { detailLines } : {}),
+    };
+  });
   const subtotal = r2(lines.reduce((a, l) => a + l.subtotal, 0));
   const discounts = discountsGross.map((d) => ({ ...d, amount: r2(d.amount * factor) }));
 
@@ -87,6 +97,21 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
   const receiverDocNumber = f?.docNro && f.docNro !== "0" ? f.docNro : customer?.document_number ?? null;
 
   const dateIso = f?.cbteFch ?? sale.created_at;
+
+  // ADR-116: concepto (el de ARCA si hay factura; si no, por los renglones:
+  // los de servicio traen unidad) y período del servicio. Una factura de
+  // servicios vieja sin período: el que se informó a ARCA (su fecha).
+  const hasServices = items.some((it) => Boolean(it.unit_label));
+  const hasGoods = items.some((it) => !it.unit_label);
+  const concepto =
+    (f?.concepto as 1 | 2 | 3 | null | undefined) ?? (hasServices ? (hasGoods ? 3 : 2) : null);
+  const isServiceDoc = concepto === 2 || concepto === 3;
+  const servicePeriod = sale.service_from
+    ? { from: sale.service_from, to: sale.service_to ?? sale.service_from }
+    : isServiceDoc && f
+      ? { from: dateIso, to: dateIso }
+      : null;
+  const paymentDue = sale.payment_due ?? (isServiceDoc && f ? dateIso : null);
 
   const transparency = !fiscal
     ? null
@@ -105,7 +130,9 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
     ptoVta: fiscal ? numberParts[0] ?? f!.ptoVta ?? "" : "",
     number: fiscal ? numberParts[1] ?? "" : sale.numberLabel,
     date: dateIso,
-    concepto: (f?.concepto as 1 | 2 | 3 | null | undefined) ?? null,
+    concepto,
+    servicePeriod: isServiceDoc ? servicePeriod : null,
+    paymentDue: isServiceDoc ? paymentDue : null,
     saleCondition: saleConditionOf(methods),
     currency: { code: "ARS" },
     issuer: {

@@ -82,6 +82,7 @@ import {
 } from "@/components/notifications/NotificationBell";
 import { useFeature } from "@/modules/saas/gating";
 import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useCatalogMode } from "@/modules/services/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
@@ -221,6 +222,8 @@ type Item = {
   requiresMultiStore?: boolean;
   // Sólo dueño o encargado (monitor de cajas, ADR-051).
   managersOnly?: boolean;
+  // ADR-116: el nombre sale del modo del catálogo (Productos / Servicios).
+  catalogLabel?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -280,7 +283,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
     {
       label: "Catálogo",
       items: [
-        { href: "/productos", label: "Productos", icon: Package },
+        // ADR-116: "Servicios" o "Productos y servicios" según el modo del catálogo.
+        { href: "/productos", label: "Productos", icon: Package, catalogLabel: true },
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         // Depósitos internos de la sucursal (F11 · H33, ADR-085).
         { href: "/depositos", label: "Depósitos", icon: Warehouse, feature: "depositos" },
@@ -579,6 +583,9 @@ export function AppShell({
   const { data: diningEnabled } = useDiningEnabled();
   const { data: deliveryEnabled } = useDeliveryEnabled();
   const { data: stores } = useStores();
+  // ADR-116: "Productos", "Servicios" o "Productos y servicios".
+  const { vocab: catalogVocab } = useCatalogMode();
+  const withLabel = (it: Item): Item => (it.catalogLabel ? { ...it, label: catalogVocab.title } : it);
   const showItem = (it: Item) =>
     (!it.requiresDining || Boolean(diningEnabled)) &&
     (!it.requiresDelivery || Boolean(deliveryEnabled)) &&
@@ -664,7 +671,7 @@ export function AppShell({
                   {g.items.filter(showItem).map((it) => (
                     <NavLink
                       key={it.href}
-                      item={it}
+                      item={withLabel(it)}
                       active={pathname === it.href}
                       onNavigate={() => setDrawer(false)}
                     />

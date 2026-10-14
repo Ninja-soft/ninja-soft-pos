@@ -36,6 +36,7 @@ import { measureLines } from "@/lib/catalog/importInfo";
 import { appOrigin } from "@/lib/site";
 import { useCatalogHintsActive } from "@/modules/catalog/hooks";
 import { StoreLogo } from "@/components/catalog/StoreLogo";
+import { CatalogCover } from "@/components/catalog/CatalogCover";
 
 // Mensajes honestos para los códigos de error del checkout.
 const CHECKOUT_ERRORS: Record<string, string> = {
@@ -199,37 +200,42 @@ function CatalogCard({
   const [expanded, setExpanded] = useState(false);
   const long = (catalog.description?.length ?? 0) > 140;
   return (
-    <article className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card">
-      <button
-        type="button"
-        onClick={catalog.owned ? onAccess : undefined}
-        className={cn("relative block text-left", !catalog.owned && "cursor-default")}
-        tabIndex={catalog.owned ? 0 : -1}
-        aria-label={catalog.owned ? `Entrar a ${catalog.name}` : undefined}
-      >
-        <Cover catalog={catalog} className="aspect-[16/10] w-full" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          <div className="flex flex-wrap gap-1.5">
-            {catalog.productCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
-                <Layers size={12} /> {formatInt(catalog.productCount)} productos
-              </span>
-            )}
-            {catalog.owned && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#15111f]">
-                {catalog.source === "granted" ? <Gift size={12} /> : <Check size={12} />}
-                {catalog.source === "granted" ? "De regalo" : "Comprado"}
-              </span>
-            )}
-          </div>
-          <h3 className="mt-2 text-xl font-bold tracking-tight text-white">{catalog.name}</h3>
-        </div>
-      </button>
+    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card">
+      {/* Portada completa, sin nada encima: el arte trae su propio texto. */}
+      {catalog.owned ? (
+        <button
+          type="button"
+          onClick={onAccess}
+          className="block w-full border-b border-border text-left transition hover:opacity-90"
+          aria-label={`Entrar a ${catalog.name}`}
+        >
+          <CatalogCover coverUrl={catalog.coverUrl} name={catalog.name} />
+        </button>
+      ) : (
+        <CatalogCover coverUrl={catalog.coverUrl} name={catalog.name} className="border-b border-border" />
+      )}
 
-      <div className="flex flex-1 flex-col p-4 pt-3.5">
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex flex-wrap gap-1.5">
+          {catalog.productCount > 0 && (
+            <Badge tone="neutral">
+              <Layers size={12} aria-hidden /> {formatInt(catalog.productCount)} productos
+            </Badge>
+          )}
+          {catalog.owned ? (
+            <Badge tone="success">
+              {catalog.source === "granted" ? <Gift size={12} aria-hidden /> : <Check size={12} aria-hidden />}
+              {catalog.source === "granted" ? "De regalo" : "Comprado"}
+            </Badge>
+          ) : (
+            <Badge tone="brand">Pago único</Badge>
+          )}
+        </div>
+
+        <h3 className="mt-3 text-lg font-bold tracking-tight text-foreground">{catalog.name}</h3>
+
         {catalog.description && (
-          <div>
+          <div className="mt-1">
             <p
               className={cn(
                 "whitespace-pre-line text-sm leading-relaxed text-muted-foreground",
@@ -249,29 +255,32 @@ function CatalogCard({
             )}
           </div>
         )}
-        <div className="mt-auto flex items-center justify-between gap-3 pt-4">
-          {catalog.owned ? (
-            <>
-              <span className="text-sm text-muted-foreground">Listo para usar</span>
-              <Button size="sm" className="rounded-full px-4" onClick={onAccess}>
-                Entrar
-              </Button>
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Pago único
-                </p>
-                <p className="font-price text-xl font-black tabular-nums text-foreground">
-                  {formatCurrency(catalog.priceArs)}
-                </p>
-              </div>
-              <Button size="sm" className="rounded-full px-4" loading={buying} onClick={onBuy}>
-                <ShoppingBag size={15} /> Comprar
-              </Button>
-            </>
-          )}
+
+        <div className="mt-auto pt-4">
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+            {catalog.owned ? (
+              <>
+                <span className="text-sm text-muted-foreground">Listo para usar</span>
+                <Button size="sm" className="rounded-full px-4" onClick={onAccess}>
+                  Entrar
+                </Button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Pago único
+                  </p>
+                  <p className="font-price text-xl font-black tabular-nums text-foreground">
+                    {formatCurrency(catalog.priceArs)}
+                  </p>
+                </div>
+                <Button size="sm" className="rounded-full px-4" loading={buying} onClick={onBuy}>
+                  <ShoppingBag size={15} /> Comprar
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </article>

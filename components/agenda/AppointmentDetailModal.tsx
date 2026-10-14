@@ -113,7 +113,7 @@ export function AppointmentDetailModal({
             </p>
           </div>
           <span
-            className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[a.status]}`}
+            className={`shrink-0 rounded-md border px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[a.status]}`}
           >
             {STATUS_LABELS[a.status]}
           </span>

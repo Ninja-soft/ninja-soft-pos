@@ -24,8 +24,13 @@ export interface Catalog {
   isActive: boolean;
   createdAt: string;
   storeKeys: string[];
-  // Conteo de productos del catálogo (deduplicado si dedupe_by_ean).
+  // Productos únicos visibles para quien lo compra (deduplicado si
+  // dedupe_by_ean): productos con al menos una publicación de una de sus
+  // tiendas, con o sin EAN. Es catalogs.product_count, que guarda el cierre de
+  // cada sincronización y el recuento al editar (ADR-118); no se cuenta en vivo.
   productCount: number;
+  // Publicaciones de sus tiendas (suma de catalog_stores.product_count).
+  offerCount: number;
   // Cuántos tenants lo compraron/recibieron.
   purchaseCount: number;
 }
@@ -85,7 +90,7 @@ export const catalogsApi = {
     const { data: cats, error } = await supabase
       .from("catalogs")
       .select(
-        "id, key, name, description, cover_url, price_ars, dedupe_by_ean, is_active, created_at",
+        "id, key, name, description, cover_url, price_ars, dedupe_by_ean, is_active, created_at, product_count",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -94,7 +99,7 @@ export const catalogsApi = {
     const ids = catRows.map((c) => c.id as string);
     if (ids.length === 0) return [];
 
-    const [{ data: maps }, { data: purchases }] = await Promise.all([
+    const [{ data: maps }, { data: purchases }, { data: stores }] = await Promise.all([
       supabase
         .from("catalog_store_map")
         .select("catalog_id, store_key")
@@ -103,7 +108,11 @@ export const catalogsApi = {
         .from("tenant_catalog_purchases")
         .select("catalog_id")
         .in("catalog_id", ids),
+      supabase.from("catalog_stores").select("key, product_count"),
     ]);
+    const offersByStore = new Map<string, number>(
+      ((stores ?? []) as Record<string, unknown>[]).map((s) => [s.key as string, Number(s.product_count ?? 0)]),
+    );
 
     const storesByCatalog = new Map<string, string[]>();
     for (const m of (maps ?? []) as Record<string, unknown>[]) {
@@ -118,16 +127,7 @@ export const catalogsApi = {
       purchasesByCatalog.set(cid, (purchasesByCatalog.get(cid) ?? 0) + 1);
     }
 
-    // Conteo de productos por catálogo vía RPC (deduplicado si corresponde).
-    const counts = await Promise.all(
-      ids.map(async (cid) => {
-        const { data } = await supabase.rpc("catalog_product_count", {
-          p_catalog_id: cid,
-        });
-        return [cid, Number(data ?? 0)] as const;
-      }),
-    );
-    const countByCatalog = new Map<string, number>(counts);
+
 
     return catRows.map((c) => ({
       id: c.id as string,
@@ -140,7 +140,8 @@ export const catalogsApi = {
       isActive: Boolean(c.is_active),
       createdAt: c.created_at as string,
       storeKeys: (storesByCatalog.get(c.id as string) ?? []).sort(),
-      productCount: countByCatalog.get(c.id as string) ?? 0,
+      productCount: Number(c.product_count ?? 0),
+      offerCount: (storesByCatalog.get(c.id as string) ?? []).reduce((a, k) => a + (offersByStore.get(k) ?? 0), 0),
       purchaseCount: purchasesByCatalog.get(c.id as string) ?? 0,
     }));
   },
@@ -157,6 +158,22 @@ export const catalogsApi = {
       p_logo_url: logoUrl,
     });
     if (error) throw error;
+  },
+
+  // Recuento por lotes de los productos de un catálogo (ADR-118): cada llamada
+  // cuenta un rango de productos (< 1 s) y el servidor guarda el avance; al
+  // terminar deja catalogs.product_count. Se usa al cambiar sus tiendas.
+  recountCatalog: async (catalogId: string, maxSteps = 200): Promise<number> => {
+    for (let i = 0; i < maxSteps; i++) {
+      const { data, error } = await db().rpc("catalog_recount_step", {
+        p_catalog_id: catalogId,
+        p_restart: i === 0,
+      });
+      if (error) throw error;
+      const r = (data ?? {}) as { done?: boolean; product_count?: number };
+      if (r.done) return Number(r.product_count ?? 0);
+    }
+    throw new Error("recount_too_long");
   },
 
   // Crear/editar catálogo + sincronizar sus tiendas, vía RPC transaccional.

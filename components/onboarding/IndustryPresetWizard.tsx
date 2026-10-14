@@ -263,7 +263,7 @@ export function IndustryPresetWizard({
                     {p.categories.map((c) => (
                       <span
                         key={c}
-                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                        className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
                       >
                         {c}
                       </span>
@@ -274,7 +274,7 @@ export function IndustryPresetWizard({
                       {p.enables.map((e) => (
                         <span
                           key={e}
-                          className="rounded-full bg-ninja-flame/12 px-2 py-0.5 text-[11px] font-medium text-ninja-flameSoft"
+                          className="rounded-md bg-ninja-flame/12 px-2 py-0.5 text-[11px] font-medium text-ninja-flameSoft"
                         >
                           {PRESET_ENABLE_LABELS[e]}
                         </span>
@@ -326,7 +326,7 @@ export function IndustryPresetWizard({
                     {chosen.categories.map((c) => (
                       <span
                         key={c}
-                        className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium"
+                        className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium"
                       >
                         {c}
                       </span>
@@ -350,7 +350,7 @@ export function IndustryPresetWizard({
                       {chosen.enables.map((e) => (
                         <span
                           key={e}
-                          className="rounded-full bg-ninja-flame/12 px-2 py-0.5 text-xs font-medium text-ninja-flameSoft"
+                          className="rounded-md bg-ninja-flame/12 px-2 py-0.5 text-xs font-medium text-ninja-flameSoft"
                         >
                           {PRESET_ENABLE_LABELS[e]}
                         </span>

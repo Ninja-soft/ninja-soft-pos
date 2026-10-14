@@ -98,7 +98,7 @@ export function ServiceTypesModal({ open, onOpenChange }: { open: boolean; onOpe
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{t.name}</span>
                 {t.is_seed && (
-                  <Badge tone="neutral" className="rounded-md">
+                  <Badge tone="neutral">
                     Base
                   </Badge>
                 )}

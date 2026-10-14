@@ -392,7 +392,7 @@ function KdsInner() {
           </Link>
           <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
             <ChefHat size={20} className="text-ninja-flameSoft" /> Cocina
-            <span className="rounded-full bg-ninja-flame/15 px-2 py-0.5 text-sm font-semibold text-ninja-flameSoft tabular-nums">
+            <span className="rounded-md bg-ninja-flame/15 px-2 py-0.5 text-sm font-semibold text-ninja-flameSoft tabular-nums">
               {totalActive}
             </span>
           </h1>

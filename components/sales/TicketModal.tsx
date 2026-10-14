@@ -11,20 +11,11 @@ import {
   SendReceiptEmailButton,
   sendReceiptEmail,
 } from "@/components/sales/SendReceiptEmail";
-import {
-  useActiveTemplate,
-  usePrintProfiles,
-  usePrintTarget,
-  useTenantSmtpStatus,
-  useTicketBranding,
-} from "@/modules/tickets/hooks";
-import { emailTemplateDiffers } from "@/modules/tickets/api";
+import { usePrintProfiles, usePrintTarget, useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { printTicketIsolated } from "@/lib/print/webPrint";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
-import { downloadA4FromNode, downloadInvoiceA4, exportNodePdfBase64 } from "@/lib/tickets/exportPng";
-import { defaultSaleBlocks } from "@/lib/tickets/blocks";
-import { type TicketData } from "@/components/tickets/TicketRenderer";
-import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
+import { downloadInvoicePdf, invoicePdfFile } from "@/lib/invoices/exportPdf";
+import type { SampleTicketData as TicketData } from "@/lib/tickets/sample";
 import { useBranches } from "@/modules/branches/hooks";
 import { ticketLocation } from "@/lib/tickets/location";
 import { printTargetLabel } from "@/lib/print/printers";
@@ -46,10 +37,12 @@ import {
   previewVisible,
   silentStep,
 } from "@/lib/tickets/postSale";
-import { TicketSheet, type DetailTab } from "@/components/sales/ticket/TicketSheet";
+import { TicketSheet, type DetailTab, type PrintFormat } from "@/components/sales/ticket/TicketSheet";
 import { useInvoiceStyle } from "@/modules/invoices/hooks";
+import { useProductPhotos, withPhotos } from "@/modules/invoices/photos";
 import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
-import { invoiceFromTicket } from "@/lib/invoices/fromTicket";
+import { InvoicePreview, ticketStyle } from "@/components/invoices/InvoicePreview";
+import { docOptions, invoiceFromTicket } from "@/lib/invoices/fromTicket";
 import { serviceOfItem, serviceOfSale } from "@/lib/invoices/serviceFields";
 
 export type { DetailTab };
@@ -90,9 +83,11 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   // ADR-112: modelo de comprobante, color, logo y sello del negocio, y la
   // marca con los datos fiscales del emisor (IIBB, inicio de actividades).
   const invoice = useInvoiceStyle(brand ?? null, open);
-  // Plantilla activa por DESTINO: impresión vs email pueden diferir.
-  const { data: printTpl } = useActiveTemplate("print", open);
-  const { data: emailTpl } = useActiveTemplate("email", open);
+  // ADR-119: fotos de producto precargadas (sólo si el negocio las muestra).
+  const photos = useProductPhotos(
+    (data?.items ?? []).map((it) => it.product_id),
+    open && (invoice.style.showPhotos || invoice.style.ticketPhotos),
+  );
   const { data: numFmt } = useSaleNumberFormat();
   // Estado del SMTP del negocio. allowed:true && !configured = el dueño aún no
   // lo configuró → gateamos el botón. Para cajeros la RPC responde
@@ -114,16 +109,13 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   const { toast } = useToast();
   const qc = useQueryClient();
   const [emailOpen, setEmailOpen] = useState(false);
-  // Nodo que se imprime, exporta a PDF y manda por email: fuera de la hoja
-  // (portal al body) para que la impresión no la recorte el scroll del diálogo.
+  // Nodo que se imprime y exporta a PDF (en el formato elegido) y el del email
+  // (en el formato del email del negocio): fuera de la hoja (portal al body)
+  // para que la impresión no la recorte el scroll del diálogo.
   const printRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLDivElement>(null);
-  // ADR-112: hoja A4 del motor de comprobantes (oculta) para el PDF y el email.
-  const a4Ref = useRef<HTMLDivElement>(null);
-  const emailA4Ref = useRef(false);
-  // Espejo de `emailDiffers` para leerlo dentro del setTimeout del auto-envío
-  // sin re-disparar el efecto cuando las plantillas cargan tarde.
-  const emailDiffersRef = useRef(false);
+  // ADR-119: formato de impresión elegido en la ventana (null = el del perfil).
+  const [formatChoice, setFormatChoice] = useState<PrintFormat | null>(null);
   const autoDoneRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -150,6 +142,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
     setShown(!silent);
     setPrintFailed(false);
     setFiscalOpen(false);
+    setFormatChoice(null);
     const t0 = Date.now();
     setOpenedAt(t0);
     setNow(t0);
@@ -254,13 +247,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
       fired = true;
       const printOk = autoPrintEnabled ? printNow() : true;
       if (shouldEmail && to) {
-        // Misma resolución de nodo que el botón manual: nodo de email oculto
-        // si la plantilla de email difiere de la de impresión.
-        const node = emailDiffersRef.current
-          ? emailRef.current
-          : emailA4Ref.current
-            ? a4Ref.current
-            : printRef.current;
+        // Nodo de email: el formato del email del negocio (ticket o A4).
+        const node = emailRef.current;
         if (node) {
           await sendReceiptEmail(sid, to, node)
             .then(() => {
@@ -295,16 +283,6 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
     return () => clearTimeout(t);
   }, [printProvisional, visible, printNow]);
 
-  // Fallback de bloques (legacy-compat): si no hay plantilla, replica el ticket
-  // clásico respetando el flag de logo del branding. El QR es obligatorio
-  // (ticket_show_qr se ignora). El despacho por modo lo resuelve TemplateRenderer.
-  const fallbackBlocks = useMemo(() => {
-    return defaultSaleBlocks().filter((b) => {
-      if (b.type === "logo") return brand?.ticket_show_logo !== false;
-      return true;
-    });
-  }, [brand]);
-
   const fiscal = ticketFiscal(saleFiscalDoc);
   const ticketData: TicketData | null = data
     ? {
@@ -322,14 +300,18 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
           // ADR-116: período del servicio y vencimiento del pago.
           ...serviceOfSale(data.sale),
         },
-        items: data.items.map((it) => ({
-          id: it.id,
-          product_name: it.product_name,
-          quantity: it.quantity,
-          unit_price: it.unit_price,
-          subtotal: it.subtotal,
-          ...serviceOfItem(it),
-        })),
+        items: withPhotos(
+          data.items.map((it) => ({
+            id: it.id,
+            product_id: it.product_id,
+            product_name: it.product_name,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            subtotal: it.subtotal,
+            ...serviceOfItem(it),
+          })),
+          photos.data,
+        ),
         payments: data.payments.map((p) => ({ id: p.id, method: p.method, amount: p.amount })),
         customer: data.sale.customers
           ? {
@@ -346,38 +328,36 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
       }
     : null;
 
-  // Formato del ticket. La plantilla de impresión activa manda (H9b); si no hay,
-  // usa el formato del perfil "ticket de venta" (H22) y, como último recurso, el
-  // ancho del branding.
-  const paper =
-    (printTpl?.paper as "58" | "80" | "a4" | undefined) ??
-    saleProfile?.paper ??
-    (brand?.ticket_width === "58" ? "58" : "80");
-
-  // El email usa la plantilla de email si difiere de la de impresión. Cuando
-  // coincide (o no hay plantilla de email), reutiliza el ticket de impresión.
-  const emailDiffers = emailTemplateDiffers(printTpl, emailTpl);
-  emailDiffersRef.current = emailDiffers;
-  const emailPaper = (emailTpl?.paper as "58" | "80" | "a4" | undefined) ?? paper;
-  // ADR-112: sin plantillas propias, "Email: A4" (o el formato A4 del perfil)
-  // adjunta la hoja A4 oculta, a tamaño real.
-  const emailA4 =
-    !emailDiffers && !emailTpl && !printTpl && (invoice.style.emailFormat === "a4" || paper === "a4");
-  emailA4Ref.current = emailA4;
-  const getEmailNode = (): HTMLElement | null =>
-    emailDiffers ? emailRef.current : emailA4 ? a4Ref.current : printRef.current;
+  // ADR-119: todo comprobante sale del motor nuevo. Formato de impresión:
+  // Ticket o A4, preseleccionado con el del perfil "ticket de venta" (H22) y
+  // elegible en la ventana; el ancho del rollo, el del perfil o el del
+  // branding. La impresión automática usa el predeterminado.
+  const defaultFormat: PrintFormat = saleProfile?.paper === "a4" ? "a4" : "ticket";
+  const printFormat: PrintFormat = formatChoice ?? defaultFormat;
+  const rollPaper: "80" | "58" =
+    saleProfile?.paper === "58" || saleProfile?.paper === "80"
+      ? saleProfile.paper
+      : brand?.ticket_width === "58"
+        ? "58"
+        : "80";
+  const invoiceDoc = ticketData ? invoiceFromTicket(ticketData, docOptions(invoice.style)) : null;
+  const rollStyle = ticketStyle(invoice.style, brand?.ticket_show_logo);
+  const emailFormat: PrintFormat = invoice.style.emailFormat === "a4" ? "a4" : "ticket";
+  const getEmailNode = (): HTMLElement | null => emailRef.current;
+  const renderDoc = (fmt: PrintFormat, printable = false) =>
+    invoiceDoc ? (
+      fmt === "a4" ? (
+        <InvoiceDocument doc={invoiceDoc} style={invoice.style} format="a4" printable={printable} />
+      ) : (
+        <InvoiceDocument doc={invoiceDoc} style={rollStyle} format={rollPaper} />
+      )
+    ) : null;
 
   async function handleA4() {
-    if (!data) return;
+    if (!data || !printRef.current) return;
     setDownloading(true);
     try {
-      // Plantilla propia activa: se respeta (su A4 o su ticket en la hoja).
-      // Si no, la factura A4 del motor de comprobantes (ADR-112).
-      if (printTpl && printRef.current) {
-        await downloadA4FromNode(printRef.current, data.sale.number);
-      } else if (a4Ref.current) {
-        await downloadInvoiceA4(a4Ref.current, `comprobante-${data.sale.number}.pdf`);
-      }
+      await downloadInvoicePdf(printRef.current, `comprobante-${data.sale.number}.pdf`);
     } catch {
       toast({ title: "No se pudo generar el PDF", variant: "error" });
     } finally {
@@ -400,10 +380,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
     if (!node || !data) return;
     setSharing(true);
     try {
-      const b64 = await exportNodePdfBase64(node);
-      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       const label = formatSaleNumber(data.sale.number, numFmt);
-      const file = new File([bytes], `comprobante-${label}.pdf`, { type: "application/pdf" });
+      const file = await invoicePdfFile(node, `comprobante-${label}.pdf`);
       await navigator.share({ files: [file], title: `Comprobante ${label}` });
     } catch (e) {
       if ((e as { name?: string })?.name !== "AbortError") {
@@ -437,67 +415,34 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
       ? new Date(phase.nextAttemptAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
       : null;
   const printHint = [
-    paper === "a4" ? "A4" : `${paper} mm`,
+    printFormat === "a4" ? "Hoja A4" : `Ticket ${rollPaper} mm`,
     saleCopies > 1 ? `${saleCopies} copias` : null,
     printTarget ? printTargetLabel(printTarget) : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
-  const preview = ticketData ? (
-    <TemplateRenderer
-      template={printTpl ?? null}
-      fallbackBlocks={fallbackBlocks}
-      data={ticketData}
-      paperOverride={paper}
-      invoice={invoice}
+  const preview = invoiceDoc ? (
+    <InvoicePreview
+      doc={invoiceDoc}
+      style={printFormat === "a4" ? invoice.style : rollStyle}
+      format={printFormat === "a4" ? "a4" : rollPaper}
     />
   ) : null;
 
   const portalTarget = typeof document !== "undefined" ? document.body : null;
   const offscreen =
-    open && ticketData && visible && portalTarget
+    open && invoiceDoc && visible && portalTarget
       ? createPortal(
           <>
             <div ref={printRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
-              <TemplateRenderer
-                template={printTpl ?? null}
-                fallbackBlocks={fallbackBlocks}
-                data={ticketData}
-                paperOverride={paper}
-                className="ticket-print"
-                invoice={{ style: invoice.style, fit: false }}
-              />
+              <div className="ticket-print">{renderDoc(printFormat, true)}</div>
             </div>
-            {/* Nodo de email cuando la plantilla de email difiere de la de
-                impresión. SIN clase `ticket-print`: no debe verse al imprimir. */}
-            {emailDiffers && (
-              <div ref={emailRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
-                <TemplateRenderer
-                  template={emailTpl ?? null}
-                  fallbackBlocks={fallbackBlocks}
-                  data={ticketData}
-                  paperOverride={emailPaper}
-                  invoice={{ style: invoice.style, fit: false }}
-                />
-              </div>
-            )}
-            {/* ADR-112: hoja A4 del comprobante (sin ticket-print, no se
-                imprime) para descargar el PDF y adjuntarlo al email. */}
-            {!printTpl && (
-              <div ref={a4Ref} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
-                <InvoiceDocument
-                  doc={invoiceFromTicket(ticketData, {
-                    tradeName: invoice.style.tradeName,
-                    legends: invoice.style.legends,
-                    showPayments: invoice.style.showPayments,
-                    showInternalRef: invoice.style.showInternalRef,
-                  })}
-                  style={invoice.style}
-                  format="a4"
-                />
-              </div>
-            )}
+            {/* Nodo del email (formato del email del negocio). SIN clase
+                `ticket-print`: no debe verse al imprimir. */}
+            <div ref={emailRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
+              {renderDoc(emailFormat)}
+            </div>
           </>,
           portalTarget,
         )
@@ -524,6 +469,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
         tab={tab}
         onTab={setTab}
         preview={preview}
+        format={printFormat}
+        onFormat={setFormatChoice}
         payments={
           data ? (
             <SalePayments

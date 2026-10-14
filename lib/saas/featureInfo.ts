@@ -472,7 +472,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Tickets ─────────────────────────────────────────────────────────────────
   tickets_pro: {
-    desc: "Personalización de comprobantes: modelos de factura A4 (Moderno, Minimal, Corporativo, Ejecutivo) y de ticket (Compacto, Destacado), color de resalte y logo propios para comprobantes, leyendas propias y el diseñador de tickets (bloques y HTML).",
+    desc: "Personalización de comprobantes: modelos de factura A4 (Moderno, Minimal, Corporativo, Ejecutivo, Elegante, Bloques de color, Compacto de una hoja y Catálogo con fotos) y de ticket (Compacto, Destacado, Moderno, Minimal), tipografía, densidad, bordes rectos, posición del logo, estilo del encabezado y separadores, fotos de producto, color y logo propios y leyendas propias.",
     impact: "Sin esto se usan los modelos Clásicos de factura A4 y ticket, con el color y el logo de tu marca, que igual cumplen todo lo que pide ARCA.",
     minPlan: "Pro",
   },

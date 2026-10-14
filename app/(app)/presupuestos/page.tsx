@@ -204,7 +204,7 @@ function PresupuestosInner() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-mono text-[13px] font-semibold tabular-nums">{quoteNumberLabel(r.pto_vta, r.number)}</span>
-                      <Badge tone={QUOTE_STATUS_TONE[r.eff]} className="rounded-md">
+                      <Badge tone={QUOTE_STATUS_TONE[r.eff]}>
                         {QUOTE_STATUS_LABEL[r.eff]}
                       </Badge>
                       {r.version > 1 && <span className="text-xs text-muted-foreground">rev. {r.version}</span>}

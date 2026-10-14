@@ -14,6 +14,7 @@ import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { formatCurrency } from "@/lib/utils/format";
 import { serviceLineBlocks, unitLabel } from "@/lib/catalog/mode";
 import { discriminatesIva, docTypeLabel } from "./legal";
+import type { ResolvedInvoiceStyle } from "./style";
 import type { InvoiceAmountRow, InvoiceClass, InvoiceCopy, InvoiceDoc, InvoiceLetter, InvoiceLine } from "./types";
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
@@ -26,6 +27,31 @@ export interface FromTicketOptions {
   showInternalRef?: boolean;
   /** Comprobante asociado (NC/ND). */
   associated?: InvoiceDoc["associated"];
+  /** ADR-119: teléfono y email del negocio (default sí). */
+  showContact?: boolean;
+  /** ADR-119: IVA contenido por alícuota en la B (default no). */
+  showIvaBreakdown?: boolean;
+  /** ADR-119: leyendas propias y la del ticket (default sí; las obligatorias van siempre). */
+  showLegends?: boolean;
+  /** ADR-119: código de barras con el número interno (default no). */
+  showSaleBarcode?: boolean;
+  /** Título del comprobante no fiscal (p. ej. "Comprobante de devolución"). */
+  nonFiscalLabel?: string;
+}
+
+/** Opciones del comprobante que salen de la personalización del negocio. */
+export function docOptions(style: ResolvedInvoiceStyle, extra: FromTicketOptions = {}): FromTicketOptions {
+  return {
+    tradeName: style.tradeName,
+    legends: style.legends,
+    showPayments: style.showPayments,
+    showInternalRef: style.showInternalRef,
+    showContact: style.showContact,
+    showIvaBreakdown: style.showIvaBreakdown,
+    showLegends: style.showLegends,
+    showSaleBarcode: style.showSaleBarcode,
+    ...extra,
+  };
 }
 
 function classOf(label: string): InvoiceClass {
@@ -84,6 +110,8 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
       ivaRate: discriminates ? singleRate : null,
       subtotal: r2(it.subtotal * factor),
       ...(detailLines.length > 0 ? { detailLines } : {}),
+      // ADR-119: foto del producto (data URL precargada) y su versión monocromo.
+      ...(it.image_url ? { imageUrl: it.image_url, imageMono: it.image_mono ?? it.image_url } : {}),
     };
   });
   const subtotal = r2(lines.reduce((a, l) => a + l.subtotal, 0));
@@ -130,7 +158,7 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
     letter,
     cbteClass: fiscal ? classOf(f!.cbteLabel) : "no_fiscal",
     cbteCode: fiscal ? f!.codigo : null,
-    label: fiscal ? f!.cbteLabel : brand?.ticket_title?.trim() || "Comprobante no fiscal",
+    label: fiscal ? f!.cbteLabel : opts.nonFiscalLabel || brand?.ticket_title?.trim() || "Comprobante no fiscal",
     ptoVta: fiscal ? numberParts[0] ?? f!.ptoVta ?? "" : "",
     number: fiscal ? numberParts[1] ?? "" : sale.numberLabel,
     date: dateIso,
@@ -147,7 +175,7 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
       activityStart: brand?.activity_start ?? null,
       ivaCondition: brand?.iva_condition ?? null,
       address: brand?.address ?? null,
-      phone: brand?.phone ?? null,
+      phone: opts.showContact === false ? null : brand?.phone ?? null,
     },
     receiver: {
       name: customer?.name?.trim() || "Consumidor Final",
@@ -167,6 +195,7 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
       total: sale.total,
     },
     transparency,
+    transparencyBreakdown: opts.showIvaBreakdown && letter === "B" && fiscal ? ivaLines.filter((l) => l.amount > 0) : null,
     authorization: f?.cae ? { type: f.emissionType, code: f.cae, due: f.caeVto ?? "" } : null,
     qrUrl: f?.qrUrl ?? null,
     qrFallbackText: `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
@@ -176,8 +205,12 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
         ? []
         : payments.map((p) => ({ label: PAYMENT_METHOD_LABELS[p.method] ?? p.method, amount: p.amount })),
     footer: brand?.ticket_footer?.trim() || "¡Gracias por su compra!",
-    legends: [...(brand?.ticket_legend?.trim() ? [brand.ticket_legend.trim()] : []), ...(opts.legends ?? [])],
+    legends:
+      opts.showLegends === false
+        ? []
+        : [...(brand?.ticket_legend?.trim() ? [brand.ticket_legend.trim()] : []), ...(opts.legends ?? [])],
     internalRef: opts.showInternalRef === false ? null : fiscal ? sale.numberLabel : null,
+    saleCode: opts.showSaleBarcode ? sale.numberLabel : null,
     branchText: ticketLocationText(data.location) ?? null,
     voided: sale.status === "voided",
     homologacion: f?.homologacion ?? false,

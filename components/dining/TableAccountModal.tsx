@@ -299,7 +299,7 @@ export function TableAccountModal({
                   {showCourses && (
                     <div className="flex items-center justify-between gap-2 px-0.5">
                       <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ninja-flame/15 px-1.5 text-[11px] font-bold text-ninja-flameSoft tabular-nums">
+                        <span className="grid h-5 min-w-5 place-items-center rounded-md bg-ninja-flame/15 px-1.5 text-[11px] font-bold text-ninja-flameSoft tabular-nums">
                           {g.course}
                         </span>
                         {COURSE_LABELS[g.course] ?? `Tiempo ${g.course}`}

@@ -221,7 +221,7 @@ export default function CuentasPage() {
                 {bucket && (
                   <button
                     onClick={() => setBucket(null)}
-                    className="rounded-full bg-ninja-flame/15 px-2.5 py-1 text-xs font-medium"
+                    className="rounded-md bg-ninja-flame/15 px-2.5 py-1 text-xs font-medium"
                   >
                     {AGING_BUCKETS.find((b) => b.key === bucket)?.label} · quitar filtro
                   </button>
@@ -286,7 +286,7 @@ export default function CuentasPage() {
                         {r.promise && (
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5",
+                              "inline-flex items-center gap-1 rounded-md px-2 py-0.5",
                               r.promise.broken ? "bg-red-400/15 text-danger" : "bg-sky-400/15 text-foreground",
                             )}
                           >

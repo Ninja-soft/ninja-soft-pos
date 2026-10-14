@@ -578,7 +578,7 @@ function PlansButton({
           <span className="text-[13px] font-semibold text-foreground">Planes de cuotas</span>
           <span
             className={cn(
-              "inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-semibold",
+              "inline-flex h-5 items-center whitespace-nowrap rounded-md px-2 text-[11px] font-semibold",
               count > 0 ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
             )}
           >

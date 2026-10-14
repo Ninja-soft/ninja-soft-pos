@@ -4,6 +4,7 @@
 // sincronización y próxima automática.
 import { CalendarClock, History, Layers, Store, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { NoData } from "@/components/ui/NoData";
 import {
   useCatalogDedupeStats,
   useCatalogStores,
@@ -26,6 +27,17 @@ export function CatalogKpis() {
   const st = shown ? runStatus(shown) : null;
   const next = config.data ? nextScheduledRun(config.data) : null;
   const enVenta = s?.tiendas.filter((t) => t.enCatalogo).length ?? 0;
+  // Los números salen de una caché que recalcula un cron cada 30 min.
+  const statValue = (n: number | undefined) =>
+    stats.isError ? <NoData /> : s?.pending ? <span className="text-lg">Calculando…</span> : fmtNum(n ?? 0);
+  const statsHint = (text: string | undefined) =>
+    stats.isError
+      ? "No se pudo leer"
+      : s?.pending
+        ? "Se actualiza cada 30 min"
+        : s?.computedAt
+          ? `${text} · ${fmtAgo(s.computedAt)}`
+          : text;
 
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -33,15 +45,15 @@ export function CatalogKpis() {
         icon={Layers}
         label="Productos únicos"
         loading={stats.isLoading}
-        value={s ? fmtNum(s.items) : "0"}
-        hint={s ? `${fmtNum(s.itemsConVariasTiendas)} en 2 o más tiendas` : undefined}
+        value={statValue(s?.items)}
+        hint={statsHint(s ? `${fmtNum(s.itemsConVariasTiendas)} en 2 o más tiendas` : undefined)}
       />
       <StatTile
         icon={Tag}
         label="Ofertas"
         loading={stats.isLoading}
-        value={s ? fmtNum(s.ofertas) : "0"}
-        hint={s ? `${fmtNum(s.ofertasVendedores)} de otros vendedores` : undefined}
+        value={statValue(s?.ofertas)}
+        hint={statsHint(s ? `${fmtNum(s.ofertasVendedores)} de otros vendedores` : undefined)}
       />
       <StatTile
         icon={Store}

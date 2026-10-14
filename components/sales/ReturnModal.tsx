@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -39,15 +40,15 @@ import {
   isValidCuit,
   type CustomerFieldKey,
 } from "@/modules/customers/schemas";
-import {
-  useActiveTemplate,
-  usePrintProfiles,
-  useTicketBranding,
-} from "@/modules/tickets/hooks";
-import { defaultSaleBlocks } from "@/lib/tickets/blocks";
-import { webPrintCopies } from "@/lib/print/webPrint";
-import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
-import { Barcode, type TicketData } from "@/components/tickets/TicketRenderer";
+import { usePrintProfiles, useTicketBranding } from "@/modules/tickets/hooks";
+import { printTicketIsolated } from "@/lib/print/webPrint";
+import { Barcode } from "@/components/products/Barcode";
+import { useInvoiceStyle } from "@/modules/invoices/hooks";
+import { useSaleFiscalDocuments } from "@/modules/arca/hooks";
+import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
+import { ticketStyle } from "@/components/invoices/InvoicePreview";
+import { ReturnReceipt, returnFiscalState, returnInvoiceDoc } from "@/components/sales/ReturnReceipt";
+import type { PrintFormat } from "@/components/sales/ticket/TicketSheet";
 import { STOCK_DESTINATIONS, type ReturnV2Result, type ExchangeResult } from "@/modules/sales/api";
 import { ExchangeFlow } from "@/components/sales/ExchangeFlow";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -116,7 +117,7 @@ export function ReturnModal({
   const [allowedBranchIds, setAllowedBranchIds] = useState<string[]>([]);
   const [result, setResult] = useState<
     | (ReturnV2Result & {
-        items: { name: string; qty: number; subtotal: number }[];
+        items: { name: string; qty: number; subtotal: number; product_id?: string | null }[];
         reasonLabel: string;
       })
     | null
@@ -257,7 +258,7 @@ export function ReturnModal({
       .map((it) => {
         const qty = qtys[it.id] ?? 0;
         const unit = it.quantity > 0 ? it.subtotal / it.quantity : it.unit_price;
-        return { name: it.product_name, qty, subtotal: unit * qty };
+        return { name: it.product_name, qty, subtotal: unit * qty, product_id: it.product_id };
       });
     try {
       const res = await ret.mutateAsync({
@@ -305,6 +306,8 @@ export function ReturnModal({
       ) : result ? (
         <ReturnResult
           result={result}
+          saleId={saleId}
+          customer={data.sale.customers ?? null}
           mpRefund={mpRefund}
           customerId={voucherCustomerId}
           onMpChange={setMpRefund}
@@ -698,14 +701,14 @@ function ItemsStep({
           <button
             type="button"
             onClick={onAll}
-            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="rounded-md border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Todo
           </button>
           <button
             type="button"
             onClick={onNone}
-            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="rounded-md border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Ninguno
           </button>
@@ -823,7 +826,7 @@ function ReasonStep({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                "rounded-full px-2.5 py-0.5 text-sm font-semibold",
+                "rounded-md px-2.5 py-0.5 text-sm font-semibold",
                 destTone(chosenDestination),
               )}
             >
@@ -1074,7 +1077,7 @@ function BranchScope({
               type="button"
               onClick={() => onToggle(b.id)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
+                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-sm transition-colors",
                 on
                   ? "choice-on font-medium"
                   : "border-border hover:bg-muted",
@@ -1325,81 +1328,123 @@ function VoucherCustomerPicker({
   );
 }
 
-// Resultado: si es vale, muestra el código y el comprobante con la plantilla de
-// ticket activa (no inventa layout). Imprimible.
+// Resultado (ADR-119): el comprobante de la devolución con el motor de
+// comprobantes. Venta con factura: la nota de crédito de ARCA (se espera el
+// CAE, con el comprobante asociado); sin factura: comprobante de devolución
+// no fiscal. Ticket o A4 (preseleccionado con el perfil de devolución) y, si
+// es vale, el código con su código de barras debajo.
 function ReturnResult({
   result,
+  saleId,
+  customer,
   mpRefund,
   customerId,
   onMpChange,
   onClose,
 }: {
   result: ReturnV2Result & {
-    items: { name: string; qty: number; subtotal: number }[];
+    items: { name: string; qty: number; subtotal: number; product_id?: string | null }[];
     reasonLabel: string;
   };
+  saleId: string | null;
+  customer: {
+    name: string;
+    email?: string | null;
+    document_type?: string | null;
+    document_number?: string | null;
+    iva_condition?: string | null;
+    address?: string | null;
+  } | null;
   mpRefund: MpRefundPanelRefund | null;
   customerId: string | null;
   onMpChange: (r: MpRefundPanelRefund) => void;
   onClose: () => void;
 }) {
   const { data: brand } = useTicketBranding(true);
-  const { data: printTpl } = useActiveTemplate("print", true);
+  const invoice = useInvoiceStyle(brand ?? null, true);
   // Perfil de impresión de "devolución / nota de crédito" (H22): formato + copias.
   const { data: printProfiles } = usePrintProfiles(true);
   const returnProfile = printProfiles?.return;
-  const ticketRef = useRef<HTMLDivElement>(null);
+  const fiscalDocs = useSaleFiscalDocuments(saleId, { fastPoll: true });
+  const docs = fiscalDocs.data ?? [];
+  const ncDoc = docs.find((d) => d.origin === "return" && d.return_id === result.return_id) ?? null;
+  const saleInvoice = docs.find((d) => d.origin === "sale" && d.status === "aprobado") ?? null;
+  const fiscal = returnFiscalState(ncDoc);
+  const [formatChoice, setFormatChoice] = useState<PrintFormat | null>(null);
+  const [provisional, setProvisional] = useState(false);
+  const [createdAt] = useState(() => new Date().toISOString());
+  const printRef = useRef<HTMLDivElement>(null);
   const isVoucher = result.refund === "store_credit" && Boolean(result.voucher_code);
   const mpAmount = Number(result.mp_amount ?? 0);
   const restAmount = Math.max(0, Math.round((result.total - mpAmount) * 100) / 100);
   const mpReceipt = mpRefundReceipt(mpRefund);
 
-  const fallbackBlocks = useMemo(
-    () =>
-      defaultSaleBlocks().filter((b) => {
-        if (b.type === "logo") return brand?.ticket_show_logo !== false;
-        return true;
-      }),
-    [brand],
-  );
-
-  // El comprobante de devolución/vale reutiliza la plantilla de ticket activa:
-  // mismos encabezado/logo/pie/ancho del negocio. El "número" del comprobante es
-  // el código del vale (si lo hay) o el N° de devolución.
-  const ticketData: TicketData = {
-    sale: {
+  const format: PrintFormat = formatChoice ?? (returnProfile?.paper === "a4" ? "a4" : "ticket");
+  const rollPaper: "80" | "58" =
+    returnProfile?.paper === "58" || returnProfile?.paper === "80"
+      ? returnProfile.paper
+      : brand?.ticket_width === "58"
+        ? "58"
+        : "80";
+  const rollStyle = ticketStyle(invoice.style, brand?.ticket_show_logo);
+  const doc = returnInvoiceDoc(
+    {
       number: result.number,
       numberLabel: isVoucher ? (result.voucher_code as string) : `DEV #${result.number}`,
-      created_at: new Date().toISOString(),
-      subtotal: result.total,
-      discount_total: 0,
+      createdAt,
       total: result.total,
-      status: "completed",
+      items: result.items,
+      payments: [
+        ...(mpAmount > 0 ? [{ id: "mp", method: "mercadopago", amount: mpAmount }] : []),
+        ...(restAmount > 0.009 ? [{ id: "r", method: isVoucher ? "store_credit" : "cash", amount: restAmount }] : []),
+      ],
+      customer,
+      brand: invoice.brand ?? brand ?? null,
+      ncDoc,
+      saleInvoice,
+      isVoucher,
     },
-    items: result.items.map((it, i) => ({
-      id: String(i),
-      product_name: it.name,
-      quantity: it.qty,
-      unit_price: it.qty > 0 ? it.subtotal / it.qty : it.subtotal,
-      subtotal: it.subtotal,
-    })),
-    payments: [
-      ...(mpAmount > 0 ? [{ id: "mp", method: "mercadopago", amount: mpAmount }] : []),
-      ...(restAmount > 0.009
-        ? [{ id: "r", method: isVoucher ? "store_credit" : "cash", amount: restAmount }]
-        : []),
-    ],
-    customer: null,
-    brand: brand ?? null,
-  };
-
-  // La plantilla activa manda el formato; si no hay, el del perfil de devolución
-  // (H22) y, por último, el ancho del branding.
-  const paper =
-    (printTpl?.paper as "58" | "80" | "a4" | undefined) ??
-    returnProfile?.paper ??
-    (brand?.ticket_width === "58" ? "58" : "80");
+    invoice.style,
+  );
   const returnCopies = returnProfile?.copies ?? 1;
+  const canPrint = fiscal !== "authorizing" || provisional;
+
+  // El vale y el reintegro de Mercado Pago van debajo del comprobante.
+  const extras =
+    mpReceipt || isVoucher ? (
+      <div className="mx-auto mt-2 w-full max-w-[80mm] bg-white px-3 pb-3 text-center font-mono text-black">
+        {mpReceipt && (
+          <>
+            <div className="border-t border-dashed border-neutral-400 pt-2 text-xs font-bold uppercase tracking-wide">
+              {mpReceipt.title}
+            </div>
+            <div className="mt-1 text-sm font-bold">{formatCurrency(mpReceipt.amount)}</div>
+            <div className="mt-0.5 text-[11px]">N° de devolución {mpReceipt.id}</div>
+            <div className="text-[11px] text-neutral-500">{mpReceipt.note}</div>
+          </>
+        )}
+        {isVoucher && (
+          <>
+            <div className="mt-2 border-t border-dashed border-neutral-400 pt-2 text-xs font-bold uppercase tracking-wide">
+              Vale · saldo a favor
+            </div>
+            <div className="mt-1 text-lg font-black tracking-wider">{result.voucher_code}</div>
+            <div className="mx-auto mt-1 flex max-w-[60mm] justify-center">
+              <Barcode value={result.voucher_code as string} />
+            </div>
+            <div className="mt-1 text-sm font-bold">{formatCurrency(result.total)}</div>
+            <div className="mt-0.5 text-[11px] text-neutral-500">
+              {result.voucher_expires_at
+                ? `Vence el ${new Date(result.voucher_expires_at).toLocaleDateString("es-AR")}`
+                : "Sin vencimiento"}
+            </div>
+            <div className="text-[11px] text-neutral-500">Canjeable en el POS por su código.</div>
+          </>
+        )}
+      </div>
+    ) : null;
+
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
 
   return (
     <div className="space-y-4">
@@ -1425,46 +1470,34 @@ function ReturnResult({
         </div>
       )}
 
-      <div className="ticket-print" ref={ticketRef}>
-        <TemplateRenderer
-          template={printTpl ?? null}
-          fallbackBlocks={fallbackBlocks}
-          data={ticketData}
-          paperOverride={paper}
-        />
-        {/* H21h (ADR-099): el comprobante lleva el id de la devolución de
-            Mercado Pago para que el cliente la reclame si no la ve. */}
-        {mpReceipt && (
-          <div className="mx-auto mt-1 max-w-[80mm] px-3 pb-3 text-center font-mono">
-            <div className="border-t border-dashed border-neutral-400 pt-2 text-xs font-bold uppercase tracking-wide">
-              {mpReceipt.title}
+      <ReturnReceipt
+        doc={doc}
+        style={invoice.style}
+        rollStyle={rollStyle}
+        rollPaper={rollPaper}
+        format={format}
+        onFormat={setFormatChoice}
+        fiscal={fiscal}
+        extras={extras}
+        showProvisional={provisional}
+      />
+
+      {/* Nodo que se imprime (portal al body, aislado al imprimir). */}
+      {portalTarget &&
+        canPrint &&
+        createPortal(
+          <div ref={printRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
+            <div className="ticket-print">
+              {format === "a4" ? (
+                <InvoiceDocument doc={doc} style={invoice.style} format="a4" printable />
+              ) : (
+                <InvoiceDocument doc={doc} style={rollStyle} format={rollPaper} />
+              )}
+              {extras}
             </div>
-            <div className="mt-1 text-sm font-bold">{formatCurrency(mpReceipt.amount)}</div>
-            <div className="mt-0.5 text-[11px]">N° de devolución {mpReceipt.id}</div>
-            <div className="text-[11px] text-neutral-500">{mpReceipt.note}</div>
-          </div>
+          </div>,
+          portalTarget,
         )}
-        {/* Panel del vale (código + vencimiento): info del vale, no un layout
-            alternativo del ticket (ese lo provee la plantilla activa de arriba). */}
-        {isVoucher && (
-          <div className="mx-auto mt-1 max-w-[80mm] px-3 pb-3 text-center font-mono">
-            <div className="border-t border-dashed border-neutral-400 pt-2 text-xs font-bold uppercase tracking-wide">
-              Vale · saldo a favor
-            </div>
-            <div className="mt-1 text-lg font-black tracking-wider">{result.voucher_code}</div>
-            <div className="mx-auto mt-1 max-w-[60mm]">
-              <Barcode value={result.voucher_code as string} />
-            </div>
-            <div className="mt-1 text-sm font-bold">{formatCurrency(result.total)}</div>
-            <div className="mt-0.5 text-[11px] text-neutral-500">
-              {result.voucher_expires_at
-                ? `Vence el ${new Date(result.voucher_expires_at).toLocaleDateString("es-AR")}`
-                : "Sin vencimiento"}
-            </div>
-            <div className="text-[11px] text-neutral-500">Canjeable en el POS por su código.</div>
-          </div>
-        )}
-      </div>
 
       <div className="no-print rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm">
         <div className="flex items-center justify-between">
@@ -1491,15 +1524,21 @@ function ReturnResult({
         )}
       </div>
 
-      <div className="no-print flex justify-end gap-2">
+      <div className="no-print flex flex-wrap justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>
           Cerrar
         </Button>
+        {!canPrint && (
+          <Button variant="secondary" onClick={() => setProvisional(true)}>
+            Ver sin CAE
+          </Button>
+        )}
         <Button
-          onClick={() => webPrintCopies(returnCopies)}
+          disabled={!canPrint}
+          onClick={() => printTicketIsolated(printRef.current, returnCopies)}
           title={returnCopies > 1 ? `Imprimir (${returnCopies} copias)` : "Imprimir"}
         >
-          <RotateCcw size={16} /> Imprimir
+          <RotateCcw size={16} /> {format === "a4" ? "Imprimir A4" : "Imprimir ticket"}
           {returnCopies > 1 ? ` (${returnCopies})` : ""}
         </Button>
       </div>

@@ -65,11 +65,28 @@ export async function startOwnerSubscriptionCheckout(
     "mp_subscription_checkout",
     { body: { back_url: backUrl } },
   );
-  if (error) throw error;
+  if (error) {
+    // El código real viene en el cuerpo (FunctionsHttpError): p. ej.
+    // billing_mode_not_mp cuando el negocio paga por cuenta corriente (ADR-120).
+    const ctx = (error as { context?: Response } | null)?.context;
+    let code: string | null = null;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        code = ((await ctx.json()) as { error?: string }).error ?? null;
+      } catch {
+        /* cuerpo no JSON */
+      }
+    }
+    throw code ? new Error(code) : error;
+  }
   const res = data as { init_point?: string; error?: string };
   if (res?.error || !res?.init_point) throw new Error(res?.error ?? "no_init_point");
   return res.init_point;
 }
+
+/** El negocio paga por cuenta corriente: el checkout de MP no aplica (ADR-120). */
+export const ACCOUNT_MODE_CHECKOUT_MESSAGE =
+  "Pagás por cuenta corriente: los datos para transferir están en el Panel del dueño, en Cómo pagar.";
 
 // Sincroniza el monto del preapproval con el total real (plan + addons). No falla
 // si todavía no hay preapproval (devuelve reason: "no_preapproval"). Best-effort:

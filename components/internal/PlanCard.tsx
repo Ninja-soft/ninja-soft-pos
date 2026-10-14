@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   Sparkles,
   Pencil,
-  SlidersHorizontal,
   Infinity as InfinityIcon,
   Gift,
   Crown,
@@ -32,7 +31,6 @@ import {
   type PlanLimits,
 } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
-import { NoData } from "@/components/ui/NoData";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
@@ -52,7 +50,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
   const { data: detail, isLoading } = useTenantPlanDetail(tenantId);
   const { data: globalPlans } = useGlobalPlans();
   const { setPlan } = useInternalMutations(tenantId);
-  const { clone, update, setOverride, grantAccess } = usePlanMutations(tenantId);
+  const { clone, update, grantAccess } = usePlanMutations(tenantId);
   const { data: addons } = usePlanAddons();
   const { data: tenantAddons } = useTenantAddons(tenantId);
   const setAddon = useSetAddon(tenantId);
@@ -84,15 +82,22 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
   });
   const [editReason, setEditReason] = useState("");
 
-  // Estado de las filas de override (input + motivo por clave).
-  const [ovInputs, setOvInputs] = useState<Record<string, string>>({});
-  const [ovReasons, setOvReasons] = useState<Record<string, string>>({});
-
-  if (isLoading || !detail) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-5">
           <SpinnerBlock className="py-6" />
+        </CardContent>
+      </Card>
+    );
+  }
+  // Sin suscripción (o sin plan legible) no hay nada que mostrar: antes quedaba
+  // el spinner girando para siempre.
+  if (!detail) {
+    return (
+      <Card>
+        <CardContent className="p-5 text-sm text-muted-foreground">
+          El negocio no tiene una suscripción con plan asignado.
         </CardContent>
       </Card>
     );
@@ -278,49 +283,6 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
     }
   }
 
-  async function handleSaveOverride(key: LimitKey) {
-    const raw = (ovInputs[key] ?? "").trim();
-    const value = raw === "" ? null : Number(raw);
-    if (value !== null && (!Number.isFinite(value) || value < 0)) {
-      toast({ title: "Valor inválido", variant: "error" });
-      return;
-    }
-    try {
-      await setOverride.mutateAsync({
-        key,
-        value,
-        reason: (ovReasons[key] ?? "").trim() || null,
-      });
-      toast({
-        title: value === null ? "Override quitado" : "Override guardado",
-        variant: "success",
-      });
-      setOvInputs((s) => ({ ...s, [key]: "" }));
-      setOvReasons((s) => ({ ...s, [key]: "" }));
-    } catch (e) {
-      toast({
-        title: "No se pudo guardar",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
-    }
-  }
-
-  async function handleClearOverride(key: LimitKey) {
-    try {
-      await setOverride.mutateAsync({ key, value: null, reason: null });
-      toast({ title: "Override quitado", variant: "success" });
-      setOvInputs((s) => ({ ...s, [key]: "" }));
-      setOvReasons((s) => ({ ...s, [key]: "" }));
-    } catch (e) {
-      toast({
-        title: "No se pudo quitar",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
-    }
-  }
-
   return (
     <>
       <Card>
@@ -392,10 +354,13 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
 
           {/* Límites efectivos (override ?? plan) */}
           <div>
-            <div className="mb-2 text-sm font-medium text-muted-foreground">
-              Límites efectivos
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <span className="text-sm font-medium text-muted-foreground">Límites que rigen</span>
+              <span className="text-xs text-muted-foreground">
+                Uso y overrides en la pestaña Configuración.
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
               {LIMIT_KEYS.map((k) => {
                 const planVal = numbers[k];
                 const ov = detail.overrides[k];
@@ -404,13 +369,17 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                 return (
                   <div
                     key={k}
-                    className="rounded-lg border border-border bg-muted/30 px-3 py-2"
+                    className="rounded-lg bg-muted/50 px-3 py-2"
                   >
                     <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                       {LIMIT_LABELS[k]}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-foreground">
-                      {eff ?? <NoData />}
+                      {eff ?? (
+                        <span className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground">
+                          <InfinityIcon size={14} aria-hidden /> Sin límite
+                        </span>
+                      )}
                       {hasOv && (
                         <span
                           title="Override activo"
@@ -418,81 +387,6 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                         />
                       )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Overrides de límites */}
-          <div>
-            <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-              <SlidersHorizontal size={14} /> Overrides de límites
-            </div>
-            <div className="space-y-2">
-              {LIMIT_KEYS.map((k) => {
-                const planVal = numbers[k];
-                const ov = detail.overrides[k];
-                const hasOv = ov !== undefined && ov !== null;
-                const inputVal = ovInputs[k] ?? "";
-                const dirty = inputVal.trim() !== "";
-                return (
-                  <div
-                    key={k}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="min-w-[120px] flex-1">
-                        <div className="text-sm font-medium text-foreground">
-                          {LIMIT_LABELS[k]}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Plan: {planVal ?? <NoData />}
-                          {hasOv && (
-                            <span className="ml-2 text-ninja-flameSoft">
-                              Override: {ov}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder={hasOv ? String(ov) : "sin override"}
-                        value={inputVal}
-                        onChange={(e) =>
-                          setOvInputs((s) => ({ ...s, [k]: e.target.value }))
-                        }
-                        className="h-9 w-28"
-                      />
-                      <Button
-                        size="sm"
-                        disabled={!dirty || setOverride.isPending}
-                        onClick={() => handleSaveOverride(k)}
-                      >
-                        Guardar
-                      </Button>
-                      {hasOv && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={setOverride.isPending}
-                          onClick={() => handleClearOverride(k)}
-                        >
-                          Quitar
-                        </Button>
-                      )}
-                    </div>
-                    {dirty && (
-                      <Input
-                        placeholder="Motivo (opcional)"
-                        value={ovReasons[k] ?? ""}
-                        onChange={(e) =>
-                          setOvReasons((s) => ({ ...s, [k]: e.target.value }))
-                        }
-                        className="mt-2 h-9"
-                      />
-                    )}
                   </div>
                 );
               })}

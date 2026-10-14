@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { SampleBrand } from "@/lib/tickets/sample";
 import {
@@ -20,13 +20,6 @@ import {
   useResolveTarget,
   useStoreLogo,
 } from "@/modules/config/hooks";
-import {
-  ticketTemplatesApi,
-  type TemplateDestination,
-  type TemplateInput,
-} from "./api";
-
-const KEY = ["ticket-templates"];
 
 // Perfiles de impresión por tipo de documento (H22). Lee
 // pos_settings.print_profiles (jsonb, no tipado en los types generados: cast +
@@ -75,8 +68,7 @@ export function usePrintTarget(doc: PrintDocType, enabled = true): PrintTarget |
   }, [doc, profiles, printers, ctx.posStoreId, register.data?.id]);
 }
 
-// Branding del negocio para el preview/render de tickets. Movido desde
-// TicketModal (H9b) para compartirlo con el editor de plantillas.
+// Branding del negocio para el comprobante (motor ADR-112 / ADR-119).
 export function useTenantTicketBranding(enabled = true) {
   const supabase = createClient();
   return useQuery({
@@ -113,10 +105,6 @@ export function useTicketBranding(enabled = true, storeId?: string | null) {
     [q.data, overrides, target, store],
   );
   return { data, isFetched: q.isFetched, isLoading: q.isLoading };
-}
-
-export function useTicketTemplates() {
-  return useQuery({ queryKey: KEY, queryFn: ticketTemplatesApi.list });
 }
 
 // Estado del SMTP del negocio. La RPC get_tenant_smtp SOLO responde a
@@ -174,61 +162,4 @@ export function useTenantSmtpStatus(enabled = true) {
       };
     },
   });
-}
-
-// Modelo activo por destino (impresión/email). queryKey bajo el prefijo KEY,
-// así las mutaciones de activación (useSetActiveTemplate / useClearActiveTemplate)
-// que invalidan KEY refrescan también este cache.
-export function useActiveTemplate(destination: TemplateDestination, enabled = true) {
-  return useQuery({
-    queryKey: [...KEY, "active", destination],
-    enabled,
-    queryFn: () => ticketTemplatesApi.getActive(destination),
-  });
-}
-
-function useInvalidate() {
-  const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: KEY });
-}
-
-export function useCreateTemplate() {
-  const inv = useInvalidate();
-  return useMutation({
-    mutationFn: ({ tenantId, input }: { tenantId: string; input: TemplateInput }) =>
-      ticketTemplatesApi.create(tenantId, input),
-    onSuccess: inv,
-  });
-}
-
-export function useUpdateTemplate() {
-  const inv = useInvalidate();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<TemplateInput> }) =>
-      ticketTemplatesApi.update(id, input),
-    onSuccess: inv,
-  });
-}
-
-export function useSetActiveTemplate() {
-  const inv = useInvalidate();
-  return useMutation({
-    mutationFn: ({ id, destination }: { id: string; destination: TemplateDestination }) =>
-      ticketTemplatesApi.setActive(id, destination),
-    onSuccess: inv,
-  });
-}
-
-export function useClearActiveTemplate() {
-  const inv = useInvalidate();
-  return useMutation({
-    mutationFn: (destination: TemplateDestination) =>
-      ticketTemplatesApi.clearActive(destination),
-    onSuccess: inv,
-  });
-}
-
-export function useRemoveTemplate() {
-  const inv = useInvalidate();
-  return useMutation({ mutationFn: ticketTemplatesApi.remove, onSuccess: inv });
 }

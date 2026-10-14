@@ -348,11 +348,11 @@ export function TenantEmailCard() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm font-medium text-muted-foreground">Cuenta de envío</span>
           {configured ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-medium text-success">
+            <span className="inline-flex items-center gap-1 rounded-md bg-success/15 px-2.5 py-1 text-xs font-medium text-success">
               <Check size={13} /> Configurado
             </span>
           ) : (
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            <span className="rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
               Sin configurar
             </span>
           )}

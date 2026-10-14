@@ -414,8 +414,12 @@ export function qrSvgDataUrl(text: string, ecc: QrEcc = "M", border = 2): string
     return "";
   }
   const dim = qr.size + border * 2;
+  // Tamaño intrínseco explícito (8 px por módulo): sin width/height, Chrome le
+  // da 300x150 al SVG y html2canvas lo recorta al exportar a PDF (el QR del
+  // PDF del email salía cortado e ilegible, ADR-119).
+  const px = dim * 8;
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dim} ${dim}" shape-rendering="crispEdges">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${dim} ${dim}" shape-rendering="crispEdges">` +
     `<rect width="${dim}" height="${dim}" fill="#fff"/>` +
     `<path d="${qrSvgPath(qr, border)}" fill="#000"/></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

@@ -250,20 +250,43 @@ export function quoteDetailLines(it: QuoteItem): { bullet: boolean; text: string
 export const QUOTE_LEGEND = "PRESUPUESTO. No válido como factura.";
 
 /** Leyendas del presupuesto (validez y condiciones). */
-export function quoteLegends(q: Pick<Quote, "valid_until" | "terms" | "version">): string[] {
+export function quoteLegends(
+  q: Pick<Quote, "valid_until" | "terms" | "version"> &
+    Partial<Pick<Quote, "notes" | "service_from" | "service_to" | "show_signature" | "status" | "accepted_at" | "accepted_by_name" | "accepted_via">>,
+): string[] {
+  const accepted = Boolean(q.accepted_at) && (q.status === "accepted" || q.status === "converted");
   return [
     `Válido hasta el ${fmtDate(q.valid_until)}.`,
     ...(q.version > 1 ? [`Revisión ${q.version}.`] : []),
+    ...(q.service_from ? [`Período del servicio: ${fmtDate(q.service_from)} al ${fmtDate(q.service_to ?? q.service_from)}.`] : []),
     ...(q.terms?.trim() ? [`Condiciones: ${q.terms.trim()}`] : []),
+    ...(q.notes?.trim() ? [`Notas: ${q.notes.trim()}`] : []),
+    ...(accepted
+      ? [
+          `Aceptado${q.accepted_by_name ? ` por ${q.accepted_by_name}` : ""} el ${fmtDate(q.accepted_at)}${q.accepted_via === "link" ? " (aceptación en línea)" : ""}.`,
+        ]
+      : q.show_signature
+        ? [QUOTE_SIGNATURE]
+        : []),
   ];
 }
+
+/** Espacio de aceptación del cliente (leyenda: el motor la dibuja en todos los modelos). */
+export const QUOTE_SIGNATURE =
+  "Acepto el presupuesto. Firma: ____________________  Aclaración: ____________________  Fecha: ____ / ____ / ______";
 
 /**
  * InvoiceDoc no fiscal para los modelos de ticket del motor: título
  * "PRESUPUESTO", la leyenda "Documento no válido como factura" (NonFiscalNote)
  * y la validez y condiciones como leyendas.
  */
-export function quoteToInvoiceDoc(q: Quote, items: QuoteItem[], brand: QuoteBrand | null): InvoiceDoc {
+export function quoteToInvoiceDoc(
+  q: Quote,
+  items: QuoteItem[],
+  brand: QuoteBrand | null,
+  /** ADR-119: fotos de los productos por id (las muestra el motor si el negocio las prendió). */
+  images?: Map<string, string> | null,
+): InvoiceDoc {
   const lines: InvoiceLine[] = items.map((it, i) => {
     const detail = quoteDetailLines(it);
     const gross = Number(it.quantity) * Number(it.unit_price);
@@ -276,6 +299,7 @@ export function quoteToInvoiceDoc(q: Quote, items: QuoteItem[], brand: QuoteBran
       discountPct: Number(it.discount) > 0 && gross > 0 ? Math.round((Number(it.discount) / gross) * 1000) / 10 : null,
       subtotal: Number(it.subtotal),
       ...(detail.length ? { detailLines: detail } : {}),
+      ...(it.product_id && images?.get(it.product_id) ? { imageUrl: images.get(it.product_id)! } : {}),
     };
   });
   const numberText = quoteNumberLabel(q.pto_vta, q.number);

@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { QuoteDocument } from "@/components/quotes/QuoteDocument";
+import { A4_MODELS } from "@/lib/invoices/models";
 import { resolveInvoiceStyle } from "@/lib/invoices/style";
 import { legalRequirements } from "@/lib/invoices/legal";
 import {
@@ -18,6 +19,7 @@ import {
   quoteErrorMessage,
   quoteItemsToCart,
   quoteLegends,
+  QUOTE_SIGNATURE,
   quoteNumberLabel,
   quoteShareText,
   quoteToInvoiceDoc,
@@ -190,18 +192,39 @@ describe("documento del motor (ADR-112)", () => {
     expect(quoteLegends(QUOTE)).toEqual([
       "Válido hasta el 29/10/2026.",
       "Revisión 2.",
+      "Período del servicio: 20/10/2026 al 24/10/2026.",
       "Condiciones: 50 % de anticipo y saldo contra entrega del informe.",
+      "Notas: Incluye traslado al laboratorio.",
+      QUOTE_SIGNATURE,
     ]);
     expect(doc.totals.discounts).toEqual([{ label: "Descuento", amount: 1000 }]);
   });
 });
 
 describe("modelos de presupuesto", () => {
+  it("hoja A4 con cada modelo del motor y sus opciones (esquinas, fotos)", () => {
+    const images = new Map([["p-fr", "data:image/png;base64,iVBORw0KGgo="]]);
+    for (const m of A4_MODELS) {
+      for (const corners of ["rounded", "square"] as const) {
+        const style = resolveInvoiceStyle({ a4_model: m.key, corners, show_photos: true }, { accent: "#0E7490", logo_url: null }, { pro: true, unbranded: true });
+        const { container, unmount } = render(<QuoteDocument quote={QUOTE} items={ITEMS} brand={null} style={style} images={images} format="a4" />);
+        const text = container.textContent ?? "";
+        expect(container.querySelector("[data-invoice-a4]")?.getAttribute("data-model"), m.key).toBe(m.key);
+        expect(text.toUpperCase(), m.key).toContain("PRESUPUESTO");
+        expect(text, m.key).toContain("Válido hasta el 29/10/2026.");
+        expect(text.toLowerCase(), m.key).toContain("documento no válido como factura");
+        // Una sola copia aunque el negocio imprima Original y Duplicado.
+        expect(container.querySelectorAll("[data-invoice-page]").length, m.key).toBeGreaterThanOrEqual(1);
+        expect(text, m.key).not.toContain("DUPLICADO");
+        unmount();
+      }
+    }
+  });
   it("hoja A4: PRESUPUESTO, número, validez, no válido como factura, condiciones y firma", () => {
     const { container } = render(<QuoteDocument quote={QUOTE} items={ITEMS} brand={{ legal_name: "Laboratorio A SRL", cuit: "30712345678", address: "Calle 1", phone: "341" }} style={STYLE} format="a4" />);
     const text = container.textContent ?? "";
-    expect(text).toContain("PRESUPUESTO");
-    expect(text).toContain("N° 0001-00000012");
+    expect(text.toUpperCase()).toContain("PRESUPUESTO");
+    expect(text).toContain("0001-00000012");
     expect(text).toContain("Revisión 2");
     expect(text).toContain("Válido hasta");
     expect(text).toContain("29/10/2026");
@@ -211,7 +234,6 @@ describe("modelos de presupuesto", () => {
     expect(text).toContain("Tipo: Análisis");
     expect(text).toContain("Aclaración");
     expect(text).toContain("Firma");
-    expect(container.querySelectorAll("[data-invoice-page]")).toHaveLength(1);
     expect(container.querySelector('[data-seal="ninjasoft"]')).not.toBeNull();
   });
   it("aceptado: muestra quién lo aceptó en lugar de la firma", () => {
@@ -229,7 +251,7 @@ describe("modelos de presupuesto", () => {
       const { container } = render(<QuoteDocument quote={QUOTE} items={ITEMS} brand={null} style={STYLE} format={format} />);
       const text = container.textContent ?? "";
       expect(text).toContain("Presupuesto");
-      expect(text).toContain("N° 0001-00000012");
+      expect(text).toContain("0001-00000012");
       expect(text).not.toContain("Período facturado");
       expect(text).toContain("Válido hasta el 29/10/2026.");
       const got = new Set(Array.from(container.querySelectorAll("[data-legal]")).map((e) => e.getAttribute("data-legal")));

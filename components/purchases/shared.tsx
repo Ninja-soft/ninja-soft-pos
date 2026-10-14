@@ -90,7 +90,7 @@ export function ComprasTabs() {
             key={t.href}
             href={t.href as never}
             className={cn(
-              "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition",
+              "shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition",
               on
                 ? "bg-ninja-flame/[0.12] text-ninja-flameSoft"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",

@@ -186,7 +186,7 @@ export function NotificationBell({
         >
           <Bell size={18} />
           {unread > 0 && (
-            <span className="absolute -right-1 -top-1 grid min-w-[18px] place-items-center rounded-full bg-ninja-flame px-1 text-[10px] font-bold leading-[18px] text-white">
+            <span className="absolute -right-1 -top-1 grid min-w-[18px] place-items-center rounded-md bg-ninja-flame px-1 text-[10px] font-bold leading-[18px] text-white">
               {badge}
             </span>
           )}

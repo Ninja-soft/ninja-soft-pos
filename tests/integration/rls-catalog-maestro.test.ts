@@ -189,6 +189,8 @@ describe.skipIf(!enabled)("ADR-109 · catálogo maestro y ofertas", () => {
     expect(Number(ref.min_price)).toBe(1500);
     expect(ref.min_seller).toBe("Electro Sur");
     expect(ref.seller_count).toBe(3);
+    // ADR-118: catalog_product_count devuelve el conteo guardado (lo deja el recuento por lotes).
+    await rpc(ctx.admin, "catalog_recount_step", { p_catalog_id: ctx.catalog, p_restart: true, p_limit: 500000 });
     const count = await rpc(a, "catalog_product_count", { p_catalog_id: ctx.catalog });
     expect(Number(count.data)).toBe(1);
   });
@@ -209,6 +211,8 @@ describe.skipIf(!enabled)("ADR-109 · catálogo maestro y ofertas", () => {
     expect(all).toHaveLength(2);
     const cmp = (await rpc(ctx.staffInternal, "catalog_price_compare", { p_ean: ACEITE })).data as { store_key: string }[];
     expect(cmp[0]!.store_key).toBe(S3); // la más barata está fuera de los catálogos
+    // Los stats salen de una caché que calcula un cron; acá se calcula a mano.
+    expect((await ctx.admin.rpc("catalog_dedupe_stats_compute" as never)).error).toBeNull();
     const stats = (await rpc(ctx.staffInternal, "catalog_dedupe_stats")).data as { items: number; tiendas: { key: string; en_catalogo: boolean }[] };
     expect(stats.items).toBeGreaterThanOrEqual(2);
     expect(stats.tiendas.find((t) => t.key === S3)?.en_catalogo).toBe(false);

@@ -53,7 +53,7 @@ function MappingsEditor() {
             type="button"
             onClick={() => setGroup(g)}
             className={cn(
-              "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition",
+              "shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition",
               g === group ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >

@@ -352,7 +352,7 @@ function ReservationRow({
               <Clock size={13} className="text-ninja-flameSoft" /> {time}
             </span>
             <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${RESERVATION_STATUS_CHIP[r.status]}`}
+              className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${RESERVATION_STATUS_CHIP[r.status]}`}
             >
               {RESERVATION_STATUS_LABELS[r.status]}
             </span>

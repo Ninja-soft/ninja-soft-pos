@@ -134,7 +134,7 @@ export function ZClosuresHistory() {
     <section>
       <div className="flex items-center gap-2">
         <h2 className="font-display text-lg font-bold">Cierres Z</h2>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+        <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           inmutable
         </span>
       </div>

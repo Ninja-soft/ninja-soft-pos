@@ -36,7 +36,8 @@ import { QuoteDocument } from "@/components/quotes/QuoteDocument";
 import { QuoteFormModal } from "@/components/quotes/QuoteFormModal";
 import { useQuote, useQuoteMutations, useQuoteRevisions } from "@/modules/quotes/hooks";
 import { useQuoteBrand } from "@/modules/quotes/useQuoteBrand";
-import { downloadInvoiceA4 } from "@/lib/tickets/exportPng";
+import { downloadInvoicePdf } from "@/lib/invoices/exportPdf";
+import { useQuoteImages } from "@/modules/quotes/useQuoteImages";
 import { printTicketIsolated } from "@/lib/print/webPrint";
 import { fmtDate } from "@/lib/invoices/legal";
 import {
@@ -74,13 +75,14 @@ export function QuoteDetailModal({
   const { data: q, isLoading } = useQuote(quoteId);
   const m = useQuoteMutations();
   const { style, brand, ticketWidth } = useQuoteBrand(open);
+  // ADR-119: fotos de los productos (el motor las muestra si el negocio las prendió).
+  const images = useQuoteImages(q?.items ?? null, open && (style.showPhotos || style.ticketPhotos || style.a4Model === "catalogo"));
   const [fmt, setFmt] = useState<Fmt>("a4");
   const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: revisions = [] } = useQuoteRevisions(quoteId, historyOpen);
-  const a4Ref = useRef<HTMLDivElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
   // El portal de las hojas fuera de pantalla sólo en el cliente (sin desfase de hidratación).
   const [mounted, setMounted] = useState(false);
@@ -140,9 +142,10 @@ export function QuoteDetailModal({
   }
 
   async function downloadPdf() {
-    if (!a4Ref.current) return;
+    if (!printRef.current) return;
     try {
-      await downloadInvoiceA4(a4Ref.current, `presupuesto-${label}.pdf`);
+      // Mismo nodo que la vista previa: hoja A4 o rollo, según lo elegido.
+      await downloadInvoicePdf(printRef.current, `presupuesto-${label}.pdf`);
     } catch {
       toast({ title: "No se pudo generar el PDF", variant: "error" });
     }
@@ -154,19 +157,16 @@ export function QuoteDetailModal({
 
   const doc =
     q && style ? (
-      <QuoteDocument quote={q} items={q.items} brand={brand} style={style} format={fmt === "a4" ? "a4" : ticketWidth} />
+      <QuoteDocument quote={q} items={q.items} brand={brand} style={style} images={images} format={fmt === "a4" ? "a4" : ticketWidth} />
     ) : null;
 
   const offscreen =
     q && mounted
       ? createPortal(
           <>
-            <div ref={a4Ref} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
-              <QuoteDocument quote={q} items={q.items} brand={brand} style={style} format="a4" />
-            </div>
             <div ref={printRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
               <div className="ticket-print">
-                <QuoteDocument quote={q} items={q.items} brand={brand} style={style} format={fmt === "a4" ? "a4" : ticketWidth} printable />
+                <QuoteDocument quote={q} items={q.items} brand={brand} style={style} images={images} format={fmt === "a4" ? "a4" : ticketWidth} printable />
               </div>
             </div>
           </>,
@@ -190,7 +190,7 @@ export function QuoteDetailModal({
                 <p className="flex flex-wrap items-center gap-2 font-display text-lg font-bold tabular-nums">
                   N° {label}
                   {eff && (
-                    <Badge tone={QUOTE_STATUS_TONE[eff]} className="rounded-md font-sans">
+                    <Badge tone={QUOTE_STATUS_TONE[eff]} className="font-sans">
                       {QUOTE_STATUS_LABEL[eff]}
                     </Badge>
                   )}

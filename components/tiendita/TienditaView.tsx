@@ -32,6 +32,7 @@ import { catalogSearchBusy } from "@/modules/tiendita/searchState";
 import type { StorefrontCatalog, CatalogSearchResult } from "@/modules/tiendita/storefront";
 import { TienditaIntro } from "./TienditaIntro";
 import { ImportProductModal } from "./ImportProductModal";
+import { measureLines } from "@/lib/catalog/importInfo";
 import { appOrigin } from "@/lib/site";
 import { useCatalogHintsActive } from "@/modules/catalog/hooks";
 import { StoreLogo } from "@/components/catalog/StoreLogo";
@@ -211,12 +212,12 @@ function CatalogCard({
         <div className="absolute inset-x-0 bottom-0 p-4">
           <div className="flex flex-wrap gap-1.5">
             {catalog.productCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
+              <span className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
                 <Layers size={12} /> {formatInt(catalog.productCount)} productos
               </span>
             )}
             {catalog.owned && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#15111f]">
+              <span className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#15111f]">
                 {catalog.source === "granted" ? <Gift size={12} /> : <Check size={12} />}
                 {catalog.source === "granted" ? "De regalo" : "Comprado"}
               </span>
@@ -422,12 +423,12 @@ function ProductTile({
           </div>
         )}
         {onSale && (
-          <span className="absolute left-2.5 top-2.5 rounded-full bg-ninja-flame px-2 py-0.5 text-[10px] font-bold text-white">
+          <span className="absolute left-2.5 top-2.5 rounded-md bg-ninja-flame px-2 py-0.5 text-[10px] font-bold text-white">
             Oferta
           </span>
         )}
         {!p.disponible && (
-          <span className="absolute right-2.5 top-2.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
+          <span className="absolute right-2.5 top-2.5 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
             Sin stock en origen
           </span>
         )}
@@ -442,6 +443,15 @@ function ProductTile({
           {p.titulo}
         </h3>
         {leaf && <p className="mt-1 truncate text-xs text-muted-foreground">{leaf}</p>}
+        {/* ADR-118: qué trae para importar (código de barras y medidas). */}
+        <div className="mt-1.5 flex flex-wrap gap-1" data-testid="tile-import-info">
+          {p.ean ? null : (
+            <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">Sin EAN</span>
+          )}
+          {measureLines(p.medidas).length > 0 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Con medidas</span>
+          )}
+        </div>
         <div className="mt-auto pt-2.5">
           {showMarketPrice && p.precio != null && (
             <div className="flex items-center gap-1.5">

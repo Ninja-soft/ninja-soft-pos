@@ -4250,6 +4250,185 @@ F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea l
 - Cuando F20-1 llegue a `main`: sumar el permiso "Cobranzas" a `internal_set_billing_profile` y decidir si `tenant_billing_terms.send_to` reemplaza a `email_facturacion` o lo usa como primer destinatario.
 - Deuda: cron de revalidación del padrón (F20-11) y FCE MiPyME.
 
+## ADR-119: Comprobantes v2: un solo motor para todo comprobante, más modelos y opciones, fotos de producto, selector Ticket o A4 al imprimir, PDF del email igual a la vista previa y nota de crédito de la devolución
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/comprobantes-v2`; migración `20261116200000_comprobantes_v2` sin aplicar; Edge `ai_assistant` sin desplegar) · **Base:** ADR-112 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-072 (facturación ARCA), ADR-077 (venta offline), H9b (plantillas de ticket), H22 (perfiles de impresión). **Numeración:** 117 es la mayor en `main`; 118 puede estar tomada en una rama abierta.
+
+### Contexto
+
+El dueño pidió, sobre el motor de ADR-112:
+
+1. Borrar el ticket de bloques "Simple (anterior)" y el editor viejo de plantillas (bloques, lienzo y HTML): la ventana después de cobrar y la devolución seguían mostrando el ticket de bloques.
+2. Más personalización por modelo y más modelos A4 y de ticket.
+3. Bordes redondeados o rectos para todas las cajas.
+4. Elegir Ticket o A4 al imprimir en la caja y en la reimpresión desde Ventas, con la vista previa que cambia ahí mismo.
+5. El PDF que llega por email salía mal.
+6. La nota de crédito de la devolución con el motor nuevo (deuda de ADR-112).
+
+Después, para la misma rama: poder elegir un modelo de factura que muestre la foto de los productos.
+
+**Diagnóstico del PDF del email** (`factura-29.pdf`, renderizado con PyMuPDF): una sola página de 80 x 189,5 mm, sin texto (una imagen) y con:
+
+- el ticket de bloques viejo, con el marco redondeado de la vista previa pegado y la leyenda "IVA contenido: se discriminará al integrar la facturación electrónica" en una factura B ya autorizada;
+- **el QR recortado e ilegible**: `qrSvgDataUrl` armaba un SVG sin `width` ni `height`; Chrome le da 300 x 150 px y html2canvas dibuja sólo la esquina superior izquierda, agrandada;
+- **el renglón cortado a la mitad** ("1x Agua 2L ($ 1.800,00)"): html2canvas mide la línea base de cada fuente con un `<img>` de 1 px alineado al texto, y el preflight de Tailwind (`img { display: block }`) lo baja a otra línea; el texto queda corrido hacia abajo, se encima o se recorta. Afecta a todo PDF hecho con html2canvas en la app (en el A4 del motor, "ARCA" y la letra quedaban encimados).
+
+### Decisión
+
+1. **Un solo motor.** Venta, devolución y nota de crédito, provisorio, contingencia (CAEA), offline, reimpresión, prueba de impresora, email y PDF salen de `InvoiceDocument`. Se borran `TemplateRenderer`, `TicketRenderer`, `CanvasTicketRenderer`, `HtmlTicketRenderer`, `TicketTemplateEditor`, `TicketTemplatesCard`, `ImageCropModal`, `lib/tickets/{blocks, blockTemplates, canvasCompat, htmlTemplates, htmlVars, legal, myBrand, requiredQr, exportPng}.ts`, `modules/tickets/api.ts`, los hooks de plantillas y sus tests. La tabla `ticket_templates` queda como historial.
+2. **Migración de datos sin borrar nada** (`20261116200000_comprobantes_v2`):
+   - los negocios con plantilla activa (impresión o email) o con el modelo `simple` pasan al Clásico con el color y el logo de su marca;
+   - si la plantilla de email (o la de impresión, sin una de email) era A4, el email adjunta A4;
+   - si la de impresión era A4 y el perfil "ticket de venta" no tenía formato, el perfil queda en A4;
+   - `invoice_style.legacy_from` guarda de dónde vino;
+   - las plantillas quedan inactivas (`print_active`/`email_active` en false, sin `deleted_at`);
+   - el trigger de plan de `invoice_style` se apaga sólo durante el update, así un negocio que bajó de plan con opciones Pro guardadas no frena la migración;
+   - el paso "ticket" del onboarding pasa a "diseñó sus comprobantes" (`invoice_style` guardado) o tenía una plantilla.
+
+   Lo guardado como `simple` también se lee como Clásico en el front.
+3. **Modelos nuevos**:
+   - A4: Elegante (encabezado centrado, filetes dobles, versalitas), Bloques de color (cada sección en una tarjeta con barra de color), Compacto de una hoja (encabezado bajo y tabla densa) y Catálogo con fotos;
+   - ticket: Moderno (secciones en recuadros, tipo en pastilla, total en caja) y Minimal (sin recuadros, alineado a la izquierda).
+
+   Quedan 9 modelos A4 y 5 de ticket. Todos cubren los campos legales de cada tipo y lo verifica el test que recorre modelos por tipos, ahora también con combinaciones extremas de opciones.
+4. **Opciones** en `invoice_style`, sin columnas nuevas:
+   - **aspecto**: tipografía (la del modelo, Inter, Helvética, Serif o Monoespaciada), tamaño de letra (chica, normal o grande), densidad (compacta, normal o amplia), **bordes redondeados o rectos**, posición del logo (la del modelo, izquierda, centro o derecha), estilo del encabezado (en color, neutro o en una pastilla) y separadores (los del modelo, punteados, sólidos o ninguno);
+   - **qué se muestra**: datos de contacto, medios de pago, número interno, detalle de IVA por alícuota en la B (la C no: el monotributo no discrimina IVA; la transparencia fiscal es obligatoria y no se oculta), leyendas propias (las obligatorias van siempre) y código de barras de la venta.
+
+   Las medidas viajan como variables CSS en la raíz de la hoja o el rollo (`--inv-fs`, `--inv-sp`, `--inv-r`, `--inv-sep`): el navegador resuelve los `calc()` y la vista previa, la impresión y el PDF dibujan lo mismo.
+5. **Fotos de producto**:
+   - "Mostrar foto del producto" en los modelos A4: miniatura cuadrada a la izquierda del renglón, con placeholder neutro si no tiene, y sigue la opción de bordes;
+   - modelo **Catálogo con fotos**: foto grande y renglones más altos;
+   - en el ticket, opcional y apagado por defecto: chicas y en monocromo.
+
+   Las fotos se precargan como data URL (recorte cuadrado de 160 px, color y escala de grises en el navegador) y sólo si la opción está prendida, así salen en la impresión, el PDF y el email (html2canvas no espera imágenes remotas ni aplica filtros CSS).
+6. **Paginación A4** (`lib/invoices/paginate.ts`, puro): con muchos renglones el detalle se parte en hojas. Encabezado, emisor y receptor van en todas; totales, transparencia, pagos, leyendas y el pie fiscal (QR y CAE), en la última; las demás dicen "Continúa en la hoja siguiente" y "Hoja N de M". El alto de cada renglón se estima (no se mide el DOM: los modelos se pueden dibujar en el servidor).
+7. **Ticket o A4 al imprimir.**
+   - En la ventana del ticket, que es también la reimpresión desde Ventas y desde la ficha del cliente, hay un selector Ticket o A4 en la vista previa y otro junto a Imprimir, con el formato del perfil "ticket de venta" preseleccionado.
+   - El botón dice "Imprimir ticket" o "Imprimir A4".
+   - PDF y Compartir usan el formato elegido.
+   - La impresión automática usa el predeterminado.
+   - El rollo usa el ancho del perfil (58 u 80) o el del branding.
+   - Al imprimir, el comprobante aislado sale en el flujo normal y sin el resto de la página (`globals.css`), así se imprimen todas las hojas de una A4 (Original, Duplicado o detalle largo).
+8. **PDF igual a la vista previa** (`lib/invoices/exportPdf.ts`):
+   - A4 real: una página de 210 x 297 mm por hoja, con los márgenes de la hoja; una hoja que se estiró se achica entera y no se corta;
+   - ticket: una página del ancho del rollo y el alto del comprobante, sin marcos;
+   - se esperan las imágenes y las remotas pasan a data URL;
+   - el SVG del QR trae tamaño intrínseco (también la copia de las Edge);
+   - mientras se captura, el `<img>` de medición de html2canvas vuelve a ser inline;
+   - más de dos hojas van en JPEG a 2x (8 hojas con Original y Duplicado: 3 MB en base64, debajo del límite de 4 MB de la Edge del email).
+
+   El email adjunta el formato de su opción (ticket o A4).
+9. **Devolución con el motor.** Si la venta tenía factura, la devolución espera el CAE de su nota de crédito (`fiscal_documents` con `origin = return` y su `return_id`). Se imprime la NC con el comprobante asociado, en Ticket o A4 (con el perfil de devolución preseleccionado). Si ARCA la rechaza, avisa y sale el comprobante de devolución no fiscal. Sin factura, sale un "Comprobante de devolución" (o "Vale por devolución") no fiscal. El vale (código y código de barras) y el reintegro de Mercado Pago van debajo.
+10. **Offline y prueba de impresora.** El ticket provisorio offline usa el motor con la marca y el diseño que ya estaban en la caché (sin consultas) y la prueba de impresora usa el modelo de ticket del negocio.
+
+### Clasificación de plan (CLAUDE.md §6)
+
+- **BASE**:
+  - los modelos Clásicos;
+  - el tamaño de letra (legibilidad);
+  - los bloques que se muestran: contacto, medios de pago, número interno, detalle de IVA en B, leyendas y código de barras.
+- **OPTIONAL `tickets_pro`**:
+  - los modelos nuevos;
+  - el aspecto: tipografía, densidad, bordes rectos, posición del logo, estilo del encabezado y separadores;
+  - las fotos de producto (A4 y ticket).
+
+  No hay key nueva: se actualiza la descripción de `tickets_pro` en `features` y su copy en `lib/saas/featureInfo.ts`.
+- **OPTIONAL `comprobantes_sin_sello`**: sin cambios.
+- **Gating real**: `invoice_style_needs_pro` (la llama el trigger `tenant_branding_assert_invoice_style` de ADR-112) suma los modelos y las opciones nuevas y es el espejo exacto de `invoiceStyleNeedsPro`. `clampInvoiceStyle` vuelve al default lo que el plan ya no incluye. Probado en PGlite: rechazos sin Pro, opciones base sin Pro, migración de los cinco casos e idempotencia.
+
+### Alternativas descartadas
+
+- **Mantener las plantillas propias como opción avanzada:** el dueño pidió sacarlas, y el motor ya cubre lo legal en todos los tipos, cosa que las plantillas libres no garantizaban.
+- **Medir el DOM para paginar:** rompe el render en el servidor y no sirve para el email automático, que corre sin la ventana visible.
+- **`foreignObjectRendering` de html2canvas o una librería nueva (html-to-image):** sin las fuentes de la app embebidas, el texto cambia; la causa real del corrimiento era la medición de la línea base y se corrige sin dependencias nuevas.
+
+### Consecuencias
+
+- Migración `20261116200000_comprobantes_v2` (sin aplicar; requiere `20261112100000_comprobantes_plantillas` de ADR-112). La Edge `ai_assistant` lee el diseño de comprobantes en lugar de las plantillas (`deno check` OK, sin desplegar).
+- Tests:
+  - `tests/unit/invoiceTemplates.test.tsx`: modelos por tipos por opciones, Simple como Clásico, gating, bordes, fotos, IVA en B, código de barras y paginación de los 9 modelos;
+  - `tests/unit/invoicePdf.test.ts`: páginas A4 de 210 x 297 mm, ticket de 80 y 58 mm y achicado sin corte;
+  - `tests/unit/qrcode.test.ts`: tamaño intrínseco del QR;
+  - `tests/components/TicketModal.test.tsx`: selector Ticket o A4 y perfil A4 en la impresión automática.
+- Deuda:
+  - la paginación es una estimación (si una hoja se estira, el PDF la achica y la impresión del navegador la parte);
+  - la NC de una anulación (`origin = void`) todavía no tiene botón de reimpresión propio en el detalle fiscal;
+  - el ticket de la venta offline no tiene fotos (no hay conexión para precargarlas);
+  - las capturas del modo claro dependen del tema de la app.
+
+---
+
+## ADR-118: Productos sin EAN por tienda, EAN con separadores limpiados, cierre de la sync por lotes y conteo de catálogos guardado
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/catalogo-sin-ean`; migración `20261115200000_catalogo_sin_ean` sin aplicar; Edge `catalog_sync` sin desplegar; scraper en la rama local `feat/feed-sin-ean` sin deployar) · **Base:** ADR-107 (sync con el feed), ADR-109 (catálogo maestro por EAN y ámbito por tienda), ADR-113 (agenda, pausa y cancelación).
+
+### Contexto
+
+La primera corrida completa del catálogo maestro (14/10) terminó "ok" con 683.395 ofertas, pero: (1) los productos sin EAN válido se descartaban en el scraper: Megatone (42.781 publicaciones) y Bancor (7.846) no publican EAN y quedaron en 0, y a Jumbo, Carrefour, BNA, Provincia, Macro, etc. les faltaban miles; (2) EAN con espacios, guiones o puntos (BNA `"0308490011 37"`) quedaban como código propio de la tienda y no se fusionaban; (3) el cierre (`catalog_sync_finalize`, que recontaba cada catálogo dos veces con `count(distinct)` sobre ~600k ofertas) superó el `statement_timeout` de PostgREST (8 s) y la corrida quedó "ok" igual; (4) el panel interno contaba los productos de cada catálogo en vivo (una RPC por catálogo, rozando el timeout) y `catalogs.product_count`, que ve el negocio, había quedado viejo (Electro & Retail en 0). El dueño decidió "incluirlos por tienda".
+
+### Decisión
+
+1. **Sin EAN, por tienda** (scraper `src/ean.js`): una publicación sin código es un producto de su tienda con clave estable `TIENDA:ID:<key>` (la key de la publicación principal; los otros vendedores `<key>~<vendedor>` se suman como ofertas). Nunca se fusiona con otras tiendas. El feed `/api/feed/catalog` la emite con `ean: null`, `scope` = la tienda y `codigo_tienda` = la key, con ficha, medidas y fotos como cualquier otro. `CATALOG_GROUPS_VERSION = 2`: al arrancar el scraper reindexa todo en segundo plano y los grupos nuevos o movidos quedan con `updated_at` = ahora (una incremental del POS los trae).
+2. **EAN con separadores**: espacios, guiones y puntos se sacan antes de validar el dígito verificador (scraper y `catalog_normalize_gtin`). Si lo que queda es un GTIN válido se fusiona como cualquier EAN; si no, sigue por tienda con el código tal cual. La migración pasa a global los ~200 productos de tienda afectados (o mueve sus ofertas al global existente; las que chocan quedan no disponibles, nunca se borran).
+3. **Modelo POS**: se reutiliza el ámbito por tienda de ADR-109. `catalog_items.ean` admite NULL sólo para productos de una tienda con `codigo_tienda` (check `NOT VALID` + `VALIDATE`), identidad por único parcial `(store_scope, codigo_tienda) where ean is null` (índice chico); `catalog_offers.ean_origen` admite NULL. `catalog_item_has_ean` (GTIN válido, incluidos los pesables) y `catalog_item_ref_code` (código de la tienda o el código inválido) separan **código de barras** de **referencia**.
+4. **Búsqueda e import**: `catalog_search` devuelve `ean` sólo si es código de barras, más `codigo_tienda` y `medidas` (columnas nuevas al final; parte de la versión rápida de `20261115100000_tiendita_destacados_rapidos` y conserva su camino sin texto) y encuentra por título, EAN (crudo, limpio o canónico) o código de la tienda. `import_catalog_product`: sin EAN el código de la tienda va como **SKU de referencia**, nunca como código de barras (también para los códigos inválidos, que antes se cargaban como código de barras); el negocio puede cargar el EAN en el diálogo. Idempotencia sin código de barras por `metadata.catalog_item_id` y por el código viejo cargado como código de barras. Si el SKU de referencia ya lo usa otro producto se omite; si lo escribió el negocio, `sku_taken`.
+5. **Cierre por lotes** (cada llamada < 1 s medido con 1,23 M de ofertas en PGlite): `catalog_sync_close_store_batch` marca faltantes y cuenta de a 20.000 ofertas por keyset sobre el índice único `(store_key, item_id, vendedor_key)` y devuelve el cursor; `catalog_recount_step` cuenta productos únicos de un catálogo por rangos de 50.000 `item_id` sobre `catalog_offers_item_idx` y guarda el avance en `catalogs.recount` (fila bloqueada: dos recuentos simultáneos se reparten el trabajo); `catalog_sync_finalize` ya no cuenta: avisa con el conteo guardado (`catalog_notify_buyers`) y decide el estado. La Edge (`runClosing` en `_shared/catalogSync.ts`) los llama en loop dentro de su presupuesto y guarda el avance en la corrida (`stores.<KEY>.cursor/contadas`, `catalog_sync_runs.closing`) después de cada lote; la próxima invocación sigue desde ahí. Un lote que falla 3 veces seguidas deja la tienda (o el catálogo) con error; si el cierre final falla 3 veces la Edge cierra la corrida como `partial`. **Una corrida con cualquier cierre fallido termina `partial`, nunca `ok`.** Sin índices nuevos sobre `catalog_offers` (disco de 8 GB).
+6. **Conteo de catálogos**: `catalogs.product_count` = productos únicos visibles para quien compra el catálogo = productos con al menos una publicación de tienda (`vendedor_key = ''`) en una de sus tiendas, con o sin EAN (igual definición que antes, ahora con los sin EAN). Se guarda al terminar cada corrida y al editar las tiendas del catálogo en el panel (recuento por lotes desde el navegador, staff admin). `catalog_product_count` devuelve el guardado. El panel muestra productos únicos, ofertas (suma de `catalog_stores.product_count`), tiendas y negocios con acceso, sin contar en vivo.
+7. **Tiendita**: el diálogo de import muestra si el producto trae EAN (o el aviso "Sin EAN" con campo para cargarlo) y qué medidas trae (peso, volumen o contenido, dimensiones, unidades por pack); las tarjetas de la tiendita marcan "Sin EAN" y "Con medidas". No hay import masivo.
+8. **No es una función de plan** (operación de plataforma sobre datos globales; el checklist de CLAUDE.md §6 no aplica).
+
+### Alternativas descartadas
+
+- **Pseudo-EAN para los sin código (`ID:<key>` en `ean`)**: cualquier lector que lo olvide lo cargaría como código de barras; NULL es honesto y seguro por defecto.
+- **Recontar en `catalog_sync_finalize` con más tiempo** (`set statement_timeout` en la función): sigue siendo un solo statement que crece con el catálogo y bloquea la tanda; por lotes escala y se puede retomar.
+- **Índice nuevo `(store_key, id)` para el cierre**: el único `(store_key, item_id, vendedor_key)` ya sirve de keyset; otro índice sobre 1,3 M de filas ocuparía disco sin necesidad.
+- **Materializar el conteo con triggers en cada upsert de ofertas**: un `count(distinct)` incremental por catálogo es caro en cada lote del feed; contar al cerrar alcanza.
+- **Contar sólo ofertas disponibles**: el buscador muestra también las no disponibles (al final); el conteo sigue lo que el negocio ve.
+
+### Consecuencias
+
+- Deploy en orden: (1) scraper `feat/feed-sin-ean` en Railway (reindexa en segundo plano unos minutos; `/catalog` responde 503 y la Edge reintenta); (2) migración `20261115200000_catalogo_sin_ean` (después de `20261115100000_tiendita_destacados_rapidos`; ~4,5 s con 650k productos y 1,23 M ofertas en PGlite; toma lock exclusivo de `catalog_items` mientras corre); (3) Edge `catalog_sync`; (4) "Lectura completa ahora" desde el panel. Guía: `docs/39-catalogo-sync.md`.
+- Volumen: en la copia local del scraper (5 tiendas, 361.673 publicaciones) se recuperan 6.319 productos sin EAN de Jumbo, 4.270 de Carrefour y 7 de Día (todos con foto; ~12 % con medidas). En producción se suman Megatone (~42.781) y Bancor (~7.846), que no estaban en la copia, y los sin EAN de los marketplaces bancarios. Más productos y fichas: unos 100-120 MB más de `catalog_items` (hoy 807 MB con 528k productos); la base está en 1,4 GB de 8 GB.
+- El conteo de los catálogos sube por los productos sin EAN (Electro & Retail más que nada). La portada de la Tiendita suma `catalogs.product_count` de los activos: el número crece en la misma medida y ahora se actualiza al terminar cada corrida.
+- Riesgo: un código con separadores que por casualidad da un GTIN válido se fusiona con ese producto (el dígito verificador descarta 9 de cada 10). Los marketplaces que publican el mismo producto sin EAN con varias publicaciones (Frávega, bancos) quedan como productos distintos de esa tienda.
+- Tests: scraper `tests/catalog.test.js` (normalización, sin código por tienda, reindexado); POS `tests/unit/catalogSyncSinEan.test.ts` (mapeo, loop de cierre con presupuesto, reintentos, partial, medidas, GTIN), `tests/components/ImportProductModal.test.tsx`, `tests/unit/catalogSyncPanel.test.ts`; integración `rls-catalog-sync` y `rls-catalog-maestro` actualizadas (permisos de las RPC nuevas, sin EAN por tienda). Migración probada en PGlite con stubs (normalización, datos con separadores, upsert sin EAN, búsqueda, import, cierre por lotes, recuento, finalize partial, permisos, compatibilidad ADR-107) y a escala (650k productos, 1,23 M ofertas: cierre ≤ 0,9 s por lote de 20.000, recuento ≤ 0,23 s por paso).
+
+## ADR-120: Suscripción por cuenta corriente (F20-8): cuentas de cobro con el editor de Transferencia, avisos idempotentes por cuota, "Ya transferí" verificado por el staff, cambio de modalidad sin cobros dobles y códigos de invitación de cuenta corriente
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-cta-cte`; migración `20261116100000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar) · **Hito:** H134 (F20-8) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §9.3, §10.1, §12.3, §14.5, §22 y §24 · **Base:** ADR-110, ADR-115 (ledger y modalidad), ADR-117, ADR-055 (cuentas de Transferencia), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 118 y 119 pueden estar tomadas por ramas abiertas.
+
+### Contexto
+
+El dueño pidió (§22 #13 y el pedido del 14/10): cobrarles por transferencia a los negocios que no usan débito automático, con un aviso periódico configurable que lleve los datos bancarios y a dónde mandar el comprobante, el botón "Ya transferí" con verificación del staff, las cuentas de NinjaSoft cargadas con el mismo editor que el medio de pago Transferencia, cambiar de modalidad en cualquier sentido sin cobros dobles, códigos de invitación que den de alta directo en cuenta corriente y rediseñar los overrides de límites de la ficha del negocio (con un "spinner que nunca termina").
+
+### Decisión
+
+1. **Cuentas de cobro** en `platform_bank_accounts` (sin `tenant_id`, RLS staff con `(select internal_scope())`, escritura sólo super_admin por RPC con motivo y auditoría, baja lógica, una por defecto con índice único parcial). CBU / CVU validado en el servidor con los dígitos verificadores. El editor es `components/billing/BankAccountEditor.tsx`, extraído de `TransferAccountModal` del POS, que pasa a ser un envoltorio: un solo editor para las dos cosas.
+2. **Aviso de cobro idempotente por cuota.** `platform_notice_key(frecuencia, días antes, cada N, cargo, vencimiento, hoy)` da la clave del aviso que toca (por cuota, por tramo de N días o por mes) y `platform_billing_notices` (inmutable, clave única) evita repetirlo aunque el cron corra dos veces. Defaults en `platform_billing_settings` y override por negocio en `tenant_billing_terms` (null = el default, §3.6). Destinatarios: `send_to` del negocio o los dueños activos, más `cc`. El email se arma con la plantilla `platform_payment_notice` (editable en Emails) y los bloques de datos bancarios y comprobante se generan en SQL con los valores escapados; el espejo TS (`lib/billing/paymentNotice.ts`) alimenta la vista previa y los tests. Arranca apagado (`notices_enabled = false`).
+3. **"Ya transferí" separado del ledger hasta verificar.** `platform_transfer_reports` guarda lo que informa el dueño (sólo él, en la carpeta de su negocio del bucket privado `platform-payment-proofs`, con SHA-256 para no informar dos veces el mismo archivo). Acreditar crea el pago por `billing_records`, la entrada del ledger de ADR-115 (idempotencia, imputación FIFO, historial y KPIs sin cambios), por el importe que efectivamente entró. Rechazar exige motivo y avisa al negocio. Verifican Cobranzas, admin y super_admin.
+4. **Cambio de modalidad en un solo lugar.** `internal_billing_change_mode` (admin o super_admin; exento sólo super_admin) registra cada cambio en `platform_billing_mode_changes` y `audit_logs`. `internal_billing_set_terms` deja de cambiar la modalidad (`use_mode_change`).
+   - **A cuenta corriente, manual o exento:** rige ya. Si hay preapproval, el cambio queda `pending_mp_cancel` hasta que la UI lo cancela con la Edge existente `mp_subscription_pause` (`action: cancel`) e informa el resultado; si MP no responde, queda marcado con Reintentar y, si MP llegara a cobrar, el pago entra como saldo a favor.
+   - **A Mercado Pago:** `pending_mode = mp_subscription` y la modalidad vigente queda explícita, así el preapproval que guarda el checkout no la cambia. El primer débito aprobado (trigger sobre `platform_payments`) completa el pase. El primer débito paga el período siguiente (reanclaje de ADR-115): nunca dos medios cobran el mismo período.
+5. **El webhook respeta la modalidad.** `platform_mp_preapproval_applies(suscripción, preapproval, estado)`: un preapproval que no es el vigente se ignora siempre; con otra modalidad sólo se aplica la autorización de un pase pendiente. Corrige además un bug previo: re-generar el checkout cancelaba el preapproval anterior y su aviso "cancelled" cancelaba la suscripción. `mp_subscription_checkout` responde `billing_mode_not_mp` a un negocio que no paga con MP y no tiene un pase pendiente. Ambos cambios son compatibles con una base sin la migración.
+6. **Códigos de invitación de cuenta corriente** (`invite_codes.kind = 'account'`, con plazo, descuento opcional por meses, ciclo y notas). El canje deja la suscripción activa con período desde el alta (el plan se cambia antes de activar para no disparar el prorrateo), la modalidad en cuenta corriente y el descuento en `tenant_discounts`; un negocio canjea un solo código de este tipo. La escritura de códigos pasa a RPC auditada (`internal_invite_code_*`) y la lectura a `(select internal_scope())`; los vitalicios sólo los crea un super_admin.
+7. **Límites del plan:** `internal_tenant_limits` devuelve límite del plan (null = sin límite, como `tenant_limit_for`), override y uso actual; `internal_set_limit_overrides` guarda todos juntos con motivo obligatorio y una sola auditoría. El "spinner" era `NoData` (círculo punteado) para límites que el plan no fija.
+8. **No es una feature de plan** (ADR-110, punto 12): lo que ve el cliente es BASE.
+
+### Alternativas descartadas
+
+- **`platform_payments` en `pending_verification` como dice la spec §6.3:** obligaba a que estado de cuenta, KPIs e imputación filtraran por estado en todos lados; un pago sin verificar no es plata.
+- **Cancelar el preapproval desde la RPC:** las RPC no llaman APIs externas; se reutiliza la Edge existente y la RPC registra el resultado.
+- **Pausar en lugar de cancelar el preapproval:** una pausa se puede reanudar sin querer y el webhook la traducía en `past_due`.
+- **Un componente nuevo de cuentas bancarias para la plataforma:** se habría duplicado el selector de bancos; el editor compartido mantiene un solo comportamiento.
+
+### Consecuencias
+
+- Al aplicar: `invite_codes` deja de aceptar escritura directa (el panel ya usa las RPC). Los negocios con `tenant_billing_terms.billing_mode` en `manual` o `exempt` ya no pueden generarse un débito de MP sin que el staff pida el pase. Los avisos no salen hasta prenderlos en Cuentas y avisos.
+- Desplegar `mp_billing_webhook` y `mp_subscription_checkout` después de aplicar la migración (sin ella el webhook sigue como antes).
+- Pendiente: pagar el saldo con Checkout Pro, PDF del aviso (F20-6) y detección automática de transferencias a la cuenta de la plataforma.
+- Tests: PGlite (103 chequeos: límites, cuentas, cambio de modalidad con MP, webhook, códigos, avisos, Ya transferí, verificación y lecturas), `tests/unit/paymentNotice.test.ts`, `tests/unit/planLimits.test.ts` y `tests/integration/rls-cobranza-cta-cte.test.ts`.
+
 ## ADR-122: Presupuestos con número propio, revisiones, link de aceptación y conversión en venta; tipos de servicio por negocio y portadas con IA (Gemini) del complemento Asistente IA
 
 **Fecha:** 2026-10-14 · **Estado:** aceptada (migraciones sin aplicar, Edge sin desplegar) · **Base:** ADR-116 (servicios profesionales: `products.is_service`, unidad, `invoice_detail`, aclaraciones, `catalog_mode`), ADR-112 (motor de comprobantes), ADR-056 (cambio de precio con motivo), ADR-071 (permisos por rol), ADR-083 (auditoría), addon `asistente_ia` (`ai_config` en `platform_secrets`). **Numeración:** 118 a 121 los usan ramas abiertas.

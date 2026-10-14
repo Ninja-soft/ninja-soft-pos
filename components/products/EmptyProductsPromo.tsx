@@ -23,7 +23,7 @@ export function EmptyProductsPromo() {
       <div className="relative z-10 grid items-center gap-8 p-8 md:grid-cols-[1.15fr_1fr] md:p-10">
         {/* Copy + CTA */}
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-ninja-flame/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-ninja-flame">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-ninja-flame/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-ninja-flame">
             <Sparkles size={13} />
             Empezá sin cargar nada a mano
           </span>

@@ -22,29 +22,18 @@ export interface IntroCatalogRow {
   product_count: number | string | null;
 }
 
-// Tono del ícono: algunos oficiales se pierden sobre un fondo del tema (letras
-// blancas en claro, azul marino o violeta profundo en oscuro). La portada les
-// pone una ficha de contraste sólo en los temas donde se pierden.
-//   light = tinta clara (necesita ficha oscura en temas claros)
-//   dark  = tinta oscura (necesita ficha clara en temas oscuros)
-export type IconInk = "light" | "dark" | null;
-const ICON_INK: Record<string, Exclude<IconInk, null>> = {
-  BANCOR: "light",
-  PROVINCIA: "light",
-  MACRO: "dark",
-  MEGATONE: "dark",
-};
-
 export interface IntroStore {
   key: string;
   name: string;
   /** Ícono oficial (public/tiendas/iconos) o null si no hay. */
   icon: string | null;
+  /** Ícono para temas oscuros / claros (variante si existe, si no el base). */
+  iconOnDark: string | null;
+  iconOnLight: string | null;
   /** logo_url de la tienda (fallback si no hay ícono oficial o falla). */
   logoUrl: string | null;
   /** Iniciales (último fallback). */
   initials: string;
-  ink: IconInk;
 }
 
 export interface IntroShowcase {
@@ -62,18 +51,15 @@ export function storeInitials(name: string): string {
   return (words[0]![0]! + words[1]![0]!).toUpperCase();
 }
 
-export function iconInk(key: string): IconInk {
-  return ICON_INK[key.toUpperCase()] ?? null;
-}
-
 export function toIntroStore(row: IntroStoreRow): IntroStore {
   return {
     key: row.key,
     name: row.name,
     icon: storeIcon(row.key),
+    iconOnDark: storeIcon(row.key, { tone: "dark" }),
+    iconOnLight: storeIcon(row.key, { tone: "light" }),
     logoUrl: row.logo_url || null,
     initials: storeInitials(row.name),
-    ink: iconInk(row.key),
   };
 }
 

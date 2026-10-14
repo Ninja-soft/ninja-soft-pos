@@ -80,6 +80,10 @@ import { errorDescription } from "@/lib/permissions/errors";
 import { SERVICE_UNITS, itemNoun } from "@/lib/catalog/mode";
 import { useCatalogMode, useServiceClarifications } from "@/modules/services/hooks";
 import { ClarificationsModal } from "@/components/services/ClarificationsModal";
+import { ServiceTypesModal } from "@/components/services/ServiceTypesModal";
+import { AiCoverPanel } from "@/components/ai/AiCoverPanel";
+import { useServiceTypes } from "@/modules/services/types";
+import { aiCoverError, useAiCoverMutations, useAiCoversEnabled, useAiImageSettings } from "@/modules/ai/covers";
 
 interface Props {
   open: boolean;
@@ -237,6 +241,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { mode: catalogMode, vocab } = useCatalogMode();
   const { data: clarifications = [] } = useServiceClarifications(false, open);
   const [clarificationsOpen, setClarificationsOpen] = useState(false);
+  // ADR-122: tipos de servicio y portada con IA.
+  const [typesOpen, setTypesOpen] = useState(false);
+  const aiEnabled = useAiCoversEnabled() === true && Boolean(myTenant?.canManage);
+  const { data: aiSettings } = useAiImageSettings(open && aiEnabled);
+  const aiMut = useAiCoverMutations();
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
   );
@@ -278,6 +287,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const nameVal = watch("name");
   const isService = Boolean(watch("is_service"));
   const clarificationIds = watch("service_clarification_ids") ?? [];
+  const { data: serviceTypes = [] } = useServiceTypes(open && isService);
   const noun = itemNoun(isService);
   const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
 
@@ -335,6 +345,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       station: product?.station ?? "",
       invoice_detail: product?.invoice_detail ?? "",
       service_clarification_ids: product?.service_clarification_ids ?? [],
+      service_type_id: product?.service_type_id ?? "",
     });
     // categories entra aparte (abajo) para no resetear el form al llegar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -431,6 +442,19 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       const nuevo = await create.mutateAsync(input);
       await saveExtras(nuevo.id);
       setCreated(nuevo);
+      // ADR-122: portada automática con IA al crear un servicio (si el
+      // negocio la prendió). No bloquea el alta: corre de fondo.
+      if (isService && aiEnabled && aiSettings?.auto_cover) {
+        toast({ title: "Generando la portada con IA", description: "Aparece en Fotos en unos segundos.", variant: "info" });
+        aiMut.generate.mutate(
+          { productId: nuevo.id, apply: true },
+          {
+            onSuccess: (r) => {
+              if (!r.ok) toast({ title: "No se generó la portada", description: aiCoverError(r.error), variant: "error" });
+            },
+          },
+        );
+      }
       toast({
         title: `${Noun} creado`,
         description: isService ? undefined : "Ahora podés subir fotos o cargar componentes.",
@@ -665,6 +689,39 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {/* ── Servicio (ADR-116) ──────────────────────────────────── */}
         {isService && (
           <div className={show("servicio")}>
+            <Group
+              title="Tipo de servicio"
+              description="Programa, visita, trabajo, informe o los tuyos. Sale en el presupuesto y la factura, y sirve de filtro."
+              aside={
+                <button
+                  type="button"
+                  onClick={() => setTypesOpen(true)}
+                  className="shrink-0 rounded-md px-1 text-xs font-semibold text-ninja-flameSoft outline-none hover:underline focus-visible:underline"
+                >
+                  Administrar
+                </button>
+              }
+            >
+              <div className="relative">
+                <select className={selectCls} aria-label="Tipo de servicio" {...register("service_type_id")}>
+                  <option value="" className="bg-popover text-popover-foreground">
+                    Sin tipo
+                  </option>
+                  {serviceTypes
+                    .filter((t) => t.is_active || t.id === watch("service_type_id"))
+                    .map((t) => (
+                      <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">
+                        {t.name}
+                      </option>
+                    ))}
+                </select>
+                <ChevronDown
+                  size={15}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+              </div>
+            </Group>
+
             <Group title="Unidad y duración" description="Cómo se cobra: por hora, visita, informe, análisis, muestra o mes.">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
@@ -997,7 +1054,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {/* ── Fotos ───────────────────────────────────────────────── */}
         <div className={show("fotos")}>
           {active ? (
-            <ProductImages productId={active.id} tenantId={active.tenant_id} legacyUrl={active.image_url} />
+            <div className="space-y-4">
+              <ProductImages productId={active.id} tenantId={active.tenant_id} legacyUrl={active.image_url} />
+              {/* ADR-122: portada con IA (complemento Asistente IA). */}
+              <AiCoverPanel productId={active.id} canManage={Boolean(myTenant?.canManage)} />
+            </div>
           ) : (
             <Group>
               <SaveFirst>Creá el producto y después subí las fotos acá mismo (se guardan como WebP).</SaveFirst>
@@ -1187,6 +1248,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         </div>
       )}
       <ClarificationsModal open={clarificationsOpen} onOpenChange={setClarificationsOpen} />
+      <ServiceTypesModal open={typesOpen} onOpenChange={setTypesOpen} />
     </Modal>
   );
 }

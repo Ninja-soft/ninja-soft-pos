@@ -142,6 +142,7 @@ export function useProductsPaged(params: ProductsPageParams) {
       params.search ?? "",
       params.categoryId ?? null,
       params.brandId ?? null,
+      params.serviceTypeId ?? null,
     ],
     queryFn: () => productsApi.listPaged(params),
     placeholderData: keepPreviousData,

@@ -189,6 +189,8 @@ describe.skipIf(!enabled)("ADR-109 · catálogo maestro y ofertas", () => {
     expect(Number(ref.min_price)).toBe(1500);
     expect(ref.min_seller).toBe("Electro Sur");
     expect(ref.seller_count).toBe(3);
+    // ADR-118: catalog_product_count devuelve el conteo guardado (lo deja el recuento por lotes).
+    await rpc(ctx.admin, "catalog_recount_step", { p_catalog_id: ctx.catalog, p_restart: true, p_limit: 500000 });
     const count = await rpc(a, "catalog_product_count", { p_catalog_id: ctx.catalog });
     expect(Number(count.data)).toBe(1);
   });

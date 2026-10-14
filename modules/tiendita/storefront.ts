@@ -29,7 +29,12 @@ export interface StorefrontCatalog {
 export interface CatalogSearchResult {
   catalogProductId: number;
   storeKey: string;
-  ean: string;
+  /** Código de barras (GTIN válido). null = el producto no tiene EAN (ADR-118). */
+  ean: string | null;
+  /** Sin EAN: código propio de la tienda (va como SKU de referencia, no como código de barras). */
+  codigoTienda: string | null;
+  /** Medidas del maestro (peso, contenido, dimensiones, unidades por pack). */
+  medidas: CatalogMeasures | null;
   titulo: string;
   precio: number | null;
   precioLista: number | null;
@@ -40,6 +45,19 @@ export interface CatalogSearchResult {
   // Datos opcionales del maestro (si el catálogo los trae).
   descripcion: string | null;
   atributos: unknown;
+}
+
+/** Medidas fusionadas del producto maestro (catalog_items.medidas). */
+export interface CatalogMeasures {
+  alto_cm?: number | null;
+  ancho_cm?: number | null;
+  profundidad_cm?: number | null;
+  medidas?: string | null;
+  peso_kg?: number | null;
+  bultos?: number | null;
+  bultos_detalle?: unknown;
+  contenido?: { valor: number; unidad: "ml" | "g" } | null;
+  unidades_pack?: number | null;
 }
 
 // Edición previa al import (todo opcional; ausente = valor del catálogo).
@@ -144,7 +162,12 @@ export const storefrontApi = {
     return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
       catalogProductId: Number(r.catalog_product_id),
       storeKey: r.store_key as string,
-      ean: r.ean as string,
+      ean: (r.ean as string) || null,
+      codigoTienda: (r.codigo_tienda as string) || null,
+      medidas:
+        r.medidas && typeof r.medidas === "object" && !Array.isArray(r.medidas)
+          ? (r.medidas as CatalogMeasures)
+          : null,
       titulo: r.titulo as string,
       precio: r.precio != null ? Number(r.precio) : null,
       precioLista: r.precio_lista != null ? Number(r.precio_lista) : null,

@@ -34,7 +34,13 @@ export function useSetStoreLogo() {
 export function useSaveCatalog() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CatalogInput) => catalogsApi.saveCatalog(input),
+    // Al guardar se recuentan sus productos (las tiendas pudieron cambiar). Si el
+    // recuento falla, el catálogo igual quedó guardado: lo corrige la próxima sync.
+    mutationFn: async (input: CatalogInput) => {
+      const id = await catalogsApi.saveCatalog(input);
+      await catalogsApi.recountCatalog(id).catch(() => undefined);
+      return id;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["internal", "catalogs"] });
     },

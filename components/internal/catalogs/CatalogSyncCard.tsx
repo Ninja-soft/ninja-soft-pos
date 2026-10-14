@@ -230,7 +230,7 @@ export function CatalogSyncCard() {
         )}
 
         <p className="text-xs text-muted-foreground">
-          Lee el catálogo maestro del scraper de NinjaSoft: un producto por EAN con la mejor ficha de todas las tiendas,
+          Lee el catálogo maestro del scraper de NinjaSoft: un producto por EAN con la mejor ficha de todas las tiendas (los que no tienen EAN entran por tienda con su código),
           más las ofertas de cada tienda y vendedor. Las tiendas nuevas se agregan solas y las ofertas que ya no están
           quedan como no disponibles (nunca se borran).
         </p>

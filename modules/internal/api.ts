@@ -224,6 +224,13 @@ export interface PlanAddon {
   isActive: boolean;
 }
 
+export interface AddonCatalogItem extends PlanAddon {
+  /** Negocios con el addon activo (pagos + bonificados). */
+  activeTenants: number;
+  /** De esos, cuántos lo tienen bonificado (source = 'granted'). */
+  grantedTenants: number;
+}
+
 // Código de invitación.
 export type InviteKind = "lifetime" | "trial_days";
 
@@ -1072,6 +1079,40 @@ export const internalApi = {
       description: a.description,
       monthlyPrice: Number(a.monthly_price_ars ?? 0),
       isActive: a.is_active,
+    }));
+  },
+
+  // Catálogo completo de addons (activos e inactivos) con cuántos negocios los
+  // tienen activos, separando los bonificados. Sólo lectura (pantalla
+  // Complementos del panel interno).
+  addonCatalog: async (): Promise<AddonCatalogItem[]> => {
+    const supabase = createClient();
+    const [addons, subs] = await Promise.all([
+      supabase
+        .from("plan_addons")
+        .select("id, key, label, description, monthly_price_ars, is_active")
+        .order("is_active", { ascending: false })
+        .order("label"),
+      supabase.from("subscription_addons").select("addon_key, source").eq("status", "active"),
+    ]);
+    if (addons.error) throw addons.error;
+    if (subs.error) throw subs.error;
+    const counts = new Map<string, { total: number; granted: number }>();
+    for (const s of subs.data ?? []) {
+      const c = counts.get(s.addon_key) ?? { total: 0, granted: 0 };
+      c.total += 1;
+      if (s.source === "granted") c.granted += 1;
+      counts.set(s.addon_key, c);
+    }
+    return (addons.data ?? []).map((a) => ({
+      id: a.id,
+      key: a.key,
+      label: a.label,
+      description: a.description,
+      monthlyPrice: Number(a.monthly_price_ars ?? 0),
+      isActive: a.is_active,
+      activeTenants: counts.get(a.key)?.total ?? 0,
+      grantedTenants: counts.get(a.key)?.granted ?? 0,
     }));
   },
 

@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Webhook } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Webhook } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
+import { Callout } from "@/components/ui/Callout";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { NoData } from "@/components/ui/NoData";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -84,14 +86,25 @@ export default async function InternalWebhooksPage() {
       />
 
       {loadError ? (
-        <div className="mt-6 rounded-lg border border-border border-t-2 border-t-danger bg-card p-4 text-sm">
-          No se pudo leer el registro de webhooks: {loadError.message}
-        </div>
+        <Callout tone="danger" icon={AlertTriangle} title="No se pudo leer el registro de webhooks" className="mt-6">
+          {loadError.message}
+        </Callout>
       ) : null}
 
-      <p className="mt-6 text-sm text-muted-foreground">
-        {totals.total} avisos recibidos, {totals.errors} con error.
-      </p>
+      <SectionHeader
+        className="mt-8"
+        title="Por proveedor"
+        icon={Activity}
+        description={
+          <>
+            <span className="tabular-nums">{totals.total}</span> avisos recibidos,{" "}
+            <span className={cn("tabular-nums", totals.errors > 0 && "font-semibold text-danger")}>
+              {totals.errors}
+            </span>{" "}
+            con error.
+          </>
+        }
+      />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {rows.map((r) => {
@@ -146,39 +159,55 @@ export default async function InternalWebhooksPage() {
         })}
       </div>
 
-      <h2 className="mt-10 text-base font-semibold text-foreground">Errores recientes</h2>
-      {errors.length === 0 ? (
-        <EmptyState compact title="Sin errores en las últimas 24 horas" className="mt-2 rounded-lg border border-border bg-card" />
-      ) : (
-        <div className="mt-3 overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="text-xs text-muted-foreground">
-              <tr className="border-b border-border">
-                <th className="px-3 py-2 font-medium">Cuándo</th>
-                <th className="px-3 py-2 font-medium">Proveedor</th>
-                <th className="px-3 py-2 font-medium">Negocio</th>
-                <th className="px-3 py-2 font-medium">HTTP</th>
-                <th className="px-3 py-2 font-medium">Referencia</th>
-                <th className="px-3 py-2 font-medium">Error</th>
+      <SectionHeader
+        className="mt-10"
+        title="Errores recientes"
+        icon={AlertTriangle}
+        description="Los últimos 20 avisos que fallaron en las últimas 24 horas."
+      />
+      <TableWrap className="mt-4">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Proveedor</th>
+              <th className="hidden px-4 py-3 font-semibold md:table-cell">Negocio</th>
+              <th className="px-4 py-3 font-semibold">HTTP</th>
+              <th className="hidden px-4 py-3 font-semibold lg:table-cell">Referencia</th>
+              <th className="px-4 py-3 font-semibold">Error</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {errors.length === 0 && (
+              <TableStateRow colSpan={5}>
+                <EmptyState compact icon={CheckCircle2} title="Sin errores en las últimas 24 horas" />
+              </TableStateRow>
+            )}
+            {errors.map((e) => (
+              <tr key={e.id} className="align-top">
+                <td className="px-4 py-3">
+                  <div className="whitespace-nowrap font-medium text-foreground">
+                    {PROVIDER_LABEL.get(e.provider) ?? e.provider}
+                  </div>
+                  <div className="text-xs tabular-nums text-muted-foreground">{when(e.created_at)}</div>
+                </td>
+                <td className="hidden px-4 py-3 md:table-cell">{e.tenants?.name ?? <NoData />}</td>
+                <td className="px-4 py-3 tabular-nums">
+                  {e.http_status != null ? <Badge tone="danger">{e.http_status}</Badge> : <NoData />}
+                </td>
+                <td
+                  className="hidden max-w-[160px] truncate px-4 py-3 font-mono text-xs lg:table-cell"
+                  title={e.payload_ref ?? undefined}
+                >
+                  {e.payload_ref ?? <NoData />}
+                </td>
+                <td className="max-w-[22rem] break-words px-4 py-3 text-xs text-muted-foreground">
+                  {e.error ?? <NoData />}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {errors.map((e) => (
-                <tr key={e.id} className="border-b border-border last:border-0 align-top">
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{when(e.created_at)}</td>
-                  <td className="whitespace-nowrap px-3 py-2">{PROVIDER_LABEL.get(e.provider) ?? e.provider}</td>
-                  <td className="px-3 py-2">{e.tenants?.name ?? <NoData />}</td>
-                  <td className="px-3 py-2 tabular-nums">{e.http_status ?? <NoData />}</td>
-                  <td className="max-w-[160px] truncate px-3 py-2 font-mono text-xs" title={e.payload_ref ?? undefined}>
-                    {e.payload_ref ?? <NoData />}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{e.error ?? <NoData />}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </TableWrap>
     </>
   );
 }

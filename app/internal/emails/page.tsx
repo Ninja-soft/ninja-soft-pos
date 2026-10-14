@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Mail, Plus, RefreshCw, Send, Server, Zap, Search } from "lucide-react";
+import { Download, FileText, Inbox, Info, Mail, Plus, RefreshCw, Send, Server, Zap, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -29,8 +29,13 @@ import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
 import { ACCOUNT_EMAIL_PREVIEWS } from "@/lib/email/accountTemplates";
 import { cn } from "@/lib/utils/cn";
 import { NoData } from "@/components/ui/NoData";
-import { SpinnerBlock } from "@/components/ui/Spinner";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { Callout } from "@/components/ui/Callout";
+import { Segmented } from "@/components/ui/Segmented";
+import { SearchField } from "@/components/ui/SearchField";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
+import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IntegrationLogo, isIntegrationKey } from "@/components/ui/IntegrationLogo";
 
@@ -171,50 +176,49 @@ export default function InternalEmailsPage() {
       <EmailProvidersCard />
 
       {/* Plantillas */}
-      <Card className="mt-6">
-        <CardContent className="space-y-5 p-5">
-          <div className="flex items-center gap-2 font-semibold">
-            <Mail size={16} /> Plantillas
-          </div>
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <section className="mt-10">
+        <SectionHeader
+          title="Plantillas"
+          icon={FileText}
+          description="Elegí un email para editar el asunto y el contenido. La vista previa usa datos de ejemplo."
+        />
+        <div className="mt-4 grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+          {/* Riel horizontal en mobile; columna fija en desktop. */}
+          <nav
+            aria-label="Plantillas de email"
+            className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] lg:flex-col lg:overflow-visible lg:rounded-lg lg:border lg:border-border lg:bg-card lg:p-2 [&::-webkit-scrollbar]:hidden"
+          >
+            <TemplateGroupLabel>Sistema</TemplateGroupLabel>
             {EMAIL_TEMPLATES.map((t) => (
-              <button
+              <TemplateTab
                 key={t.key}
-                type="button"
+                label={t.label}
+                active={selectedKey === t.key}
+                edited={Boolean(saved[t.key])}
                 onClick={() => setSelectedKey(t.key)}
-                className={cn(
-                  "shrink-0 rounded-lg px-3 py-1.5 text-sm transition",
-                  selectedKey === t.key
-                    ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {t.label}
-              </button>
+              />
             ))}
-            <span className="shrink-0 self-center px-1 text-xs text-muted-foreground">Cuenta corriente</span>
+            <TemplateGroupLabel className="lg:mt-2">Cuenta corriente</TemplateGroupLabel>
             {ACCOUNT_EMAIL_PREVIEWS.map((t) => (
-              <button
+              <TemplateTab
                 key={t.key}
-                type="button"
+                label={t.label}
+                active={selectedKey === t.key}
                 onClick={() => setSelectedKey(t.key)}
-                className={cn(
-                  "shrink-0 rounded-lg px-3 py-1.5 text-sm transition",
-                  selectedKey === t.key
-                    ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {t.label}
-              </button>
+              />
             ))}
-          </div>
+          </nav>
+          <Card className="min-w-0">
+            <CardContent className="space-y-5 p-4 sm:p-5">
           {accountPreview ? (
             <AccountEmailPreviewPanel preview={accountPreview} />
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">{def.description}</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">{def.label}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{def.description}</p>
+                </div>
                 <Dropdown>
                   <DropdownTrigger asChild>
                     <Button variant="secondary" size="sm">
@@ -241,31 +245,25 @@ export default function InternalEmailsPage() {
                 onChange={(e) => setSubject(e.target.value)}
               />
               <div>
-                <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                <label htmlFor="email-html" className="mb-2 block text-sm font-medium text-muted-foreground">
                   Contenido (HTML)
                 </label>
                 <textarea
+                  id="email-html"
                   ref={htmlRef}
                   value={html}
+                  spellCheck={false}
                   onFocus={() => setActiveField("html")}
                   onChange={(e) => setHtml(e.target.value)}
                   rows={7}
-                  className="w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+                  className="slim-scrollbar w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground outline-none transition focus:border-foreground/30"
                 />
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  Tocá un campo (asunto o contenido) y luego “Insertar variable”.
+                  Tocá un campo (asunto o contenido) y después “Insertar variable”.
                 </p>
               </div>
-              <div>
-                <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
-                <div className="overflow-hidden rounded-lg border border-border bg-white text-sm text-neutral-900">
-                  <div className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">
-                    Asunto: {renderTemplate(subject, vars)}
-                  </div>
-                  <EmailPreviewFrame html={renderTemplate(html, vars)} minHeight={640} />
-                </div>
-              </div>
-              <div className="flex flex-wrap justify-end gap-2">
+              <EmailPreview subject={renderTemplate(subject, vars)} html={renderTemplate(html, vars)} />
+              <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -275,14 +273,16 @@ export default function InternalEmailsPage() {
                 >
                   <Send size={16} /> Enviar prueba
                 </Button>
-                <Button onClick={() => saveTpl.mutate()} disabled={saveTpl.isPending}>
+                <Button onClick={() => saveTpl.mutate()} loading={saveTpl.isPending}>
                   Guardar plantilla
                 </Button>
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
 
       {/* Bitácora de envíos (paridad Food) */}
       <SystemEmailsLog />
@@ -331,19 +331,86 @@ export default function InternalEmailsPage() {
 function AccountEmailPreviewPanel({ preview }: { preview: (typeof ACCOUNT_EMAIL_PREVIEWS)[number] }) {
   const mail = preview.render();
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">{preview.description}</p>
-      <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+    <div className="space-y-4">
+      <div className="min-w-0">
+        <p className="font-semibold text-foreground">{preview.label}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{preview.description}</p>
+      </div>
+      <Callout tone="info" icon={Info}>
         Sólo vista previa con datos de ejemplo: cada negocio lo envía con su propio email, su logo y su color.
-      </p>
-      <div>
-        <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
-        <div className="overflow-hidden rounded-lg border border-border bg-white text-sm text-neutral-900">
-          <div className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">Asunto: {mail.subject}</div>
-          <EmailPreviewFrame html={mail.html} minHeight={640} />
+      </Callout>
+      <EmailPreview subject={mail.subject} html={mail.html} />
+    </div>
+  );
+}
+
+// Vista previa del email: el sobre siempre es blanco (así lo ve el cliente de
+// correo), con el asunto arriba.
+function EmailPreview({ subject, html }: { subject: string; html: string }) {
+  return (
+    <div>
+      <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
+      <div className="overflow-hidden rounded-lg border border-border bg-white text-sm text-neutral-900">
+        <div className="truncate border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">
+          <span className="font-semibold text-neutral-700">Asunto:</span> {subject}
         </div>
+        <EmailPreviewFrame html={html} minHeight={640} />
       </div>
     </div>
+  );
+}
+
+function TemplateGroupLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 self-center px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:self-auto lg:pb-1 lg:pt-1.5",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TemplateTab({
+  label,
+  active,
+  edited = false,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  edited?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "true" : undefined}
+      className={cn(
+        "flex shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm transition lg:w-full",
+        active
+          ? "choice-on font-medium text-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <span className="truncate">{label}</span>
+      {edited && (
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-ninja-flameSoft"
+          title="Editada por el staff"
+          aria-label="Editada"
+        />
+      )}
+    </button>
   );
 }
 
@@ -455,17 +522,30 @@ function EmailProvidersCard() {
   });
 
   return (
-    <Card className="mt-6">
-      <CardContent className="space-y-5 p-5">
-        <div className="flex items-center gap-2 font-semibold">
-          <Zap size={16} /> Proveedores de email
+    <section className="mt-8">
+      <SectionHeader
+        title="Proveedores de envío"
+        icon={Zap}
+        description={
+          <>
+            El principal se usa siempre; el de respaldo entra solo si el principal falla.
+            Cada uno puede ser Resend (recomendado) o un SMTP propio.
+          </>
+        }
+      />
+      {providers === undefined ? (
+        <div className="mt-4 grid gap-4 lg:grid-cols-2" aria-busy="true" aria-label="Cargando proveedores">
+          {[0, 1].map((i) => (
+            <div key={i} className="space-y-3 rounded-lg border border-border bg-card p-4">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          El <b>proveedor principal</b> se usa siempre; el de <b>respaldo</b> entra
-          automáticamente solo si el principal falla (failover). Cada uno puede ser
-          Resend (recomendado) o un SMTP propio.
-        </p>
-        <div className="grid gap-4 lg:grid-cols-2">
+      ) : (
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <SlotEditor
             title="Proveedor principal"
             state={slot1}
@@ -481,8 +561,8 @@ function EmailProvidersCard() {
             saving={save.isPending}
           />
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </section>
   );
 }
 
@@ -515,11 +595,13 @@ function SlotEditor({
   }
 
   return (
-    <div className="rounded-xl border border-border p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold">{title}</div>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          {state.is_active ? "Activo" : "Inactivo"}
+        <div className="min-w-0 text-sm font-semibold">{title}</div>
+        <label className="flex shrink-0 items-center gap-2">
+          <Badge tone={state.is_active ? "success" : "neutral"}>
+            {state.is_active ? "Activo" : "Inactivo"}
+          </Badge>
           <Switch
             checked={state.is_active}
             onCheckedChange={(v) => set({ is_active: v })}
@@ -641,20 +723,19 @@ function SlotEditor({
                 onChange={(e) => set({ smtp_pass: e.target.value })}
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                className="accent-ninja-flame"
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2.5 text-sm text-foreground">
+              <span>Conexión segura (SSL/TLS, puerto 465)</span>
+              <Switch
                 checked={state.smtp_secure}
-                onChange={(e) => set({ smtp_secure: e.target.checked })}
+                onCheckedChange={(v) => set({ smtp_secure: v })}
+                label="Conexión segura"
               />
-              Conexión segura (SSL/TLS, puerto 465)
-            </label>
+            </div>
           </>
         )}
 
-        <div className="flex justify-end">
-          <Button size="sm" onClick={onSave} disabled={saving}>
+        <div className="flex justify-end border-t border-border pt-3">
+          <Button size="sm" onClick={onSave} loading={saving}>
             Guardar proveedor
           </Button>
         </div>
@@ -683,32 +764,24 @@ function fmtDate(s: string): string {
 
 function StatusChip({ email }: { email: SystemEmail }) {
   const label = STATUS_LABELS[email.status] ?? email.status;
-  const cls =
-    email.status === "sent"
-      ? "bg-emerald-500/12 text-success"
-      : email.status === "failed"
-        ? "bg-red-500/12 text-danger"
-        : "bg-muted text-muted-foreground";
+  const tone = email.status === "sent" ? "success" : email.status === "failed" ? "danger" : "warning";
   return (
-    <span
-      className={cn(
-        "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-        cls,
-      )}
+    <Badge
+      tone={tone}
       title={email.status === "failed" ? email.error_message ?? undefined : undefined}
     >
       {label}
-    </span>
+    </Badge>
   );
 }
 
 // Origen del envío: "negocios" = originado por un tenant (comprobante o prueba
 // SMTP del negocio); "sistema" = emails del sistema NinjaPos.
 type OriginFilter = "todos" | "negocios" | "sistema";
-const ORIGIN_FILTERS: { key: OriginFilter; label: string }[] = [
-  { key: "todos", label: "Todos" },
-  { key: "negocios", label: "Negocios" },
-  { key: "sistema", label: "Sistema" },
+const ORIGIN_FILTERS: { value: OriginFilter; label: string }[] = [
+  { value: "todos", label: "Todos" },
+  { value: "negocios", label: "Negocios" },
+  { value: "sistema", label: "Sistema" },
 ];
 
 function matchesOrigin(email: SystemEmail, origin: OriginFilter): boolean {
@@ -792,17 +865,17 @@ function SystemEmailsLog() {
   }
 
   return (
-    <Card className="mt-6">
-      <CardContent className="space-y-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-semibold">
-            <Mail size={16} /> Bitácora de envíos
-          </div>
-          <div className="flex gap-2">
+    <section className="mt-10">
+      <SectionHeader
+        title="Bitácora de envíos"
+        icon={Inbox}
+        description="Lo último que salió por los proveedores. Los pendientes se procesan solos cada 5 minutos."
+        actions={
+          <>
             <Button
               size="sm"
               onClick={() => processPending.mutate()}
-              disabled={processPending.isPending}
+              loading={processPending.isPending}
             >
               <Send size={15} /> Procesar pendientes
             </Button>
@@ -811,9 +884,10 @@ function SystemEmailsLog() {
               size="sm"
               onClick={() => refetch()}
               disabled={isFetching}
+              aria-label="Actualizar"
             >
-              <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />{" "}
-              Actualizar
+              <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
+              <span className="hidden sm:inline">Actualizar</span>
             </Button>
             <Button
               variant="secondary"
@@ -821,88 +895,91 @@ function SystemEmailsLog() {
               onClick={onExport}
               disabled={filtered.length === 0}
             >
-              <Download size={15} /> Exportar XLSX
+              <Download size={15} /> Exportar
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {/* Filtros: origen (segmented) + búsqueda por negocio. */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-lg border border-border p-0.5">
-            {ORIGIN_FILTERS.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => setOrigin(f.key)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  origin === f.key
-                    ? "bg-ninja-flame/12 text-ninja-flameSoft"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="w-full max-w-[220px]">
-            <Input
-              placeholder="Filtrar por negocio…"
-              value={tenantQuery}
-              onChange={(e) => setTenantQuery(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {isLoading ? (
-          <SpinnerBlock className="py-6" />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            compact
-            icon={emails.length === 0 ? Mail : Search}
-            title={
-              emails.length === 0
-                ? "Todavía no hay envíos registrados"
-                : "No hay envíos que coincidan con los filtros"
-            }
-          />
-        ) : (
-          <div className="-mx-1 overflow-x-auto px-1">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">Fecha</th>
-                  <th className="py-2 pr-3 font-medium">Asunto</th>
-                  <th className="py-2 pr-3 font-medium">Destinatario</th>
-                  <th className="py-2 pr-3 font-medium">Negocio</th>
-                  <th className="py-2 pr-3 font-medium">Tipo</th>
-                  <th className="py-2 pr-3 font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((e) => (
-                  <tr key={e.id} className="border-b border-border/60">
-                    <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
-                      {fmtDate(e.created_at)}
-                    </td>
-                    <td className="py-2 pr-3">{e.subject}</td>
-                    <td className="py-2 pr-3">{e.recipient}</td>
-                    <td className="py-2 pr-3">{e.tenantName ?? <NoData />}</td>
-                    <td className="py-2 pr-3">
-                      <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                        {KIND_LABELS[e.kind] ?? e.kind}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3">
-                      <StatusChip email={e} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Filtros: origen (segmentado) + búsqueda por negocio. */}
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Segmented
+          value={origin}
+          options={ORIGIN_FILTERS}
+          onChange={setOrigin}
+          aria-label="Origen del envío"
+          size="sm"
+        />
+        <SearchField
+          value={tenantQuery}
+          onValueChange={setTenantQuery}
+          placeholder="Filtrar por negocio"
+          aria-label="Filtrar por negocio"
+          className="sm:max-w-xs"
+        />
+        {!isLoading && emails.length > 0 && (
+          <span className="text-xs text-muted-foreground sm:ml-auto">
+            {filtered.length} de {emails.length}
+          </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      <TableWrap className="mt-3">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Email</th>
+              <th className="hidden px-4 py-3 font-semibold md:table-cell">Negocio</th>
+              <th className="hidden px-4 py-3 font-semibold lg:table-cell">Tipo</th>
+              <th className="px-4 py-3 font-semibold">Estado</th>
+              <th className="hidden px-4 py-3 text-right font-semibold sm:table-cell">Fecha</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {isLoading && <TableStateRow colSpan={5} loading />}
+            {!isLoading && filtered.length === 0 && (
+              <TableStateRow colSpan={5}>
+                <EmptyState
+                  compact
+                  icon={emails.length === 0 ? Mail : Search}
+                  title={
+                    emails.length === 0
+                      ? "Acá vas a ver cada email que se envíe"
+                      : "Ningún envío coincide con los filtros"
+                  }
+                />
+              </TableStateRow>
+            )}
+            {!isLoading &&
+              filtered.map((e) => (
+                <tr key={e.id} className="align-top transition hover:bg-muted/40">
+                  <td className="max-w-[18rem] px-4 py-3">
+                    <div className="truncate font-medium text-foreground">{e.subject}</div>
+                    <div className="truncate text-xs text-muted-foreground">{e.recipient}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground sm:hidden">
+                      {fmtDate(e.created_at)}
+                    </div>
+                  </td>
+                  <td className="hidden px-4 py-3 md:table-cell">{e.tenantName ?? <NoData />}</td>
+                  <td className="hidden px-4 py-3 lg:table-cell">
+                    <Badge>{KIND_LABELS[e.kind] ?? e.kind}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusChip email={e} />
+                    {e.status === "failed" && e.error_message && (
+                      <p className="mt-1 max-w-[16rem] truncate text-xs text-danger" title={e.error_message}>
+                        {e.error_message}
+                      </p>
+                    )}
+                  </td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
+                    {fmtDate(e.created_at)}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </TableWrap>
+    </section>
   );
 }

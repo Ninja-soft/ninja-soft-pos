@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { quotesApi, type PublicQuote } from "@/modules/quotes/api";
-import { QUOTE_STATUS_LABEL, quoteDetailLines, quoteErrorMessage, quoteNumberLabel } from "@/lib/quotes/logic";
+import { QUOTE_NO_EXPIRY_LEGEND, QUOTE_STATUS_LABEL, quoteDetailLines, quoteErrorMessage, quoteNumberLabel } from "@/lib/quotes/logic";
 import { fmtDate, ivaConditionLabel } from "@/lib/invoices/legal";
 import { accentPalette } from "@/lib/invoices/style";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -84,7 +84,7 @@ export default function PublicQuotePage() {
                 )}
                 <p className="text-base font-bold">{q.issuer.name}</p>
                 <p className="text-xs" style={{ color: "#6b7080" }}>
-                  {[q.issuer.cuit ? `CUIT ${q.issuer.cuit}` : null, q.issuer.iva_condition ? ivaConditionLabel(q.issuer.iva_condition) : null, q.issuer.address, q.issuer.phone]
+                  {[q.issuer.cuit ? `CUIT ${q.issuer.cuit}` : null, q.issuer.iva_condition ? ivaConditionLabel(q.issuer.iva_condition) : null, q.issuer.address, q.issuer.phone, q.issuer.email]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
@@ -95,8 +95,13 @@ export default function PublicQuotePage() {
                 </p>
                 <p className="font-mono text-sm font-bold tabular-nums">N° {quoteNumberLabel(q.pto_vta, q.number)}</p>
                 <p className="text-xs" style={{ color: "#6b7080" }}>
-                  {fmtDate(q.issue_date)} · válido hasta el {fmtDate(q.valid_until)}
+                  {fmtDate(q.issue_date)} · {q.valid_until ? `válido hasta el ${fmtDate(q.valid_until)}` : "precio de referencia"}
                 </p>
+                {q.issued_by_name && (
+                  <p className="text-xs" style={{ color: "#6b7080" }}>
+                    Emitido por: {q.issued_by_name}
+                  </p>
+                )}
                 <span
                   className="mt-2 inline-block rounded-md px-2 py-0.5 text-xs font-semibold"
                   style={{ background: "#eef0f3", color: "#1b1f2a" }}
@@ -169,6 +174,9 @@ export default function PublicQuotePage() {
                   <p className="mt-1 whitespace-pre-wrap text-sm">{q.notes}</p>
                 </div>
               )}
+              {!q.valid_until && (
+                <p className="mt-6 text-sm font-medium">{QUOTE_NO_EXPIRY_LEGEND}</p>
+              )}
               <p className="mt-6 text-xs font-semibold uppercase" style={{ color: "#6b7080" }}>
                 Documento no válido como factura
               </p>
@@ -186,7 +194,7 @@ export default function PublicQuotePage() {
                 </p>
               ) : q.status === "expired" ? (
                 <p className="text-sm font-semibold" style={{ color: "#8a5a00" }}>
-                  Este presupuesto venció el {fmtDate(q.valid_until)}. Pedile al negocio una versión actualizada.
+                  Este presupuesto venció{q.valid_until ? ` el ${fmtDate(q.valid_until)}` : ""}. Pedile al negocio una versión actualizada.
                 </p>
               ) : open ? (
                 <div className="space-y-3">

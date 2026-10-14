@@ -85,6 +85,8 @@ import { BranchDot } from "@/components/branches/BranchSwitcher";
 import { useLowStockByStore, useMultiStoreStock } from "@/modules/stock/hooks";
 import { branchFileTag, filterByStore, reportScopeLabel } from "@/lib/reports/branchScope";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
+import { useFeature } from "@/modules/saas/gating";
+import { useQuoteIssuerReport } from "@/modules/quotes/hooks";
 import {
   DELIVERY_CHANNEL_LABELS,
   DELIVERY_TYPE_LABELS,
@@ -128,6 +130,8 @@ const REPORTS = [
   { key: "by_method", label: "Medios de pago" },
   { key: "by_category", label: "Categorías" },
   { key: "by_user", label: "Por cajero" },
+  // ADR-123: sólo con `presupuestos` en el plan (comisiones por emisor).
+  { key: "quotes_by_issuer", label: "Presupuestos por emisor" },
   { key: "by_product", label: "Top productos" },
   { key: "by_customer", label: "Top clientes" },
   { key: "cash_flow", label: "Flujo de caja" },
@@ -154,6 +158,7 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_method: true,
   by_category: true,
   by_user: true,
+  quotes_by_issuer: true,
   by_product: true,
   by_customer: true,
   cash_flow: true,
@@ -242,6 +247,10 @@ export default function ReportesPage() {
   // Productividad por profesional (H39): el owner liquida comisiones de la semana
   // mirando esta tabla (+ export XLSX).
   const { data: staff } = useStaffProductivity(fromISO, toISO, storeId);
+  // Presupuestos por emisor (ADR-123): cantidad, monto y conversión por quien
+  // los emitió, para liquidar comisiones. Consolidado (todas las sucursales).
+  const quotesEnabled = useFeature("presupuestos") === true;
+  const { data: quoteIssuers } = useQuoteIssuerReport(fromISO, toISO, quotesEnabled);
 
   // ── Gastronomía (F13 · H52): la sección sólo aparece si el tenant usa mesas
   // o delivery. Cada RPC se consulta gateada por su modo (top ítems = cualquiera).
@@ -998,6 +1007,7 @@ export default function ReportesPage() {
                   if (r.key === "gastro_delivery") return deliveryEnabled;
                   if (r.key === "gastro_kitchen" || r.key === "gastro_top_items")
                     return showGastro;
+                  if (r.key === "quotes_by_issuer") return quotesEnabled;
                   return true;
                 }).map((r) => (
                   <div
@@ -1310,6 +1320,54 @@ export default function ReportesPage() {
                       r.cashier,
                       formatCurrency(r.total),
                       String(r.count),
+                    ])}
+                  />
+                }
+              />
+            ),
+            quotes_by_issuer: quotesEnabled && vis.quotes_by_issuer && (
+              <ReportSection<"ranking">
+                id="quotes_by_issuer"
+                title="Presupuestos por emisor"
+                subtitle="Cantidad, monto y conversión en venta (todas las sucursales)"
+                chart={() => {
+                  const rows = quoteIssuers ?? [];
+                  return {
+                    option: rankingBarOption({
+                      items: rows.map((r) => ({
+                        label: r.issuer_name,
+                        value: r.total,
+                        note: `${r.count} presupuestos · ${r.converted} convertidos (${r.count ? Math.round((r.converted / r.count) * 100) : 0} %)`,
+                      })),
+                      name: "Presupuestado",
+                      format: "currency",
+                    }),
+                    height: barsHeight(rows.length, 0),
+                    empty: rows.length === 0,
+                    ariaLabel: "Monto presupuestado por emisor",
+                    summary: {
+                      columns: ["Emisor", "Presupuestos", "Monto", "Convertidos", "Conversión"],
+                      rows: rows.map((r) => [
+                        r.issuer_name,
+                        String(r.count),
+                        formatCurrency(r.total),
+                        String(r.converted),
+                        `${r.count ? Math.round((r.converted / r.count) * 100) : 0} %`,
+                      ]),
+                    },
+                  };
+                }}
+                table={
+                  <BareTable
+                    cols={["Emisor", "Presup.", "Monto", "Aceptados", "Convertidos", "Monto convertido", "Conversión"]}
+                    rows={(quoteIssuers ?? []).map((r) => [
+                      r.issuer_name,
+                      String(r.count),
+                      formatCurrency(r.total),
+                      String(r.accepted),
+                      String(r.converted),
+                      formatCurrency(r.converted_total),
+                      `${r.count ? Math.round((r.converted / r.count) * 100) : 0} %`,
                     ])}
                   />
                 }

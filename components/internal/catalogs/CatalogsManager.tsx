@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import {
   Boxes,
+  ChevronDown,
   Gift,
   ImagePlus,
   Package,
@@ -15,15 +16,13 @@ import {
   Check,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
-import { SectionHeader } from "@/components/ui/PageHeader";
-import { Badge } from "@/components/ui/Badge";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { resizeToWebp } from "@/lib/utils/image";
 import { formatCurrency } from "@/lib/utils/format";
+import { cn } from "@/lib/utils/cn";
 import {
   useCatalogs,
   useCatalogStores,
@@ -34,13 +33,13 @@ import { CatalogEditorModal } from "./CatalogEditorModal";
 import { CatalogGrantsModal } from "./CatalogGrantsModal";
 import { CatalogSyncCard } from "./CatalogSyncCard";
 import { Disclosure } from "@/components/ui/Disclosure";
-
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const CATALOG_IMPORTS_BUCKET = "catalog-imports";
 
 export function CatalogsManager() {
   const { toast } = useToast();
-  const { data: stores, isLoading: storesLoading } = useCatalogStores();
+  const { data: stores } = useCatalogStores();
   const { data: catalogs, isLoading } = useCatalogs();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -143,32 +142,14 @@ export function CatalogsManager() {
     <div className="space-y-10">
       {/* Tiendas de origen */}
       <section>
-        <SectionHeader
-          title="Tiendas de origen"
-          icon={Store}
-          description="Llegan solas con la sincronización. Los catálogos vendibles se arman agrupando estas tiendas."
-        />
-        {!storesLoading && (stores?.length ?? 0) === 0 && (
-          <Card className="mt-3">
-            <EmptyState
-              compact
-              icon={Store}
-              title="Todavía no hay tiendas"
-              description="Aparecen cuando corre la primera sincronización del catálogo."
-            />
-          </Card>
-        )}
+        <Heading as="h2" className="flex items-center gap-2 text-base">
+          <Store size={18} /> Tiendas de origen
+        </Heading>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          Las tiendas llegan solas con la sincronización. Los catálogos
+          vendibles se arman agrupando estas tiendas.
+        </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {storesLoading &&
-            Array.from({ length: 6 }, (_, i) => (
-              <Card key={i} aria-busy className="flex items-center gap-3 p-4">
-                <Skeleton className="h-11 w-11 shrink-0 rounded-lg" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-3.5 w-2/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </Card>
-            ))}
           {(stores ?? []).map((s) => {
             const busy =
               setStoreLogo.isPending && logoStoreKey === s.key;
@@ -205,7 +186,6 @@ export function CatalogsManager() {
                     disabled={setStoreLogo.isPending}
                     onClick={() => pickStoreLogo(s.key)}
                     title={s.logoUrl ? "Cambiar foto" : "Subir foto"}
-                    aria-label={`${s.logoUrl ? "Cambiar la foto de" : "Subir foto de"} ${s.name}`}
                   >
                     {!busy && <ImagePlus size={14} />}
                     <span className="hidden sm:inline">
@@ -228,41 +208,27 @@ export function CatalogsManager() {
 
       {/* Catálogos vendibles */}
       <section>
-        <SectionHeader
-          title="Catálogos vendibles"
-          icon={Boxes}
-          description="Agrupá tiendas en un catálogo con nombre, carátula y precio único. El cliente lo compra y busca o agrega sus productos."
-          actions={
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={15} /> Nuevo catálogo
-            </Button>
-          }
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Heading as="h2" className="flex items-center gap-2 text-base">
+            <Boxes size={18} /> Catálogos vendibles
+          </Heading>
+          <Button size="sm" onClick={openCreate}>
+            <Plus size={15} /> Nuevo catálogo
+          </Button>
+        </div>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          Agrupá tiendas en un catálogo con nombre, carátula y precio único. El
+          cliente lo compra y puede buscar/agregar sus productos.
+        </p>
 
         <div className="mt-3 space-y-3">
           {isLoading ? (
-            Array.from({ length: 2 }, (_, i) => (
-              <Card key={i} aria-busy className="flex items-center gap-4 p-4">
-                <Skeleton className="h-16 w-24 shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-1/3" />
-                  <Skeleton className="h-3 w-2/3" />
-                </div>
-              </Card>
-            ))
+            <SpinnerBlock className="py-6" />
           ) : (catalogs?.length ?? 0) === 0 ? (
             <Card>
-              <EmptyState
-                compact
-                icon={Boxes}
-                title="Todavía no hay catálogos"
-                description="Agrupá tiendas de origen en un catálogo y ponele precio."
-                action={
-                  <Button size="sm" variant="secondary" onClick={openCreate}>
-                    <Plus size={15} /> Nuevo catálogo
-                  </Button>
-                }
-              />
+              <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                Todavía no hay catálogos. Creá el primero con “Nuevo catálogo”.
+              </CardContent>
             </Card>
           ) : (
             (catalogs ?? []).map((c) => (
@@ -286,10 +252,21 @@ export function CatalogsManager() {
                       <span className="text-sm font-semibold text-foreground">
                         {c.name}
                       </span>
-                      <Badge tone={c.isActive ? "success" : "neutral"}>
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
+                          c.isActive
+                            ? "bg-emerald-500/15 text-success"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
                         {c.isActive ? "Activo" : "Inactivo"}
-                      </Badge>
-                      {c.dedupeByEan && <Badge tone="brand">Paquete</Badge>}
+                      </span>
+                      {c.dedupeByEan && (
+                        <span className="rounded bg-ninja-flame/15 px-1.5 py-0.5 text-[10px] font-medium uppercase text-ninja-flameSoft">
+                          Paquete
+                        </span>
+                      )}
                     </div>
                     {c.description && (
                       <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
@@ -297,9 +274,8 @@ export function CatalogsManager() {
                       </p>
                     )}
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span className="inline-flex min-w-0 items-center gap-1">
-                        <Store size={12} className="shrink-0" />
-                        <span className="truncate">{c.storeKeys.join(", ") || "Sin tiendas"}</span>
+                      <span className="inline-flex items-center gap-1">
+                        <Store size={12} /> {c.storeKeys.join(", ") || "sin tiendas"}
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <Package size={12} />{" "}
@@ -311,8 +287,8 @@ export function CatalogsManager() {
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <span className="mr-auto font-price text-base font-bold tabular-nums text-foreground sm:mr-1">
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="font-price text-base font-bold text-foreground">
                       {formatCurrency(c.priceArs)}
                     </span>
                     <Button
@@ -335,7 +311,9 @@ export function CatalogsManager() {
 
       {/* Sincronización con el catálogo (ADR-107) */}
       <section>
-        <SectionHeader title="Sincronización con el catálogo" icon={RefreshCw} />
+        <Heading as="h2" className="flex items-center gap-2 text-base">
+          <RefreshCw size={18} /> Sincronización con el catálogo
+        </Heading>
         <CatalogSyncCard />
 
         {/* Plan B si el feed está caído: Excel a mano por script */}
@@ -375,14 +353,21 @@ export function CatalogsManager() {
               )}
             </div>
 
-            <Disclosure title="Detalles técnicos: correr el import del lado del servidor">
-              <div>
+            <details className="group rounded-lg border border-border bg-muted/30">
+              <summary className="flex cursor-pointer list-none items-center gap-2 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:text-foreground">
+                <ChevronDown
+                  size={14}
+                  className="transition-transform group-open:rotate-180"
+                />
+                Ver detalles técnicos / correr el import server-side
+              </summary>
+              <div className="border-t border-border px-3 pb-3 pt-3">
                 <p className="mb-2 text-xs text-muted-foreground">
                   La carga masiva a la base la corre un{" "}
                   <strong>script server-side</strong> con la service key, porque
                   el archivo es enorme y no entra en una función web.
                 </p>
-                <pre className="slim-scrollbar overflow-x-auto rounded-md bg-background p-3 text-xs leading-relaxed text-foreground">
+                <pre className="overflow-x-auto rounded-md bg-background/70 p-3 text-xs leading-relaxed text-foreground">
 {`SUPABASE_URL=…  SUPABASE_SERVICE_ROLE_KEY=…  \\
   node scripts/import_catalog.cjs <archivo.xlsx>`}
                 </pre>
@@ -392,7 +377,7 @@ export function CatalogsManager() {
                   negocios que compraron cada catálogo.
                 </p>
               </div>
-            </Disclosure>
+            </details>
           </div>
         </Disclosure>
       </section>

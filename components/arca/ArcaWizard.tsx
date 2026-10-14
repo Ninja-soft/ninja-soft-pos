@@ -48,9 +48,18 @@ import { CopyValue, Dot, ExtLink, HowTo, Term } from "./shared";
 // Asistente de Configuración > Facturación electrónica (ADR-072): un paso por
 // pantalla, barra de progreso, lenguaje simple y glosario en cada término.
 
-export function ArcaWizard({ config, canWrite }: { config: ArcaConfig; canWrite: boolean }) {
+export function ArcaWizard({
+  config,
+  canWrite,
+  initialStep,
+}: {
+  config: ArcaConfig;
+  canWrite: boolean;
+  /** Paso a abrir (desde la guía de requisitos); si no, el primero pendiente. */
+  initialStep?: WizardStepKey;
+}) {
   const done = useMemo(() => wizardStepsDone(config), [config]);
-  const [step, setStep] = useState<WizardStepKey>(() => currentWizardStep(config));
+  const [step, setStep] = useState<WizardStepKey>(() => initialStep ?? currentWizardStep(config));
   const idx = WIZARD_STEPS.findIndex((s) => s.key === step);
   const progress = wizardProgress(config);
   const go = (d: number) => {

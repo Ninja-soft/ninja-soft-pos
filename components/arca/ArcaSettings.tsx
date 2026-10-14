@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, AlertTriangle, ListChecks, Lock, SlidersHorizontal } from "lucide-react";
+import { Activity, AlertTriangle, FileText, ListChecks, Lock, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Segmented } from "@/components/ui/Segmented";
 import { Select } from "@/components/ui/Select";
 import { SpinnerBlock } from "@/components/ui/Spinner";
@@ -19,11 +20,14 @@ import {
   certExpiryText,
   formatFiscalDate,
   type ArcaEnv,
+  type WizardStepKey,
 } from "@/lib/arca/labels";
 import type { ArcaConfig } from "@/modules/arca/api";
 import { useArcaConfig, useArcaMutations } from "@/modules/arca/hooks";
+import { useTaxSettings } from "@/modules/tax/hooks";
 import { ArcaWizard } from "./ArcaWizard";
 import { ArcaMonitor } from "./ArcaMonitor";
+import { ArcaRequirements, CertificateIsNotTheLetter, LetterGuide } from "./InvoiceLettersGuide";
 import { Dot, Term } from "./shared";
 import { ArcaIcon } from "@/components/settings/brandIcons";
 
@@ -33,7 +37,10 @@ type Tab = "asistente" | "monitor" | "ajustes";
 // escribir pide la feature `facturacion_afip` (el servidor lo exige igual).
 export function ArcaSettings() {
   const q = useArcaConfig();
+  const tax = useTaxSettings();
   const [tab, setTab] = useState<Tab | null>(null);
+  // Paso del asistente que abre la guía de requisitos ("Ver cómo y cargarlo").
+  const [wizardStep, setWizardStep] = useState<WizardStepKey | null>(null);
   if (q.isLoading) return <SpinnerBlock className="py-16" />;
   if (q.error || !q.data) {
     return (
@@ -48,6 +55,24 @@ export function ArcaSettings() {
   return (
     <div className="space-y-5">
       <ArcaSummary config={config} />
+      <Disclosure
+        title="Qué facturas vas a emitir y qué necesitás de ARCA"
+        icon={<FileText size={15} />}
+        defaultOpen={!config.settings?.enabled}
+      >
+        <div className="space-y-4">
+          <LetterGuide condition={config.emitter.iva_condition} issuesM={Boolean(tax.data?.issues_cbte_m)} />
+          <CertificateIsNotTheLetter />
+          <ArcaRequirements
+            config={config}
+            canWrite={canWrite}
+            onGo={(step) => {
+              setWizardStep(step);
+              setTab("asistente");
+            }}
+          />
+        </div>
+      </Disclosure>
       {!config.feature && (
         <Callout tone="warning" icon={Lock} title="Tu plan no incluye la facturación electrónica">
           Está en los planes Pro, Business y Enterprise. Podés ver lo que ya se emitió, pero no cambiar la configuración.
@@ -63,7 +88,9 @@ export function ArcaSettings() {
           { value: "ajustes", label: "Ajustes", icon: <SlidersHorizontal size={15} /> },
         ]}
       />
-      {active === "asistente" && <ArcaWizard config={config} canWrite={canWrite} />}
+      {active === "asistente" && (
+        <ArcaWizard key={wizardStep ?? "auto"} config={config} canWrite={canWrite} initialStep={wizardStep ?? undefined} />
+      )}
       {active === "monitor" && <ArcaMonitor config={config} canWrite={canWrite} />}
       {active === "ajustes" && <ArcaAdjustments config={config} canWrite={canWrite} />}
     </div>

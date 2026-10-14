@@ -4513,3 +4513,31 @@ El dueño pidió emitir presupuestos desde el POS, un modelo de presupuesto y, p
 - Envío por email: hoy abre el correo del usuario con el link (`mailto:`). Siguiente paso: mandar el PDF con el email del negocio, como el comprobante de una venta.
 - Deuda: la firma es una leyenda (los modelos del motor no tienen bloque de firma); la conversión sin conexión no marca el presupuesto; no hay vencimiento por cron (el estado vencido se calcula al leer).
 - Tests: `tests/unit/presupuestos.test.tsx`, `tests/unit/aiCoverImage.test.ts` (Gemini con mocks) y `tests/integration/rls-presupuestos.test.ts`.
+
+## ADR-123: La guía de letras y requisitos de ARCA para el dueño se deriva de la regla real (inferLetter) y del estado real de la configuración; nada de tablas hardcodeadas
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (sin cambios de esquema) · **Base:** ADR-068 (letra del comprobante), ADR-072 (facturación electrónica ARCA), ADR-117 (padrón de la plataforma)
+
+### Contexto
+
+El dueño pidió que "quede todo explicado, todo intuitivo y fácil": un dueño sin conocimiento contable tiene que entender en el panel qué facturas puede emitir y qué necesita de ARCA. La confusión más común: creer que el certificado define la letra. La letra sale de la condición frente al IVA del CUIT en ARCA; el certificado sólo autoriza a facturar por web service, y si la condición cargada en el POS no coincide con la de ARCA, ARCA rechaza el comprobante.
+
+### Decisión
+
+1. **Helpers puros en `lib/billing/letter.ts`:** `letterGuide(condición, { issuesM })` arma la matriz "a quién le vendés → letra" llamando a `inferLetter` con un receptor representativo por tipo de cliente (RI, monotributista, consumidor final, exento o no alcanzado, exterior); `letterGuideSummary` la resume en una frase; `letterReason` explica la letra de un comprobante emitido (las notas llevan la letra de la factura que corrigen); `compareConditionWithPadron` compara con el padrón (monotributo y monotributo social cuentan como iguales; "consumidor final" en el padrón = no inscripto). Ninguna letra se decide fuera de `inferLetter`.
+2. **Componentes en `components/arca/InvoiceLettersGuide.tsx`:** `LetterGuide`, `CertificateIsNotTheLetter`, `PadronConditionCheck`, `ArcaRequirements`, y `WhyLetter` en `components/arca/WhyLetter.tsx` (aparte para no sumarle hooks al POS). Se muestran en Configuración › Impuestos (Datos fiscales, en vivo con la condición del select), en Facturación electrónica (desplegable abierto mientras la facturación está apagada) y en el estado fiscal de la venta ("¿Por qué C?").
+3. **Verificación contra el padrón con la consulta existente** (`platform_billing` · `padron_lookup`, la del certificado de la plataforma, con cache de 30 días y tope por negocio). Si difiere, botón para guardar la condición de ARCA (`tax_settings_save`, que ya acepta parches parciales y exige dueño o encargado). Sin padrón disponible, se explica cómo ver la constancia de inscripción pública.
+4. **Checklist "Qué necesitás de ARCA" con estado real** de `arca_config`: condición y CUIT cargados, puntos de venta por sucursal (y verificados por ARCA en real), certificado activo del ambiente o delegación, última prueba de conexión del ambiente. Cada fila abre el paso del asistente que lo resuelve (`ArcaWizard` acepta `initialStep`).
+
+### Alternativas descartadas
+
+- **Tabla fija de letras en el componente:** se desincroniza de la regla que usan la venta y el worker de ARCA.
+- **Bloquear el guardado si la condición difiere del padrón:** el padrón puede tardar en reflejar un cambio de categoría; se avisa y se ofrece corregir, la decisión es del dueño.
+
+### Consecuencias
+
+- Las facturas E se muestran en la tabla pero se aclara que NinjaSoft todavía no las emite (el worker responde `exportacion_no_soportada`).
+- "A con leyenda" no está modelado: sólo se explica la M (`issues_cbte_m`).
+- Las consultas al padrón desde Impuestos cuentan para el mismo tope por hora que Datos de facturación.
+- Sin capturas por tema en este PR: falta pasar el gate visual (`/verify`) en los 4 temas.
+- Tests: `tests/unit/billingLetterGuide.test.ts`.

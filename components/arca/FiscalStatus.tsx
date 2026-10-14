@@ -12,6 +12,8 @@ import { useArcaMutations, useArcaStatus } from "@/modules/arca/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { docLabel } from "./ArcaMonitor";
 import { FiscalStatusBadge } from "./shared";
+import { WhyLetter } from "./WhyLetter";
+import { letterOfTipo } from "@/supabase/functions/_shared/arca/comprobante";
 
 // Estado fiscal en el detalle de la venta (ADR-072): comprobante, estado, CAE
 // o CAEA con vencimiento, QR, y reproceso o emisión para dueño y encargado.
@@ -54,7 +56,10 @@ export function FiscalStatus({ saleId, docs, saleStatus }: { saleId: string; doc
         return (
           <div key={d.id} className="rounded-md border border-border bg-card p-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-semibold">{docLabel(d)}</p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="font-semibold">{docLabel(d)}</p>
+                <WhyLetter letter={(d.cbte_tipo != null ? letterOfTipo(d.cbte_tipo) : null) ?? d.cbte_letter} cbteTipo={d.cbte_tipo} />
+              </div>
               <span className="flex flex-wrap items-center gap-1.5">
                 {d.environment === "homologacion" && <Badge tone="neutral">{ENV_SHORT.homologacion}</Badge>}
                 {d.emission_type === "CAEA" && <Badge tone="info">Contingencia</Badge>}

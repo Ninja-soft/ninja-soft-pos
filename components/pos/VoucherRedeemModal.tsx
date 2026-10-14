@@ -167,7 +167,7 @@ function VoucherStatus({ status }: { status: VoucherLookup["status"] }) {
   };
   const m = map[status];
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${m.cls}`}>
+    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${m.cls}`}>
       {m.label}
     </span>
   );

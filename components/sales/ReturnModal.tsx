@@ -698,14 +698,14 @@ function ItemsStep({
           <button
             type="button"
             onClick={onAll}
-            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="rounded-md border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Todo
           </button>
           <button
             type="button"
             onClick={onNone}
-            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="rounded-md border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Ninguno
           </button>
@@ -823,7 +823,7 @@ function ReasonStep({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                "rounded-full px-2.5 py-0.5 text-sm font-semibold",
+                "rounded-md px-2.5 py-0.5 text-sm font-semibold",
                 destTone(chosenDestination),
               )}
             >
@@ -1074,7 +1074,7 @@ function BranchScope({
               type="button"
               onClick={() => onToggle(b.id)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
+                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1 text-sm transition-colors",
                 on
                   ? "choice-on font-medium"
                   : "border-border hover:bg-muted",

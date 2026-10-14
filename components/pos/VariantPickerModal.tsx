@@ -71,8 +71,8 @@ export function VariantPickerModal({
                 <span
                   className={
                     out
-                      ? "inline-flex w-fit rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-danger"
-                      : "inline-flex w-fit rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                      ? "inline-flex w-fit rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-danger"
+                      : "inline-flex w-fit rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                   }
                 >
                   {formatQty(v.stock)} en stock

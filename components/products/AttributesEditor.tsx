@@ -76,7 +76,7 @@ export function AttributesEditor({
             key={s}
             type="button"
             onClick={() => onChange([...value, { key: s, value: "" }])}
-            className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            className="inline-flex items-center gap-1 rounded-md bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
           >
             <Plus size={12} /> {s}
           </button>

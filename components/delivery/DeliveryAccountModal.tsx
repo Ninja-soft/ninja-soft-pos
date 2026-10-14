@@ -193,11 +193,11 @@ export function DeliveryAccountModal({
           {order && (
             <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-ninja-flame/15 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft">
                   {isDelivery ? <Bike size={12} /> : <ShoppingBag size={12} />}
                   {DELIVERY_TYPE_LABELS[order.order_type]}
                 </span>
-                <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                <span className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
                   {DELIVERY_STATUS_LABELS[order.status]}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">

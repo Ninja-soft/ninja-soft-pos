@@ -53,7 +53,7 @@ export const CredentialInput = forwardRef<HTMLInputElement, CredentialInputProps
             {optional && <span className="ml-1.5 text-xs font-normal text-muted-foreground">Opcional</span>}
           </label>
           {configured && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
               <Check size={11} strokeWidth={3} /> {configuredLabel}
             </span>
           )}

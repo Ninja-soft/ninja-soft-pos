@@ -1726,7 +1726,7 @@ function PosPageInner() {
                   title="Ventas pausadas"
                 >
                   <Pause size={18} aria-hidden />
-                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--pos-solid)] px-1 text-[11px] font-bold text-[color:var(--pos-on)]">
+                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-md bg-[var(--pos-solid)] px-1 text-[11px] font-bold text-[color:var(--pos-on)]">
                     {pauser.list.length}
                   </span>
                 </button>
@@ -1748,7 +1748,7 @@ function PosPageInner() {
                   {pendingWatch.waiting + pendingWatch.attention > 0 && (
                     <span
                       className={
-                        "absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold " +
+                        "absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-md px-1 text-[11px] font-bold " +
                         (pendingWatch.attention > 0
                           ? "bg-warning text-white"
                           : "bg-[var(--pos-solid)] text-[color:var(--pos-on)]")

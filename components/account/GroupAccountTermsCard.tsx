@@ -25,7 +25,7 @@ export function InheritBadge({ own, label }: { own: boolean; label?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        "inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium",
         own ? "bg-ninja-flame/15 text-ninja-flameSoft" : "bg-muted text-muted-foreground",
       )}
     >

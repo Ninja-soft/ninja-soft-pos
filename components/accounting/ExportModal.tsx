@@ -169,7 +169,7 @@ export function ExportModal({
                       type="button"
                       onClick={() => toggleColumn(c)}
                       className={cn(
-                        "rounded-full px-3 py-1 text-xs font-medium transition",
+                        "rounded-md px-3 py-1 text-xs font-medium transition",
                         idx >= 0 ? "bg-ninja-flame/[0.12] text-ninja-flameSoft" : "bg-muted text-muted-foreground hover:text-foreground",
                       )}
                     >

@@ -678,7 +678,7 @@ export function TenantEmailCard() {
           design={bodyTemplate}
           accent={accent}
           logoUrl={logoUrl}
-          name={String(branding?.legal_name ?? "").trim() || fromName.trim() || "Mi Negocio"}
+          name={(tradeNameOf(branding) || String(branding?.legal_name ?? "").trim() || fromName.trim() || "Mi Negocio")}
           bodyText={bodyText.trim()}
         />
       </Modal>
@@ -812,4 +812,9 @@ function ResendGuide() {
       </a>
     </div>
   );
+}
+
+// ADR-123: la vista previa del email usa el nombre de fantasía, igual que la Edge.
+function tradeNameOf(b: { trade_name?: string | null } | null | undefined): string {
+  return (b?.trade_name ?? "").trim();
 }

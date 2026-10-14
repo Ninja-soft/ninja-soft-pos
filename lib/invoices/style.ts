@@ -17,6 +17,7 @@
 // Si el plan ya no incluye algo, el render vuelve al default (la base también
 // lo bloquea al guardar: trg_assert_invoice_style_feature).
 
+import { invoiceTradeName } from "@/lib/branding/businessName";
 import { isA4Model, isTicketModel, a4ModelIsPro, ticketModelIsPro, type A4Model, type TicketModel } from "./models";
 
 export const NINJA_POS_ACCENT = "#FF4B22";
@@ -58,7 +59,10 @@ export interface InvoiceStyleSettings {
   show_ninja_seal: boolean;
   /** Leyendas propias (una por línea). */
   legends: string;
-  /** Nombre de fantasía sobre la razón social. */
+  /**
+   * Nombre de fantasía SÓLO para comprobantes (override, ADR-123). Vacío =
+   * el de Configuración > Marca (tenant_branding.trade_name).
+   */
   trade_name: string;
   show_payments: boolean;
   show_internal_ref: boolean;
@@ -223,6 +227,10 @@ export interface InvoiceEntitlements {
 export interface InvoiceBrandInput {
   accent?: string | null;
   logo_url?: string | null;
+  /** ADR-123: nombre de fantasía de la marca, nombre de la cuenta y razón social. */
+  trade_name?: string | null;
+  tenant_name?: string | null;
+  legal_name?: string | null;
 }
 
 /** Defaults cuando la tienda no tiene marca: Ninja POS (negocios) o Ninja Soft (plataforma). */
@@ -353,7 +361,13 @@ export function resolveInvoiceStyle(
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean),
-    tradeName: s.trade_name.trim() || null,
+    // ADR-123: override del comprobante > fantasía de la marca > nombre de la cuenta.
+    tradeName: invoiceTradeName({
+      override: s.trade_name,
+      tradeName: brand?.trade_name,
+      tenantName: brand?.tenant_name,
+      legalName: brand?.legal_name,
+    }),
     showPayments: s.show_payments,
     showInternalRef: s.show_internal_ref,
     a4Copies: s.a4_copies,

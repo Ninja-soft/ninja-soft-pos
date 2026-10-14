@@ -9,6 +9,7 @@
 // C, NC, no fiscal) con datos de ejemplo. Se guarda en
 // tenant_branding (invoice_style, iibb, activity_start); la base exige el plan
 // (trigger trg_assert_invoice_style_feature), acá sólo se muestra el candado.
+import { businessDisplayName } from "@/lib/branding/businessName";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImageUp, Lock, ReceiptText } from "lucide-react";
@@ -465,9 +466,11 @@ export function InvoiceStyleCard() {
                   value={form.activity_start}
                   onChange={(e) => setForm({ ...form, activity_start: e.target.value })}
                 />
+                {/* ADR-123: el nombre de fantasía vive en Marca; esto sólo lo pisa en los comprobantes. */}
                 <Input
-                  label="Nombre de fantasía (opcional)"
-                  placeholder="Se muestra arriba de la razón social"
+                  label="Nombre en el comprobante (opcional)"
+                  placeholder={businessDisplayName({ tradeName: brand?.trade_name, tenantName: brand?.tenant_name }, "El de Marca")}
+                  hint="Vacío: usa el nombre de fantasía de Configuración > Marca."
                   value={s.trade_name}
                   maxLength={120}
                   onChange={(e) => setStyle({ trade_name: e.target.value })}

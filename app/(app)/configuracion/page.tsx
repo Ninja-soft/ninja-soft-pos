@@ -258,7 +258,7 @@ const OPERACION_FIELDS = [
 const CLIENTES_FIELDS = ["require_customer", "auto_email_receipt"];
 // Dominio "ticket" partido en dos secciones: datos del negocio en Marca y
 // textos del comprobante en Ticket (cada una pisa por sucursal sólo lo suyo).
-const BRAND_TICKET_FIELDS = ["use_store_contact", "legal_name", "cuit", "phone", "address"];
+const BRAND_TICKET_FIELDS = ["use_store_contact", "trade_name", "legal_name", "cuit", "phone", "address"];
 const TICKET_TEXT_FIELDS = ["ticket_title", "ticket_legend", "ticket_footer"];
 const DISPLAY_FIELDS = ["display_show_unit_prices", "display_welcome_message", "display_thanks_message"];
 

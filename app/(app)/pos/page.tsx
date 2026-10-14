@@ -68,6 +68,7 @@ import { useCustomerPackCredits } from "@/modules/packs/hooks";
 import type { CustomerPackCredit } from "@/modules/packs/api";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useTicketBranding } from "@/modules/tickets/hooks";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import {
   publishDisplayState,
   type DisplayBranding,
@@ -483,7 +484,8 @@ function PosPageInner() {
   const paidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayBranding = useMemo<DisplayBranding>(
     () => ({
-      businessName: dispBranding?.legal_name ?? null,
+      // ADR-123: el cliente ve el nombre de fantasía (si no, el de la cuenta).
+      businessName: dispBranding ? brandDisplayName(dispBranding, "") || null : null,
       logoUrl: dispBranding?.logo_url ?? null,
       accent: dispBranding?.accent ?? null,
       // Con varias sucursales, "Centro · Caja 1"; con una, sólo la caja.

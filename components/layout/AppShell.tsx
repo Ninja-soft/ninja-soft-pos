@@ -68,6 +68,7 @@ import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
+import { BusinessBadge } from "@/components/layout/BusinessBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import {
   Dropdown,
@@ -631,6 +632,11 @@ export function AppShell({
         </div>
       </div>
 
+      {/* Negocio activo (ADR-123): nombre de fantasía o el de la cuenta. */}
+      <div className="mb-2 shrink-0 empty:hidden">
+        <BusinessBadge />
+      </div>
+
       {/* Sucursal actual (F17 · H90): sólo con más de una sucursal. */}
       <div className="mb-2 shrink-0 px-1 empty:hidden">
         <BranchSwitcher />
@@ -770,6 +776,7 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Isotype className="h-6 w-auto" />
+          <BusinessBadge compact />
           <BranchSwitcher compact />
           <div className="ml-auto flex items-center gap-2">
             {canSell && !onPos && <SellQuickAction compact />}

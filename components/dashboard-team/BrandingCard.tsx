@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronRight, ImagePlus, ReceiptText } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -11,8 +12,18 @@ import { Button, buttonVariants } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { resizeToWebp } from "@/lib/utils/image";
 import { cn } from "@/lib/utils/cn";
+import { cleanTradeName, TRADE_NAME_MAX } from "@/lib/branding/businessName";
+import { BUSINESS_NAME_QUERY_KEYS } from "@/modules/tenants/businessName";
 
 const BUCKET = "tenant-assets";
+
+type LooseSelect = {
+  from: (t: string) => {
+    select: (c: string) => {
+      eq: (c: string, v: string) => { maybeSingle: () => PromiseLike<{ data: unknown; error: unknown }> };
+    };
+  };
+};
 const PRESET_ACCENTS = [
   "#EC3F17", "#FF6A1A", "#FFB020", "#FFD21F", "#16A34A",
   "#2DB8A3", "#0EA5E9", "#3B82F6", "#7C4DFF", "#A855F7",
@@ -20,6 +31,8 @@ const PRESET_ACCENTS = [
 ];
 
 type Branding = {
+  /** ADR-123: nombre de fantasía (el que se muestra en toda la app y al cliente). */
+  trade_name: string | null;
   logo_path: string | null;
   logo_url: string | null;
   accent: string;
@@ -29,6 +42,7 @@ type Branding = {
   address: string | null;
 };
 const EMPTY: Branding = {
+  trade_name: null,
   logo_path: null,
   logo_url: null,
   accent: "#EC3F17",
@@ -39,12 +53,21 @@ const EMPTY: Branding = {
 };
 
 type BrandingRow = { [K in keyof Branding]?: string | boolean | null };
-type Ctx = { tenantId: string; canManage: boolean; branding: BrandingRow } | null;
+type Ctx = {
+  tenantId: string;
+  canManage: boolean;
+  branding: BrandingRow;
+  /** tenants.name: fallback del nombre de fantasía. */
+  tenantName: string | null;
+  /** false si la columna trade_name todavía no existe (migración sin aplicar). */
+  tradeNameReady: boolean;
+} | null;
 
 export function BrandingCard() {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<Branding | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,15 +88,30 @@ export function BrandingCard() {
         .maybeSingle();
       if (!mem) return null;
       const canManage = ["owner", "manager"].includes(mem.role);
-      if (!canManage) return { tenantId: mem.tenant_id, canManage, branding: {} };
-      const { data: b } = await supabase
-        .from("tenant_branding")
-        .select(
-          "logo_path, logo_url, accent, legal_name, cuit, phone, address",
-        )
-        .eq("tenant_id", mem.tenant_id)
-        .maybeSingle();
-      return { tenantId: mem.tenant_id, canManage, branding: b ?? {} };
+      if (!canManage) return { tenantId: mem.tenant_id, canManage, branding: {}, tenantName: null, tradeNameReady: false };
+      // trade_name en consulta aparte: sin la migración aplicada la columna no
+      // existe y el resto de la marca se tiene que poder editar igual.
+      const [{ data: b }, trade, { data: t }] = await Promise.all([
+        supabase
+          .from("tenant_branding")
+          .select("logo_path, logo_url, accent, legal_name, cuit, phone, address")
+          .eq("tenant_id", mem.tenant_id)
+          .maybeSingle(),
+        (supabase as unknown as LooseSelect)
+          .from("tenant_branding")
+          .select("trade_name")
+          .eq("tenant_id", mem.tenant_id)
+          .maybeSingle(),
+        supabase.from("tenants").select("name").eq("id", mem.tenant_id).maybeSingle(),
+      ]);
+      const tradeName = (trade.data as { trade_name?: string | null } | null)?.trade_name ?? null;
+      return {
+        tenantId: mem.tenant_id,
+        canManage,
+        branding: { ...(b ?? {}), trade_name: tradeName },
+        tenantName: t?.name ?? null,
+        tradeNameReady: !trade.error,
+      };
     },
   });
 
@@ -82,6 +120,7 @@ export function BrandingCard() {
     if (!ctx?.canManage) return;
     const b = ctx.branding;
     setForm({
+      trade_name: (b.trade_name as string | null) ?? null,
       logo_path: (b.logo_path as string | null) ?? null,
       logo_url: (b.logo_url as string | null) ?? null,
       accent: (b.accent as string | null) ?? EMPTY.accent,
@@ -95,14 +134,19 @@ export function BrandingCard() {
   const save = useMutation({
     mutationFn: async () => {
       if (!form || !ctx) return;
+      const { trade_name, ...rest } = form;
+      const row: Record<string, unknown> = { tenant_id: ctx.tenantId, ...rest };
+      if (ctx.tradeNameReady) row.trade_name = cleanTradeName(trade_name);
       const { error } = await supabase
         .from("tenant_branding")
-        .upsert({ tenant_id: ctx.tenantId, ...form }, { onConflict: "tenant_id" });
+        .upsert(row as never, { onConflict: "tenant_id" });
       if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Marca guardada", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["my-branding-ctx"] });
+      // ADR-123: el nombre se ve en la barra lateral, el ticket, el login, etc.
+      for (const queryKey of BUSINESS_NAME_QUERY_KEYS) qc.invalidateQueries({ queryKey: [...queryKey] });
+      router.refresh();
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -223,8 +267,21 @@ export function BrandingCard() {
           </div>
         </div>
 
-        {/* Datos comerciales */}
+        {/* Datos comerciales. ADR-123: el nombre de fantasía es el que se
+            muestra en toda la app y al cliente; la razón social, en lo fiscal. */}
         <div className="grid gap-3 sm:grid-cols-2">
+          {ctx.tradeNameReady && (
+            <div className="sm:col-span-2">
+              <Input
+                label="Nombre de fantasía"
+                placeholder={ctx.tenantName ?? "El nombre de tu negocio"}
+                hint={`El que ven tu equipo y tus clientes: barra lateral, tickets, facturas, presupuestos, emails y catálogo. Vacío: ${ctx.tenantName ?? "el nombre de la cuenta"}.`}
+                value={form.trade_name ?? ""}
+                maxLength={TRADE_NAME_MAX}
+                onChange={(e) => set("trade_name", e.target.value)}
+              />
+            </div>
+          )}
           <Input label="Razón social" value={form.legal_name ?? ""} onChange={(e) => set("legal_name", e.target.value)} />
           <Input label="CUIT" value={form.cuit ?? ""} onChange={(e) => set("cuit", e.target.value)} />
           <Input label="Teléfono" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />

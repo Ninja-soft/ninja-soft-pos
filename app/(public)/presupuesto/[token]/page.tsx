@@ -12,6 +12,7 @@ import { quotesApi, type PublicQuote } from "@/modules/quotes/api";
 import { QUOTE_STATUS_LABEL, quoteDetailLines, quoteErrorMessage, quoteNumberLabel } from "@/lib/quotes/logic";
 import { fmtDate, ivaConditionLabel } from "@/lib/invoices/legal";
 import { accentPalette } from "@/lib/invoices/style";
+import { businessDisplayName, invoiceTradeName } from "@/lib/branding/businessName";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { unitLabel } from "@/lib/catalog/mode";
 
@@ -60,6 +61,11 @@ export default function PublicQuotePage() {
   }
 
   const pal = accentPalette(q?.issuer.accent ?? "#FF4B22");
+  const tradeName = q ? invoiceTradeName({ tradeName: q.issuer.trade_name, legalName: q.issuer.name }) : null;
+  const displayName = q ? businessDisplayName({ tradeName: q.issuer.trade_name, legalName: q.issuer.name }) : null;
+  useEffect(() => {
+    if (displayName) document.title = `Presupuesto de ${displayName}`;
+  }, [displayName]);
   const open = q && (q.status === "draft" || q.status === "sent");
 
   return (
@@ -82,7 +88,9 @@ export default function PublicQuotePage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={q.issuer.logo_url} alt="" style={{ maxHeight: 48, maxWidth: 180, objectFit: "contain" }} className="mb-3" />
                 )}
-                <p className="text-base font-bold">{q.issuer.name}</p>
+                {/* ADR-123: nombre de fantasía arriba; la razón social con los datos fiscales. */}
+                {tradeName && <p className="text-lg font-bold leading-tight">{tradeName}</p>}
+                <p className={tradeName ? "text-sm font-medium" : "text-base font-bold"}>{q.issuer.name}</p>
                 <p className="text-xs" style={{ color: "#6b7080" }}>
                   {[q.issuer.cuit ? `CUIT ${q.issuer.cuit}` : null, q.issuer.iva_condition ? ivaConditionLabel(q.issuer.iva_condition) : null, q.issuer.address, q.issuer.phone]
                     .filter(Boolean)

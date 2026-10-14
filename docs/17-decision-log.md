@@ -4513,3 +4513,34 @@ El dueño pidió emitir presupuestos desde el POS, un modelo de presupuesto y, p
 - Envío por email: hoy abre el correo del usuario con el link (`mailto:`). Siguiente paso: mandar el PDF con el email del negocio, como el comprobante de una venta.
 - Deuda: la firma es una leyenda (los modelos del motor no tienen bloque de firma); la conversión sin conexión no marca el presupuesto; no hay vencimiento por cron (el estado vencido se calcula al leer).
 - Tests: `tests/unit/presupuestos.test.tsx`, `tests/unit/aiCoverImage.test.ts` (Gemini con mocks) y `tests/integration/rls-presupuestos.test.ts`.
+
+## ADR-123: Nombre de fantasía como dato de la marca del negocio, con un helper único para mostrar el nombre del negocio en toda la app
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edges sin desplegar) · **Base:** ADR-112 / ADR-119 (motor de comprobantes, `invoice_style.trade_name`), ADR-049 (herencia de configuración por grupo y sucursal), ADR-122 (presupuestos), H8 (`tenant_branding`).
+
+### Contexto
+
+El dueño pidió "agregá en Marca el nombre de fantasía, e incorporalo en la interfaz". Hasta ahora el nombre de fantasía existía sólo como opción del comprobante (`tenant_branding.invoice_style.trade_name`, Configuración > Comprobantes) y cada pantalla elegía por su cuenta qué nombre mostrar: `tenants.name` (barra lateral no lo mostraba, panel del dueño, selector de negocio, login), `legal_name` (pantalla del cliente, links de pago, email del comprobante, catálogo público) o una mezcla.
+
+### Decisión
+
+1. **Columna propia `tenant_branding.trade_name`** (texto de 1 a 120 caracteres o null), editable en Configuración > Marca junto a la razón social, el logo y el color. RLS de la tabla sin cambios (lectura miembros, escritura dueño o encargado).
+2. **BASE, sin key de plan.** Es un dato básico del negocio como la razón social: no entra en las columnas que gatea `personalizacion_marca` (logo y color, `trg_assert_branding_feature`, que es por columna), así que se edita en cualquier plan. No se agrega a `features` ni a la matriz de planes.
+3. **Un solo helper para mostrar el nombre:** `businessDisplayName()` en `lib/branding/businessName.ts` (fantasía, si no `tenants.name`, si no la razón social). Lo usan la barra lateral y el encabezado mobile (`BusinessBadge`), el panel del dueño, el selector de negocio del panel, el login "Hola de nuevo" (negocio recordado), el título de la pestaña ("Nombre · NinjaSoft POS"), la pantalla del cliente, los links de pago (WhatsApp y email), la lista de espera, el detalle de la venta, el catálogo público, el presupuesto público y las Edges `send_receipt_email`, `pending_charge_share`, `getnet_checkout` y `payway_checkout` (espejo en `supabase/functions/_shared/businessName.ts`). `useMyTenant().name` pasa a ser el nombre para mostrar (con `tenantName` y `tradeName` aparte).
+4. **Comprobantes (ticket, factura A4, presupuesto):** encabezado comercial arriba y la razón social con los datos fiscales. Prioridad del encabezado (`invoiceTradeName`): `invoice_style.trade_name` (override sólo del comprobante, sigue en Configuración > Comprobantes como "Nombre en el comprobante") > `trade_name` de la marca (con lo que pise el grupo o la sucursal) > `tenants.name`. Si coincide con la razón social no se repite; sin razón social cargada, el emisor se nombra con el nombre comercial.
+5. **Por sucursal:** `trade_name` es un campo de texto del dominio `ticket` de la herencia (ADR-049), editable por grupo o sucursal en Marca como la razón social (`config_field_type`, `lib/config/inheritance.ts`, `effectiveTicketBrand`).
+6. **Migración del dato:** `20261121100000_nombre_fantasia` mueve `invoice_style.trade_name` a la columna (sólo si la columna está vacía) y lo quita del jsonb, con el trigger de plan de `invoice_style` apagado durante el backfill (quitar una clave no cambia el plan). Dejarlo en el jsonb lo convertía en un override que tapaba lo que se edite en Marca. En producción hoy no hay ningún negocio con ese dato (verificado en sólo lectura).
+7. **Tolerante a la migración sin aplicar:** el front y las Edges leen `trade_name` en una consulta aparte y un error se toma como "sin fantasía"; Marca oculta el campo si la columna no existe.
+
+### Alternativas descartadas
+
+- **Seguir guardándolo en `invoice_style`:** es un dato de la marca, no del diseño del comprobante, y lo necesitan pantallas que no leen la personalización de comprobantes (catálogo, emails, login).
+- **Renombrar `tenants.name`:** es el nombre de la cuenta (lo ve NinjaSoft en internal, define el slug); el negocio puede tener una razón social, una cuenta y un nombre comercial distintos.
+- **Gatearlo con `personalizacion_marca`:** el nombre con el que el cliente reconoce al negocio no es branding pago; sin él, el ticket mostraría sólo la razón social.
+
+### Consecuencias
+
+- Migración `20261121100000_nombre_fantasia` (sin aplicar; probada en PGlite con 18 chequeos: backfill, limpieza de claves vacías, re-ejecución, constraint, herencia, catálogo y presupuesto público). Recrea `config_field_type`, `public_catalog` y `quote_public_get` desde sus definiciones vigentes (comparadas con producción).
+- Edges `send_receipt_email`, `pending_charge_share`, `getnet_checkout` y `payway_checkout` sin desplegar: hasta desplegarlas siguen con el nombre de antes.
+- El panel interno sigue mostrando `tenants.name` (es el nombre de la cuenta para el staff).
+- Tests: `tests/unit/businessName.test.ts`.

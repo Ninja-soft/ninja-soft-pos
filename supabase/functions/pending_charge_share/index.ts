@@ -14,6 +14,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { sendWithChain } from "../_shared/mailer.ts";
+import { businessDisplayName, fetchTradeName } from "../_shared/businessName.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -267,7 +268,13 @@ Deno.serve(async (req: Request) => {
     if ((perChargeRes.count ?? 0) >= MAX_PER_CHARGE) return json({ error: "rate_limited" }, 429);
 
     const brand = brandRes.data as { legal_name?: string | null; logo_url?: string | null; accent?: string | null } | null;
-    const businessName = String(brand?.legal_name || (tenantRes.data as { name?: string } | null)?.name || "")
+    // ADR-123: nombre de fantasía → nombre de la cuenta → razón social.
+    const tradeName = await fetchTradeName(admin, tenantId);
+    const businessName = businessDisplayName({
+      tradeName,
+      tenantName: (tenantRes.data as { name?: string } | null)?.name,
+      legalName: brand?.legal_name,
+    })
       // deno-lint-ignore no-control-regex
       .replace(/[\x00-\x1f\x7f]+/g, " ")
       .trim()

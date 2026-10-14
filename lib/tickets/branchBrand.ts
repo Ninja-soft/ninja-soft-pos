@@ -23,7 +23,8 @@ export function storeAddressLine(s: StoreContact): string | null {
   return parts.length ? parts.join(", ") : null;
 }
 
-const TICKET_FIELDS = ["legal_name", "cuit", "phone", "address", "ticket_title", "ticket_legend", "ticket_footer"] as const;
+// ADR-123: trade_name (nombre de fantasía) también se pisa por grupo o sucursal.
+const TICKET_FIELDS = ["trade_name", "legal_name", "cuit", "phone", "address", "ticket_title", "ticket_legend", "ticket_footer"] as const;
 
 export function effectiveTicketBrand(
   brand: SampleBrand | null,
@@ -37,6 +38,7 @@ export function effectiveTicketBrand(
   const eff = resolveEffective("ticket", "", base, overrides, target).value;
   const out: SampleBrand = {
     ...(brand ?? {
+      trade_name: null,
       logo_url: null,
       legal_name: null,
       cuit: null,

@@ -3149,6 +3149,7 @@ export type Database = {
           ticket_show_qr: boolean
           ticket_title: string | null
           ticket_width: string
+          trade_name: string | null
           updated_at: string
         }
         Insert: {
@@ -3167,6 +3168,7 @@ export type Database = {
           ticket_show_qr?: boolean
           ticket_title?: string | null
           ticket_width?: string
+          trade_name?: string | null
           updated_at?: string
         }
         Update: {
@@ -3185,6 +3187,7 @@ export type Database = {
           ticket_show_qr?: boolean
           ticket_title?: string | null
           ticket_width?: string
+          trade_name?: string | null
           updated_at?: string
         }
         Relationships: [

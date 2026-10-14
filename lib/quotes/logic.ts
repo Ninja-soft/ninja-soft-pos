@@ -287,6 +287,7 @@ export function quoteToInvoiceDoc(
   /** ADR-119: fotos de los productos por id (las muestra el motor si el negocio las prendió). */
   images?: Map<string, string> | null,
 ): InvoiceDoc {
+  const issuerName = brand?.legal_name?.trim() || brand?.trade_name?.trim() || "Mi negocio";
   const lines: InvoiceLine[] = items.map((it, i) => {
     const detail = quoteDetailLines(it);
     const gross = Number(it.quantity) * Number(it.unit_price);
@@ -320,8 +321,9 @@ export function quoteToInvoiceDoc(
     saleCondition: "A convenir",
     currency: { code: "ARS" },
     issuer: {
-      name: brand?.legal_name?.trim() || brand?.trade_name || "Mi negocio",
-      tradeName: brand?.trade_name ?? null,
+      name: issuerName,
+      // ADR-123: encabezado comercial (fantasía); no se repite si es la razón social.
+      tradeName: brand?.trade_name?.trim() && brand.trade_name.trim() !== issuerName ? brand.trade_name.trim() : null,
       cuit: brand?.cuit ?? null,
       ivaCondition: brand?.iva_condition ?? null,
       address: brand?.address ?? null,

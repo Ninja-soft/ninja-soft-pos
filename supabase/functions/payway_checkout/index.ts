@@ -46,6 +46,7 @@ import {
   toCents,
 } from "../_shared/payway.ts";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { businessDisplayName, fetchTradeName } from "../_shared/businessName.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -129,7 +130,11 @@ Deno.serve(async (req: Request) => {
     return json({
       status: row.status,
       amount: Number(row.amount),
-      tenant_name: branding?.legal_name || tenant?.name || "Tu compra",
+      // ADR-123: nombre de fantasía → nombre de la cuenta → razón social.
+      tenant_name: businessDisplayName(
+        { tradeName: await fetchTradeName(admin, row.tenant_id), tenantName: tenant?.name, legalName: branding?.legal_name },
+        "Tu compra",
+      ),
       logo_url: branding?.logo_url ?? null,
       accent: branding?.accent ?? null,
       plans: (plans ?? []).map((p) => ({

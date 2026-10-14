@@ -18,6 +18,8 @@ import { formatCbu, formatCuit } from "@/lib/payments/transfer";
 import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
 import { locationLabel } from "@/modules/branches/logic";
 import { useDisplayPresenceBeacon } from "@/modules/branches/heartbeat";
+import { businessDisplayNameOrNull } from "@/lib/branding/businessName";
+import { fetchBusinessName } from "@/modules/tenants/businessName";
 
 // =============================================================================
 // Pantalla del cliente / segunda pantalla (F10 · H25)
@@ -59,7 +61,7 @@ export default function CustomerDisplayPage() {
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<DisplayBranding> => {
       const supabase = createClient();
-      const [{ data: b }, { data: s }] = await Promise.all([
+      const [{ data: b }, { data: s }, names] = await Promise.all([
         supabase
           .from("tenant_branding")
           .select("legal_name, logo_url, accent")
@@ -70,6 +72,8 @@ export default function CustomerDisplayPage() {
           // cast vía unknown.
           .select("*")
           .maybeSingle(),
+        // ADR-123: nombre de fantasía (consulta aparte, tolerante).
+        fetchBusinessName().catch(() => null),
       ]);
       const settings = (s as unknown as {
         display_show_unit_prices?: boolean;
@@ -82,7 +86,11 @@ export default function CustomerDisplayPage() {
         accent?: string | null;
       } | null;
       return {
-        businessName: branding?.legal_name ?? null,
+        businessName: businessDisplayNameOrNull({
+          tradeName: names?.tradeName,
+          tenantName: names?.tenantName,
+          legalName: branding?.legal_name,
+        }),
         logoUrl: branding?.logo_url ?? null,
         accent: branding?.accent ?? null,
         registerLabel: null,

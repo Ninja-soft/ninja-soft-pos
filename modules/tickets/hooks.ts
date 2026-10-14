@@ -12,6 +12,7 @@ import {
 import { resolvePrintTarget, type PrintTarget } from "@/lib/print/printers";
 import { resolveEffective } from "@/lib/config/inheritance";
 import { effectiveTicketBrand } from "@/lib/tickets/branchBrand";
+import { fetchBusinessName } from "@/modules/tenants/businessName";
 import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
 import {
   useConfigOverrides,
@@ -68,6 +69,20 @@ export function usePrintTarget(doc: PrintDocType, enabled = true): PrintTarget |
   }, [doc, profiles, printers, ctx.posStoreId, register.data?.id]);
 }
 
+const EMPTY_BRAND: SampleBrand = {
+  logo_url: null,
+  legal_name: null,
+  cuit: null,
+  phone: null,
+  address: null,
+  ticket_footer: null,
+  ticket_width: null,
+  ticket_title: null,
+  ticket_legend: null,
+  ticket_show_qr: null,
+  ticket_show_logo: null,
+};
+
 // Branding del negocio para el comprobante (motor ADR-112 / ADR-119).
 export function useTenantTicketBranding(enabled = true) {
   const supabase = createClient();
@@ -75,13 +90,25 @@ export function useTenantTicketBranding(enabled = true) {
     queryKey: ["ticket-branding"],
     enabled,
     queryFn: async (): Promise<SampleBrand | null> => {
-      const { data } = await supabase
-        .from("tenant_branding")
-        .select(
-          "logo_url, legal_name, accent, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo, iva_condition",
-        )
-        .maybeSingle();
-      return (data as SampleBrand | null) ?? null;
+      // ADR-123: el nombre de fantasía y el de la cuenta van aparte (tolerante a
+      // la migración sin aplicar) para el encabezado comercial del comprobante.
+      const [{ data }, names] = await Promise.all([
+        supabase
+          .from("tenant_branding")
+          .select(
+            "logo_url, legal_name, accent, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo, iva_condition",
+          )
+          .maybeSingle(),
+        fetchBusinessName().catch(() => null),
+      ]);
+      const brand = (data as SampleBrand | null) ?? null;
+      if (!names) return brand;
+      if (!brand && !names.tenantName && !names.tradeName) return null;
+      return {
+        ...(brand ?? EMPTY_BRAND),
+        trade_name: names.tradeName,
+        tenant_name: names.tenantName,
+      };
     },
   });
 }

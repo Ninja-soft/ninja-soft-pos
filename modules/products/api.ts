@@ -28,6 +28,8 @@ export interface ProductsPageParams {
   search?: string;
   categoryId?: string | null;
   brandId?: string | null;
+  /** ADR-122: tipo de servicio (service_types.id). */
+  serviceTypeId?: string | null;
 }
 
 // `plu` (código corto de 6 dígitos) e `is_favorite`/`favorite_order` (botón
@@ -45,6 +47,8 @@ export type Product = Tables<"products"> & {
   // Servicios profesionales (ADR-116).
   invoice_detail?: string | null;
   service_clarification_ids?: string[] | null;
+  // ADR-122: tipo del servicio.
+  service_type_id?: string | null;
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
@@ -137,7 +141,7 @@ export const productsApi = {
   // demanda: trae solo la página pedida.
   listPaged: async (params: ProductsPageParams): Promise<Paged<Product>> => {
     const supabase = createClient();
-    const { page, pageSize, search, categoryId, brandId } = params;
+    const { page, pageSize, search, categoryId, brandId, serviceTypeId } = params;
     const start = Math.max(0, (page - 1) * pageSize);
     const end = start + pageSize - 1;
 
@@ -153,6 +157,8 @@ export const productsApi = {
       );
     if (categoryId) q = q.eq("category_id", categoryId);
     if (brandId) q = q.eq("brand_id", brandId);
+    // ADR-122: la columna todavía no está en los tipos generados.
+    if (serviceTypeId) q = (q as unknown as { eq: (c: string, v: string) => typeof q }).eq("service_type_id", serviceTypeId);
 
     const { data, error, count } = await q.range(start, end);
     if (error) throw error;
@@ -377,6 +383,8 @@ export const productsApi = {
         invoice_detail: input.invoice_detail ?? null,
         service_clarification_ids: input.service_clarification_ids ?? [],
         ...(input.is_service ? { track_stock: false } : {}),
+        // ADR-122: tipo del servicio (sólo los servicios mandan la columna).
+        ...(input.is_service ? { service_type_id: input.service_type_id ?? null } : {}),
         // `plu`/`is_favorite` aún no están en los tipos generados: casteamos el payload.
       } as never)
       .select("*")
@@ -438,6 +446,8 @@ export const productsApi = {
         invoice_detail: input.invoice_detail ?? null,
         service_clarification_ids: input.service_clarification_ids ?? [],
         ...(input.is_service ? { track_stock: false } : {}),
+        // ADR-122: tipo del servicio (sólo los servicios mandan la columna).
+        ...(input.is_service ? { service_type_id: input.service_type_id ?? null } : {}),
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       } as never)

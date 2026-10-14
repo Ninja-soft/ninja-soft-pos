@@ -89,6 +89,11 @@ export const ProductSchema = z.object({
   // factura y aclaraciones predefinidas que se suman solas al venderlo.
   invoice_detail: optionalText(2000),
   service_clarification_ids: z.array(z.string().uuid()).max(20).default([]),
+  // ADR-122: tipo del servicio (service_types). "" → null = sin tipo.
+  service_type_id: z
+    .union([z.string().uuid(), z.literal(""), z.null()])
+    .transform((v) => (v ? v : null))
+    .optional(),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

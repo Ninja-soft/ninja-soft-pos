@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { SECTION_INFO } from "@/lib/pos/sectionInfo";
-import { FEATURE_INFO } from "@/lib/saas/featureInfo";
 
 // InfoHint — ícono "i" discreto que abre un Popover con ayuda contextual.
 //
@@ -48,8 +47,21 @@ export function InfoHint({
   const [open, setOpen] = useState(false);
   const info = section ? SECTION_INFO[section] : undefined;
   const heading = title ?? info?.title;
-  // Plan mínimo (solo si la sección referencia una feature de plan real).
-  const minPlan = info?.feature ? FEATURE_INFO[info.feature]?.minPlan : undefined;
+  // Plan mínimo (solo si la sección referencia una feature de plan real). El
+  // catálogo de funciones es grande: se pide recién al abrir el popover para
+  // que no viaje en el bundle inicial de cada pantalla con un "i".
+  const feature = info?.feature;
+  const [minPlan, setMinPlan] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!open || !feature) return;
+    let alive = true;
+    void import("@/lib/saas/featureInfo").then((m) => {
+      if (alive) setMinPlan(m.FEATURE_INFO[feature]?.minPlan);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, feature]);
 
   // Si no hay contenido libre ni copy de sección, no renderizamos nada.
   if (!children && !info) return null;

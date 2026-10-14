@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   accountMrr,
   addonsMonthly,
+  applyExclusions,
   collectionRisk,
   exclusionReason,
   formatCompactArs,
@@ -287,5 +288,29 @@ describe("formato y tendencia", () => {
     expect(previous.end.toISOString()).toBe(current.start.toISOString());
     const ant = periodsFor("anterior", NOW);
     expect(ant.current.end.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+  });
+});
+
+describe("exclusiones de la cobranza (F20-1, §22 #7)", () => {
+  it("negocios del staff, exentos y de prueba no cuentan en el MRR ni como nuevos", () => {
+    const base = [
+      acc({ tenantId: "cliente" }),
+      acc({ tenantId: "staff", createdAt: "2026-10-02T00:00:00Z" }),
+      acc({ tenantId: "exento" }),
+      acc({ tenantId: "qa", createdAt: "2026-10-03T00:00:00Z" }),
+    ];
+    const accounts = applyExclusions(base, [
+      { tenant_id: "staff", reason: "staff_owned" },
+      { tenant_id: "exento", reason: "exempt" },
+      { tenant_id: "qa", reason: "test" },
+    ]);
+    expect(accounts.map((a) => exclusionReason(a))).toEqual([null, "staff", "exempt", "test"]);
+    expect(mrrSummary(accounts, new Set(), NOW).paidAccounts).toBe(1);
+    expect(newTenants(accounts, { start: new Date("2026-10-01T00:00:00Z"), end: NOW })).toBe(0);
+  });
+
+  it("sin filas de exclusión devuelve las cuentas tal cual", () => {
+    const accounts = [acc({ tenantId: "a" })];
+    expect(applyExclusions(accounts, null)).toBe(accounts);
   });
 });

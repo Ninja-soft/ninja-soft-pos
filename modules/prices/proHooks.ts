@@ -166,7 +166,10 @@ export function usePriceResolver({
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });
-  const legacy = useMostradorPricing();
+  // La lista mostrador (lista + todos sus items, dos consultas en serie) sólo
+  // hace falta si la foto no llega (base sin la migración o error): antes se
+  // bajaba siempre, en paralelo con la foto.
+  const legacy = useMostradorPricing((snap.isFetched || snap.failureCount > 0) && !snap.data);
   const world = snap.data ?? null;
 
   const resolve = useCallback(

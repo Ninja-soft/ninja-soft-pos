@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldPlus, Trash2, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { Landmark, ShieldPlus, Trash2, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -16,6 +16,10 @@ import { Callout } from "@/components/ui/Callout";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
+import { Switch } from "@/components/ui/Switch";
+import { ReasonDialog } from "@/components/internal/ReasonDialog";
+import { billingErrorMessage } from "@/lib/billing/ledger";
+import { useBillingConfigMutations, useStaffPermissions } from "@/modules/billing/ledger";
 
 type Level = "support" | "admin" | "super_admin";
 const LEVEL_LABELS: Record<string, string> = {
@@ -47,6 +51,10 @@ export default function InternalStaffPage() {
   const [email, setEmail] = useState("");
   const [level, setLevel] = useState<Level>("admin");
   const [removing, setRemoving] = useState<Staff | null>(null);
+  const [cobranzasFor, setCobranzasFor] = useState<{ staff: Staff; enabled: boolean } | null>(null);
+  const { data: permissions = [] } = useStaffPermissions();
+  const { setPermission } = useBillingConfigMutations();
+  const hasCobranzas = (id: string) => permissions.some((p) => p.user_id === id && p.permission === "cobranzas");
 
   const { data: me } = useQuery({
     queryKey: ["my-internal-level"],
@@ -97,7 +105,7 @@ export default function InternalStaffPage() {
       }),
   });
 
-  const cols = isSuper ? 3 : 2;
+  const cols = isSuper ? 4 : 3;
 
   return (
     <>
@@ -178,6 +186,14 @@ export default function InternalStaffPage() {
                 </li>
               ))}
             </ul>
+            <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
+              <Landmark size={14} className="mt-0.5 shrink-0 text-ninja-flameSoft" aria-hidden />
+              <span>
+                <span className="font-semibold text-foreground">Cobranzas</span> es un permiso que se suma al nivel: una persona de
+                Soporte con Cobranzas ve y opera las cuentas corrientes (registra pagos y bonifica dentro de su tope) sin administrar
+                negocios. Admin y Super admin ya operan cobranzas por su nivel.
+              </span>
+            </p>
           </CardContent>
         </Card>
       )}
@@ -193,11 +209,12 @@ export default function InternalStaffPage() {
         }
       />
       <TableWrap className="mt-3">
-        <table className="w-full min-w-[360px] text-sm">
+        <table className="w-full min-w-[520px] text-sm">
           <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Persona</th>
               <th className="px-4 py-3">Nivel</th>
+              <th className="px-4 py-3">Cobranzas</th>
               {isSuper && (
                 <th className="px-4 py-3">
                   <span className="sr-only">Acciones</span>
@@ -251,6 +268,21 @@ export default function InternalStaffPage() {
                         </Badge>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      {s.internal_level === "admin" || s.internal_level === "super_admin" ? (
+                        <Badge tone="neutral">Por su nivel</Badge>
+                      ) : isSuper ? (
+                        <Switch
+                          checked={hasCobranzas(s.id)}
+                          onCheckedChange={(v) => setCobranzasFor({ staff: s, enabled: v })}
+                          label={`Permiso Cobranzas para ${name}`}
+                        />
+                      ) : hasCobranzas(s.id) ? (
+                        <Badge tone="success">Sí</Badge>
+                      ) : (
+                        <Badge tone="neutral">No</Badge>
+                      )}
+                    </td>
                     {isSuper && (
                       <td className="px-4 py-3 text-right">
                         <button
@@ -270,6 +302,31 @@ export default function InternalStaffPage() {
           </tbody>
         </table>
       </TableWrap>
+
+      <ReasonDialog
+        open={cobranzasFor !== null}
+        onOpenChange={(o) => !o && setCobranzasFor(null)}
+        title={cobranzasFor?.enabled ? "Dar permiso Cobranzas" : "Quitar permiso Cobranzas"}
+        description={
+          cobranzasFor
+            ? cobranzasFor.enabled
+              ? `${cobranzasFor.staff.full_name || cobranzasFor.staff.email} va a poder registrar pagos, bonificar y anular cargos dentro del tope de Cobranzas.`
+              : `${cobranzasFor.staff.full_name || cobranzasFor.staff.email} vuelve a ver las cuentas corrientes sólo en modo lectura.`
+            : undefined
+        }
+        confirmLabel={cobranzasFor?.enabled ? "Dar permiso" : "Quitar permiso"}
+        loading={setPermission.isPending}
+        onConfirm={async (reason) => {
+          if (!cobranzasFor) return;
+          try {
+            await setPermission.mutateAsync({ userId: cobranzasFor.staff.id, enabled: cobranzasFor.enabled, reason });
+            toast({ title: cobranzasFor.enabled ? "Permiso Cobranzas otorgado" : "Permiso Cobranzas quitado", variant: "success" });
+            setCobranzasFor(null);
+          } catch (e) {
+            toast({ title: "No se pudo cambiar el permiso", description: billingErrorMessage(e), variant: "error" });
+          }
+        }}
+      />
 
       <ConfirmDialog
         open={removing !== null}

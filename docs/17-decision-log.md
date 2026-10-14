@@ -4057,6 +4057,71 @@ En "Pagos de plataforma", el Client ID tiene cargado un email.
 - Hay deuda documentada en la spec: FCE MiPyME (se detecta y queda `requires_action`), factura E, multimoneda y la detección automática de transferencias a la cuenta de la plataforma.
 - Las preguntas abiertas al dueño están en la spec §21: condición fiscal, IVA incluido o no, la tasa y la escalera, las cuentas de prueba, el permiso de cobranzas, los topes, las promesas del cliente, el inicio del período al pagar durante el trial, el prorrateo y el botón de arrepentimiento.
 
+---
+
+## ADR-115: Cuenta corriente de la plataforma (F20-1): ledger inmutable con imputación FIFO alimentado por billing_records, cargos por período con descuentos y prorrateo, permiso Cobranzas con topes por nivel y exclusión de negocios del staff y de prueba
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-ledger`; migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar) · **Hito:** H127 (F20-1) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §6.3, §10, §17, §18 y §22 · **Base:** ADR-110, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-083 (auditoría inmutable). **Numeración:** 112 la toma `feat/plantillas-factura`.
+
+### Contexto
+
+F20-1 es la base económica de la cobranza: saber qué debe cada negocio, qué pagó y qué venció. Hoy sólo existe `billing_records` (pagos sin deuda ni imputación), `subscription_billing_total()` ignora `tenant_discounts` (bug reportado) y los KPIs cuentan negocios de prueba y del staff. Las decisiones del dueño (§22) fijan: precios con IVA incluido (#2), negocios del staff y de prueba fuera de los KPIs (#7), permiso propio "Cobranzas" (#8), topes configurables por nivel (#9), período pago desde el fin de la prueba (#11) y prorrateo de upgrade sumado al próximo cobro (#12).
+
+### Decisión
+
+1. **Modelo** (todo de plataforma, prefijo `platform_`): `platform_charges` y `platform_charge_lines` (precio congelado en líneas: plan, addons, descuento, prorrateo), `platform_payments`, `platform_ledger` (debe > 0, haber < 0, CHECK de signo por tipo, tipos previstos para punitorios y condonaciones de F20-9), `platform_allocations` (haber → debe, sólo se liberan), `platform_ingest_log`, `tenant_billing_terms` (modalidad y plazo) y `platform_billing_settings`. Importes en centavos `bigint`, `currency = 'ARS'`.
+2. **Inmutable:** triggers que rechazan UPDATE y DELETE del ledger, las líneas y el log; en cargos y pagos sólo cambian estado y anulación; una imputación sólo se libera una vez. Toda corrección es un movimiento compensatorio con motivo (CHECK en la tabla).
+3. **`billing_records` sigue siendo la entrada** del webhook de Mercado Pago y del "Registrar pago" viejo: un trigger `AFTER INSERT` la pasa al ledger (pago + cargo del período si vino con período + imputación FIFO). Idempotente por billing_record y por `(mercadopago, id de pago)`. Si algo falla, el billing_record se guarda igual (es plata cobrada), se audita `platform_ledger_ingest_failed` y el cron lo reintenta. Así **no hubo que tocar ni desplegar Edge Functions**. Reemplazar `billing_records` por una vista queda para cuando el webhook escriba directo en `platform_payments` (F20-10).
+4. **Cargos de período:** clave `sub:{suscripción}:{inicio}:subscription_period` con el inicio en UTC, la misma convención del webhook, así webhook y cron caen en el mismo cargo. El cron `platform-billing-run` (cada hora) genera el cargo del período vigente y el de la renovación vencida sin pagar, sólo de períodos que empiezan desde `ledger_since` (la fecha de aplicar la migración: no aparece deuda retroactiva). Con débito automático espera 1 día (`mp_wait_days`) al webhook. Vencimiento = inicio + plazo (`tenant_billing_terms.due_days` o el default 0).
+5. **Monto:** `subscription_billing_total()` (misma firma) pasa a `platform_billing_breakdown()`: plan del ciclo + addons comprados vigentes − descuentos vigentes (porcentajes sobre el bruto con tope 100 %, después fijos mensuales × 12 en el anual), nunca negativo; `total` es neto de descuentos. Espejo TS en `lib/billing/ledger.ts` (`billingTotal`), mismo criterio que el MRR de `saasKpis.accountMrr`.
+6. **Prueba (§22 #11):** `reanchor_subscription_period` ancla en `tenants.trial_ends_at` si la suscripción está en `trial` y la prueba no terminó (cubre las pruebas extendidas, que no mueven `current_period_end`).
+7. **Upgrade (§22 #12):** trigger sobre `subscriptions.plan_id`: si sube de precio con el mismo ciclo en un período vigente, cargo `proration` = (precio nuevo − viejo) × días que quedan / días del período, con los descuentos porcentuales, que **vence con el próximo cobro**. Downgrade sin crédito (rige al fin del período); el cambio de ciclo no se prorratea acá (F20-10). Nunca bloquea el cambio de plan.
+8. **Imputación FIFO:** punitorios primero (F20-9) y después por vencimiento; el excedente queda a favor y se aplica solo al próximo cargo. Lock por negocio (`pg_advisory_xact_lock`).
+9. **Exclusión (§22 #7):** `platform_billing_exclusion()` devuelve `test` (`tenants.is_test`, sólo la cambia un super_admin con motivo), `staff_owned` (dueño activo con `users.internal_level`), `lifetime` o `exempt`. Esos negocios no generan cargos y salen del MRR, churn, conversión y nuevos (`internal_billing_exclusions()` → `saasKpis.applyExclusions`). La migración marca `ninjasoft-qa` como prueba y pasa las lifetime a la modalidad exenta.
+10. **Permiso Cobranzas (§22 #8)** sumable al nivel en `platform_staff_permissions` (no en el JWT: no hace falta volver a iniciar sesión). `support` + Cobranzas opera cobranzas y nada más (las RPC viejas siguen rechazando a `support`). **Topes (§22 #9)** en `platform_billing_caps` por nivel (`cobranzas`, `admin`, `super_admin`), por operación y por mes calendario por negocio, sumando bonificaciones, anulaciones, ajustes a favor y condonaciones de todo el staff; super_admin los edita. Superar el tope rechaza la operación (la aprobación de un super_admin es F20-7).
+11. **Lectura:** el staff con `(select internal_scope())` lee las tablas; el negocio (dueño o encargado) sólo lee sus cargos por RLS y su estado de cuenta por `my_billing_statement()`, sin motivos internos ni autores. Todas las RPC de escritura piden motivo y auditan antes de responder.
+12. **Backfill:** cada billing_record existente entra como pago con un cargo histórico por el mismo importe (el pasado queda saldado; dos pagos del mismo período dejan saldo a favor). Re-ejecutar la migración no duplica nada.
+
+### Alternativas descartadas
+
+- **Un nivel nuevo `billing` en `internal_level`:** las RPC existentes bloquean sólo a `support` (`coalesce(internal_level(),'admin') = 'support'`), así que un nivel nuevo habría administrado negocios como un admin. El permiso sumable sobre `support` es seguro sin tocar esas RPC.
+- **Que el webhook escriba directo en el ledger:** obligaba a desplegar la Edge y dejaba sin cubrir el "Registrar pago" viejo; el trigger cubre a los dos.
+- **Sumar el prorrateo como línea del próximo cargo de período:** obligaba a guardar líneas pendientes mutables; un cargo `proration` que vence el mismo día deja el ledger inmutable y se ve igual en el estado de cuenta.
+- **Contar el tope por persona:** dos admins podían duplicar lo que se resigna en un mismo negocio; por negocio es más conservador.
+
+### Consecuencias
+
+- Al aplicar: el backfill corre sobre `billing_records` (hoy vacía en producción); no aparece deuda de períodos anteriores a la fecha de aplicación. El primer cargo automático en producción sería el de NinjaSoft QA el 26/10, pero queda excluido por la marca de prueba.
+- `subscription_billing_total()` baja el monto que piden `mp_subscription_checkout` y `mp_update_subscription_amount` a quien tenga descuentos; los preapproval ya creados no cambian solos. Un débito de MP mayor al cargo deja saldo a favor; uno menor deja deuda (información correcta).
+- Pendiente en F20-1 según la spec y no construido acá: promesas y notas de gestión (F20-9/F20-11), espejo `tenants.status` por trigger (spec §5.1 lo pasa a F20-2), contracargos automáticos desde el webhook (F20-10; hoy se registran a mano con "Revertir pago").
+- Tests: PGlite (86 chequeos: backfill, re-aplicar, 5 entregas del webhook, cron con espera de MP, FIFO, prorrateo, prueba, inmutabilidad, RLS, permisos, topes y vista general), `tests/unit/billingLedger.test.ts`, `tests/unit/saasKpis.test.ts` y `tests/integration/rls-cobranza-ledger.test.ts`.
+## ADR-114: Velocidad del POS: menos JS en el primer render, consultas del arranque sólo cuando hacen falta y catálogo offline una vez por apertura
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `perf/pos-velocidad`; sin migraciones, Edges ni secrets) · **Base:** ADR-077 (venta offline y foto local), ADR-058 (resolver de precios con `price_context_snapshot`), ADR-090 y ADR-091 (auditoría de rendimiento de la base).
+
+### Contexto
+
+Pedido del dueño: optimizar la velocidad del POS. Medido sobre `main`: `/pos` cargaba 448 kB de JS (438 kB gzip sumando chunks: 308 kB del panel y 133 kB propios del POS); el layout raíz precargaba 11 archivos de fuentes (~276 kB en producción, más que todo el JS de `/login`); al abrir el POS salían unas 55 a 60 consultas, varias sin uso hasta abrir un modal y otras duplicadas por dependencias que cambian durante el arranque (turno, sucursal). El catálogo para vender sin conexión (`products *`, hasta 5000) se bajaba 2 o 3 veces porque el efecto dependía del turno y la sucursal.
+
+### Decisión
+
+1. **Fuentes:** se precargan sólo Inter (texto) y Sora (títulos). Las candidatas de Apariencia y la monoespaciada llevan `preload: false`: se bajan si el CSS las usa (`display: swap`).
+2. **Chunks diferidos:** `UpgradeModal` pasa a ser un envoltorio con `next/dynamic` + `MountWhenOpened` (la implementación vive en `UpgradeModalBody`; los 35 importadores no cambian). Así `lib/saas/featureInfo.ts` sale del bundle del panel y los planes (`useGlobalPlansForUpgrade`) se piden al abrir el modal y no al montar cada ítem bloqueado o el `discountGate` del POS. `InfoHint` carga el plan mínimo al abrir el popover. En el POS, los diálogos chicos, las ventas pausadas (panel y diálogos), la ayuda de atajos y las miniaturas del selector de diseño van en chunks que se precargan en idle con el resto de los modales.
+3. **Consultas del arranque:** selector de clientes con `enabled` atado a abrirlo; planes de garantía con algo en el carrito; foto de precios con `enabled: registerFetched` (antes, una vez con `storeId` null y otra con la sucursal); lista mostrador (`price_lists` + todos sus items) sólo si la foto no llega o falla; heartbeat de la caja recién con el turno resuelto; `arca_status` cada 5 min si la facturación no está activa.
+4. **Catálogo offline:** una descarga por apertura del POS, en `requestIdleCallback` (máx. 3 s) y luego cada 10 min. Turno, sucursal y política van por ref y un segundo efecto los ajusta en la foto guardada sin bajar el catálogo (`snapshotWithMeta`, con lecturas y escrituras de IndexedDB en serie y 1,5 s de espera para no escribir el `null` transitorio del arranque).
+
+### Alternativas descartadas
+
+- **Saltear la descarga si la foto tiene menos de 10 min:** un producto recién creado no estaría en la venta offline hasta el siguiente refresco.
+- **Una RPC `my_context` que reúna las 6 lecturas de `tenant_users` y las 3 de `tenants` del panel:** es el mayor ahorro pendiente (9 a 11 consultas y tres cadenas en serie), pero toca el shell, los gates y la cuenta; va en su propio PR con migración.
+- **Achicar el `select *` de productos del POS:** el tipo `Product` se usa entero en el carrito, la foto offline y los pickers; recortarlo sin un mapa de uso arriesga romper la venta.
+
+### Consecuencias
+
+- `/pos` 448 → 421 kB de First Load JS (412 kB gzip); `/caja` 305 → 289, `/ventas` 312 → 286, `/productos` 370 → 351. Fuentes precargadas 11 → 2.
+- Abrir un modal diferido por primera vez antes de la precarga en idle muestra el modal un instante después (el chunk es chico y se pide en paralelo).
+- Pendientes para otro PR: unificar el contexto del usuario y el negocio en una RPC; quitar el doble `getUser` de middleware + layout; `pending_charges` del watcher trae hasta 100 cobros completados en cada sondeo (filtrar por `completed_at` en el servidor); miniaturas de 160 px al subir fotos de productos (hoy el tile de 44 px baja el WebP de 900 px); `select` explícito en `pos_settings`, `cash_shifts`, `categories` y `warranty_plans`.
+- Tests: `tests/unit/offlineSync.test.ts` (ajuste de turno, sucursal y política de la foto sin tocar el catálogo).
 ## ADR-112: Motor de comprobantes con modelos de factura A4 y ticket, personalización por negocio y sello "Un software de Ninja Soft" ocultable por plan
 
 **Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar) · **Base:** ADR-068 (impuestos y transparencia fiscal), ADR-072 (factura electrónica ARCA, CAE/CAEA y QR), H9b (plantillas de ticket), ADR-110 (cobranza SaaS, factura de la plataforma). **Numeración:** 109, 110 y 111 están tomados en `main` y en `feat/ticket-post-venta`.

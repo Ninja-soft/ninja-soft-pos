@@ -31,7 +31,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
-| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | ⚪ Diseñada (spec [`40-cobranza-saas.md`](./40-cobranza-saas.md), ADR-110); facturar depende de la CUIT de NinjaSoft |
+| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b y F20-1 con código (ADR-110, ADR-115; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | a definir | ⚪ Futuro, no construir aún (diseño en spec §20; depende de F20) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
@@ -1412,19 +1412,22 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Clave del webhook y validación de `x-signature` en `mp_billing_webhook`.
   - [ ] Ambiente, "Probar conexión" (`/users/me`), URL del webhook para copiar y últimos eventos.
   - [ ] *Criterio:* un webhook con firma inválida se descarta y queda en Salud de webhooks; "Probar conexión" muestra la cuenta y el ambiente.
-- [ ] **H127 · F20-1: ledger económico de la plataforma.**
-  - [ ] Tablas nuevas:
+- [ ] **H127 · F20-1: ledger económico de la plataforma.** Código en `feat/cobranza-ledger` ([ADR-115](./17-decision-log.md)); migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar.
+  - [x] Tablas nuevas:
     - `tenant_billing_terms`, con las modalidades MP, cuenta corriente, manual y exento;
     - `platform_charges` y sus líneas;
-    - `platform_ledger`;
-    - `platform_allocations`;
-    - `platform_payments`, con backfill desde `billing_records`;
-    - promesas y notas de gestión.
-  - [ ] El webhook de MP genera el cargo, el pago y la imputación, de forma idempotente.
-  - [ ] `subscription_billing_total()` aplica los descuentos.
-  - [ ] `tenants.status` pasa a ser un espejo de `subscriptions.status`.
-  - [ ] Estado de cuenta en el panel interno y en el del cliente.
-  - [ ] *Criterio:* 5 entregas del mismo webhook dejan un solo pago y un solo cargo; RLS probada (`rls_internal_scope_leaks()` = 0, ningún dueño ve el ledger de otro negocio).
+    - `platform_ledger` (inmutable, movimientos compensatorios);
+    - `platform_allocations` (FIFO, sólo se liberan);
+    - `platform_payments`, con backfill desde `billing_records`.
+  - [ ] Promesas y notas de gestión: pasan a F20-9 y F20-11.
+  - [x] El webhook de MP genera el cargo, el pago y la imputación, de forma idempotente (trigger sobre `billing_records`, sin desplegar Edges).
+  - [x] `subscription_billing_total()` aplica los descuentos.
+  - [x] Cargos por período con cron horario, pago durante la prueba desde el fin de la prueba y prorrateo de upgrade sumado al próximo cobro (§22 #11 y #12).
+  - [x] Permiso Cobranzas sumable al nivel y topes de bonificación por nivel editables por super_admin (§22 #8 y #9).
+  - [x] `tenants.is_test` y exclusión de los negocios del staff en la cobranza y en los KPIs (§22 #7).
+  - [ ] `tenants.status` pasa a ser un espejo de `subscriptions.status`: queda para F20-2 (spec §5.1).
+  - [x] Estado de cuenta en el panel interno (pestaña Cuenta corriente y vista Cobranzas) y en el del cliente (Mi suscripción > Estado de cuenta).
+  - [x] *Criterio:* 5 entregas del mismo webhook dejan un solo pago y un solo cargo; RLS probada (`rls_internal_scope_leaks()` = 0, ningún dueño ve el ledger de otro negocio). Probado en PGlite y en `tests/integration/rls-cobranza-ledger.test.ts`.
 - [ ] **H128 · F20-2: snapshots de MRR y KPIs de cobranza.**
   - [ ] `platform_mrr_snapshots` diario.
   - [ ] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación) y NRR.

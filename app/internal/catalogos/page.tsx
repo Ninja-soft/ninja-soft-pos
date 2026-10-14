@@ -11,15 +11,15 @@ export default function InternalCatalogosPage() {
         icon={Boxes}
         description={
           <>
-            El addon <strong>Tiendita</strong>: catálogos con cientos de miles de
-            productos de supermercados y retailers. Subís el Excel, armás catálogos
+            El addon <strong>Tiendita</strong>: cientos de miles de productos de
+            supermercados y retailers que llegan solos del scraper. Armás catálogos
             vendibles agrupando tiendas, les ponés precio único y los bonificás a los
             negocios que quieras.
           </>
         }
       />
 
-      <div className="mt-8">
+      <div className="mt-6">
         <CatalogsManager />
       </div>
     </>

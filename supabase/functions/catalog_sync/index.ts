@@ -16,9 +16,10 @@
 //
 // DOS ENTRADAS:
 //   1. Cron (pg_cron + pg_net): header X-Cron-Secret ==
-//      platform_secrets('internal_cron').token. Semanal sábado 06:00 AR (la
-//      corrida ya la abrió la base con catalog_sync_enqueue) y cada minuto
-//      mientras haya una corrida abierta sin lease (catalog_sync_any_due).
+//      platform_secrets('internal_cron').token. El job de cada minuto llama
+//      a catalog_sync_tick() (ADR-113): abre la corrida automática cuando la
+//      agenda editable de catalog_sync_config lo pide y avisa acá mientras
+//      haya una corrida abierta sin lease y sin pausar.
 //   2. Staff interno (JWT con app_metadata.is_internal, nivel admin o
 //      super_admin; soporte no): { action: "start", full?: boolean } abre la
 //      corrida (auditada en audit_logs por catalog_sync_enqueue antes de
@@ -33,6 +34,11 @@
 // recuento y aviso a los negocios por catálogo afectado (catalog_sync_finalize).
 // Si se acaba el tiempo, suelta el lease y el cron de cada minuto continúa;
 // si la invocación muere, el lease vence y pasa lo mismo.
+//
+// ADR-113: el staff puede pausar o cancelar la corrida desde el panel
+// (internal_catalog_sync_control). Antes de cada página o cierre se mira el
+// estado: pausada o cancelada, la tanda se corta sin cerrar nada (la cancelada
+// queda en el historial; lo ya escrito se queda).
 //
 // Primera corrida (y la primera después de ADR-109): completa. Siguientes:
 // incremental con `since` = inicio de la última corrida OK (menos 1 h).
@@ -117,8 +123,18 @@ interface Progress {
   totals: RunTotals;
 }
 
+/** La corrida fue pausada o cancelada desde el panel: cortar la tanda. */
+class RunStopped extends Error {}
+
+async function assertActive(admin: SupabaseClient, runId: string) {
+  const { data, error } = await admin.from("catalog_sync_runs").select("status, paused_at").eq("id", runId).maybeSingle();
+  if (error) throw new Error(`estado de la corrida: ${error.message}`);
+  const row = data as { status?: string; paused_at?: string | null } | null;
+  if (!row || row.status !== "running" || row.paused_at) throw new RunStopped(row?.status === "running" ? "paused" : "cancelled");
+}
+
 async function saveRun(admin: SupabaseClient, runId: string, p: Progress, extra: Record<string, unknown> = {}) {
-  const { error } = await admin
+  const { data, error } = await admin
     .from("catalog_sync_runs")
     .update({
       stores: p.stores,
@@ -130,8 +146,11 @@ async function saveRun(admin: SupabaseClient, runId: string, p: Progress, extra:
       heartbeat_at: new Date().toISOString(),
       ...extra,
     })
-    .eq("id", runId);
+    .eq("id", runId)
+    .eq("status", "running")
+    .select("id");
   if (error) throw new Error(`no se pudo guardar el avance: ${error.message}`);
+  if (!data?.length) throw new RunStopped("cancelled");
 }
 
 /** Primera invocación de la corrida: tiendas del feed (alta de las nuevas) y since. */
@@ -189,6 +208,7 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
     if (!p.feed) p = await initRun(admin, feed, run, p.totals);
 
     while (hasTime(t0, Date.now())) {
+      await assertActive(admin, run.id);
       const st = p.feed as FeedState;
       // 1) Lectura del feed maestro, página por página.
       if (!st.done) {
@@ -206,6 +226,7 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
           pages++;
           await saveRun(admin, run.id, p, { current_store: null });
         } catch (e) {
+          if (e instanceof RunStopped) throw e;
           const msg = e instanceof Error ? e.message : String(e);
           console.error(JSON.stringify({ fn: "catalog_sync", run: run.id, error: msg }));
           p = { ...p, feed: applyFeedError(st, msg) };
@@ -246,6 +267,11 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
       return { finished: true, pages };
     }
   } catch (e) {
+    if (e instanceof RunStopped) {
+      // Pausada o cancelada: soltar el lease sin tocar nada más.
+      await admin.from("catalog_sync_runs").update({ locked_until: null }).eq("id", run.id);
+      return { finished: e.message === "cancelled", pages };
+    }
     const msg = e instanceof Error ? e.message : String(e);
     console.error(JSON.stringify({ fn: "catalog_sync", run: run.id, error: msg }));
     // Si ni siquiera se pudo leer la lista de tiendas tras varios intentos, la

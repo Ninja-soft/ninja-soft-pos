@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ImagePlus, Link2, Trash2, Store } from "lucide-react";
+import { Check, ImagePlus, Link2, Trash2 } from "lucide-react";
+import { StoreLogo } from "@/components/catalog/StoreLogo";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -276,18 +277,7 @@ export function CatalogEditorModal({
                     checked ? "choice-on" : "border-border hover:bg-muted",
                   )}
                 >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background">
-                    {s.logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={s.logoUrl}
-                        alt={s.name}
-                        className="h-full w-full object-contain p-1"
-                      />
-                    ) : (
-                      <Store size={16} className="text-muted-foreground" />
-                    )}
-                  </span>
+                  <StoreLogo storeKey={s.key} name={s.name} logoUrl={s.logoUrl} size={36} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-foreground">
                       {s.name}

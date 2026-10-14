@@ -131,7 +131,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "personalizacion_marca",
         keywords: "logo color razon social cuit direccion telefono",
       },
-      // F20-3 (ADR-110 / ADR-115): datos fiscales para la factura de NinjaSoft.
+      // F20-3 (ADR-110 / ADR-117): datos fiscales para la factura de NinjaSoft.
       // BASE (no es feature de plan); dueño o encargado (lo valida la base).
       {
         key: "datos-facturacion",

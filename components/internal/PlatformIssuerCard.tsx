@@ -20,7 +20,7 @@ import { usePlatformIssuer, useSavePlatformIssuer } from "@/modules/fiscalProfil
 type Env = "homologacion" | "produccion";
 const NONE = "__none__";
 
-// Emisor de las facturas de NinjaSoft (F20-3 · ADR-115): condición frente al
+// Emisor de las facturas de NinjaSoft (F20-3 · ADR-117): condición frente al
 // IVA (define la letra), CUIT, ambiente del padrón e interruptor de la
 // verificación automática. Mientras la condición esté "Sin definir" la letra
 // de todos los negocios queda pendiente (§22 #1). Sólo super_admin edita.

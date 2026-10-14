@@ -1423,7 +1423,7 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] `platform_mrr_snapshots` diario.
   - [ ] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación) y NRR.
   - [ ] Cobrado bruto y neto, deuda vencida con aging, efectividad y DSO.
-- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.** Construido en `feat/cobranza-datos-fiscales` (ADR-115, migración `20261113300000` sin aplicar, Edge `platform_billing` sin desplegar).
+- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.** Construido en `feat/cobranza-datos-fiscales` (ADR-117, migración `20261113300000` sin aplicar, Edge `platform_billing` sin desplegar).
   - [x] `tenant_billing_profiles` con historia.
   - [x] Consulta de `ws_sr_constancia_inscripcion` con cache y rate limit (activa cuando exista el certificado de la plataforma).
   - [x] El panel del cliente muestra la letra que le va a corresponder (hoy "pendiente": NinjaSoft sin CUIT).

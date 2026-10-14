@@ -4120,7 +4120,7 @@ Hasta ahora el comprobante sin plantilla propia era el ticket de bloques y el "A
 
 ---
 
-## ADR-115: Datos fiscales del cliente para la factura de NinjaSoft: emisor configurable con letra pendiente, verificación sólo desde una consulta al padrón grabada por el servidor e historia por vigencia (F20-3)
+## ADR-117: Datos fiscales del cliente para la factura de NinjaSoft: emisor configurable con letra pendiente, verificación sólo desde una consulta al padrón grabada por el servidor e historia por vigencia (F20-3)
 
 **Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-110 (cobranza SaaS), ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §7.2, §8 y §22. **Numeración:** 113 lo toma `feat/catalogo-sync-config`; 114 está en `main`.
 

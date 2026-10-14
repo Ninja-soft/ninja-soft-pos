@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261113300000_cobranza_datos_fiscales  (F20-3 · ADR-110 · ADR-115)
+-- 20261113300000_cobranza_datos_fiscales  (F20-3 · ADR-110 · ADR-117)
 --
 -- Datos fiscales del cliente para la facturación de la PLATAFORMA (NinjaSoft
 -- le factura la suscripción a cada negocio). Spec: docs/40-cobranza-saas.md

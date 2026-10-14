@@ -17,7 +17,7 @@ export default function InternalArcaPage() {
       />
       <div className="mt-8 space-y-8">
         <ArcaPlatformCard />
-        {/* F20-3 (ADR-115): NinjaSoft como emisora de sus propias facturas. */}
+        {/* F20-3 (ADR-117): NinjaSoft como emisora de sus propias facturas. */}
         <PlatformIssuerCard />
       </div>
     </>

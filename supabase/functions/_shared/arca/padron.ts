@@ -1,6 +1,6 @@
 // =============================================================================
 // Padrón de ARCA: ws_sr_constancia_inscripcion ("padrón A5", getPersona_v2).
-// F20-3 · ADR-110 / ADR-115 · spec docs/40-cobranza-saas.md §8.2. PURO.
+// F20-3 · ADR-110 / ADR-117 · spec docs/40-cobranza-saas.md §8.2. PURO.
 //
 // Lo usa la Edge platform_billing (acción padron_lookup) para traer la razón
 // social, la condición frente al IVA y el domicilio fiscal de un CUIT. La

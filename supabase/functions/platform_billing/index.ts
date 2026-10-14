@@ -1,5 +1,5 @@
 // =============================================================================
-// Edge Function: platform_billing (F20-3 · ADR-110 / ADR-115).
+// Edge Function: platform_billing (F20-3 · ADR-110 / ADR-117).
 // Spec: docs/40-cobranza-saas.md §8.2 y §13.1. Lógica pura en
 // ../_shared/arca/padron.ts (parser y reglas) y ../_shared/arca/wsaa.ts.
 //

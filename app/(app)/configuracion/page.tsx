@@ -173,7 +173,7 @@ const ArcaSettings = dynamic(
   { loading },
 );
 
-// Datos de facturación frente a NinjaSoft (F20-3 · ADR-115).
+// Datos de facturación frente a NinjaSoft (F20-3 · ADR-117).
 const BillingProfileSettings = dynamic(
   () => import("@/components/billing/BillingProfileSettings").then((m) => m.BillingProfileSettings),
   { loading },

@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Datos fiscales del cliente para la factura de NinjaSoft (F20-3 · ADR-115):
+// Datos fiscales del cliente para la factura de NinjaSoft (F20-3 · ADR-117):
 // dígito verificador del CUIT, regla de la letra (espejo de
 // platform_cbte_letter) y resolución del perfil con el fallback a los datos
 // de la empresa (espejo de _tenant_billing_profile_eff).

@@ -3,7 +3,7 @@ import type { BillingSource, CompanyFiscal, HolderType, Verification } from "@/l
 import type { PlatformLetterStatus } from "@/lib/billing/letter";
 
 // Datos fiscales del negocio para la facturación de NinjaSoft (F20-3 ·
-// ADR-110 / ADR-115). Las RPC nuevas no están en types/database.ts (no se
+// ADR-110 / ADR-117). Las RPC nuevas no están en types/database.ts (no se
 // regenera en este PR): cliente suelto, como modules/arca/api.ts. La base y
 // la Edge `platform_billing` validan todo (RLS, rol, nivel del staff).
 type Res<T> = Promise<{ data: T | null; error: { message: string } | null }>;

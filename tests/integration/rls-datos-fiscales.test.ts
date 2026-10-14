@@ -1,6 +1,6 @@
 // @vitest-environment node
 // =============================================================================
-// Datos fiscales del cliente para la factura de NinjaSoft (F20-3 · ADR-115,
+// Datos fiscales del cliente para la factura de NinjaSoft (F20-3 · ADR-117,
 // migración 20261113300000): RLS por negocio y rol (dueño o encargado),
 // historia con una sola fila vigente, fallback a los datos de la empresa,
 // verificación sólo con una consulta al padrón grabada por service_role,

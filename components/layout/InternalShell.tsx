@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   LogOut,
   FileCheck2,
+  HandCoins,
   Mail,
   Menu,
   Moon,
@@ -64,6 +65,8 @@ const NAV = [
   { href: "/internal", label: "Inicio", icon: LayoutDashboard },
   { href: "/internal/tenants", label: "Negocios", icon: Building2 },
   { href: "/internal/cobranza", label: "Cobranzas", icon: Landmark },
+  // Participación del staff (F21 · ADR-121): super_admin ve el panel; el resto, lo suyo.
+  { href: "/internal/participacion", label: "Participación", icon: HandCoins },
   { href: "/internal/usuarios", label: "Usuarios", icon: Users },
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },

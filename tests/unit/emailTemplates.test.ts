@@ -160,7 +160,7 @@ describe("artefactos generados", () => {
       .map((f) => read(`supabase/migrations/${f}`))
       .join("\n");
     for (const t of EMAIL_TEMPLATES) {
-      const where = sql.includes(`('${t.key}',`) ? sql : later;
+      const where = t.migration ? read(t.migration) : sql.includes(`('${t.key}',`) ? sql : later;
       expect(where, t.key).toContain(`('${t.key}',`);
       expect(where, t.key).toContain(`$tpl$${t.defaultHtml}$tpl$`);
     }

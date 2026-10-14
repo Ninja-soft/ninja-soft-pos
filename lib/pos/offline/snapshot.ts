@@ -57,6 +57,22 @@ export function buildSnapshot<P extends object>(i: {
   };
 }
 
+/**
+ * La misma foto con el turno, la sucursal y la política actuales, sin volver a
+ * bajar el catálogo. Devuelve null si no cambia nada.
+ */
+export function snapshotWithMeta<P>(
+  s: OfflineSnapshot<P>,
+  meta: { shift: { id: string; storeId: string | null } | null; policy: OfflinePolicy },
+): OfflineSnapshot<P> | null {
+  const cur = s.shift;
+  const sameShift =
+    (cur?.id ?? null) === (meta.shift?.id ?? null) && (cur?.storeId ?? null) === (meta.shift?.storeId ?? null);
+  const samePolicy = JSON.stringify(s.policy) === JSON.stringify(meta.policy);
+  if (sameShift && samePolicy) return null;
+  return { ...s, shift: meta.shift, policy: meta.policy };
+}
+
 /** La foto es de esta sesión y de esta versión. */
 export function snapshotMatches(s: OfflineSnapshot<unknown> | null | undefined, tenantId: string, userId: string) {
   return Boolean(s && s.v === SNAPSHOT_VERSION && s.tenantId === tenantId && s.userId === userId);

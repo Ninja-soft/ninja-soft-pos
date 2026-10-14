@@ -5,6 +5,7 @@ import { ExternalLink, ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils/cn";
 import { formatQty } from "@/lib/utils/format";
 import { money } from "../ui/posStyles";
@@ -75,6 +76,7 @@ export function CustomerPickerDialog({
           <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {search.trim() ? "Resultados" : "Recientes"}
           </p>
+          {customers === undefined && <SpinnerBlock className="py-6" label="Buscando clientes" />}
           {customers?.map((c) => (
             <button
               key={c.id}

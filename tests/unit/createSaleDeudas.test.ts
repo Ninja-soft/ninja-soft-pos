@@ -78,8 +78,11 @@ describe("migración 20261108200000", () => {
   // (reservas de stock y garantía enlazada). Son las únicas posteriores.
   const ADR093 = "20261108600000_perf_f4_create_sale_tenant.sql";
   const ADR096 = "20261109500000_create_sale_reservas_garantia.sql";
+  // ADR-116 recrea create_sale copiando la de ADR-096 con un parámetro
+  // opcional más (tests/unit/serviciosProfesionales.test.ts lo compara).
+  const ADR116 = "20261114100000_servicios_profesionales.sql";
   const later = readdirSync(DIR)
-    .filter((f) => f.endsWith(".sql") && f > MIG && f !== ADR093 && f !== ADR096)
+    .filter((f) => f.endsWith(".sql") && f > MIG && f !== ADR093 && f !== ADR096 && f !== ADR116)
     .map((f) => readFileSync(join(DIR, f), "utf8"));
   const adr093 = readFileSync(join(DIR, ADR093), "utf8");
   const adr096 = readFileSync(join(DIR, ADR096), "utf8");
@@ -107,7 +110,7 @@ describe("migración 20261108200000", () => {
       .join("\n")
       .replace(/\s+/g, " ");
 
-  it("es la última definición de create_sale y de return_sale_v2 (salvo las copias de ADR-093 y ADR-096)", () => {
+  it("es la última definición de create_sale y de return_sale_v2 (salvo las copias de ADR-093, ADR-096 y ADR-116)", () => {
     for (const s of later) {
       expect(s).not.toMatch(/function (public\.)?create_sale\(/);
       expect(s).not.toMatch(/function (public\.)?return_sale_v2\(/);

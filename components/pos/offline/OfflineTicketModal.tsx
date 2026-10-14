@@ -46,7 +46,7 @@ export function OfflineTicketModal({
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-base font-semibold">{entry.provisional}</span>
             <span className="text-xs text-muted-foreground">
-              {new Date(entry.sold_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+              {new Date(entry.sold_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short", hourCycle: "h23" })}
             </span>
           </div>
           <ul className="divide-y divide-border rounded-lg border border-border">

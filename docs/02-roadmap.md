@@ -31,7 +31,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
-| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | ⚪ Diseñada (spec [`40-cobranza-saas.md`](./40-cobranza-saas.md), ADR-110); facturar depende de la CUIT de NinjaSoft |
+| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b y F20-1 con código (ADR-110, ADR-115; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | a definir | ⚪ Futuro, no construir aún (diseño en spec §20; depende de F20) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
@@ -722,6 +722,12 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [x] Señas, cancelaciones, no-show y reprogramación. — *Cancelación con motivo, **no-show**, reprogramación (editar fecha/hora) y todos los estados (reservado/confirmado/en_curso/realizado/cancelado/no_show) hechos. **Seña/pago de reserva** queda como follow-up (H39/pagos). *Auditoría 2026-10-13: sigue abierta; descontar la seña al cobrar el turno requiere tocar `create_sale` o un medio de pago "seña" (deuda en ADR-082). **Hecho en `feat/create-sale-deudas` (ADR-088, `20261108200000` sin aplicar):** `appointment_deposits`, seña cobrada en la caja propia al reservar (feature `agenda_senas`, Pro+), descontada en `create_sale` como pago `sena` exacto con el turno enlazado en la misma transacción, liberada si la venta se anula y devolución del sobrante con motivo.*
   - [x] *Criterio:* una peluquería agenda corte + color con profesional, cobra el turno y calcula comisión. — *Cumplido a nivel core (validado por SQL: profesional + servicio + turno → cambio de estado → venta enlazada; la comisión se calcula y muestra en el detalle del turno). La **liquidación** de comisiones es H39.*
 
+- [x] **H38b — Servicios profesionales (facturar trabajos con aclaraciones).** — *Hecho (2026-10-14, ADR-116, rama `feat/servicios-profesionales`, migración `20261114100000_servicios_profesionales` sin aplicar).*
+  - [x] Catálogo en modo servicios / productos y servicios (FLAG-OPERATIVO `pos_settings.catalog_mode`): vocabulario y editor de servicio (unidad, duración, honorarios, detalle para la factura, aclaraciones predefinidas, sin stock).
+  - [x] Aclaración por renglón en el POS y período del servicio con vencimiento del pago; `create_sale` con `p_service` opcional.
+  - [x] Factura de servicios: concepto 2/3 con `FchServDesde`, `FchServHasta` y `FchVtoPago` reales; aclaraciones debajo del servicio en los modelos A4 y ticket.
+  - [ ] Presupuesto de servicios con las mismas aclaraciones, convertible en venta (no existe flujo de presupuestos).
+
 - [x] **H39 — Comisiones, propinas y productividad del staff.** *(Auditoría 2026-10-13: todos los ítems y el criterio están hechos; el reparto de propina entre varios profesionales es mejora futura, no ítem del hito.)* — *Core hecho (migración `20260608550000_commissions_tips`, aplicada en remoto; **local, pendiente de push**). Propinas al cobrar (monto + medio efectivo/tarjeta/QR) en `sales.tip_amount`/`tip_method`, aparte del total de productos. Atribución de vendedor/profesional a la venta (`sales.professional_id`, selector en el PaymentModal) y comisión por línea `coalesce(products.commission_pct, professional.commission_pct, 0)% × subtotal`. Reporte de productividad por profesional en Reportes (servicios, productos, facturado, comisión, propinas, ticket prom. + export XLSX) vía RPC `staff_productivity` SECURITY DEFINER tenant-scoped. Flag `pos_settings.staff_sees_own_only` (toggle en Configuración → Operación) con RLS de lectura sólo-propia en la agenda y filtro en el reporte. Probado por SQL (rollback). **Reparto de propina entre varios profesionales** → futuro (hoy la propina va al profesional de la venta).*
   - [x] Comisión por servicio, por producto, por garantía/extra y por profesional. — *Por línea: % del producto si lo define, si no el del profesional, si no 0. Las garantías/extras (ítem libre sin commission_pct de producto) caen al % del profesional. Las garantías además ya tienen su comisión propia en el reporte de Garantías (H28).*
   - [x] Propinas por efectivo/tarjeta/QR con reparto manual o por profesional. — *Captura al cobrar (monto + medio); se atribuye al profesional de la venta. Reparto manual entre varios queda como mejora futura.*
@@ -1406,28 +1412,32 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Clave del webhook y validación de `x-signature` en `mp_billing_webhook`.
   - [ ] Ambiente, "Probar conexión" (`/users/me`), URL del webhook para copiar y últimos eventos.
   - [ ] *Criterio:* un webhook con firma inválida se descarta y queda en Salud de webhooks; "Probar conexión" muestra la cuenta y el ambiente.
-- [ ] **H127 · F20-1: ledger económico de la plataforma.**
-  - [ ] Tablas nuevas:
+- [ ] **H127 · F20-1: ledger económico de la plataforma.** Código en `feat/cobranza-ledger` ([ADR-115](./17-decision-log.md)); migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar.
+  - [x] Tablas nuevas:
     - `tenant_billing_terms`, con las modalidades MP, cuenta corriente, manual y exento;
     - `platform_charges` y sus líneas;
-    - `platform_ledger`;
-    - `platform_allocations`;
-    - `platform_payments`, con backfill desde `billing_records`;
-    - promesas y notas de gestión.
-  - [ ] El webhook de MP genera el cargo, el pago y la imputación, de forma idempotente.
-  - [ ] `subscription_billing_total()` aplica los descuentos.
-  - [ ] `tenants.status` pasa a ser un espejo de `subscriptions.status`.
-  - [ ] Estado de cuenta en el panel interno y en el del cliente.
-  - [ ] *Criterio:* 5 entregas del mismo webhook dejan un solo pago y un solo cargo; RLS probada (`rls_internal_scope_leaks()` = 0, ningún dueño ve el ledger de otro negocio).
+    - `platform_ledger` (inmutable, movimientos compensatorios);
+    - `platform_allocations` (FIFO, sólo se liberan);
+    - `platform_payments`, con backfill desde `billing_records`.
+  - [ ] Promesas y notas de gestión: pasan a F20-9 y F20-11.
+  - [x] El webhook de MP genera el cargo, el pago y la imputación, de forma idempotente (trigger sobre `billing_records`, sin desplegar Edges).
+  - [x] `subscription_billing_total()` aplica los descuentos.
+  - [x] Cargos por período con cron horario, pago durante la prueba desde el fin de la prueba y prorrateo de upgrade sumado al próximo cobro (§22 #11 y #12).
+  - [x] Permiso Cobranzas sumable al nivel y topes de bonificación por nivel editables por super_admin (§22 #8 y #9).
+  - [x] `tenants.is_test` y exclusión de los negocios del staff en la cobranza y en los KPIs (§22 #7).
+  - [ ] `tenants.status` pasa a ser un espejo de `subscriptions.status`: queda para F20-2 (spec §5.1).
+  - [x] Estado de cuenta en el panel interno (pestaña Cuenta corriente y vista Cobranzas) y en el del cliente (Mi suscripción > Estado de cuenta).
+  - [x] *Criterio:* 5 entregas del mismo webhook dejan un solo pago y un solo cargo; RLS probada (`rls_internal_scope_leaks()` = 0, ningún dueño ve el ledger de otro negocio). Probado en PGlite y en `tests/integration/rls-cobranza-ledger.test.ts`.
 - [ ] **H128 · F20-2: snapshots de MRR y KPIs de cobranza.**
   - [ ] `platform_mrr_snapshots` diario.
   - [ ] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación) y NRR.
   - [ ] Cobrado bruto y neto, deuda vencida con aging, efectividad y DSO.
-- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.**
-  - [ ] `tenant_billing_profiles` con historia.
-  - [ ] Consulta de `ws_sr_constancia_inscripcion` con cache y rate limit.
-  - [ ] El panel del cliente muestra la letra que le va a corresponder.
-  - [ ] Carga manual de respaldo y lista de perfiles sin verificar.
+- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.** Construido en `feat/cobranza-datos-fiscales` (ADR-117, migración `20261113300000` sin aplicar, Edge `platform_billing` sin desplegar).
+  - [x] `tenant_billing_profiles` con historia.
+  - [x] Consulta de `ws_sr_constancia_inscripcion` con cache y rate limit (activa cuando exista el certificado de la plataforma).
+  - [x] El panel del cliente muestra la letra que le va a corresponder (hoy "pendiente": NinjaSoft sin CUIT).
+  - [x] Carga manual de respaldo y lista de perfiles sin verificar.
+  - [ ] Aplicar la migración, desplegar la Edge y probar el padrón en homologación cuando esté el certificado.
   - [ ] *Criterio:* un CUIT RI trae razón social, condición y domicilio y muestra "Vas a recibir Factura A"; sin la CUIT de NinjaSoft se puede cargar a mano y queda marcado.
 - [ ] **H130 · F20-4: factura de plataforma con CAE (emisión manual).**
   - [ ] `platform_issuer_profile` y `platform_documents`, con sus líneas y eventos.

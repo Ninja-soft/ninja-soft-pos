@@ -10,6 +10,7 @@ import {
   MonitorDot,
   ShieldCheck,
   Palette,
+  ReceiptText,
   Settings,
   ShoppingCart,
   Store,
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/Badge";
 import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
+import { AccountStatementCard } from "@/components/dashboard-team/AccountStatementCard";
 import {
   MiniStat,
   QuickActions,
@@ -307,6 +309,16 @@ export default async function DashboardTeamPage() {
           },
         ]
       : []),
+    ...(canManage
+      ? [
+          {
+            href: "/configuracion?seccion=datos-facturacion",
+            title: "Datos de facturación",
+            description: "A nombre de quién te factura NinjaSoft y a qué email.",
+            icon: ReceiptText,
+          },
+        ]
+      : []),
     {
       href: "/configuracion?seccion=apariencia",
       title: "Apariencia",
@@ -493,6 +505,13 @@ export default async function DashboardTeamPage() {
       {isOwner && (
         <div id="suscripcion" className="mt-10 scroll-mt-24">
           <SubscriptionCard />
+        </div>
+      )}
+
+      {/* ── Mi suscripción > Estado de cuenta (F20-1): dueño y encargado, sólo lectura ── */}
+      {canManage && (
+        <div id="estado-de-cuenta" className="mt-10 scroll-mt-24">
+          <AccountStatementCard />
         </div>
       )}
     </PageContainer>

@@ -26,6 +26,7 @@ import { PeriodSwitch } from "@/components/internal/dashboard/PeriodSwitch";
 import { tenantHealthScore, HEALTH_LEVEL_DOT } from "@/lib/internal/tenantHealth";
 import {
   KPI_DEFINITIONS,
+  applyExclusions,
   collected,
   collectionRisk,
   exclusionReason,
@@ -101,7 +102,10 @@ export default async function InternalHomePage({
   const { current, previous } = periodsFor(periodKey, now);
   const supabase = createClient({ scope: "internal" });
 
-  const [tenantsRes, addonsRes, catalogRes, discountsRes, paymentsRes, healthRes, eventsRes] = await Promise.all([
+  const looseRpc = supabase as unknown as {
+    rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+  };
+  const [tenantsRes, addonsRes, catalogRes, discountsRes, paymentsRes, healthRes, eventsRes, exclusionsRes] = await Promise.all([
     supabase
       .from("tenants")
       .select(
@@ -120,9 +124,9 @@ export default async function InternalHomePage({
     supabase.from("billing_records").select("tenant_id, amount, created_at"),
     supabase.rpc("internal_tenant_health"),
     // F20-0a: cambios de estado desde la auditoría (migración 20261111200000).
-    (supabase as unknown as {
-      rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
-    }).rpc("internal_saas_kpi_events", { p_since: previous.start.toISOString() }),
+    looseRpc.rpc("internal_saas_kpi_events", { p_since: previous.start.toISOString() }),
+    // F20-1: negocios de prueba, del staff, lifetime y exentos (migración 20261113100100).
+    looseRpc.rpc("internal_billing_exclusions"),
   ]);
 
   const tenants = (tenantsRes.data ?? []) as unknown as TenantRaw[];
@@ -169,15 +173,14 @@ export default async function InternalHomePage({
   const sub = (t: TenantRaw): SubRow | null =>
     !t.subscriptions ? null : Array.isArray(t.subscriptions) ? t.subscriptions[0] ?? null : t.subscriptions;
 
-  const accounts: KpiAccount[] = tenants.map((t) => {
+  const exclusions = exclusionsRes.error ? null : ((exclusionsRes.data ?? []) as { tenant_id: string; reason: string }[]);
+  const rawAccounts: KpiAccount[] = tenants.map((t) => {
     const s = sub(t);
     return {
       tenantId: t.id,
       name: t.name,
       createdAt: t.created_at,
       trialEndsAt: t.trial_ends_at,
-      // Pendiente: tenants.is_test (spec §15.1, pregunta abierta 6). Sin marca,
-      // ningún negocio se excluye como "de prueba".
       isTest: false,
       status: s?.status ?? t.status,
       billingCycle: s?.billing_cycle ?? null,
@@ -190,7 +193,17 @@ export default async function InternalHomePage({
     };
   });
 
-  const excludedLifetime = accounts.filter((a) => exclusionReason(a) === "lifetime").length;
+  const accounts = applyExclusions(rawAccounts, exclusions);
+  const excludedBy = (r: string) => accounts.filter((a) => exclusionReason(a) === r).length;
+  const excludedSummary = [
+    [excludedBy("lifetime"), "lifetime"],
+    [excludedBy("staff"), "del staff"],
+    [excludedBy("test"), "de prueba"],
+    [excludedBy("exempt"), "exentas"],
+  ]
+    .filter(([n]) => Number(n) > 0)
+    .map(([n, label]) => `${n} ${label}`)
+    .join(", ");
   const excludedIds = new Set(accounts.filter((a) => exclusionReason(a)).map((a) => a.tenantId));
 
   // ── Plata ────────────────────────────────────────────────────────────────
@@ -255,15 +268,17 @@ export default async function InternalHomePage({
 
       <p className="mt-4 text-xs text-muted-foreground">
         Período: {PERIOD_LABEL[periodKey]}. Los stocks (MRR, cuentas pagas) se miden {stockLabel}; los flujos (cobrado, nuevos,
-        churn, conversión) suman el período. Excluye {excludedLifetime}{" "}
-        {excludedLifetime === 1 ? "cuenta lifetime" : "cuentas lifetime"} (exentas de pago).
+        churn, conversión) suman el período.{" "}
+        {excludedSummary ? `Excluye ${excludedIds.size} ${excludedIds.size === 1 ? "cuenta" : "cuentas"} que no se cobran (${excludedSummary}).` : "Sin cuentas excluidas."}
       </p>
 
       <div className="mt-3 space-y-2">
-        <Callout tone="neutral" icon={AlertTriangle} title="Falta marcar los negocios internos o de prueba">
-          Todavía no existe la marca <code className="break-all font-mono text-xs">tenants.is_test</code> (spec de cobranza §15.1). Hasta
-          que exista, un negocio de prueba con plan activo cuenta como cuenta paga y suma al MRR.
-        </Callout>
+        {!exclusions && (
+          <Callout tone="warning" icon={AlertTriangle} title="Negocios de prueba y del staff sin excluir">
+            Falta aplicar la migración <code className="break-all font-mono text-xs">20261113100100_cobranza_ledger_rpc</code>. Hasta
+            entonces sólo se excluyen las cuentas lifetime: un negocio de prueba o del staff con plan activo suma al MRR.
+          </Callout>
+        )}
         {!events && (
           <Callout tone="warning" icon={AlertTriangle} title="Churn y tendencias sin datos">
             Falta aplicar la migración <code className="break-all font-mono text-xs">20261111300000_internal_saas_kpi_events</code>, que lee

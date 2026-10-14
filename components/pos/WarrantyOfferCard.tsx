@@ -69,10 +69,10 @@ export function WarrantyOfferCard({
   if (!eligible || activePlans.length === 0 || dismissed) return null;
 
   return (
-    <div className="rounded-xl bg-ninja-flame/[0.08] p-3">
+    <div className="rounded-lg border border-border bg-card p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
-          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
               Ofrecé garantía extendida
@@ -107,13 +107,13 @@ export function WarrantyOfferCard({
               onClick={() => onSelect(selected ? "" : p.id)}
               className={
                 selected
-                  ? "flex w-full items-center justify-between gap-2 rounded-lg border border-ninja-flame bg-ninja-flame/10 px-3 py-2 text-left"
-                  : "flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left transition hover:border-ninja-flameSoft/50"
+                  ? "choice-on flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left"
+                  : "flex min-h-11 w-full items-center justify-between gap-2 rounded-lg bg-fg-4 px-3 py-2 text-left transition-colors hover:bg-fg-6"
               }
             >
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                  {selected && <Check size={14} className="shrink-0 text-ninja-flameSoft" />}
+                  {selected && <Check size={14} className="shrink-0 text-foreground" aria-hidden />}
                   {p.label}
                 </span>
                 <span className="block text-xs text-muted-foreground">
@@ -130,7 +130,7 @@ export function WarrantyOfferCard({
       </div>
 
       {selectedWarrantyId && (
-        <p className="mt-2 text-xs text-ninja-flameSoft">
+        <p className="mt-2 text-xs text-muted-foreground">
           Garantía agregada. Se cobra como línea al confirmar la venta.
         </p>
       )}

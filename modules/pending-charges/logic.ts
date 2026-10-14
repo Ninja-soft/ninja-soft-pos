@@ -426,6 +426,10 @@ export interface SaleArgsLine {
   listPrice?: number | null;
   /** Id local de la línea del carrito (ADR-096: la garantía la referencia). */
   lineId?: string;
+  // ADR-116: datos de servicio del renglón (undefined = lo del servicio).
+  lineDetail?: string | null;
+  clarificationIds?: string[];
+  lineNote?: string | null;
 }
 
 export interface SaleArgsExtra {
@@ -457,6 +461,10 @@ export interface SaleArgsItem {
   // ADR-096: garantía extendida enlazada a la línea que cubre.
   warranty_plan_id?: string;
   warranty_for?: number;
+  // ADR-116: datos de servicio del renglón (los guarda create_sale).
+  line_note?: string;
+  line_detail?: string;
+  clarification_ids?: string[];
 }
 
 export interface SaleArgsExtraOut {
@@ -495,6 +503,11 @@ export function buildSaleItemsAndExtras(
           ...(l.listPrice != null ? { list_price: l.listPrice } : {}),
         }
       : {}),
+    // ADR-116: aclaración libre, descripción ampliada y aclaraciones elegidas.
+    // Sin la clave, create_sale toma las del servicio.
+    ...(l.lineNote?.trim() ? { line_note: l.lineNote.trim() } : {}),
+    ...(l.lineDetail !== undefined ? { line_detail: l.lineDetail?.trim() ?? "" } : {}),
+    ...(l.clarificationIds !== undefined ? { clarification_ids: l.clarificationIds } : {}),
   }));
   for (const ex of extras ?? []) {
     if ((ex.kind === "warranty" || ex.kind === "surcharge") && (ex.amount ?? 0) > 0) {

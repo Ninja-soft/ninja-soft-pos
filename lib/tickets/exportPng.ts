@@ -59,6 +59,8 @@ export async function exportNodePng(node: HTMLElement): Promise<string> {
 // prefijo `data:` — el caller lo manda así a la Edge Function para adjuntarlo).
 // Usado por el envío del comprobante por email (PDF adjunto, reemplaza al PNG).
 export async function exportNodePdfBase64(node: HTMLElement): Promise<string> {
+  // ADR-112: si el nodo trae hojas A4 del motor de comprobantes, PDF A4.
+  if (node.querySelector("[data-invoice-page]")) return toBase64(await buildA4Pdf(node));
   const [html2canvas, jsPDF] = await Promise.all([loadHtml2canvas(), loadJsPdf()]);
   const restore = await inlineImages(node);
   try {
@@ -81,6 +83,50 @@ export async function exportNodePdfBase64(node: HTMLElement): Promise<string> {
   } finally {
     restore();
   }
+}
+
+function toBase64(doc: { output: (t: "datauristring") => string }): string {
+  const dataUri = doc.output("datauristring");
+  const comma = dataUri.indexOf(",");
+  return comma >= 0 ? dataUri.slice(comma + 1) : dataUri;
+}
+
+/**
+ * ADR-112: PDF A4 real del motor de comprobantes. Cada hoja
+ * (`[data-invoice-page]`, 794 px = 210 mm) va a su página; si una hoja se
+ * estiró por muchos renglones, se corta en páginas A4 consecutivas.
+ */
+async function buildA4Pdf(node: HTMLElement) {
+  const [html2canvas, jsPDF] = await Promise.all([loadHtml2canvas(), loadJsPdf()]);
+  const restore = await inlineImages(node);
+  try {
+    const sheets = Array.from(node.querySelectorAll<HTMLElement>("[data-invoice-page]"));
+    const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    let first = true;
+    for (const sheet of sheets) {
+      const canvas = await html2canvas(sheet, { scale: 2, backgroundColor: "#ffffff" });
+      const pagePx = Math.round((canvas.width * 297) / 210);
+      for (let y = 0; y < canvas.height - 4; y += pagePx) {
+        const h = Math.min(pagePx, canvas.height - y);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = h;
+        slice.getContext("2d")?.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+        if (!first) doc.addPage();
+        first = false;
+        doc.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, 210, (h * 210) / canvas.width, undefined, "FAST");
+      }
+    }
+    return doc;
+  } finally {
+    restore();
+  }
+}
+
+/** Descarga el comprobante A4 del motor (ADR-112) como PDF. */
+export async function downloadInvoiceA4(node: HTMLElement, fileName: string): Promise<void> {
+  const doc = await buildA4Pdf(node);
+  doc.save(fileName);
 }
 
 // A4/PDF a partir del nodo ya renderizado por TicketRenderer.

@@ -95,6 +95,25 @@ function addDaysYmd(ymd: string, days: number): string {
 }
 
 /**
+ * Fechas de un comprobante de servicios (concepto 2 o 3, ADR-116): período
+ * del servicio y vencimiento del pago de la venta, en AAAAMMDD. Sin datos
+ * (ventas anteriores o sin p_service) van la fecha del comprobante, como
+ * antes. ARCA rechaza un vencimiento anterior al comprobante: se corre a esa
+ * fecha. Hasta nunca queda antes que desde.
+ */
+export function serviceDates(
+  sale: { service_from?: string | null; service_to?: string | null; payment_due?: string | null },
+  cbteFch: string,
+): { desde: string; hasta: string; vto: string } {
+  const desde = isoToYmd(sale.service_from) ?? cbteFch;
+  let hasta = isoToYmd(sale.service_to) ?? (desde > cbteFch ? desde : cbteFch);
+  if (hasta < desde) hasta = desde;
+  let vto = isoToYmd(sale.payment_due) ?? cbteFch;
+  if (vto < cbteFch) vto = cbteFch;
+  return { desde, hasta, vto };
+}
+
+/**
  * Fecha del comprobante: la de la venta, salvo que quede fuera de la ventana
  * que acepta ARCA (hasta 5 días antes para productos y 10 para servicios) o
  * sea anterior al último autorizado de la serie (la numeración tiene que ir

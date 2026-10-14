@@ -71,7 +71,8 @@ export type SettingsSectionKey =
   | "envios"
   | "mercadolibre"
   | "canales-delivery"
-  | "facturacion";
+  | "facturacion"
+  | "datos-facturacion";
 
 export type SettingsSectionDef = {
   key: SettingsSectionKey;
@@ -129,6 +130,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Store,
         feature: "personalizacion_marca",
         keywords: "logo color razon social cuit direccion telefono",
+      },
+      // F20-3 (ADR-110 / ADR-117): datos fiscales para la factura de NinjaSoft.
+      // BASE (no es feature de plan); dueño o encargado (lo valida la base).
+      {
+        key: "datos-facturacion",
+        label: "Datos de facturación",
+        title: "Datos de facturación",
+        description:
+          "A nombre de quién te factura NinjaSoft tu suscripción, qué letra te corresponde y a qué email te llega.",
+        icon: ReceiptText,
+        keywords: "factura ninjasoft suscripcion cuit razon social condicion iva titular email facturacion arca padron letra",
       },
       {
         key: "sucursales",
@@ -343,9 +355,10 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: "Ticket",
         title: "Ticket",
         description:
-          "Ancho, textos y logo del comprobante, y los modelos para diseñar cómo se imprime. El QR va siempre.",
+          "Ancho, textos y logo del comprobante, el diseño de facturas A4 y ticket, y los modelos propios. El QR va siempre.",
         icon: ReceiptText,
-        keywords: "ticket comprobante plantilla diseño modelo ancho 58 80 mm titulo leyenda pie logo qr",
+        keywords:
+          "ticket comprobante factura a4 pdf plantilla diseño modelo ancho 58 80 mm titulo leyenda pie logo qr color sello iibb inicio actividades",
       },
       {
         key: "facturacion",
@@ -481,6 +494,8 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = SETTINGS_GROUPS.flatMap(
 export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   cupones: "promociones",
   arca: "facturacion",
+  "mis-datos-fiscales": "datos-facturacion",
+  "facturacion-ninjasoft": "datos-facturacion",
   afip: "facturacion",
   "factura-electronica": "facturacion",
   diagnostico: "hardware",

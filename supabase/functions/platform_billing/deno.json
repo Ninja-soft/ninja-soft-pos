@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "node-forge": "npm:node-forge@1.3.1"
+  }
+}

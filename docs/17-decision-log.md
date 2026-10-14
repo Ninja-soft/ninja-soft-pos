@@ -4087,3 +4087,165 @@ El dueño pidió poder modificar la sincronización automática del catálogo de
 - Deploy: migración `20261111400000_catalogo_sync_config` (después de `20261111300000`); redeploy de la Edge `catalog_sync` para que pausar y cancelar corten la tanda en el acto. Sin secrets nuevos.
 - El job de cada minuto ahora también lee `catalog_sync_config` y escribe `last_check_at` (una fila): costo despreciable.
 - Tests: `tests/unit/catalogSyncSchedule.test.ts` (cron, validación, próxima ejecución, equivalente UTC, payload), `tests/unit/catalogSyncPanel.test.ts` (estado por tienda, ETA, baldosa), RLS `tests/integration/rls-catalog-sync-config.test.ts`. Migración probada en PGlite con stubs (cron, agenda, tick, completa cada K, cada N días, ventana de minutos salteados, pausa, cancelación sin revivir, permisos y auditoría).
+---
+
+## ADR-115: Cuenta corriente de la plataforma (F20-1): ledger inmutable con imputación FIFO alimentado por billing_records, cargos por período con descuentos y prorrateo, permiso Cobranzas con topes por nivel y exclusión de negocios del staff y de prueba
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-ledger`; migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar) · **Hito:** H127 (F20-1) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §6.3, §10, §17, §18 y §22 · **Base:** ADR-110, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-083 (auditoría inmutable). **Numeración:** 112 la toma `feat/plantillas-factura`.
+
+### Contexto
+
+F20-1 es la base económica de la cobranza: saber qué debe cada negocio, qué pagó y qué venció. Hoy sólo existe `billing_records` (pagos sin deuda ni imputación), `subscription_billing_total()` ignora `tenant_discounts` (bug reportado) y los KPIs cuentan negocios de prueba y del staff. Las decisiones del dueño (§22) fijan: precios con IVA incluido (#2), negocios del staff y de prueba fuera de los KPIs (#7), permiso propio "Cobranzas" (#8), topes configurables por nivel (#9), período pago desde el fin de la prueba (#11) y prorrateo de upgrade sumado al próximo cobro (#12).
+
+### Decisión
+
+1. **Modelo** (todo de plataforma, prefijo `platform_`): `platform_charges` y `platform_charge_lines` (precio congelado en líneas: plan, addons, descuento, prorrateo), `platform_payments`, `platform_ledger` (debe > 0, haber < 0, CHECK de signo por tipo, tipos previstos para punitorios y condonaciones de F20-9), `platform_allocations` (haber → debe, sólo se liberan), `platform_ingest_log`, `tenant_billing_terms` (modalidad y plazo) y `platform_billing_settings`. Importes en centavos `bigint`, `currency = 'ARS'`.
+2. **Inmutable:** triggers que rechazan UPDATE y DELETE del ledger, las líneas y el log; en cargos y pagos sólo cambian estado y anulación; una imputación sólo se libera una vez. Toda corrección es un movimiento compensatorio con motivo (CHECK en la tabla).
+3. **`billing_records` sigue siendo la entrada** del webhook de Mercado Pago y del "Registrar pago" viejo: un trigger `AFTER INSERT` la pasa al ledger (pago + cargo del período si vino con período + imputación FIFO). Idempotente por billing_record y por `(mercadopago, id de pago)`. Si algo falla, el billing_record se guarda igual (es plata cobrada), se audita `platform_ledger_ingest_failed` y el cron lo reintenta. Así **no hubo que tocar ni desplegar Edge Functions**. Reemplazar `billing_records` por una vista queda para cuando el webhook escriba directo en `platform_payments` (F20-10).
+4. **Cargos de período:** clave `sub:{suscripción}:{inicio}:subscription_period` con el inicio en UTC, la misma convención del webhook, así webhook y cron caen en el mismo cargo. El cron `platform-billing-run` (cada hora) genera el cargo del período vigente y el de la renovación vencida sin pagar, sólo de períodos que empiezan desde `ledger_since` (la fecha de aplicar la migración: no aparece deuda retroactiva). Con débito automático espera 1 día (`mp_wait_days`) al webhook. Vencimiento = inicio + plazo (`tenant_billing_terms.due_days` o el default 0).
+5. **Monto:** `subscription_billing_total()` (misma firma) pasa a `platform_billing_breakdown()`: plan del ciclo + addons comprados vigentes − descuentos vigentes (porcentajes sobre el bruto con tope 100 %, después fijos mensuales × 12 en el anual), nunca negativo; `total` es neto de descuentos. Espejo TS en `lib/billing/ledger.ts` (`billingTotal`), mismo criterio que el MRR de `saasKpis.accountMrr`.
+6. **Prueba (§22 #11):** `reanchor_subscription_period` ancla en `tenants.trial_ends_at` si la suscripción está en `trial` y la prueba no terminó (cubre las pruebas extendidas, que no mueven `current_period_end`).
+7. **Upgrade (§22 #12):** trigger sobre `subscriptions.plan_id`: si sube de precio con el mismo ciclo en un período vigente, cargo `proration` = (precio nuevo − viejo) × días que quedan / días del período, con los descuentos porcentuales, que **vence con el próximo cobro**. Downgrade sin crédito (rige al fin del período); el cambio de ciclo no se prorratea acá (F20-10). Nunca bloquea el cambio de plan.
+8. **Imputación FIFO:** punitorios primero (F20-9) y después por vencimiento; el excedente queda a favor y se aplica solo al próximo cargo. Lock por negocio (`pg_advisory_xact_lock`).
+9. **Exclusión (§22 #7):** `platform_billing_exclusion()` devuelve `test` (`tenants.is_test`, sólo la cambia un super_admin con motivo), `staff_owned` (dueño activo con `users.internal_level`), `lifetime` o `exempt`. Esos negocios no generan cargos y salen del MRR, churn, conversión y nuevos (`internal_billing_exclusions()` → `saasKpis.applyExclusions`). La migración marca `ninjasoft-qa` como prueba y pasa las lifetime a la modalidad exenta.
+10. **Permiso Cobranzas (§22 #8)** sumable al nivel en `platform_staff_permissions` (no en el JWT: no hace falta volver a iniciar sesión). `support` + Cobranzas opera cobranzas y nada más (las RPC viejas siguen rechazando a `support`). **Topes (§22 #9)** en `platform_billing_caps` por nivel (`cobranzas`, `admin`, `super_admin`), por operación y por mes calendario por negocio, sumando bonificaciones, anulaciones, ajustes a favor y condonaciones de todo el staff; super_admin los edita. Superar el tope rechaza la operación (la aprobación de un super_admin es F20-7).
+11. **Lectura:** el staff con `(select internal_scope())` lee las tablas; el negocio (dueño o encargado) sólo lee sus cargos por RLS y su estado de cuenta por `my_billing_statement()`, sin motivos internos ni autores. Todas las RPC de escritura piden motivo y auditan antes de responder.
+12. **Backfill:** cada billing_record existente entra como pago con un cargo histórico por el mismo importe (el pasado queda saldado; dos pagos del mismo período dejan saldo a favor). Re-ejecutar la migración no duplica nada.
+
+### Alternativas descartadas
+
+- **Un nivel nuevo `billing` en `internal_level`:** las RPC existentes bloquean sólo a `support` (`coalesce(internal_level(),'admin') = 'support'`), así que un nivel nuevo habría administrado negocios como un admin. El permiso sumable sobre `support` es seguro sin tocar esas RPC.
+- **Que el webhook escriba directo en el ledger:** obligaba a desplegar la Edge y dejaba sin cubrir el "Registrar pago" viejo; el trigger cubre a los dos.
+- **Sumar el prorrateo como línea del próximo cargo de período:** obligaba a guardar líneas pendientes mutables; un cargo `proration` que vence el mismo día deja el ledger inmutable y se ve igual en el estado de cuenta.
+- **Contar el tope por persona:** dos admins podían duplicar lo que se resigna en un mismo negocio; por negocio es más conservador.
+
+### Consecuencias
+
+- Al aplicar: el backfill corre sobre `billing_records` (hoy vacía en producción); no aparece deuda de períodos anteriores a la fecha de aplicación. El primer cargo automático en producción sería el de NinjaSoft QA el 26/10, pero queda excluido por la marca de prueba.
+- `subscription_billing_total()` baja el monto que piden `mp_subscription_checkout` y `mp_update_subscription_amount` a quien tenga descuentos; los preapproval ya creados no cambian solos. Un débito de MP mayor al cargo deja saldo a favor; uno menor deja deuda (información correcta).
+- Pendiente en F20-1 según la spec y no construido acá: promesas y notas de gestión (F20-9/F20-11), espejo `tenants.status` por trigger (spec §5.1 lo pasa a F20-2), contracargos automáticos desde el webhook (F20-10; hoy se registran a mano con "Revertir pago").
+- Tests: PGlite (86 chequeos: backfill, re-aplicar, 5 entregas del webhook, cron con espera de MP, FIFO, prorrateo, prueba, inmutabilidad, RLS, permisos, topes y vista general), `tests/unit/billingLedger.test.ts`, `tests/unit/saasKpis.test.ts` y `tests/integration/rls-cobranza-ledger.test.ts`.
+## ADR-114: Velocidad del POS: menos JS en el primer render, consultas del arranque sólo cuando hacen falta y catálogo offline una vez por apertura
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `perf/pos-velocidad`; sin migraciones, Edges ni secrets) · **Base:** ADR-077 (venta offline y foto local), ADR-058 (resolver de precios con `price_context_snapshot`), ADR-090 y ADR-091 (auditoría de rendimiento de la base).
+
+### Contexto
+
+Pedido del dueño: optimizar la velocidad del POS. Medido sobre `main`: `/pos` cargaba 448 kB de JS (438 kB gzip sumando chunks: 308 kB del panel y 133 kB propios del POS); el layout raíz precargaba 11 archivos de fuentes (~276 kB en producción, más que todo el JS de `/login`); al abrir el POS salían unas 55 a 60 consultas, varias sin uso hasta abrir un modal y otras duplicadas por dependencias que cambian durante el arranque (turno, sucursal). El catálogo para vender sin conexión (`products *`, hasta 5000) se bajaba 2 o 3 veces porque el efecto dependía del turno y la sucursal.
+
+### Decisión
+
+1. **Fuentes:** se precargan sólo Inter (texto) y Sora (títulos). Las candidatas de Apariencia y la monoespaciada llevan `preload: false`: se bajan si el CSS las usa (`display: swap`).
+2. **Chunks diferidos:** `UpgradeModal` pasa a ser un envoltorio con `next/dynamic` + `MountWhenOpened` (la implementación vive en `UpgradeModalBody`; los 35 importadores no cambian). Así `lib/saas/featureInfo.ts` sale del bundle del panel y los planes (`useGlobalPlansForUpgrade`) se piden al abrir el modal y no al montar cada ítem bloqueado o el `discountGate` del POS. `InfoHint` carga el plan mínimo al abrir el popover. En el POS, los diálogos chicos, las ventas pausadas (panel y diálogos), la ayuda de atajos y las miniaturas del selector de diseño van en chunks que se precargan en idle con el resto de los modales.
+3. **Consultas del arranque:** selector de clientes con `enabled` atado a abrirlo; planes de garantía con algo en el carrito; foto de precios con `enabled: registerFetched` (antes, una vez con `storeId` null y otra con la sucursal); lista mostrador (`price_lists` + todos sus items) sólo si la foto no llega o falla; heartbeat de la caja recién con el turno resuelto; `arca_status` cada 5 min si la facturación no está activa.
+4. **Catálogo offline:** una descarga por apertura del POS, en `requestIdleCallback` (máx. 3 s) y luego cada 10 min. Turno, sucursal y política van por ref y un segundo efecto los ajusta en la foto guardada sin bajar el catálogo (`snapshotWithMeta`, con lecturas y escrituras de IndexedDB en serie y 1,5 s de espera para no escribir el `null` transitorio del arranque).
+
+### Alternativas descartadas
+
+- **Saltear la descarga si la foto tiene menos de 10 min:** un producto recién creado no estaría en la venta offline hasta el siguiente refresco.
+- **Una RPC `my_context` que reúna las 6 lecturas de `tenant_users` y las 3 de `tenants` del panel:** es el mayor ahorro pendiente (9 a 11 consultas y tres cadenas en serie), pero toca el shell, los gates y la cuenta; va en su propio PR con migración.
+- **Achicar el `select *` de productos del POS:** el tipo `Product` se usa entero en el carrito, la foto offline y los pickers; recortarlo sin un mapa de uso arriesga romper la venta.
+
+### Consecuencias
+
+- `/pos` 448 → 421 kB de First Load JS (412 kB gzip); `/caja` 305 → 289, `/ventas` 312 → 286, `/productos` 370 → 351. Fuentes precargadas 11 → 2.
+- Abrir un modal diferido por primera vez antes de la precarga en idle muestra el modal un instante después (el chunk es chico y se pide en paralelo).
+- Pendientes para otro PR: unificar el contexto del usuario y el negocio en una RPC; quitar el doble `getUser` de middleware + layout; `pending_charges` del watcher trae hasta 100 cobros completados en cada sondeo (filtrar por `completed_at` en el servidor); miniaturas de 160 px al subir fotos de productos (hoy el tile de 44 px baja el WebP de 900 px); `select` explícito en `pos_settings`, `cash_shifts`, `categories` y `warranty_plans`.
+- Tests: `tests/unit/offlineSync.test.ts` (ajuste de turno, sucursal y política de la foto sin tocar el catálogo).
+## ADR-112: Motor de comprobantes con modelos de factura A4 y ticket, personalización por negocio y sello "Un software de Ninja Soft" ocultable por plan
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar) · **Base:** ADR-068 (impuestos y transparencia fiscal), ADR-072 (factura electrónica ARCA, CAE/CAEA y QR), H9b (plantillas de ticket), ADR-110 (cobranza SaaS, factura de la plataforma). **Numeración:** 109, 110 y 111 están tomados en `main` y en `feat/ticket-post-venta`.
+
+### Contexto
+
+El dueño pidió plantillas de factura "mucho más profesionales", con el lenguaje visual de una factura B real (logo, letra en recuadro al centro, bloques con título, tabla de renglones con cabecera oscura, totales, transparencia fiscal y pie con QR, ARCA y CAE), varios modelos A4 y de ticket, todos con lo que pide la normativa, muy personalizables, con el logo de Ninja Soft y la leyenda "Un software de Ninja Soft" desactivables, y con los colores y el logo de la tienda (o los de Ninja POS si la tienda no tiene). El mismo motor tiene que servir más adelante para la factura de NinjaSoft a sus clientes (ADR-110).
+
+Hasta ahora el comprobante sin plantilla propia era el ticket de bloques y el "A4" era un PDF básico de jsPDF (o el ticket pegado en una hoja), sin IIBB, inicio de actividades, letra en recuadro ni IVA discriminado.
+
+### Decisión
+
+1. **Modelo de documento neutro** (`lib/invoices/types.ts`, `InvoiceDoc`): emisor, receptor, letra, clase (factura, NC, ND, no fiscal), punto de venta y número, fecha, concepto y período facturado, condición de venta, moneda y cotización, renglones (código, cantidad, unidad, precio, bonificación, alícuota), totales (neto gravado, no gravado, exento, IVA por alícuota, otros tributos y percepciones), transparencia fiscal, CAE o CAEA con vencimiento, QR, comprobantes asociados, pagos, leyendas y copia. Cada origen tiene su adaptador: `invoiceFromTicket` para las ventas (reusa los datos que ya arma el detalle de la venta, incluida la factura de ARCA); la plataforma armará el mismo `InvoiceDoc` desde su ledger.
+2. **Requisitos legales en un solo lugar** (`lib/invoices/legal.ts`): `legalRequirements(doc, formato)` lista los campos obligatorios según tipo (RG 1415, RG 4291, RG 4892, Ley 27.743 y RG 5614, RG 5700 para identificar al consumidor final desde $10.000.000). `invoiceView` arma la vista (filas con la clave legal que cubren) y **todos los modelos la dibujan** marcando cada campo con `data-legal`. Los tests recorren cada modelo por cada tipo (A, B, C, NC, no fiscal, servicios con período, moneda extranjera) y fallan si falta uno. Comprobante sin CAE: no fiscal, letra X y "Documento no válido como factura".
+3. **Modelos**: A4 Clásico (el de la referencia), Moderno, Minimal, Corporativo (banda de color) y Ejecutivo (columna lateral); ticket 80/58 mm Clásico, Compacto y Destacado, más "Simple (anterior)", que es el ticket de bloques de siempre. Componentes React sin hooks y con estilos inline (`components/invoices`): el mismo render sirve para la vista previa, la impresión del navegador, el PDF A4 (html2canvas + jsPDF, una página por hoja, Original y Duplicado), el PDF adjunto del email y el PNG, y se puede renderizar en el servidor para la plataforma. El QR va siempre.
+4. **Integración sin romper lo que existe**: una plantilla propia activa (bloques, lienzo o HTML) sigue mandando igual que antes. Sin plantilla propia, el comprobante usa el modelo de ticket elegido (por defecto Clásico; "Simple" devuelve el de antes). "Descargar A4" genera la factura A4 del motor, salvo con plantilla propia activa. El email adjunta el ticket o la hoja A4 según la opción. "Mostrar logo en el ticket" apagado también vale para los modelos de ticket.
+5. **Personalización por negocio en `tenant_branding`** (Configuración › Ticket › Diseño de facturas y comprobantes), con vista previa en vivo de cada tipo con datos de ejemplo: `invoice_style jsonb` (modelos, color de resalte de la marca o propio, logo de la marca, propio para comprobantes o ninguno, sello, leyendas, nombre de fantasía, medios de pago, número interno, copias A4 y formato del email) e `iibb` y `activity_start` (datos fiscales obligatorios que no existían). Las policies RLS de `tenant_branding` (lectura del tenant, escritura owner/manager) cubren las columnas nuevas. Si la migración no está aplicada, la lectura falla en silencio y todo usa los defaults.
+6. **Defaults de marca**: color y logo de la tienda (`tenant_branding.accent` y `logo_url`); si no tiene, los de Ninja POS (`public/brand/oficial/ninja-pos-*`). Para la plataforma, el logo de Ninja Soft (`PLATFORM_DEFAULTS`). El texto en color se oscurece si el color elegido no tiene contraste sobre blanco.
+
+### Clasificación de plan (CLAUDE.md §6)
+
+- **BASE**: el modelo Clásico A4 y ticket y "Simple", con el color y el logo de la marca, los datos fiscales del emisor (IIBB, inicio de actividades), las opciones de medios de pago, número interno, copias y formato del email. Cumplir la normativa no depende del plan.
+- **OPTIONAL `tickets_pro` (Pro+)**: los modelos Moderno, Minimal, Corporativo, Ejecutivo, Compacto y Destacado, el color y el logo propios del comprobante y las leyendas propias. No se crea una key nueva: `tickets_pro` ya es "personalización de comprobantes" y se actualiza su descripción y su copy.
+- **OPTIONAL `comprobantes_sin_sello` (Business y Enterprise)**: ocultar el sello "Un software de Ninja Soft". Key nueva en `features` (grupo tickets, `is_basic=false`), marcada en `plans.limits.modules`, copy en `lib/saas/featureInfo.ts`; la comparación de planes la toma de la matriz.
+- **Gating real**: trigger `tenant_branding_assert_invoice_style` (BEFORE INSERT/UPDATE, sólo cuando cambia `invoice_style`) con `invoice_style_needs_pro(jsonb)`, espejo exacto de `invoiceStyleNeedsPro`. El render también vuelve al default lo que el plan ya no incluye (`clampInvoiceStyle`).
+
+### Consecuencias
+
+- Migración `20261112100000_comprobantes_plantillas` (sin aplicar).
+- `fiscal_documents` ahora se lee con `doc_tipo`, `doc_nro` y `concepto`, y el detalle de la venta trae documento, condición IVA y domicilio del cliente para el receptor. `saleTaxTicket` devuelve el IVA por alícuota para discriminarlo en la A.
+- Deuda: la nota de crédito de una devolución todavía se imprime con el ticket de devolución; el motor ya la soporta (comprobante asociado) y falta conectarla a la ventana de devolución y al detalle fiscal. Las líneas de venta no guardan código ni alícuota propios: en la A se usa la alícuota única de la venta (o "Varias") y el código es el número de renglón. Los textos legales son orientativos: validar con el contador del negocio.
+
+## ADR-116: Servicios profesionales: catálogo en modo servicios, aclaración por renglón y factura de servicios con período y vencimiento del pago
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar) · **Base:** ADR-068 (`products.is_service`, concepto de WSFE), ADR-072 (cola fiscal ARCA), ADR-075 (perfiles de rubro), ADR-096 (última `create_sale`), ADR-112 (motor de comprobantes). **Numeración:** 113 está en `feat/catalogo-sync-config`; 114 y 115, en `feat/cobranza-ledger`.
+
+### Contexto
+
+El dueño pidió poder usar el POS como "cuenta profesional": por ejemplo, un laboratorio de bromatología que factura un trabajo a un cliente necesita detallar en la factura qué hizo (análisis, relevamiento, informe) y sumar aclaraciones (lote, dirección del relevamiento, N° de muestra, normativa), configurando todo en "Productos", que en su caso son servicios.
+
+Ya existían el rubro "Servicios profesionales" (`tenants.industry = 'servicios'`), `products.is_service` (ADR-068), la unidad, la descripción y la duración del servicio (H38), y la cola fiscal ya mandaba concepto 2 o 3 cuando la venta tenía servicios. Lo que faltaba: el vocabulario ("Productos" en todo), un editor pensado para servicios, la aclaración por renglón, el detalle del servicio en la factura y el período real del servicio: la cola mandaba siempre la fecha del comprobante como `FchServDesde`, `FchServHasta` y `FchVtoPago`.
+
+### Decisión
+
+1. **Modo del catálogo** (`pos_settings.catalog_mode`: `productos`, `servicios` o `mixto`; null = según el rubro, `servicios` para "Servicios profesionales"). Se elige en Configuración › Operación › Modo de operación ("Qué vende el negocio") y lo fija el asistente de rubro ("vendo productos / servicios / ambos"). Cambia el menú y el título ("Servicios", "Productos y servicios"), el botón de alta y el editor. `lib/catalog/mode.ts` (puro) y `useCatalogMode`.
+2. **Servicio como ítem**: el tipo es `products.is_service`. Un trigger (`products_service_no_stock`) lo deja sin stock. El editor, con el ítem como servicio, oculta stock, variantes, kit, serie, código de barras, PLU, atributos, bultos, receta y estación de cocina, y suma la pestaña **Servicio**: unidad (`products.unit`: unidad, hora, visita, informe, análisis, muestra, mes, servicio), duración estimada y comisión, **detalle para la factura** (`products.invoice_detail`, texto con formato simple: líneas y viñetas con guion) y **aclaraciones que se suman solas** (`products.service_clarification_ids`). El precio se llama "Honorarios"; el SKU, "Código interno"; la alícuota es la del ítem. En modo mixto, cada ítem elige Producto o Servicio.
+3. **Aclaraciones predefinidas** (`service_clarifications`): plantillas de texto del negocio con título y texto. `tenant_id`, RLS con `(select current_tenant_id())`, escritura sólo dueño o encargado (más `trg_role_write_guard('manage')`), sin DELETE (baja lógica) y auditoría por trigger. Se administran desde la página del catálogo y desde el editor.
+4. **Al facturar**: en el POS, cada renglón de servicio tiene **Aclaración** (texto libre multilínea, aclaraciones predefinidas y la descripción ampliada, que viene del servicio y se puede cambiar para esa venta). Un renglón aclarado no se fusiona con otro igual. Con servicios en el carrito, el resumen muestra el **período del servicio y el vencimiento del pago** (por defecto, hoy) y se pueden cambiar.
+5. **`create_sale`**: copia completa de la de ADR-096 con un parámetro opcional al final, `p_service jsonb default null` (`{from, to, due}`), y un bloque marcado que llama a `_sale_apply_service` después de insertar los renglones (usa `v_line_ids`, mismo orden que `p_items`). Por renglón acepta `line_note`, `line_detail` y `clarification_ids`; sin las dos últimas claves toma las del servicio. Guarda fotos en `sale_items` (`line_detail`, `line_note`, `line_clarifications`, `unit_label`: la factura no cambia si después se edita el servicio o la plantilla) y el período en `sales` (`service_from`, `service_to`, `payment_due`). Valida `service_period_invalid` (hasta antes que desde, fecha inválida o fuera de rango) y `service_due_invalid` (vencimiento antes de la fecha de la venta), audita `sale_service_billed` y devuelve `service` en la respuesta. Se borra la firma de 13 parámetros para que no queden sobrecargas: las llamadas existentes (POS, offline, pausadas, cobros en espera, Mercado Libre) resuelven igual por nombre o posición y, sin `p_service`, una venta con servicios toma la fecha de la venta (lo mismo que se informaba antes).
+6. **ARCA**: `arca_snapshot` (copia de ADR-072) suma el período y el vencimiento de la venta; `detalleFor` los manda como `FchServDesde`, `FchServHasta` y `FchVtoPago` (`serviceDates`): sin datos, la fecha del comprobante como antes; el vencimiento nunca antes del comprobante (ARCA lo rechaza) y hasta nunca antes que desde. El concepto sigue saliendo de los renglones: 1 productos, 2 servicios, 3 ambos.
+7. **Comprobantes (motor ADR-112)**: cada renglón lleva `detailLines` (descripción ampliada, aclaraciones con viñeta y aclaración libre) debajo del nombre en los cinco modelos A4 y los tres de ticket, más chico y gris; la unidad del servicio en "U. medida"; el período facturado y el vencimiento del pago en los datos del comprobante. Sin factura, el concepto se deduce de los renglones (los de servicio guardan `unit_label`). Una factura de servicios vieja sin período muestra la fecha que se informó a ARCA.
+
+### Clasificación de plan (CLAUDE.md §6)
+
+**FLAG-OPERATIVO**, sin key nueva en `features`: el modo del catálogo es una elección del dueño según su rubro (como `dining_enabled`), y el período, el vencimiento, el detalle y las aclaraciones son datos que exige la factura de servicios: cumplir la normativa no depende del plan. Las aclaraciones predefinidas son plantillas de texto sin costo de plataforma.
+
+### Consecuencias
+
+- Migración `20261114100000_servicios_profesionales` (sin aplicar). `tests/unit/createSaleDeudas.test.ts` suma la excepción de esta copia y `tests/unit/serviciosProfesionales.test.tsx` compara la copia con ADR-096.
+- Los servicios cargados antes con stock prendido quedan sin stock la próxima vez que se editan (sin backfill: la migración no toca datos).
+- Las ventas offline y los cobros en espera guardan la aclaración por renglón pero no el período (toman la fecha de la venta).
+- Presupuestos: no existe un flujo de presupuestos; queda como siguiente paso (presupuesto de servicios con las mismas aclaraciones, convertible en venta).
+- Deuda: el ticket de bloques "Simple" y las plantillas propias no muestran la aclaración (sí los modelos del motor ADR-112); la nota de crédito de una devolución todavía usa el ticket de devolución.
+---
+
+## ADR-117: Datos fiscales del cliente para la factura de NinjaSoft: emisor configurable con letra pendiente, verificación sólo desde una consulta al padrón grabada por el servidor e historia por vigencia (F20-3)
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-110 (cobranza SaaS), ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §7.2, §8 y §22. **Numeración:** 113 lo toma `feat/catalogo-sync-config`; 114 está en `main`.
+
+### Contexto
+
+F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea la letra antes de confirmar y que el CUIT se verifique con el padrón de ARCA. NinjaSoft todavía no tiene CUIT ni certificado (§22 #1): no hay condición del emisor para calcular la letra ni forma de consultar el padrón. Los datos fiscales del negocio ya existen (`tax_settings`, `tenant_branding`) con el vocabulario de condiciones de ADR-068.
+
+### Decisión
+
+1. **Emisor configurable** (`platform_issuer_profile`, una fila por ambiente y una activa): condición frente al IVA, CUIT, razón social, domicilio e interruptor del padrón. Lo edita sólo super_admin, con motivo. Condición vacía = **letra pendiente** para todos (`pending_issuer`). El certificado sigue en `arca_platform`.
+2. **Letra** con `platform_cbte_letter` (SQL) y `lib/billing/letter.ts`, sobre `cbte_letter_infer`: misma regla que las ventas, sin M. Receptor sin condición = `pending_receptor`.
+3. **Condición con el vocabulario de ADR-068** (texto) en lugar del id de ARCA que proponía §6.2; el id sale de `fiscal_condition_arca_id`. Se reutilizan los checks, la letra y las etiquetas.
+4. **Perfil con historia por vigencia** (`tenant_billing_profiles`): cada cambio cierra la fila vigente y abre otra; un índice único parcial garantiza una sola abierta; baja lógica y auditoría con `before/after`. Sin fila se usan los datos de la empresa; sin CUIT, consumidor final. Con datos de la empresa la fila guarda el email y, si se verificó, la copia de ese CUIT (si el negocio cambia de CUIT, la verificación no se arrastra).
+5. **La verificación nunca la declara el cliente.** `owner_set_billing_profile({use_padron: true})` exige una consulta `ok` del mismo CUIT de los últimos 30 días en `platform_fiscal_lookups`, que sólo escribe `service_role` (Edge `platform_billing`), y toma de ahí razón social, condición y domicilio. Cambiar sólo el email conserva la verificación; cambiar datos fiscales la pierde.
+6. **Nivel `staff`** además de `padron`, `manual` y `none`: un admin puede marcar como verificados datos revisados a mano (constancia por email), con motivo. Es la salida mientras no haya certificado y habilita la factura A.
+7. **Padrón por la Edge `platform_billing`** con el WSAA existente (`_shared/arca`), `service = ws_sr_constancia_inscripcion` y ticket propio en `arca_platform_tickets`; parser puro en `_shared/arca/padron.ts`. Sin certificado responde `platform_not_configured` sin llamar a ARCA. Cache de 30 días, 10 consultas por hora por negocio y 300 en total. La autorización la decide la base con el JWT del usuario (`my_billing_profile`, o `internal_billing_profile_get` con `x-ninja-scope`).
+8. **RLS:** el negocio con `(select current_tenant_id())` y `(select is_tenant_manager())` (dueño o encargado lee y edita por RPC); el staff con `(select internal_scope())`; sin políticas de escritura. No es una feature de plan (ADR-110, punto 12).
+
+### Alternativas descartadas
+
+- **Calcular la letra con un emisor supuesto (monotributo):** mostraría "Factura C" a clientes que quizás reciban A. Es mejor "pendiente" con la explicación.
+- **Que el cliente mande los datos del padrón y un flag "verificado":** cualquiera podría declararse verificado.
+- **Guardar sólo la fila vigente y dejar la historia en `audit_logs`:** la historia del titular es dato de negocio (refacturación, §17.7), no sólo auditoría.
+- **Reutilizar `customers` o `tax_settings`:** mezclaría los datos con los que el negocio factura con los que NinjaSoft le factura a él.
+
+### Consecuencias
+
+- Migración `20261113300000_cobranza_datos_fiscales` (sin aplicar) y Edge `platform_billing` (sin desplegar; `verify_jwt` por defecto).
+- Para que el padrón funcione hace falta el certificado de la plataforma con `ws_sr_constancia_inscripcion` autorizado (spec §16.1) y elegir el ambiente activo.
+- Cuando F20-1 llegue a `main`: sumar el permiso "Cobranzas" a `internal_set_billing_profile` y decidir si `tenant_billing_terms.send_to` reemplaza a `email_facturacion` o lo usa como primer destinatario.
+- Deuda: cron de revalidación del padrón (F20-11) y FCE MiPyME.

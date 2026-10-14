@@ -11,7 +11,7 @@ import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
 import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
-import { toSalePayments } from "@/modules/pos/api";
+import { toSalePayments, type SaleServiceInput } from "@/modules/pos/api";
 import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
 import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflinePos";
 
@@ -22,6 +22,9 @@ import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflin
 export function saleErrorTitle(msg: string): string {
   // F18 · H100 (ADR-056): precio autoritativo y venta libre.
   if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
+  // ADR-116: período del servicio y vencimiento del pago.
+  if (msg.includes("service_period_invalid")) return "Revisá el período del servicio: termina antes de empezar o la fecha no es válida";
+  if (msg.includes("service_due_invalid")) return "El vencimiento del pago no puede ser anterior a hoy";
   // F9 (ADR-074): el servidor calcula las promociones.
   if (msg.includes("promo_mismatch")) return "Las promociones cambiaron: revisá el total y volvé a cobrar";
   if (msg.includes("promo_gift_invalid")) return "El regalo de la promo ya no corresponde: revisá el carrito";
@@ -147,6 +150,10 @@ export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
     overrideReason: l.overrideReason ?? null,
     listPrice: l.listPrice ?? null,
     lineId: l.lineId,
+    // ADR-116: datos de servicio del renglón.
+    ...(l.lineNote ? { lineNote: l.lineNote } : {}),
+    ...(l.lineDetail !== undefined ? { lineDetail: l.lineDetail } : {}),
+    ...(l.clarificationIds !== undefined ? { clarificationIds: l.clarificationIds } : {}),
   }));
 }
 
@@ -161,6 +168,8 @@ export function usePosSale(ctx: {
   reservationId?: string | null;
   salePromo: (p?: Promo | null) => Promo | null;
   couponId: string | null;
+  /** ADR-116: período del servicio y vencimiento (sólo si hay servicios). */
+  service?: SaleServiceInput | null;
   /** hadCash: la venta tuvo un cobro en efectivo (cajón, ADR-063). */
   onSuccess: (r: { saleId: string; change: number; hadCash: boolean }) => void;
   /** Venta offline (ADR-077): cola local, conectividad y reglas. */
@@ -230,6 +239,8 @@ export function usePosSale(ctx: {
         promo: ctx.salePromo(appliedPromo),
         // Cupón (H54): sólo el id; create_sale lo valida, calcula y consume.
         couponId: ctx.couponId,
+        // ADR-116: período del servicio y vencimiento del pago.
+        service: ctx.service ?? null,
       });
       // Turno (H38): enlazar la venta y marcarlo 'realizado' (best-effort).
       if (ctx.appointmentId) {

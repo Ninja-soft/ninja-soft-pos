@@ -58,6 +58,8 @@ import {
   LEASE_SECONDS,
   MAX_FEED_ERRORS,
   mapCatalogPage,
+  mergeUpsertResults,
+  UPSERT_CHUNK,
   nextPendingStore,
   runMode,
   storeFaltantes,
@@ -217,10 +219,13 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
           if (!page || !Array.isArray(page.items)) throw new Error("respuesta del feed inválida");
           const rows = mapCatalogPage(page.items);
           let result: UpsertResult = EMPTY_RESULT;
-          if (rows.length) {
-            const { data, error } = await admin.rpc("catalog_sync_upsert_catalog", { p_run: run.id, p_items: rows });
+          for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+            const { data, error } = await admin.rpc("catalog_sync_upsert_catalog", {
+              p_run: run.id,
+              p_items: rows.slice(i, i + UPSERT_CHUNK),
+            });
             if (error) throw new Error(`upsert: ${error.message}`);
-            result = data as UpsertResult;
+            result = mergeUpsertResults(result, data as UpsertResult);
           }
           p = { ...p, ...applyPage(st, p.stores, p.totals, page, result) };
           pages++;

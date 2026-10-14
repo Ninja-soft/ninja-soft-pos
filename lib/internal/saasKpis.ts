@@ -8,8 +8,9 @@
 //
 // Definiciones (resumen; el texto completo vive en KPI_DEFINITIONS):
 //   · Cuenta paga: suscripción active o past_due, no excluida y con MRR > 0.
-//   · Excluidas: lifetime (exentas), negocios de prueba (isTest, cuando exista
-//     la marca tenants.is_test) y negocios dados de baja (deleted_at).
+//   · Excluidas (§22 #7): negocios de prueba (tenants.is_test), negocios cuyo
+//     dueño es staff interno, lifetime, exentos y dados de baja. La lista sale
+//     de internal_billing_exclusions() (F20-1), la misma que usa la cobranza.
 //   · MRR: plan del ciclo normalizado a mes (anual / 12; si el anual vale 0,
 //     el mensual) + addons comprados vigentes − descuentos vigentes.
 // =============================================================================
@@ -43,8 +44,12 @@ export interface KpiAccount {
   name: string;
   createdAt: string;
   deletedAt?: string | null;
-  /** Marca de negocio interno o de prueba. Pendiente: tenants.is_test (spec §15.1). */
+  /** Negocio interno o de prueba (tenants.is_test, spec §15.1). */
   isTest?: boolean;
+  /** El dueño es staff interno de NinjaSoft (§22 #7). */
+  isStaffOwned?: boolean;
+  /** Modalidad de cobro exenta (tenant_billing_terms). */
+  isExempt?: boolean;
   trialEndsAt: string | null;
   status: SubStatus | null;
   billingCycle: string | null;
@@ -113,13 +118,36 @@ export function parsePeriodKey(v: string | string[] | undefined): PeriodKey {
 
 // ── Exclusiones y MRR ───────────────────────────────────────────────────────
 
-export type ExclusionReason = "lifetime" | "test" | "deleted";
+export type ExclusionReason = "lifetime" | "test" | "deleted" | "staff" | "exempt";
 
+/** Mismo orden que platform_billing_exclusion() en la base. */
 export function exclusionReason(a: KpiAccount): ExclusionReason | null {
   if (a.deletedAt) return "deleted";
   if (a.isTest) return "test";
+  if (a.isStaffOwned) return "staff";
   if (a.isLifetime) return "lifetime";
+  if (a.isExempt) return "exempt";
   return null;
+}
+
+/** Marca las exclusiones que devuelve internal_billing_exclusions(). */
+export function applyExclusions(
+  accounts: KpiAccount[],
+  rows: { tenant_id: string; reason: string }[] | null | undefined,
+): KpiAccount[] {
+  if (!rows || rows.length === 0) return accounts;
+  const by = new Map(rows.map((r) => [r.tenant_id, r.reason]));
+  return accounts.map((a) => {
+    const r = by.get(a.tenantId);
+    if (!r) return a;
+    return {
+      ...a,
+      isTest: a.isTest || r === "test",
+      isStaffOwned: a.isStaffOwned || r === "staff_owned",
+      isLifetime: a.isLifetime || r === "lifetime",
+      isExempt: a.isExempt || r === "exempt",
+    };
+  });
 }
 
 /** Precio mensual normalizado del plan según el ciclo. */
@@ -343,10 +371,10 @@ export function trialsSummary(accounts: KpiAccount[], now: Date = new Date()): {
   return { active, endingIn7d: ending };
 }
 
-/** Negocios creados en el período (sin los de prueba ni los borrados). */
+/** Negocios creados en el período (sin los de prueba, del staff ni los borrados). */
 export function newTenants(accounts: KpiAccount[], p: Period): number {
   return accounts.filter((a) => {
-    if (a.deletedAt || a.isTest) return false;
+    if (a.deletedAt || a.isTest || a.isStaffOwned) return false;
     const t = new Date(a.createdAt).getTime();
     return t >= p.start.getTime() && t < p.end.getTime();
   }).length;
@@ -479,7 +507,7 @@ export function formatPct(v: number): string {
 // ── Definiciones (tooltip de cada tarjeta) ──────────────────────────────────
 
 export const KPI_DEFINITIONS = {
-  mrr: "Ingreso recurrente mensual de las cuentas pagas: precio del plan normalizado a mes (anual / 12) más addons comprados vigentes, menos descuentos vigentes. No incluye trials, suspendidas, canceladas, cuentas lifetime ni negocios de prueba.",
+  mrr: "Ingreso recurrente mensual de las cuentas pagas: precio del plan normalizado a mes (anual / 12) más addons comprados vigentes, menos descuentos vigentes. No incluye trials, suspendidas, canceladas, cuentas lifetime o exentas, negocios de prueba ni negocios cuyo dueño es del staff.",
   arr: "Run-rate anual: MRR × 12. No es lo facturado en el año.",
   mrrAtRisk: "Suma del MRR de las cuentas pagas con el pago vencido o con el último débito de Mercado Pago rechazado (30 días).",
   collected: "Pagos registrados en el período (billing_records), en bruto. El neto de comisiones y las reversas llegan con el ledger de cobranza (F20-1).",
@@ -488,7 +516,7 @@ export const KPI_DEFINITIONS = {
   trials: "Negocios en período de prueba. Entre paréntesis, los que vencen en los próximos 7 días.",
   conversion: "Trials cuyo fin de prueba cayó en el período y pagaron por primera vez antes de los 7 días siguientes, sobre todos los trials que terminaron en el período. Con menos de 5 casos se muestra n/d.",
   churn: "Cuentas pagas al inicio del período que al cierre están canceladas o suspendidas hace más de 30 días, sobre las pagas al inicio. Se reconstruye desde la auditoría de cambios de estado, no desde la fecha de modificación.",
-  newTenants: "Negocios creados en el período, sin los de prueba ni los dados de baja.",
+  newTenants: "Negocios creados en el período, sin los de prueba, los del staff ni los dados de baja.",
   collectionRisk: "Negocios con el pago vencido, suspendidos por falta de pago o con el último débito rechazado (30 días). Las promesas de pago y el saldo vencido se suman con el ledger (F20-1).",
   usageRisk: "Cuentas pagas o trials con puntaje de salud menor a 60 (logins, ventas y usuarios activos), más los trials sin ventas después de 7 días (riesgo de conversión).",
 } as const;

@@ -68,11 +68,16 @@ vi.mock("@/modules/arca/api", () => ({ arcaApi: { emitirVenta: vi.fn(async () =>
 vi.mock("@/components/arca/FiscalStatus", () => ({ FiscalStatus: () => <div>detalle fiscal</div> }));
 vi.mock("@/components/sales/SalePayments", () => ({ SalePayments: () => <div>cobros</div> }));
 vi.mock("@/components/tickets/TemplateRenderer", () => ({
-  TemplateRenderer: ({ className }: { className?: string }) => (
-    <div className={className} data-testid="ticket">
+  TemplateRenderer: ({ className, invoice }: { className?: string; invoice?: { style?: { ticketModel?: string } } }) => (
+    <div className={className} data-testid="ticket" data-invoice-model={invoice?.style?.ticketModel ?? ""}>
       TICKET
     </div>
   ),
+}));
+
+// ADR-112: la hoja A4 oculta (PDF y email) no es parte de lo que se prueba acá.
+vi.mock("@/components/invoices/InvoiceDocument", () => ({
+  InvoiceDocument: () => <div data-testid="invoice-a4" />,
 }));
 
 import { TicketModal } from "@/components/sales/TicketModal";
@@ -177,6 +182,13 @@ describe("TicketModal · ventana visible", () => {
     screen.getAllByRole("button", { name: /Nueva venta/ })[0]!.click();
     expect(onNewSale).toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("ADR-112: la vista previa y la impresión usan el modelo de comprobante y hay hoja A4 para el PDF", async () => {
+    setup({});
+    const tickets = await screen.findAllByTestId("ticket");
+    expect(tickets.every((t) => t.getAttribute("data-invoice-model") === "clasico")).toBe(true);
+    expect(await screen.findByTestId("invoice-a4")).toBeInTheDocument();
   });
 
   it("sin auto-imprimir no imprime solo; Imprimir ticket imprime", async () => {

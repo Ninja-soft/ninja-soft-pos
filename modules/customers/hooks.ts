@@ -22,11 +22,14 @@ export function useCustomers(search: string) {
 // recientes; con búsqueda filtra server-side con límite. keepPreviousData evita
 // el parpadeo de la lista mientras se tipea (el caller pasa el término ya
 // debounced).
-export function useCustomersForPicker(search: string) {
+// `enabled`: el POS lo ata a que el selector esté abierto (antes se pedía la
+// lista de recientes en cada arranque del POS aunque nadie abriera el selector).
+export function useCustomersForPicker(search: string, enabled = true) {
   return useQuery({
     queryKey: ["customers", "picker", search],
     queryFn: () => customersApi.forPicker(search),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

@@ -8,6 +8,10 @@ import { HtmlTicketRenderer } from "@/components/tickets/HtmlTicketRenderer";
 import type { TemplateContent, TicketBlock } from "@/lib/tickets/blocks";
 import type { TicketTemplate } from "@/modules/tickets/api";
 import { ensureQrBlocks, ensureQrCanvas, ensureQrHtml } from "@/lib/tickets/requiredQr";
+import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
+import { InvoiceFit } from "@/components/invoices/InvoiceFit";
+import { invoiceFromTicket } from "@/lib/invoices/fromTicket";
+import type { ResolvedInvoiceStyle } from "@/lib/invoices/style";
 
 type Paper = "58" | "80" | "a4";
 
@@ -17,6 +21,19 @@ interface Props {
   data: TicketData;
   paperOverride?: Paper;
   className?: string;
+  /**
+   * ADR-112: estilo de comprobante del negocio. Sin plantilla propia activa,
+   * el comprobante sale con el modelo elegido (factura A4 o ticket) en vez de
+   * los bloques clásicos; con el modelo de ticket "simple", igual que antes.
+   */
+  invoice?: {
+    style: ResolvedInvoiceStyle;
+    /**
+     * A4 achicado al ancho disponible (vista previa, default). `false` en el
+     * nodo que se imprime o exporta: tamaño real y reglas @page de A4.
+     */
+    fit?: boolean;
+  } | null;
 }
 
 export function TemplateRenderer({
@@ -25,6 +42,7 @@ export function TemplateRenderer({
   data,
   paperOverride,
   className,
+  invoice,
 }: Props) {
   const paper: Paper = paperOverride ?? (template?.paper as Paper | undefined) ?? "80";
   const showNinja = Boolean(template?.show_ninjasoft_logo);
@@ -40,7 +58,44 @@ export function TemplateRenderer({
     />
   );
 
-  if (!template) return fallback;
+  if (!template) {
+    if (invoice && (paper === "a4" || invoice.style.ticketModel !== "simple")) {
+      // "Mostrar logo en el ticket" apagado (ahorro de tinta en térmica) también
+      // vale para los modelos de ticket; la hoja A4 sigue la opción de logo propia.
+      const style =
+        paper !== "a4" && data.brand?.ticket_show_logo === false
+          ? { ...invoice.style, logoUrl: null, logoOnAccentUrl: null }
+          : invoice.style;
+      const doc = invoiceFromTicket(data, {
+        tradeName: style.tradeName,
+        legends: style.legends,
+        showPayments: style.showPayments,
+        showInternalRef: style.showInternalRef,
+      });
+      if (paper === "a4") {
+        return (
+          <div className={className}>
+            {invoice.fit === false ? (
+              <InvoiceDocument doc={doc} style={style} format="a4" printable />
+            ) : (
+              <InvoiceFit>
+                <InvoiceDocument doc={doc} style={style} format="a4" />
+              </InvoiceFit>
+            )}
+          </div>
+        );
+      }
+      return (
+        <div
+          className={`mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white ${className ?? ""}`}
+          style={{ width: paper === "58" ? "58mm" : "80mm", maxWidth: "100%" }}
+        >
+          <InvoiceDocument doc={doc} style={style} format={paper} />
+        </div>
+      );
+    }
+    return fallback;
+  }
 
   const c = template.content as unknown as TemplateContent;
   const mode = template.mode;

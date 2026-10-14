@@ -124,6 +124,10 @@ const TicketSettingsCard = dynamic(
   () => import("@/components/dashboard-team/TicketSettingsCard").then((m) => m.TicketSettingsCard),
   { loading },
 );
+const InvoiceStyleCard = dynamic(
+  () => import("@/components/invoices/InvoiceStyleCard").then((m) => m.InvoiceStyleCard),
+  { loading },
+);
 const TicketTemplatesCard = dynamic(
   () => import("@/components/tickets/TicketTemplatesCard").then((m) => m.TicketTemplatesCard),
   { loading },
@@ -166,6 +170,12 @@ const TaxSettings = dynamic(
 // Facturación electrónica ARCA (F3 · ADR-072).
 const ArcaSettings = dynamic(
   () => import("@/components/arca/ArcaSettings").then((m) => m.ArcaSettings),
+  { loading },
+);
+
+// Datos de facturación frente a NinjaSoft (F20-3 · ADR-117).
+const BillingProfileSettings = dynamic(
+  () => import("@/components/billing/BillingProfileSettings").then((m) => m.BillingProfileSettings),
   { loading },
 );
 
@@ -291,6 +301,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
           <ScopedSection domain="ticket" fields={TICKET_TEXT_FIELDS}>
             <TicketSettingsCard />
           </ScopedSection>
+          {/* ADR-112: modelos de factura A4 y ticket, color, logo y sello. */}
+          <InvoiceStyleCard />
           <TicketTemplatesCard />
         </div>
       );
@@ -451,6 +463,9 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;
+    // Datos fiscales para la factura de NinjaSoft (F20-3): dueño o encargado.
+    case "datos-facturacion":
+      return <BillingProfileSettings />;
   }
 }
 

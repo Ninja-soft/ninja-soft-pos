@@ -165,6 +165,10 @@ export interface FiscalDocument {
   last_error_msg: string | null;
   observations: { code: string; msg: string }[] | null;
   emission_type: "CAE" | "CAEA";
+  /** ADR-112: receptor y concepto, para la factura impresa. */
+  doc_tipo?: number | null;
+  doc_nro?: string | null;
+  concepto?: number | null;
   inform_status: "pendiente" | "informado" | "rechazado" | null;
   informed_at: string | null;
   approved_at: string | null;
@@ -246,7 +250,7 @@ export interface PlatformEnvInfo {
 export type DocFilter = "pendientes" | "errores" | "aprobados" | "contingencia" | "todos";
 
 const DOC_COLS =
-  "id, sale_id, return_id, origin, environment, store_id, cbte_letter, cbte_tipo, pto_vta, cbte_nro, cbte_fch, imp_total, status, attempts, next_attempt_at, dead_letter_at, cae, cae_vto, qr_url, last_error_code, last_error_msg, observations, emission_type, inform_status, informed_at, approved_at, created_at";
+  "id, sale_id, return_id, origin, environment, store_id, cbte_letter, cbte_tipo, pto_vta, cbte_nro, cbte_fch, imp_total, status, attempts, next_attempt_at, dead_letter_at, cae, cae_vto, qr_url, last_error_code, last_error_msg, observations, emission_type, inform_status, informed_at, approved_at, created_at, doc_tipo, doc_nro, concepto";
 
 // ---------------------------------------------------------------------------
 // API

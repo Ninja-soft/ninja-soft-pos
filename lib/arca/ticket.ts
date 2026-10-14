@@ -19,6 +19,11 @@ export interface TicketFiscal {
   qrUrl: string | null;
   emissionType: "CAE" | "CAEA";
   homologacion: boolean;
+  /** ADR-112 (opcionales): fecha del comprobante, receptor y concepto. */
+  cbteFch?: string | null;
+  docTipo?: number | null;
+  docNro?: string | null;
+  concepto?: number | null;
 }
 
 interface DocLike {
@@ -33,6 +38,10 @@ interface DocLike {
   emission_type?: "CAE" | "CAEA" | null;
   environment?: string | null;
   origin?: string | null;
+  cbte_fch?: string | null;
+  doc_tipo?: number | null;
+  doc_nro?: string | null;
+  concepto?: number | null;
 }
 
 export function ticketFiscal(doc: DocLike | null | undefined): TicketFiscal | null {
@@ -51,6 +60,10 @@ export function ticketFiscal(doc: DocLike | null | undefined): TicketFiscal | nu
     qrUrl: approved ? doc.qr_url : null,
     emissionType: doc.emission_type === "CAEA" ? "CAEA" : "CAE",
     homologacion: doc.environment === "homologacion",
+    cbteFch: doc.cbte_fch ?? null,
+    docTipo: doc.doc_tipo ?? null,
+    docNro: doc.doc_nro ?? null,
+    concepto: doc.concepto ?? null,
   };
 }
 

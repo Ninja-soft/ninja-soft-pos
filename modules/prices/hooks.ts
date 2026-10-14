@@ -76,9 +76,10 @@ export function usePriceItemMutations(
 
 // Lista 'mostrador' activa + todos sus items, para resolver el precio de venta
 // del POS. Si no hay lista → null y el POS usa el precio base sin cambios.
-export function useMostradorPricing() {
+export function useMostradorPricing(enabled = true) {
   return useQuery({
     queryKey: ["price-lists", "mostrador-pricing"],
     queryFn: () => pricesApi.channelPricing("mostrador"),
+    enabled,
   });
 }

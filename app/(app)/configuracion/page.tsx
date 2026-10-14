@@ -173,6 +173,12 @@ const ArcaSettings = dynamic(
   { loading },
 );
 
+// Datos de facturación frente a NinjaSoft (F20-3 · ADR-115).
+const BillingProfileSettings = dynamic(
+  () => import("@/components/billing/BillingProfileSettings").then((m) => m.BillingProfileSettings),
+  { loading },
+);
+
 // Integraciones (ADR-062).
 const ChannelsSettings = dynamic(
   () => import("@/components/deliveryChannels/ChannelsSettings").then((m) => m.ChannelsSettings),
@@ -457,6 +463,9 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;
+    // Datos fiscales para la factura de NinjaSoft (F20-3): dueño o encargado.
+    case "datos-facturacion":
+      return <BillingProfileSettings />;
   }
 }
 

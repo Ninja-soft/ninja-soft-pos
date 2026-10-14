@@ -132,6 +132,36 @@ export interface UpsertResult {
   por_tienda: Record<string, { nuevas?: number; actualizadas?: number; faltantes?: number }>;
 }
 
+/**
+ * Productos por llamada a catalog_sync_upsert_catalog. La RPC corre bajo el
+ * statement_timeout de PostgREST (8 s); con el catálogo grande una página de
+ * 250 fichas con sus ofertas lo superaba. Se guarda la página en lotes.
+ */
+export const UPSERT_CHUNK = 50;
+
+/** Suma los resultados de varios lotes de upsert. */
+export function mergeUpsertResults(a: UpsertResult, b: UpsertResult): UpsertResult {
+  const por_tienda: UpsertResult["por_tienda"] = { ...a.por_tienda };
+  for (const [k, r] of Object.entries(b.por_tienda ?? {})) {
+    const prev = por_tienda[k] ?? {};
+    por_tienda[k] = {
+      nuevas: (prev.nuevas ?? 0) + (r.nuevas ?? 0),
+      actualizadas: (prev.actualizadas ?? 0) + (r.actualizadas ?? 0),
+      faltantes: (prev.faltantes ?? 0) + (r.faltantes ?? 0),
+    };
+  }
+  return {
+    recibidos: a.recibidos + (b.recibidos ?? 0),
+    nuevos: a.nuevos + (b.nuevos ?? 0),
+    actualizados: a.actualizados + (b.actualizados ?? 0),
+    ofertas: a.ofertas + (b.ofertas ?? 0),
+    ofertas_nuevas: a.ofertas_nuevas + (b.ofertas_nuevas ?? 0),
+    ofertas_actualizadas: a.ofertas_actualizadas + (b.ofertas_actualizadas ?? 0),
+    faltantes: a.faltantes + (b.faltantes ?? 0),
+    por_tienda,
+  };
+}
+
 /** Productos por página pedidos al feed (el feed acepta hasta 500). */
 export const FEED_PAGE_LIMIT = 250;
 /** Presupuesto de una invocación de la Edge. */

@@ -28,7 +28,9 @@ function assertClean(label: string, text: string) {
 }
 
 // --- 1) Plantillas ------------------------------------------------------------
-const rows = EMAIL_TEMPLATES.map((t) => {
+// Las plantillas con `migration` propia se siembran en su migración (la
+// general ya está aplicada y no se regenera para plantillas nuevas).
+const rows = EMAIL_TEMPLATES.filter((t) => !t.migration).map((t) => {
   assertClean(t.key, t.defaultSubject + t.defaultHtml);
   return `  ('${t.key}',\n   ${dollar("tpl", t.defaultSubject)},\n   ${dollar("tpl", t.defaultHtml)})`;
 });

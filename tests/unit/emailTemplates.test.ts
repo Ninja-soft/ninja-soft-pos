@@ -153,8 +153,9 @@ describe("artefactos generados", () => {
     const sql = read("supabase/migrations/20261011160000_emails_diseno_ninja_soft.sql");
     expect(sql).not.toContain(EM_DASH);
     for (const t of EMAIL_TEMPLATES) {
-      expect(sql, t.key).toContain(`('${t.key}',`);
-      expect(sql, t.key).toContain(`$tpl$${t.defaultHtml}$tpl$`);
+      const src = t.migration ? read(t.migration) : sql;
+      expect(src, t.key).toContain(`('${t.key}',`);
+      expect(src, t.key).toContain(`$tpl$${t.defaultHtml}$tpl$`);
     }
     expect(sql).toContain("create or replace function _dunning_email_html");
   });

@@ -17,6 +17,12 @@ export interface EmailTemplateDef {
   variables: string[];
   defaultSubject: string;
   defaultHtml: string;
+  /**
+   * Migración que siembra esta plantilla, si no es la general
+   * (20261011160000_emails_diseno_ninja_soft.sql, que ya está aplicada y no se
+   * regenera para plantillas nuevas).
+   */
+  migration?: string;
 }
 
 const BASE_VARS = ["negocio", "logo_url"];
@@ -363,6 +369,33 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       cta: { href: LOGIN, label: "Ver mi suscripción" },
     }),
   },
+  // === Staff: participación (F21 · ADR-121) =================================
+  {
+    key: "staff_payout_credited",
+    label: "Pago al staff acreditado",
+    description: "Avisa a una persona del staff que NinjaSoft le pagó (total o parcial) su liquidación.",
+    variables: [...BASE_VARS, "nombre", "monto", "periodo", "medio", "fecha", "referencia", "cuenta"],
+    defaultSubject: "NinjaSoft te acreditó {{monto}}",
+    defaultHtml: emailLayout({
+      preheader: "Pago de tu liquidación de {{periodo}}.",
+      icon: "💸",
+      tone: "success",
+      eyebrow: "Pago acreditado",
+      title: "Te pagamos {{monto}}",
+      intro: "Hola {{nombre}}, NinjaSoft registró un pago de tu participación de <b>{{periodo}}</b>.",
+      rows: [
+        ["Monto", "{{monto}}"],
+        ["Medio", "{{medio}}"],
+        ["Fecha", "{{fecha}}"],
+        ["Cuenta", "{{cuenta}}"],
+        ["Referencia", "{{referencia}}"],
+      ],
+      cta: { href: `${APP_URL}/internal/mi-participacion`, label: "Ver mi participación" },
+      note: "Si algo no coincide con lo que te llegó, respondé este email.",
+      reason: "Recibiste este email porque participás de la facturación de NinjaSoft.",
+    }),
+    migration: "supabase/migrations/20261115200000_staff_participacion.sql",
+  },
 ];
 
 /** Reemplaza {{variable}} por su valor; si falta, deja el placeholder. */
@@ -389,5 +422,10 @@ export function sampleVars(negocio: string): Record<string, string> {
     precio_anterior: "$ 9.900,00",
     precio_nuevo: "$ 12.500,00",
     catalogo: "Kiosco esencial",
+    periodo: "10/2026",
+    medio: "Transferencia bancaria",
+    fecha: "05/11/2026",
+    referencia: "123456789012",
+    cuenta: "Banco Galicia · juan.perez.ns",
   };
 }

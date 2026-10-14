@@ -3,7 +3,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, Zap } from "lucide-react";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
-import { fetchOwnerBillingSummary, startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
+import {
+  ACCOUNT_MODE_CHECKOUT_MESSAGE,
+  fetchOwnerBillingSummary,
+  startOwnerSubscriptionCheckout,
+} from "@/modules/saas/subscriptionBilling";
 import { useToast } from "@/components/ui/Toast";
 import { appOrigin } from "@/lib/site";
 
@@ -34,8 +38,10 @@ export function PastDueBanner() {
         title:
           e.message === "not_owner"
             ? "Pedile al dueño que regularice el pago"
-            : "No se pudo iniciar el pago",
-        variant: e.message === "not_owner" ? "info" : "error",
+            : e.message === "billing_mode_not_mp"
+              ? ACCOUNT_MODE_CHECKOUT_MESSAGE
+              : "No se pudo iniciar el pago",
+        variant: e.message === "not_owner" || e.message === "billing_mode_not_mp" ? "info" : "error",
       }),
   });
 

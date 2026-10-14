@@ -123,7 +123,7 @@ export function ReturnsSettingsCard() {
                     <span className="flex items-center gap-2 text-sm font-medium">
                       {p.label}
                       {p.tag && (
-                        <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+                        <span className="rounded-md bg-emerald-400/15 px-2 py-0.5 text-[11px] font-semibold text-success">
                           {p.tag}
                         </span>
                       )}

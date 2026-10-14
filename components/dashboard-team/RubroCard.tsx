@@ -186,7 +186,7 @@ export function RubroCard() {
               {verticalFeatures(current).map((f) => (
                 <span
                   key={f}
-                  className="rounded-full bg-ninja-flame/12 px-2.5 py-1 text-xs font-medium text-ninja-flameSoft"
+                  className="rounded-md bg-ninja-flame/12 px-2.5 py-1 text-xs font-medium text-ninja-flameSoft"
                 >
                   {FEATURE_LABELS[f] ?? f}
                 </span>

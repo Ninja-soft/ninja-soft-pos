@@ -224,8 +224,15 @@ export interface PlanAddon {
   isActive: boolean;
 }
 
+export interface AddonCatalogItem extends PlanAddon {
+  /** Negocios con el addon activo (pagos + bonificados). */
+  activeTenants: number;
+  /** De esos, cuántos lo tienen bonificado (source = 'granted'). */
+  grantedTenants: number;
+}
+
 // Código de invitación.
-export type InviteKind = "lifetime" | "trial_days";
+export type InviteKind = "lifetime" | "trial_days" | "account";
 
 export interface InviteCode {
   id: string;
@@ -239,6 +246,12 @@ export interface InviteCode {
   valid_until: string | null;
   is_active: boolean;
   created_at: string;
+  /** Cuenta corriente (F20-8): plazo de pago, descuento y ciclo. */
+  due_days: number | null;
+  discount_percent: number | null;
+  discount_months: number | null;
+  billing_cycle: "monthly" | "yearly" | null;
+  notes: string | null;
 }
 
 export interface InviteCodeInput {
@@ -249,6 +262,11 @@ export interface InviteCodeInput {
   max_uses: number | null;
   valid_from: string | null;
   valid_until: string | null;
+  due_days?: number | null;
+  discount_percent?: number | null;
+  discount_months?: number | null;
+  billing_cycle?: "monthly" | "yearly" | null;
+  notes?: string | null;
 }
 
 export interface GrantAccessInput {
@@ -325,6 +343,14 @@ export interface SystemEmail {
   sent_at: string | null;
   created_at: string;
   tenantName: string | null;
+}
+
+// RPC que todavía no están en types/database.ts (migraciones sin aplicar).
+function untypedRpc(fn: string, args: Record<string, unknown>) {
+  const client = createClient() as unknown as {
+    rpc: (f: string, a: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+  };
+  return client.rpc(fn, args);
 }
 
 export const internalApi = {
@@ -1075,6 +1101,40 @@ export const internalApi = {
     }));
   },
 
+  // Catálogo completo de addons (activos e inactivos) con cuántos negocios los
+  // tienen activos, separando los bonificados. Sólo lectura (pantalla
+  // Complementos del panel interno).
+  addonCatalog: async (): Promise<AddonCatalogItem[]> => {
+    const supabase = createClient();
+    const [addons, subs] = await Promise.all([
+      supabase
+        .from("plan_addons")
+        .select("id, key, label, description, monthly_price_ars, is_active")
+        .order("is_active", { ascending: false })
+        .order("label"),
+      supabase.from("subscription_addons").select("addon_key, source").eq("status", "active"),
+    ]);
+    if (addons.error) throw addons.error;
+    if (subs.error) throw subs.error;
+    const counts = new Map<string, { total: number; granted: number }>();
+    for (const s of subs.data ?? []) {
+      const c = counts.get(s.addon_key) ?? { total: 0, granted: 0 };
+      c.total += 1;
+      if (s.source === "granted") c.granted += 1;
+      counts.set(s.addon_key, c);
+    }
+    return (addons.data ?? []).map((a) => ({
+      id: a.id,
+      key: a.key,
+      label: a.label,
+      description: a.description,
+      monthlyPrice: Number(a.monthly_price_ars ?? 0),
+      isActive: a.is_active,
+      activeTenants: counts.get(a.key)?.total ?? 0,
+      grantedTenants: counts.get(a.key)?.granted ?? 0,
+    }));
+  },
+
   // Addons activos de un tenant (set de keys con status active).
   tenantAddons: async (tenantId: string): Promise<Set<string>> => {
     const supabase = createClient();
@@ -1140,15 +1200,14 @@ export const internalApi = {
     if (error) throw error;
   },
 
-  // ── Fase C — Códigos de invitación (CRUD directo, RLS internal) ───────────
+  // ── Códigos de invitación: lectura con RLS internal, escritura por RPC
+  //    auditada (F20-8 · ADR-120) ───────────────────────────────────────────
 
   listInviteCodes: async (): Promise<InviteCode[]> => {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("invite_codes")
-      .select(
-        "id, code, kind, plan_key, trial_days, max_uses, used_count, valid_from, valid_until, is_active, created_at",
-      )
+      .select("*")
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -1159,39 +1218,18 @@ export const internalApi = {
   },
 
   createInviteCode: async (input: InviteCodeInput): Promise<void> => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const { error } = await supabase.from("invite_codes").insert({
-      code: input.code,
-      kind: input.kind,
-      plan_key: input.plan_key,
-      trial_days: input.trial_days,
-      max_uses: input.max_uses,
-      valid_from: input.valid_from,
-      valid_until: input.valid_until,
-      created_by: user?.id ?? null,
-    });
-    if (error) throw error;
+    const { error } = await untypedRpc("internal_invite_code_create", { p_data: input });
+    if (error) throw new Error(error.message);
   },
 
   setInviteCodeActive: async (id: string, active: boolean): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("invite_codes")
-      .update({ is_active: active })
-      .eq("id", id);
-    if (error) throw error;
+    const { error } = await untypedRpc("internal_invite_code_set_active", { p_id: id, p_active: active });
+    if (error) throw new Error(error.message);
   },
 
   deleteInviteCode: async (id: string): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("invite_codes")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) throw error;
+    const { error } = await untypedRpc("internal_invite_code_delete", { p_id: id });
+    if (error) throw new Error(error.message);
   },
 
   listDiscounts: async (tenantId: string): Promise<TenantDiscount[]> => {

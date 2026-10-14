@@ -29,9 +29,14 @@
 // 170 s), responde 202 y sigue en segundo plano (EdgeRuntime.waitUntil) hasta
 // ~100 s: pide páginas del feed maestro con su cursor y guarda el avance en
 // catalog_sync_runs.feed después de CADA página. Terminada la lectura, cierra
-// tienda por tienda (catalog_sync_finish_store: si fue completa, las ofertas
-// que no vinieron quedan no disponibles, nunca se borran; conteo) y al final
-// recuento y aviso a los negocios por catálogo afectado (catalog_sync_finalize).
+// POR LOTES (ADR-118, runClosing): tienda por tienda de a CLOSE_BATCH_ROWS
+// ofertas (catalog_sync_close_store_batch: si fue completa, las que no vinieron
+// quedan no disponibles, nunca se borran; conteo), recuento de cada catálogo
+// afectado por rangos (catalog_recount_step) y aviso (catalog_sync_finalize).
+// El avance queda en la corrida (stores.*.cursor, closing). Un lote que falla
+// 3 veces seguidas deja la tienda/catálogo con error y la corrida "partial".
+// ADR-118 también: los productos sin EAN entran por tienda (ean null +
+// codigo_tienda).
 // Si se acaba el tiempo, suelta el lease y el cron de cada minuto continúa;
 // si la invocación muere, el lease vence y pasa lo mismo.
 //
@@ -50,6 +55,8 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import {
   applyFeedError,
   applyPage,
+  CLOSE_BATCH_ROWS,
+  emptyClosing,
   feedCatalogUrl,
   feedStoresUrl,
   hasTime,
@@ -59,14 +66,19 @@ import {
   MAX_FEED_ERRORS,
   mapCatalogPage,
   mergeUpsertResults,
+  RECOUNT_BATCH_ITEMS,
+  runClosing,
   UPSERT_CHUNK,
-  nextPendingStore,
   runMode,
   storeFaltantes,
+  type CloseBatchResult,
+  type ClosingDeps,
+  type ClosingState,
   type FeedCatalogPage,
   type FeedState,
   type FeedStore,
   type PreviousRun,
+  type RecountStepResult,
   type RunTotals,
   type StoresState,
   type UpsertResult,
@@ -102,6 +114,7 @@ interface RunRow {
   ofertas_nuevas: number;
   ofertas_actualizadas: number;
   started_at: string;
+  closing: ClosingState | null;
 }
 
 interface Feed {
@@ -123,6 +136,7 @@ interface Progress {
   stores: StoresState;
   feed: FeedState | null;
   totals: RunTotals;
+  closing: ClosingState;
 }
 
 /** La corrida fue pausada o cancelada desde el panel: cortar la tanda. */
@@ -141,9 +155,13 @@ async function saveRun(admin: SupabaseClient, runId: string, p: Progress, extra:
     .update({
       stores: p.stores,
       feed: p.feed,
+      closing: p.closing,
       ...p.totals,
       faltantes: storeFaltantes(p.stores),
-      errores: (p.feed?.error ? 1 : 0) + Object.values(p.stores).filter((s) => s.error).length,
+      errores:
+        (p.feed?.error ? 1 : 0) +
+        Object.values(p.stores).filter((s) => s.error).length +
+        Object.keys(p.closing.errors ?? {}).length,
       mode: runMode(p.feed),
       heartbeat_at: new Date().toISOString(),
       ...extra,
@@ -175,6 +193,7 @@ async function initRun(admin: SupabaseClient, feed: Feed, run: RunRow, totals: R
     stores: initStores(feedStores),
     feed: initFeedState((prev ?? []) as PreviousRun[], run.force_full),
     totals,
+    closing: emptyClosing(),
   };
   await saveRun(admin, run.id, progress);
   return progress;
@@ -203,6 +222,7 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
       ofertas_nuevas: run.ofertas_nuevas ?? 0,
       ofertas_actualizadas: run.ofertas_actualizadas ?? 0,
     },
+    closing: run.closing ?? emptyClosing(),
   };
   let pages = 0;
 
@@ -242,34 +262,67 @@ async function processSlice(admin: SupabaseClient, feed: Feed, run: RunRow): Pro
         continue;
       }
 
-      // 2) Cierre por tienda: faltantes (sólo si la lectura fue completa y sin
-      //    error) + conteo. Una RPC por tienda: ninguna toca la tabla entera.
-      const key = nextPendingStore(p.stores);
-      if (key) {
-        const { data: fin, error: finErr } = await admin.rpc("catalog_sync_finish_store", {
-          p_run: run.id,
-          p_store: key,
-          p_full: st.full && !st.error,
-        });
-        const s = p.stores[key];
-        p = {
-          ...p,
-          stores: {
-            ...p.stores,
-            [key]: finErr
-              ? { ...s, done: true, error: `cierre: ${finErr.message}`.slice(0, 500) }
-              : { ...s, done: true, marcados: Number((fin as { marcados?: number } | null)?.marcados ?? 0) },
-          },
-        };
-        await saveRun(admin, run.id, p, { current_store: key });
-        continue;
-      }
-
-      // 3) Fin: recuento y aviso por catálogo.
-      await saveRun(admin, run.id, p, { current_store: null });
-      const { error } = await admin.rpc("catalog_sync_finalize", { p_run: run.id });
-      if (error) throw new Error(`cierre: ${error.message}`);
-      return { finished: true, pages };
+      // 2) Cierre por lotes (ADR-118): faltantes y conteo por tienda, recuento
+      //    de cada catálogo afectado y aviso. Cada lote dura < 2 s; el avance
+      //    queda en la corrida y la próxima invocación sigue desde ahí.
+      const full = st.full && !st.error;
+      const deps: ClosingDeps = {
+        assertActive: () => assertActive(admin, run.id),
+        closeStoreBatch: async (store, cursor, counted) => {
+          const { data, error } = await admin.rpc("catalog_sync_close_store_batch", {
+            p_run: run.id,
+            p_store: store,
+            p_full: full,
+            p_after_item: cursor?.item ?? null,
+            p_after_vendor: cursor?.vendor ?? null,
+            p_limit: CLOSE_BATCH_ROWS,
+            p_counted: counted,
+          });
+          if (error) throw new Error(error.message);
+          return data as CloseBatchResult;
+        },
+        listCatalogs: async (storeKeys) => {
+          if (!storeKeys.length) return [];
+          const { data, error } = await admin.from("catalog_store_map").select("catalog_id").in("store_key", storeKeys);
+          if (error) throw new Error(`catálogos afectados: ${error.message}`);
+          return ((data ?? []) as { catalog_id: string }[]).map((r) => r.catalog_id);
+        },
+        recountStep: async (catalogId, restart) => {
+          const { data, error } = await admin.rpc("catalog_recount_step", {
+            p_catalog_id: catalogId,
+            p_restart: restart,
+            p_limit: RECOUNT_BATCH_ITEMS,
+          });
+          if (error) throw new Error(error.message);
+          return data as RecountStepResult;
+        },
+        finalize: async () => {
+          const { error } = await admin.rpc("catalog_sync_finalize", { p_run: run.id });
+          if (error) throw new Error(error.message);
+        },
+        markPartial: async (message) => {
+          await admin
+            .from("catalog_sync_runs")
+            .update({
+              status: "partial",
+              finished_at: new Date().toISOString(),
+              locked_until: null,
+              current_store: null,
+              last_error: message,
+              closing: p.closing,
+            })
+            .eq("id", run.id)
+            .eq("status", "running");
+        },
+        save: async (cp, extra) => {
+          p = { ...p, stores: cp.stores, closing: cp.closing };
+          await saveRun(admin, run.id, p, extra ?? {});
+        },
+      };
+      const out = await runClosing({ stores: p.stores, closing: p.closing }, deps, () => hasTime(t0, Date.now()));
+      p = { ...p, stores: out.progress.stores, closing: out.progress.closing };
+      if (out.finished) return { finished: true, pages };
+      break;
     }
   } catch (e) {
     if (e instanceof RunStopped) {

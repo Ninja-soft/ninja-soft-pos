@@ -7,6 +7,13 @@
 // regenera los tipos): accedemos vía un cliente "destipado" (cast) SÓLO para
 // estas tablas/funciones. Las funciones públicas de este módulo siguen tipadas.
 import { createClient } from "@/lib/supabase/client";
+import {
+  buildIntroShowcase,
+  type IntroCatalogRow,
+  type IntroShowcase,
+  type IntroStoreLink,
+  type IntroStoreRow,
+} from "./introShowcase";
 
 // Catálogo tal como lo ve el cliente en el storefront.
 export interface StorefrontCatalog {
@@ -29,7 +36,12 @@ export interface StorefrontCatalog {
 export interface CatalogSearchResult {
   catalogProductId: number;
   storeKey: string;
-  ean: string;
+  /** Código de barras (GTIN válido). null = el producto no tiene EAN (ADR-118). */
+  ean: string | null;
+  /** Sin EAN: código propio de la tienda (va como SKU de referencia, no como código de barras). */
+  codigoTienda: string | null;
+  /** Medidas del maestro (peso, contenido, dimensiones, unidades por pack). */
+  medidas: CatalogMeasures | null;
   titulo: string;
   precio: number | null;
   precioLista: number | null;
@@ -40,6 +52,19 @@ export interface CatalogSearchResult {
   // Datos opcionales del maestro (si el catálogo los trae).
   descripcion: string | null;
   atributos: unknown;
+}
+
+/** Medidas fusionadas del producto maestro (catalog_items.medidas). */
+export interface CatalogMeasures {
+  alto_cm?: number | null;
+  ancho_cm?: number | null;
+  profundidad_cm?: number | null;
+  medidas?: string | null;
+  peso_kg?: number | null;
+  bultos?: number | null;
+  bultos_detalle?: unknown;
+  contenido?: { valor: number; unidad: "ml" | "g" } | null;
+  unidades_pack?: number | null;
 }
 
 // Edición previa al import (todo opcional; ausente = valor del catálogo).
@@ -74,6 +99,25 @@ function db(): AnyDb {
 }
 
 export const storefrontApi = {
+  // Portada: tiendas de origen cargadas en internal (catalog_stores) que están
+  // en algún catálogo activo + total de productos de los catálogos activos.
+  // Las tres tablas tienen lectura para authenticated por RLS (catalogs sólo
+  // las activas para el negocio); no hace falta RPC.
+  introShowcase: async (): Promise<IntroShowcase> => {
+    const supabase = db();
+    const [stores, links, cats] = await Promise.all([
+      supabase.from("catalog_stores").select("key, name, logo_url").order("name"),
+      supabase.from("catalog_store_map").select("catalog_id, store_key"),
+      supabase.from("catalogs").select("id, is_active, product_count").eq("is_active", true),
+    ]);
+    if (stores.error) throw stores.error;
+    return buildIntroShowcase(
+      (stores.data ?? []) as IntroStoreRow[],
+      (links.data ?? []) as IntroStoreLink[],
+      (cats.data ?? []) as IntroCatalogRow[],
+    );
+  },
+
   // Catálogos activos + estado de acceso del tenant (una consulta a catalogs por
   // RLS — sólo ve los activos — y otra a sus compras/grants).
   //
@@ -144,7 +188,12 @@ export const storefrontApi = {
     return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
       catalogProductId: Number(r.catalog_product_id),
       storeKey: r.store_key as string,
-      ean: r.ean as string,
+      ean: (r.ean as string) || null,
+      codigoTienda: (r.codigo_tienda as string) || null,
+      medidas:
+        r.medidas && typeof r.medidas === "object" && !Array.isArray(r.medidas)
+          ? (r.medidas as CatalogMeasures)
+          : null,
       titulo: r.titulo as string,
       precio: r.precio != null ? Number(r.precio) : null,
       precioLista: r.precio_lista != null ? Number(r.precio_lista) : null,

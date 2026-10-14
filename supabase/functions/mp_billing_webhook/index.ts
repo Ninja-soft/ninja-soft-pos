@@ -326,6 +326,37 @@ Deno.serve(withWebhookLog("mercadopago_billing", "mp_billing_webhook", async (re
     wh.tenant(tenantId);
     wh.done();
 
+    // F20-8 (ADR-120): si el negocio dejó Mercado Pago (cuenta corriente,
+    // manual o exento) o este preapproval ya no es el vigente (se canceló al
+    // cambiar de modalidad o al re-generar el checkout), su pausa o
+    // cancelación NO toca la suscripción: si no, cancelar el débito al pasar a
+    // cuenta corriente daría de baja al negocio. Con un pase pendiente a MP,
+    // sólo la autorización se aplica. Sin la migración (RPC inexistente) se
+    // sigue como antes.
+    const { data: applies, error: appliesErr } = await admin.rpc(
+      "platform_mp_preapproval_applies",
+      {
+        p_subscription: sub.id,
+        p_preapproval: pre.id ?? dataId,
+        p_mp_status: pre.status ?? "",
+      },
+    );
+    if (!appliesErr && applies === false) {
+      await admin.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: null,
+        entity_type: "subscriptions",
+        entity_id: sub.id,
+        action: "subscription_webhook_ignored",
+        after_data: {
+          preapproval_id: pre.id ?? dataId,
+          mp_status: pre.status,
+          reason: "not_current_billing_mode",
+        },
+      });
+      return ok();
+    }
+
     if (newStatus === "active") {
       // Autorización INICIAL del preapproval (alta / reactivación al pagar la
       // primera cuota desde el checkout). Las RENOVACIONES ya no llegan por acá

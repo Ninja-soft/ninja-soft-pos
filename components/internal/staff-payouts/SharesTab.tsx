@@ -16,7 +16,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { BankLogo } from "@/components/payments/BankLogo";
-import { BankAccountEditor, bankAccountPayload, bankAccountValueOf } from "@/components/billing/BankAccountEditor";
+import { BankAccountEditor } from "@/components/billing/BankAccountEditor";
+import { staffAccountInput, staffAccountPayload } from "@/lib/staffPayouts/bankAccount";
 import { ReasonField } from "@/components/internal/billing/LedgerModals";
 import { formatCbu } from "@/lib/payments/transfer";
 import { shareOn, sharesOverflow, type ClientRuleKind, type StaffShare } from "@/supabase/functions/_shared/staff/settlement";
@@ -487,16 +488,19 @@ export function AccountsList({
       <BankAccountEditor
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
-        initial={current ? bankAccountValueOf(current) : null}
-        isDefault={current ? current.is_default : mine.length === 0}
-        lockDefault={current?.is_default}
+        initial={current ? staffAccountInput(current) : null}
+        initialDefault={current ? current.is_default : mine.length === 0}
+        defaultLocked={current?.is_default}
         title={current ? "Editar cuenta de cobro" : "Nueva cuenta de cobro"}
-        description="Adónde se le transfiere a esta persona."
+        pickDescription="Elegí el banco o la billetera donde cobra esta persona."
+        formDescription="Adónde NinjaSoft le transfiere a esta persona."
         defaultLabel="Usar por defecto para pagarle"
+        noteLabel="Nota (opcional)"
+        notePlaceholder="Ej. Cuenta para los bonos"
         saving={mut.saveAccount.isPending}
         onSave={(v, o) =>
           mut.saveAccount.mutate(
-            { id: current?.id ?? null, member: memberId, payload: bankAccountPayload(v), is_default: o.is_default },
+            { id: current?.id ?? null, member: memberId, payload: staffAccountPayload(v), is_default: o.isDefault },
             {
               onSuccess: () => {
                 toast({ title: "Cuenta guardada", variant: "success" });

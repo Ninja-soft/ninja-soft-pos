@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
@@ -152,10 +152,17 @@ describe("artefactos generados", () => {
   it("la migración tiene el HTML actual de cada template", () => {
     const sql = read("supabase/migrations/20261011160000_emails_diseno_ninja_soft.sql");
     expect(sql).not.toContain(EM_DASH);
+    // Las plantillas que se suman después de ese rediseño se siembran en su
+    // propia migración (p. ej. las de cobranza de 20261116100000, ADR-120):
+    // las aplicadas no se reescriben.
+    const later = readdirSync(resolve(ROOT, "supabase/migrations"))
+      .filter((f) => f > "20261011160000" && f.endsWith(".sql"))
+      .map((f) => read(`supabase/migrations/${f}`))
+      .join("\n");
     for (const t of EMAIL_TEMPLATES) {
-      const src = t.migration ? read(t.migration) : sql;
-      expect(src, t.key).toContain(`('${t.key}',`);
-      expect(src, t.key).toContain(`$tpl$${t.defaultHtml}$tpl$`);
+      const where = t.migration ? read(t.migration) : sql.includes(`('${t.key}',`) ? sql : later;
+      expect(where, t.key).toContain(`('${t.key}',`);
+      expect(where, t.key).toContain(`$tpl$${t.defaultHtml}$tpl$`);
     }
     expect(sql).toContain("create or replace function _dunning_email_html");
   });

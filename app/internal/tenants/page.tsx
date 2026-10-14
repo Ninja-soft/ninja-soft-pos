@@ -310,7 +310,7 @@ export default function InternalTenantsPage() {
                   </td>
                   <td className="px-4 py-3"><Skeleton className="h-3.5 w-36" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-3.5 w-20" /></td>
-                  <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-md" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-3.5 w-24" /></td>
                   <td className="px-4 py-3"><Skeleton className="ml-auto h-3.5 w-16" /></td>
                 </tr>

@@ -187,7 +187,7 @@ export function PosShell(p: PosShellProps) {
                 {p.itemCount > 0 && (
                   <span
                     key={p.itemCount}
-                    className="pos-pop absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--pos-solid)] px-1 text-[11px] font-semibold tabular-nums text-[color:var(--pos-on)]"
+                    className="pos-pop absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-md bg-[var(--pos-solid)] px-1 text-[11px] font-semibold tabular-nums text-[color:var(--pos-on)]"
                   >
                     {p.itemCount}
                   </span>

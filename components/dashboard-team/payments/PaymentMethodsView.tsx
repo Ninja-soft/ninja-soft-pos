@@ -59,10 +59,10 @@ export function PaymentMethodsView({
     <section className="space-y-6">
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+          <span className="rounded-md bg-muted px-2.5 py-1 text-muted-foreground">
             <strong className="text-foreground">{enabled}</strong> {enabled === 1 ? "canal activo" : "canales activos"}
           </span>
-          <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+          <span className="rounded-md bg-muted px-2.5 py-1 text-muted-foreground">
             <strong className="text-foreground">{connected}</strong>{" "}
             {connected === 1 ? "cuenta conectada" : "cuentas conectadas"}
           </span>

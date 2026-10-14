@@ -4,11 +4,24 @@
 // Cobranzas (F20-1 · ADR-115, spec docs/40 §14.1 y §14.3): deuda de toda la
 // plataforma por antigüedad, negocios con saldo y próximos vencimientos.
 // Excluye los negocios que no se cobran (prueba, del staff, lifetime, exentos).
+//
+// F20-8 (ADR-120): vista "Pagos a verificar" (transferencias informadas con
+// Ya transferí) y "Cuentas y avisos" (cuentas de cobro de NinjaSoft, email y
+// WhatsApp de comprobantes, avisos de cobro). ?vista=pagos | config.
 // =============================================================================
 
 import Link from "next/link";
 import type { Route } from "next";
-import { CalendarClock, ChevronRight, CircleAlert, Landmark, PiggyBank, Users, Wallet } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CalendarClock, ChevronRight, CircleAlert, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, Users, Wallet } from "lucide-react";
+import { Segmented } from "@/components/ui/Segmented";
+import { TransferInbox } from "@/components/internal/billing/TransferInbox";
+import {
+  CollectionConfigSkeleton,
+  CollectionSettingsCard,
+  PlatformBankAccountsCard,
+} from "@/components/internal/billing/CollectionConfig";
+import { useCollection } from "@/modules/billing/collection";
 import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
@@ -24,9 +37,26 @@ import { useBillingAccess, useBillingOverview } from "@/modules/billing/ledger";
 
 const tenantHref = (id: string) => `/internal/tenants/${id}?tab=cuenta` as Route;
 
+type Vista = "resumen" | "pagos" | "config";
+const isVista = (v: string | null): v is Vista => v === "resumen" || v === "pagos" || v === "config";
+
 export default function InternalCobranzaPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const raw = searchParams.get("vista");
+  const vista: Vista = isVista(raw) ? raw : "resumen";
+  const setVista = (v: Vista) => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (v === "resumen") sp.delete("vista");
+    else sp.set("vista", v);
+    const qs = sp.toString();
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false });
+  };
   const { data: ov, isLoading, error } = useBillingOverview();
   const { data: access } = useBillingAccess();
+  const { data: coll, isLoading: collLoading, error: collError } = useCollection(null);
+  const pendingCount = coll?.pending_reports.length ?? 0;
   const rows = (ov?.tenants ?? []).filter((t) => !t.exclusion && (t.balance_cents !== 0 || t.upcoming_cents > 0));
   const t = ov?.totals;
 
@@ -38,6 +68,65 @@ export default function InternalCobranzaPage() {
         icon={Landmark}
         description="Lo que los negocios le deben a NinjaSoft: deuda vencida por antigüedad, saldos y próximos vencimientos. Cada negocio tiene su cuenta corriente en su ficha."
       />
+
+      <div className="slim-scrollbar -mx-4 mt-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <Segmented<Vista>
+          aria-label="Vista de cobranzas"
+          value={vista}
+          onChange={setVista}
+          className="flex-nowrap"
+          options={[
+            { value: "resumen", label: "Resumen", icon: <LayoutGrid size={15} /> },
+            {
+              value: "pagos",
+              label: pendingCount > 0 ? `Pagos a verificar (${pendingCount})` : "Pagos a verificar",
+              icon: <Inbox size={15} />,
+            },
+            { value: "config", label: "Cuentas y avisos", icon: <Settings2 size={15} /> },
+          ]}
+        />
+      </div>
+
+      {vista === "pagos" && (
+        <section className="mt-6" aria-labelledby="cob-pagos">
+          <SectionHeader
+            title={<span id="cob-pagos">Pagos a verificar</span>}
+            icon={Inbox}
+            description="Transferencias que los negocios informaron con su comprobante. Cotejalas con el banco: acreditar imputa el pago a la deuda más vieja."
+          />
+          <div className="mt-3">
+            {collError ? (
+              <Callout tone="warning" icon={CircleAlert} title="No se pudo cargar la bandeja">
+                {billingErrorMessage(collError)}
+              </Callout>
+            ) : collLoading || !coll ? (
+              <Skeleton className="h-40 rounded-xl" />
+            ) : (
+              <TransferInbox reports={coll.pending_reports} accounts={coll.bank_accounts} canOperate={Boolean(access?.can_operate)} />
+            )}
+          </div>
+        </section>
+      )}
+
+      {vista === "config" && (
+        <div className="mt-6 space-y-10">
+          {collError ? (
+            <Callout tone="warning" icon={CircleAlert} title="No se pudo cargar la configuración">
+              {billingErrorMessage(collError)}
+            </Callout>
+          ) : collLoading || !coll ? (
+            <CollectionConfigSkeleton />
+          ) : (
+            <>
+              <PlatformBankAccountsCard view={coll} canEdit={Boolean(access?.can_configure)} />
+              <CollectionSettingsCard key={JSON.stringify(coll.settings)} view={coll} canEdit={Boolean(access?.can_configure)} />
+            </>
+          )}
+        </div>
+      )}
+
+      {vista === "resumen" && (
+      <>
 
       {error && (
         <Callout tone="warning" icon={CircleAlert} title="No se pudo cargar la cobranza" className="mt-6">
@@ -218,6 +307,8 @@ export default function InternalCobranzaPage() {
             <BillingCapsCard access={access} />
           </div>
         </>
+      )}
+      </>
       )}
     </>
   );

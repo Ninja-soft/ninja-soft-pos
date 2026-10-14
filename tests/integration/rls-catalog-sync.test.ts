@@ -227,6 +227,12 @@ describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
       .from("catalog_sync_runs")
       .update({ stores: { [STORE]: { label: "Tienda test", done: true, error: null } } })
       .eq("id", runId);
+    // ADR-118: el recuento del catálogo es por lotes (la Edge lo hace antes del cierre).
+    let step = await rpc(admin, "catalog_recount_step", { p_catalog_id: ctx.catalog, p_restart: true, p_limit: 500000 });
+    for (let i = 0; i < 50 && !(step.data as { done?: boolean } | null)?.done; i++) {
+      step = await rpc(admin, "catalog_recount_step", { p_catalog_id: ctx.catalog, p_restart: false, p_limit: 500000 });
+    }
+    expect(step.error).toBeNull();
     const close = await rpc(admin, "catalog_sync_finalize", { p_run: runId });
     expect(close.error).toBeNull();
     expect(close.data).toMatchObject({ status: "ok", catalogos: 1 });
@@ -267,6 +273,61 @@ describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
     }
     const { data } = await ctx.admin.from("catalog_offers").select("id").eq("ean_origen", `${STAMP}-x`);
     expect(data ?? []).toEqual([]);
+  });
+
+  it("ADR-118: cierre por lotes sólo service_role; recuento sólo staff admin en el panel interno", async () => {
+    for (const c of [ctx.staffInternal, ctx.owner]) {
+      const close = await rpc(c, "catalog_sync_close_store_batch", {
+        p_run: ctx.runs[0],
+        p_store: STORE,
+        p_full: true,
+        p_after_item: null,
+        p_after_vendor: null,
+        p_limit: 100,
+        p_counted: 0,
+      });
+      expect(close.error).not.toBeNull();
+    }
+    const own = await rpc(ctx.owner, "catalog_recount_step", { p_catalog_id: ctx.catalog, p_restart: true });
+    expect(own.error).not.toBeNull();
+    const staffOut = await rpc(ctx.staff, "catalog_recount_step", { p_catalog_id: ctx.catalog, p_restart: true });
+    expect(staffOut.error).not.toBeNull();
+
+    const batch = await rpc(ctx.admin, "catalog_sync_close_store_batch", {
+      p_run: ctx.runs[0],
+      p_store: STORE,
+      p_full: false,
+      p_after_item: null,
+      p_after_vendor: null,
+      p_limit: 100,
+      p_counted: 0,
+    });
+    expect(batch.error).toBeNull();
+    expect(batch.data).toMatchObject({ done: true, marcados: 0 });
+  });
+
+  it("ADR-118: producto sin EAN entra por tienda con su código", async () => {
+    const runId = ctx.runs[0];
+    const up = await rpc(ctx.admin, "catalog_sync_upsert_catalog", {
+      p_run: runId,
+      p_items: [
+        {
+          ean: null,
+          scope: STORE,
+          codigo_tienda: `${STAMP}-SKU`,
+          titulo: "Producto sin EAN",
+          ofertas: [{ store_key: STORE, vendedor_key: "", precio: 10, disponible: true }],
+        },
+      ],
+    });
+    expect(up.error).toBeNull();
+    expect(up.data).toMatchObject({ recibidos: 1, nuevos: 1, ofertas: 1 });
+    const { data: it } = await ctx.admin
+      .from("catalog_items")
+      .select("ean, store_scope, codigo_tienda")
+      .eq("codigo_tienda", `${STAMP}-SKU`)
+      .single();
+    expect(it).toEqual({ ean: null, store_scope: STORE, codigo_tienda: `${STAMP}-SKU` });
   });
 
   it("notify_catalog_update: un dueño de negocio no la puede llamar", async () => {

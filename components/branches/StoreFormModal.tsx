@@ -202,7 +202,7 @@ export function StoreFormModal({
               aria-checked={f.color === null}
               onClick={() => set("color", null)}
               className={cn(
-                "h-8 rounded-full border px-3 text-xs font-medium",
+                "h-8 rounded-md border px-3 text-xs font-medium",
                 f.color === null ? "border-foreground" : "border-border text-muted-foreground",
               )}
             >

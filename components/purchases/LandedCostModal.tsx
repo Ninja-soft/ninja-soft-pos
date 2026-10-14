@@ -348,7 +348,7 @@ export function LandedCostModal({
                 <button
                   key={c}
                   type="button"
-                  className="rounded-full bg-muted px-2.5 py-1 text-xs transition hover:bg-muted/70"
+                  className="rounded-md bg-muted px-2.5 py-1 text-xs transition hover:bg-muted/70"
                   onClick={() =>
                     patchSheet({
                       expenses: [

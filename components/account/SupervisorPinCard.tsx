@@ -90,14 +90,14 @@ export function SupervisorPinCard() {
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium",
                   status.has_pin ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
                 )}
               >
                 <ShieldCheck size={13} /> {status.has_pin ? "Tenés un PIN activo" : "Todavía no tenés PIN"}
               </span>
               {status.locked_until && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-400/15 px-2.5 py-1 text-xs font-medium text-danger">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-red-400/15 px-2.5 py-1 text-xs font-medium text-danger">
                   <Lock size={13} /> Bloqueado hasta las {hhmm(status.locked_until)} por intentos fallidos
                 </span>
               )}

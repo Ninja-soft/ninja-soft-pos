@@ -104,7 +104,7 @@ function StatusBadge({ kind, label }: { kind: StateKind; label?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium",
         m.cls,
       )}
     >
@@ -469,7 +469,7 @@ export function HardwareCard() {
                         <td className="px-3 py-1.5">{c.format}</td>
                         <td className="px-3 py-1.5">
                           {c.duplicate && (
-                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-warning">
+                            <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-warning">
                               dup
                             </span>
                           )}

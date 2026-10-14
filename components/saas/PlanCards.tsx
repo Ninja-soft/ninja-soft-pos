@@ -253,11 +253,11 @@ function PlanCardItem({
           <span className="text-sm text-ninja-lavender">/mes</span>
         </div>
         {isContact ? (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
+          <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
             Pago inmediato · se activa al pagar
           </span>
         ) : (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+          <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-success">
             {trialLabel(plan.trialDays)} · sin tarjeta
           </span>
         )}

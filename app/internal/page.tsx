@@ -261,12 +261,12 @@ export default async function InternalHomePage({
 
       <div className="mt-3 space-y-2">
         <Callout tone="neutral" icon={AlertTriangle} title="Falta marcar los negocios internos o de prueba">
-          Todavía no existe la marca <code className="font-mono text-xs">tenants.is_test</code> (spec de cobranza §15.1). Hasta
+          Todavía no existe la marca <code className="break-all font-mono text-xs">tenants.is_test</code> (spec de cobranza §15.1). Hasta
           que exista, un negocio de prueba con plan activo cuenta como cuenta paga y suma al MRR.
         </Callout>
         {!events && (
           <Callout tone="warning" icon={AlertTriangle} title="Churn y tendencias sin datos">
-            Falta aplicar la migración <code className="font-mono text-xs">20261111200000_internal_saas_kpi_events</code>, que lee
+            Falta aplicar la migración <code className="break-all font-mono text-xs">20261111200000_internal_saas_kpi_events</code>, que lee
             los cambios de estado desde la auditoría.
           </Callout>
         )}

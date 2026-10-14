@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/Card";
+import { SkeletonLines } from "@/components/ui/Skeleton";
 import { getProfile } from "@/lib/profiles/businessProfiles";
 import { formatRelative } from "@/lib/utils/format";
 import { useTenantProfile } from "@/modules/profiles/hooks";
@@ -18,7 +19,7 @@ export function TenantProfileCard({ tenantId }: { tenantId: string }) {
       <CardContent className="p-5">
         <p className="mb-2 text-sm font-medium text-muted-foreground">Perfil por rubro</p>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+          <SkeletonLines lines={2} />
         ) : isError ? (
           <p className="text-sm text-muted-foreground">No se pudo leer el perfil.</p>
         ) : !data ? (

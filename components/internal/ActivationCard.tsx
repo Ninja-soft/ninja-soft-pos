@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/Card";
+import { SkeletonLines } from "@/components/ui/Skeleton";
 import { createClient } from "@/lib/supabase/client";
 import {
   activationMilestones,
@@ -34,7 +35,7 @@ export function ActivationCard({ tenantId }: { tenantId: string }) {
     <Card className="mt-3">
       <CardContent className="p-5">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+          <SkeletonLines lines={2} />
         ) : error || !data ? (
           <p className="text-sm text-muted-foreground">No se pudieron leer las métricas de activación.</p>
         ) : (
@@ -51,7 +52,7 @@ export function ActivationCard({ tenantId }: { tenantId: string }) {
                   <span className="flex items-center gap-2 text-sm text-foreground">
                     <span
                       aria-hidden
-                      className={`h-2 w-2 shrink-0 rounded-full ${m.done ? "bg-emerald-400" : "bg-muted-foreground/40"}`}
+                      className={`h-2 w-2 shrink-0 rounded-full ${m.done ? "bg-success" : "bg-muted-foreground/40"}`}
                     />
                     {m.label}
                   </span>

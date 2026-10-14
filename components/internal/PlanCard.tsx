@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -41,9 +42,6 @@ const LIMIT_LABELS: Record<LimitKey, string> = {
   max_products: "Productos",
   max_sales_per_month: "Ventas / mes",
 };
-
-const selectCls =
-  "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
 function planNumbers(limits: PlanLimits): PlanLimitNumbers {
   return (limits.limits ?? {}) as PlanLimitNumbers;
@@ -340,7 +338,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                   </span>
                 )}
                 {detail.isLifetime && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-warning">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning">
                     <InfinityIcon size={12} /> Vitalicio
                   </span>
                 )}
@@ -371,14 +369,11 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
 
           {/* Selector de plan global */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Plan asignado
-            </label>
-            <select
-              className={selectCls}
+            <Select
+              label="Plan asignado"
               value={detail.planKey}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={planOptions.map((p) => ({ value: p.key as string, label: p.name }))}
+              onChange={(v) => {
                 if (v === detail.planKey) return;
                 setPlan
                   .mutateAsync(v)
@@ -392,13 +387,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                     }),
                   );
               }}
-            >
-              {planOptions.map((p) => (
-                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Límites efectivos (override ?? plan) */}
@@ -659,22 +648,12 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
             Marca la suscripción como <b>vitalicia</b>: queda activa sin
             vencimiento y el motor de cobros la saltea. Es un regalo permanente.
           </p>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Plan
-            </label>
-            <select
-              className={selectCls}
-              value={grantPlan}
-              onChange={(e) => setGrantPlan(e.target.value)}
-            >
-              {(globalPlans ?? []).map((p) => (
-                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Plan"
+            value={grantPlan}
+            options={(globalPlans ?? []).map((p) => ({ value: p.key as string, label: p.name }))}
+            onChange={setGrantPlan}
+          />
           <Input
             label="Motivo"
             value={grantReason}
@@ -722,22 +701,12 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
           <p className="text-sm text-muted-foreground">
             Extiende la prueba del plan elegido por la cantidad de días indicada.
           </p>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Plan
-            </label>
-            <select
-              className={selectCls}
-              value={grantPlan}
-              onChange={(e) => setGrantPlan(e.target.value)}
-            >
-              {(globalPlans ?? []).map((p) => (
-                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Plan"
+            value={grantPlan}
+            options={(globalPlans ?? []).map((p) => ({ value: p.key as string, label: p.name }))}
+            onChange={setGrantPlan}
+          />
           <Input
             label="Días"
             type="number"

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Segmented";
@@ -46,7 +47,7 @@ function discountState(
   if (d.valid_from > today)
     return {
       label: "Programado",
-      cls: "bg-sky-400/15 text-info",
+      cls: "bg-info/15 text-info",
     };
   if (d.valid_until && d.valid_until < today)
     return {
@@ -55,7 +56,7 @@ function discountState(
     };
   return {
     label: "Vigente",
-    cls: "bg-emerald-400/15 text-success",
+    cls: "bg-success/15 text-success",
   };
 }
 
@@ -307,7 +308,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
 
           {/* Trial info */}
           {isTrial && (
-            <div className={`rounded-lg border p-3 text-sm ${trialExpired ? "border-transparent bg-red-400/10 text-danger" : "border-transparent bg-yellow-400/5 text-warning"}`}>
+            <div className={`rounded-lg border p-3 text-sm ${trialExpired ? "border-transparent bg-danger/10 text-danger" : "border-transparent bg-warning/10 text-warning"}`}>
               <div className="flex items-center gap-1.5 font-medium">
                 <Clock size={14} />
                 {trialExpired ? "Trial vencido" : "En período de prueba"}
@@ -325,7 +326,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                     key={d}
                     disabled={extendTrial.isPending}
                     onClick={() => handleExtend(d)}
-                    className="rounded border border-transparent bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
+                    className="rounded-md border border-transparent bg-warning/10 px-2 py-0.5 text-xs font-medium transition hover:bg-warning/20 disabled:opacity-50"
                   >
                     +{d}d
                   </button>
@@ -333,7 +334,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                 <button
                   disabled={setTrialEnd.isPending}
                   onClick={() => openAction("set_end")}
-                  className="rounded border border-transparent bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
+                  className="rounded-md border border-transparent bg-warning/10 px-2 py-0.5 text-xs font-medium transition hover:bg-warning/20 disabled:opacity-50"
                 >
                   Fijar fin…
                 </button>
@@ -343,14 +344,14 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                 <button
                   disabled={trialOutcome.isPending}
                   onClick={() => openAction("converted")}
-                  className="rounded bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-success transition hover:bg-emerald-400/20 disabled:opacity-50"
+                  className="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success transition hover:bg-success/20 disabled:opacity-50"
                 >
                   Convertir a pago
                 </button>
                 <button
                   disabled={trialOutcome.isPending}
                   onClick={() => openAction("lost")}
-                  className="rounded bg-red-400/10 px-2 py-0.5 text-xs font-medium text-danger transition hover:bg-red-400/20 disabled:opacity-50"
+                  className="rounded-md bg-danger/10 px-2 py-0.5 text-xs font-medium text-danger transition hover:bg-danger/20 disabled:opacity-50"
                 >
                   Marcar perdido
                 </button>
@@ -363,8 +364,8 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
             <div
               className={`rounded-lg border p-3 text-sm ${
                 overdueDays > 0
-                  ? "border-transparent bg-red-400/10 text-danger"
-                  : "border-transparent bg-emerald-400/10 text-success"
+                  ? "border-transparent bg-danger/10 text-danger"
+                  : "border-transparent bg-success/10 text-success"
               }`}
             >
               <div className="flex items-center gap-1.5 font-medium">
@@ -438,7 +439,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                     {r.period_start && (
                       <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                         <CalendarDays size={11} />
-                        {r.period_start}{r.period_end ? ` → ${r.period_end}` : ""}
+                        {r.period_start}{r.period_end ? ` a ${r.period_end}` : ""}
                       </div>
                     )}
                     {r.notes && (
@@ -491,13 +492,13 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                         <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                           <CalendarDays size={11} />
                           {d.valid_from}
-                          {d.valid_until ? ` → ${d.valid_until}` : " → sin fin"}
+                          {d.valid_until ? ` a ${d.valid_until}` : ", sin fin"}
                         </div>
                       </div>
                       <button
                         onClick={() => setRemoveId(d.id)}
                         title="Dar de baja"
-                        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
+                        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-danger/15 hover:text-danger"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -586,22 +587,12 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
-              Medio
-            </label>
-            <select
-              value={medium}
-              onChange={(e) => setMedium(e.target.value)}
-              className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-            >
-              {Object.entries(MEDIUM_LABELS).map(([k, v]) => (
-                <option key={k} value={k} className="bg-popover text-popover-foreground">
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Medio"
+            value={medium}
+            options={Object.entries(MEDIUM_LABELS).map(([value, label]) => ({ value, label }))}
+            onChange={setMedium}
+          />
           <div className="grid grid-cols-2 gap-2">
             <Input
               label="Período desde"

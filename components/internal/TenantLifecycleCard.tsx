@@ -41,7 +41,7 @@ export function TenantLifecycleCard({
   const st = STATE_TEXT[state];
 
   return (
-    <Card className="border-t-2 border-t-border">
+    <Card>
       <CardContent className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

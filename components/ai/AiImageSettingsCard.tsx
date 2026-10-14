@@ -37,6 +37,9 @@ const SAMPLE = {
   business: "professional services firm",
 };
 
+// Paleta sugerida para el acento; "Otro" abre el selector nativo.
+const ACCENT_PRESETS = ["#FF4B22", "#2563EB", "#0EA5A4", "#16A34A", "#CA8A04", "#9333EA", "#DB2777", "#334155"];
+
 export function AiImageSettingsCard() {
   const { toast } = useToast();
   const { data: me } = useMyTenant();
@@ -55,6 +58,7 @@ export function AiImageSettingsCard() {
     [s.style, s.accent, s.base_prompt],
   );
   const editable = canEdit && enabled === true;
+  const customAccent = Boolean(s.accent) && !ACCENT_PRESETS.some((c) => c.toLowerCase() === s.accent?.toLowerCase());
 
   async function save() {
     try {
@@ -100,7 +104,7 @@ export function AiImageSettingsCard() {
           <Switch checked={s.auto_cover} disabled={!editable} onCheckedChange={(v) => setS({ ...s, auto_cover: v })} label="Generar automáticamente" />
         </SettingRow>
         <SettingRow label="Estilo" description="Se usa en todas las portadas nuevas. En cada servicio se puede elegir otro." stacked>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" role="radiogroup" aria-label="Estilo">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup" aria-label="Estilo">
             {COVER_STYLES.map((st) => (
               <button
                 key={st.key}
@@ -109,32 +113,74 @@ export function AiImageSettingsCard() {
                 aria-checked={s.style === st.key}
                 disabled={!editable}
                 onClick={() => setS({ ...s, style: st.key })}
-                className={choiceClass(s.style === st.key, "px-3 py-2.5")}
+                className={choiceClass(s.style === st.key, "overflow-hidden p-0")}
               >
-                <span className="block text-sm font-semibold">{st.name}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{st.description}</span>
+                {/* Muestra real generada con Gemini (public/ia/estilos). */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/ia/estilos/${st.key}.webp`}
+                  alt=""
+                  width={320}
+                  height={320}
+                  loading="lazy"
+                  className="aspect-[4/3] w-full object-cover"
+                />
+                <span className="block px-3 pt-2 text-sm font-semibold">{st.name}</span>
+                <span className="block px-3 pb-2.5 pt-0.5 text-xs text-muted-foreground">{st.description}</span>
               </button>
             ))}
           </div>
         </SettingRow>
-        <SettingRow label="Color de acento" description="Opcional. Sin color, el modelo elige la paleta según el estilo." htmlFor="ai-accent">
-          <div className="flex items-center gap-3">
-            <input
-              id="ai-accent"
-              type="color"
-              disabled={!editable || !s.accent}
-              value={s.accent ?? "#FF4B22"}
-              onChange={(e) => setS({ ...s, accent: e.target.value })}
-              className="h-11 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-1 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={Boolean(s.accent)}
-                disabled={!editable}
-                onCheckedChange={(v) => setS({ ...s, accent: v ? s.accent ?? "#FF4B22" : null })}
-                label="Usar color de acento"
+        <SettingRow label="Color de acento" description="Opcional. En Automático el modelo elige la paleta según el estilo." stacked>
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Color de acento">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!s.accent}
+              disabled={!editable}
+              onClick={() => setS({ ...s, accent: null })}
+              className={choiceClass(!s.accent, "h-10 px-3 text-sm font-semibold")}
+            >
+              Automático
+            </button>
+            {ACCENT_PRESETS.map((c) => {
+              const on = s.accent?.toLowerCase() === c.toLowerCase();
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={c}
+                  title={c}
+                  disabled={!editable}
+                  onClick={() => setS({ ...s, accent: c })}
+                  className={`grid h-10 w-10 place-items-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    on ? "border-foreground" : "border-border hover:border-[color-mix(in_srgb,var(--foreground)_40%,transparent)]"
+                  }`}
+                >
+                  <span className="h-6 w-6 rounded-md" style={{ background: c }} />
+                </button>
+              );
+            })}
+            <label
+              className={`relative flex h-10 items-center gap-2 rounded-lg border px-2.5 text-sm ${
+                customAccent ? "border-foreground" : "border-border"
+              } ${editable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+            >
+              <span
+                className="h-6 w-6 rounded-md border border-border"
+                style={{ background: customAccent ? s.accent ?? undefined : "transparent" }}
               />
-              Usar un color de acento
+              <span className="font-mono text-xs tabular-nums">{customAccent ? s.accent?.toUpperCase() : "Otro"}</span>
+              <input
+                type="color"
+                disabled={!editable}
+                value={s.accent ?? "#FF4B22"}
+                onChange={(e) => setS({ ...s, accent: e.target.value })}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                aria-label="Elegir otro color"
+              />
             </label>
           </div>
         </SettingRow>

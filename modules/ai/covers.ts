@@ -18,7 +18,7 @@ export interface AiImageSettings {
 }
 
 export const DEFAULT_AI_IMAGE_SETTINGS: AiImageSettings = {
-  auto_cover: false,
+  auto_cover: true,
   style: "flat_icon",
   accent: null,
   base_prompt: null,

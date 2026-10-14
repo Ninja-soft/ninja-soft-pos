@@ -230,6 +230,57 @@ describe.skipIf(!enabled)("ADR-122 · presupuestos", () => {
     expect(edit.error?.message).toMatch(/quote_locked/);
   });
 
+  // ADR-123: sin vencimiento, varios emails, emisor y envío por email.
+  it("v2: sin vencimiento nunca vence; emails del cliente y emisor guardados", async () => {
+    const r = await rpc(ctx.cashierA, "quote_save", {
+      p_quote: { no_expiry: true, customer_name: "Ref SA", customer_emails: ["A@x.com", "a@x.com", "b@y.com"] },
+      p_items: [{ name: "Ref", quantity: 1, unit_price: 100 }],
+    });
+    expect(r.error).toBeNull();
+    const id = (r.data as { id: string }).id;
+    const row = await ctx.ownerA
+      .from("quotes" as never)
+      .select("valid_until, customer_emails, customer_email, created_by_name")
+      .eq("id", id)
+      .single();
+    expect(row.data).toMatchObject({ valid_until: null, customer_emails: ["a@x.com", "b@y.com"], customer_email: "a@x.com" });
+    expect((row.data as unknown as { created_by_name: string | null }).created_by_name).toBeTruthy();
+    const eff = await rpc(ctx.ownerA, "quote_effective_status", { p_status: "sent", p_valid_until: null });
+    expect(eff.data).toBe("sent");
+    const rep = await rpc(ctx.ownerA, "quote_issuer_report", { p_from: "2000-01-01T00:00:00Z", p_to: "2100-01-01T00:00:00Z" });
+    expect(rep.error).toBeNull();
+    expect((rep.data as { count: number }[]).reduce((a, x) => a + x.count, 0)).toBeGreaterThanOrEqual(3);
+    const repB = await rpc(ctx.ownerB, "quote_issuer_report", { p_from: "2000-01-01T00:00:00Z", p_to: "2100-01-01T00:00:00Z" });
+    expect(repB.error?.message).toMatch(/feature_not_in_plan/);
+  });
+
+  it("v2: envío por email registrado; el cliente no escribe ni cierra envíos", async () => {
+    const r = await rpc(ctx.cashierA, "quote_save", {
+      p_quote: { no_expiry: true, customer_name: "Mail SA" },
+      p_items: [{ name: "Mail", quantity: 1, unit_price: 100 }],
+    });
+    const id = (r.data as { id: string }).id;
+    const bad = await rpc(ctx.cashierA, "quote_email_prepare", { p_id: id, p_to: ["no-es-email"], p_subject: "x" });
+    expect(bad.error?.message).toMatch(/quote_email_invalid/);
+    const viewer = await rpc(ctx.viewerA, "quote_email_prepare", { p_id: id, p_to: ["a@x.com"], p_subject: "x" });
+    expect(viewer.error?.message).toMatch(/forbidden_read_only/);
+    const prep = await rpc(ctx.cashierA, "quote_email_prepare", { p_id: id, p_to: ["a@x.com"], p_subject: "Presupuesto" });
+    expect(prep.error).toBeNull();
+    const batch = (prep.data as { batch_id: string }).batch_id;
+    const fin = await rpc(ctx.cashierA, "quote_email_finish", { p_batch: batch, p_results: [{ recipient: "a@x.com", ok: true }], p_provider: "platform" });
+    expect(fin.error).not.toBeNull();
+    const direct = await ctx.ownerA.from("quote_emails" as never).insert({ tenant_id: ctx.tenantA, quote_id: id } as never);
+    expect(direct.error).not.toBeNull();
+    const ok = await rpc(ctx.admin, "quote_email_finish", { p_batch: batch, p_results: [{ recipient: "a@x.com", ok: true }], p_provider: "platform" });
+    expect(ok.error).toBeNull();
+    const log = await ctx.ownerA.from("quote_emails" as never).select("status").eq("quote_id", id);
+    expect(log.data).toEqual([{ status: "sent" }]);
+    const seenB = await ctx.ownerB.from("quote_emails" as never).select("id");
+    expect((seenB.data as unknown[]).length).toBe(0);
+    const q = await ctx.ownerA.from("quotes" as never).select("status").eq("id", id).single();
+    expect(q.data).toEqual({ status: "sent" });
+  });
+
   it("imágenes con IA: sin el complemento no se configura y el cliente no escribe generaciones", async () => {
     const s = await ctx.ownerA.from("ai_image_settings" as never).insert({ tenant_id: ctx.tenantA, auto_cover: true } as never);
     expect(s.error?.message).toMatch(/addon_required/);

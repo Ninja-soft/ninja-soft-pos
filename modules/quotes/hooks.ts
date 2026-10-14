@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { quotesApi, type QuoteSaveInput, type QuoteSettings } from "./api";
 
+
 export const QUOTES_KEY = ["quotes"] as const;
 
 export function useQuotes(enabled = true) {
@@ -22,6 +23,34 @@ export function useQuoteRevisions(id: string | null, enabled = true) {
     queryKey: [...QUOTES_KEY, "revisions", id],
     queryFn: () => quotesApi.revisions(id!),
     enabled: Boolean(id) && enabled,
+  });
+}
+
+/** Envíos por email del presupuesto (ADR-123). */
+export function useQuoteEmails(id: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...QUOTES_KEY, "emails", id],
+    queryFn: () => quotesApi.emails(id!),
+    enabled: Boolean(id) && enabled,
+  });
+}
+
+/** Contacto de la ficha del cliente (ADR-123). */
+export function useQuoteCustomerContact(id: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...QUOTES_KEY, "customer-contact", id],
+    queryFn: () => quotesApi.customerContact(id!),
+    enabled: Boolean(id) && enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Presupuestos por emisor en el período (ADR-123). */
+export function useQuoteIssuerReport(fromISO: string, toISO: string, enabled = true) {
+  return useQuery({
+    queryKey: [...QUOTES_KEY, "issuers", fromISO, toISO],
+    queryFn: () => quotesApi.issuerReport(fromISO, toISO),
+    enabled,
   });
 }
 
@@ -49,6 +78,7 @@ export function useQuoteMutations() {
       mutationFn: (v: { id: string; saleId: string }) => quotesApi.linkSale(v.id, v.saleId),
       onSuccess: inv,
     }),
+    sendEmail: useMutation({ mutationFn: quotesApi.sendEmail, onSuccess: inv }),
     saveSettings: useMutation({ mutationFn: (s: QuoteSettings) => quotesApi.saveSettings(s), onSuccess: inv }),
   };
 }

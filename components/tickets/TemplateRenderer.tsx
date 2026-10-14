@@ -7,6 +7,7 @@ import { CanvasTicketRenderer } from "@/components/tickets/CanvasTicketRenderer"
 import { HtmlTicketRenderer } from "@/components/tickets/HtmlTicketRenderer";
 import type { TemplateContent, TicketBlock } from "@/lib/tickets/blocks";
 import type { TicketTemplate } from "@/modules/tickets/api";
+import { ensureQrBlocks, ensureQrCanvas, ensureQrHtml } from "@/lib/tickets/requiredQr";
 
 type Paper = "58" | "80" | "a4";
 
@@ -27,10 +28,11 @@ export function TemplateRenderer({
 }: Props) {
   const paper: Paper = paperOverride ?? (template?.paper as Paper | undefined) ?? "80";
   const showNinja = Boolean(template?.show_ninjasoft_logo);
+  // El QR es obligatorio en todo comprobante: cada modo lo garantiza abajo.
 
   const fallback = (
     <TicketRenderer
-      blocks={fallbackBlocks}
+      blocks={ensureQrBlocks(fallbackBlocks)}
       data={data}
       paper={paper}
       showNinjaLogo={showNinja}
@@ -46,7 +48,7 @@ export function TemplateRenderer({
   if (mode === "blocks" && c && "blocks" in c && Array.isArray(c.blocks) && c.blocks.length) {
     return (
       <TicketRenderer
-        blocks={c.blocks}
+        blocks={ensureQrBlocks(c.blocks)}
         data={data}
         paper={paper}
         showNinjaLogo={showNinja}
@@ -65,7 +67,7 @@ export function TemplateRenderer({
   ) {
     return (
       <CanvasTicketRenderer
-        content={c.canvas}
+        content={ensureQrCanvas(c.canvas, paper)}
         data={data}
         paper={paper}
         showNinjaLogo={showNinja}
@@ -77,7 +79,7 @@ export function TemplateRenderer({
   if (mode === "html" && c && "html" in c && typeof c.html === "string" && c.html.length) {
     return (
       <HtmlTicketRenderer
-        html={c.html}
+        html={ensureQrHtml(c.html)}
         data={data}
         paper={paper}
         showNinjaLogo={showNinja}

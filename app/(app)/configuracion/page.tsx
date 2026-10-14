@@ -120,6 +120,10 @@ const TenantEmailCard = dynamic(
   () => import("@/components/dashboard-team/TenantEmailCard").then((m) => m.TenantEmailCard),
   { loading },
 );
+const TicketSettingsCard = dynamic(
+  () => import("@/components/dashboard-team/TicketSettingsCard").then((m) => m.TicketSettingsCard),
+  { loading },
+);
 const TicketTemplatesCard = dynamic(
   () => import("@/components/tickets/TicketTemplatesCard").then((m) => m.TicketTemplatesCard),
   { loading },
@@ -237,6 +241,10 @@ const OPERACION_FIELDS = [
   "require_close_reason",
 ];
 const CLIENTES_FIELDS = ["require_customer", "auto_email_receipt"];
+// Dominio "ticket" partido en dos secciones: datos del negocio en Marca y
+// textos del comprobante en Ticket (cada una pisa por sucursal sólo lo suyo).
+const BRAND_TICKET_FIELDS = ["use_store_contact", "legal_name", "cuit", "phone", "address"];
+const TICKET_TEXT_FIELDS = ["ticket_title", "ticket_legend", "ticket_footer"];
 const DISPLAY_FIELDS = ["display_show_unit_prices", "display_welcome_message", "display_thanks_message"];
 
 // Contenido de cada sección. El encabezado (título + bajada) lo pone
@@ -258,6 +266,7 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return (
         <ScopedSection
           domain="ticket"
+          fields={BRAND_TICKET_FIELDS}
           scopedExtra={(s) => (s.scope === "store" ? <BranchLogoField storeId={s.id} /> : null)}
         >
           <BrandingCard />
@@ -274,9 +283,17 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       );
     case "seguridad":
       return <SecuritySettings />;
-    // Modelos de ticket (escritura protegida por RLS).
+    // Ticket: ajustes básicos (BASE, cualquier plan; antes en Marca) y los
+    // modelos (escritura protegida por RLS; personalización tras tickets_pro).
     case "tickets":
-      return <TicketTemplatesCard />;
+      return (
+        <div className="space-y-4">
+          <ScopedSection domain="ticket" fields={TICKET_TEXT_FIELDS}>
+            <TicketSettingsCard />
+          </ScopedSection>
+          <TicketTemplatesCard />
+        </div>
+      );
     // Impresión por tipo de documento (F10 · H22; owner/manager).
     case "impresion":
       return (

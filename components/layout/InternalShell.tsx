@@ -132,11 +132,11 @@ export function InternalShell({
   }
 
   const nav = (
-    <nav className="flex h-full flex-col gap-1 p-3">
+    <nav className="flex h-full min-h-0 flex-col p-3">
       <Link
         href="/internal"
         onClick={() => setDrawer(false)}
-        className="mb-1 flex items-center gap-2.5 px-2 py-2"
+        className="mb-1 flex shrink-0 items-center gap-2.5 px-2 py-2"
       >
         <Isotype className="h-8 w-auto" priority />
         <span className="flex flex-col items-start leading-none">
@@ -147,33 +147,34 @@ export function InternalShell({
           </span>
         </span>
       </Link>
-      <div className="mb-2" />
+      {/* Secciones: scroll propio cuando no entran; el pie queda fijo. */}
+      <div className="slim-scrollbar -mx-1 mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1">
+        {NAV.map((it) => {
+          const Icon = it.icon;
+          const active =
+            it.href === "/internal"
+              ? pathname === "/internal"
+              : pathname === it.href || pathname.startsWith(it.href + "/");
+          return (
+            <Link
+              key={it.href}
+              href={it.href as never}
+              onClick={() => setDrawer(false)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
+                active
+                  ? "bg-ninja-flame/15 font-medium text-ninja-flameSoft"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <Icon size={17} />
+              {it.label}
+            </Link>
+          );
+        })}
+      </div>
 
-      {NAV.map((it) => {
-        const Icon = it.icon;
-        const active =
-          it.href === "/internal"
-            ? pathname === "/internal"
-            : pathname === it.href || pathname.startsWith(it.href + "/");
-        return (
-          <Link
-            key={it.href}
-            href={it.href as never}
-            onClick={() => setDrawer(false)}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
-              active
-                ? "bg-ninja-flame/15 font-medium text-ninja-flameSoft"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <Icon size={17} />
-            {it.label}
-          </Link>
-        );
-      })}
-
-      <div className="mt-auto space-y-3 pt-3">
+      <div className="mt-3 shrink-0 space-y-3 border-t border-border pt-3">
         <Link
           href="/dashboard"
           onClick={() => setDrawer(false)}

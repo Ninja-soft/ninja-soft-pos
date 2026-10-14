@@ -11,10 +11,13 @@ import { cn } from "@/lib/utils/cn";
 export function ProductThumb({
   src,
   size = 40,
+  fill = false,
   className,
 }: {
   src?: string | null;
   size?: number;
+  /** Ocupa el contenedor (celdas de mosaico); `size` sólo escala el ícono. */
+  fill?: boolean;
   className?: string;
 }) {
   const url = src?.trim() || null;
@@ -30,13 +33,14 @@ export function ProductThumb({
     <span
       className={cn(
         "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground",
+        fill && "h-full w-full rounded-none",
         className,
       )}
-      style={{ width: size, height: size }}
+      style={fill ? undefined : { width: size, height: size }}
     >
       {showImage ? (
         <>
-          {!loaded && <Spinner size={16} label="Cargando foto" className="absolute" />}
+          {!loaded && <Spinner size={Math.min(16, size)} label="Cargando foto" className="absolute" />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}

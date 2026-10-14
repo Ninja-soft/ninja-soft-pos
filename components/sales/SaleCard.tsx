@@ -22,7 +22,7 @@ import {
   relativeTime,
   returnState,
   saleStatusBadge,
-  thumbsPreview,
+  thumbsMosaic,
   unitsCount,
 } from "@/lib/sales/salesList";
 import { formatCurrency } from "@/lib/utils/format";
@@ -63,7 +63,6 @@ export function SaleCard(p: SaleCardProps) {
   const status = saleStatusBadge(sale.status, ret);
   const fiscal = fiscalBadge(extras?.fiscal ?? []);
   const chips = groupPayments(extras?.payments ?? [], p.providerOf);
-  const { shown, extra } = thumbsPreview(items, 3);
   const units = unitsCount(items);
   const customer = sale.customers?.name?.trim() || null;
   const voided = sale.status === "voided";
@@ -95,27 +94,12 @@ export function SaleCard(p: SaleCardProps) {
           voided && "opacity-75",
         )}
       >
-        {/* Miniaturas de los primeros productos */}
-        {/* Miniaturas superpuestas (pila), la primera adelante. */}
+        {/* Miniaturas de los productos: mosaico dentro de un cuadrado fijo */}
         <div className="flex shrink-0 items-start" aria-hidden>
           {p.extrasLoading && !extras ? (
-            <Skeleton className="h-11 w-11" />
+            <Skeleton className="h-12 w-12 rounded-lg" />
           ) : (
-            <>
-              {shown.map((it, i) => (
-                <ProductThumb
-                  key={it.id}
-                  src={it.image_url}
-                  size={44}
-                  className={cn("border-2 border-card", i > 0 && "-ml-5")}
-                />
-              ))}
-              {extra > 0 && (
-                <span className="-ml-5 grid h-11 w-11 place-items-center rounded-md border-2 border-card bg-muted text-xs font-semibold text-foreground">
-                  +{extra}
-                </span>
-              )}
-            </>
+            <SaleThumbs items={items} />
           )}
         </div>
 
@@ -244,12 +228,45 @@ export function SaleCard(p: SaleCardProps) {
   );
 }
 
+// Mosaico de miniaturas en un cuadrado de 48 px, sin superposiciones:
+// 1 producto = foto entera; 2 = dos mitades; 3 = una mitad + dos cuartos;
+// 4 = 2x2; más de 4 = tres fotos y "+N" en la cuarta celda. Con foto se usa
+// la del producto; sin foto, el ícono neutro de ProductThumb.
+const MOSAIC_LAYOUT: Record<number, string> = {
+  1: "grid-cols-1 grid-rows-1",
+  2: "grid-cols-2 grid-rows-1",
+  3: "grid-cols-2 grid-rows-2",
+  4: "grid-cols-2 grid-rows-2",
+};
+
+export function SaleThumbs({ items }: { items: { id: string; image_url: string | null }[] }) {
+  if (items.length === 0) return <ProductThumb size={48} className="rounded-lg" />;
+  const { shown, extra } = thumbsMosaic(items);
+  const cells = shown.length + (extra > 0 ? 1 : 0);
+  // Tamaño del ícono de placeholder según el alto de la celda.
+  const iconBase = (i: number) => (cells === 1 ? 44 : cells === 2 || (cells === 3 && i === 0) ? 36 : 26);
+  return (
+    <span className={cn("grid h-12 w-12 gap-0.5 overflow-hidden rounded-lg", MOSAIC_LAYOUT[cells])}>
+      {shown.map((it, i) => (
+        <span key={it.id} className={cn("min-h-0 min-w-0", cells === 3 && i === 0 && "row-span-2")}>
+          <ProductThumb src={it.image_url} size={iconBase(i)} fill />
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="grid min-h-0 min-w-0 place-items-center bg-muted text-[10px] font-semibold tabular-nums text-foreground">
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** Esqueleto de una fila mientras carga la página. */
 export function SaleCardSkeleton() {
   return (
     <li className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:gap-4 sm:px-5" aria-hidden>
       <div className="flex gap-1 sm:w-[92px]">
-        <Skeleton className="h-11 w-11" />
+        <Skeleton className="h-12 w-12 rounded-lg" />
       </div>
       <div className="flex-1 space-y-2">
         <Skeleton className="h-4 w-40" />

@@ -857,7 +857,8 @@ export function explainLine(l: SettlementLine): ExplainStep[] {
   const s: ExplainStep[] = [];
   for (const t of l.by_tenant) {
     const why = t.rule === "bonus_bp" ? " (con bonus en este cliente)" : t.rule === "override_bp" ? " (% especial en este cliente)" : "";
-    s.push({ label: `${pct(t.bp)} de ${t.tenant_name}${why}`, cents: t.cents, tone: "plus" });
+    const back = t.cents < 0 ? " (reintegro o contracargo)" : "";
+    s.push({ label: `${pct(t.bp)} de ${t.tenant_name}${why}${back}`, cents: t.cents, tone: t.cents < 0 ? "minus" : "plus" });
   }
   if (l.signup_cents) s.push({ label: "Comisión de alta", cents: l.signup_cents, tone: "plus" });
   for (const e of l.by_expense) s.push({ label: `Su parte de ${e.name}`, cents: -e.cents, tone: "minus" });

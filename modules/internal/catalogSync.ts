@@ -6,8 +6,11 @@
 // regenera): cliente "destipado" sólo para esta tabla, como catalogs.ts.
 import { createClient } from "@/lib/supabase/client";
 import { parseMarketOffer, type MarketOffer } from "@/modules/catalog/priceReference";
+import { parseSyncConfig, toConfigPayload, type SyncScheduleConfig } from "./catalogSyncSchedule";
 
-export type SyncStatus = "running" | "ok" | "partial" | "error";
+export type SyncControlAction = "pause" | "resume" | "cancel";
+
+export type SyncStatus = "running" | "ok" | "partial" | "error" | "cancelled";
 
 /** Resultado por tienda: ofertas (de la tienda y de otros vendedores). */
 export interface SyncStoreState {
@@ -33,6 +36,9 @@ export interface SyncRun {
   id: string;
   trigger: "manual" | "cron";
   status: SyncStatus;
+  /** ADR-113: pausada por el staff (sigue abierta). */
+  pausedAt: string | null;
+  forceFull: boolean;
   mode: "full" | "incremental" | "mixed" | null;
   currentStore: string | null;
   /** Productos únicos (catalog_items) nuevos / actualizados. */
@@ -71,7 +77,11 @@ export function parseSyncRun(row: Record<string, unknown>): SyncRun {
   return {
     id: String(row.id),
     trigger: row.trigger === "cron" ? "cron" : "manual",
-    status: (["running", "ok", "partial", "error"].includes(String(row.status)) ? row.status : "error") as SyncStatus,
+    status: (["running", "ok", "partial", "error", "cancelled"].includes(String(row.status))
+      ? row.status
+      : "error") as SyncStatus,
+    pausedAt: (row.paused_at as string) ?? null,
+    forceFull: row.force_full === true,
     mode: (row.mode as SyncRun["mode"]) ?? null,
     currentStore: (row.current_store as string) ?? null,
     nuevos: num(row.nuevos),
@@ -114,6 +124,57 @@ export function syncProgress(run: SyncRun): { phase: "feed" | "stores"; done: nu
     return { phase: "feed", done: pages, total: 0, pct: Math.min(79, Math.round(80 * (1 - 1 / (1 + pages / 200)))) };
   }
   return { phase: "stores", done, total, pct: 80 + (total ? Math.round((done / total) * 20) : 20) };
+}
+
+export type StoreRowState = "pending" | "running" | "ok" | "error";
+
+/**
+ * Estado de una tienda dentro de la corrida (tabla del panel). El feed
+ * maestro trae todas las tiendas a la vez: mientras se lee, todas están "en
+ * curso" sin porcentaje propio (pct null = barra indeterminada). En el cierre,
+ * la tienda que se está cerrando está en curso, las cerradas OK (o Error) y
+ * el resto pendiente. Una corrida terminada sin cerrar la tienda (cancelada)
+ * la deja pendiente.
+ */
+export function storeRowState(run: SyncRun, store: SyncStoreState): { state: StoreRowState; pct: number | null } {
+  if (store.error && store.done) return { state: "error", pct: 100 };
+  if (store.done) return { state: "ok", pct: 100 };
+  const open = run.status === "running";
+  if (!open) return { state: "pending", pct: 0 };
+  if (!run.feed || !run.feed.done) return { state: run.pausedAt ? "pending" : "running", pct: null };
+  if (run.currentStore === store.key && !run.pausedAt) return { state: "running", pct: null };
+  return { state: store.error ? "error" : "pending", pct: 0 };
+}
+
+/** ¿La corrida fue (o es) una lectura completa? */
+export function runIsFull(run: SyncRun): boolean {
+  return run.feed ? run.feed.full : run.mode === "full" || run.forceFull;
+}
+
+/**
+ * Tiempo transcurrido y estimación de lo que falta para la corrida abierta,
+ * según la duración de la última corrida terminada (ok o con errores) del
+ * mismo tipo (completa o sólo cambios). Sin una así, no hay estimación.
+ * Pausada: no se estima (el reloj no corre igual).
+ */
+export function estimateEta(
+  run: SyncRun,
+  history: SyncRun[],
+  now: Date = new Date(),
+): { elapsedMs: number; etaMs: number | null; basis: "full" | "incremental" | null } {
+  const elapsedMs = Math.max(0, now.getTime() - new Date(run.startedAt).getTime());
+  if (run.status !== "running" || run.pausedAt) return { elapsedMs, etaMs: null, basis: null };
+  const full = runIsFull(run);
+  const prev = history.find(
+    (r) =>
+      r.id !== run.id &&
+      (r.status === "ok" || r.status === "partial") &&
+      r.finishedAt &&
+      runIsFull(r) === full,
+  );
+  if (!prev?.finishedAt) return { elapsedMs, etaMs: null, basis: null };
+  const prevMs = new Date(prev.finishedAt).getTime() - new Date(prev.startedAt).getTime();
+  return { elapsedMs, etaMs: Math.max(prevMs - elapsedMs, 0), basis: full ? "full" : "incremental" };
 }
 
 /** Estadísticas de deduplicación (catalog_dedupe_stats). */
@@ -169,8 +230,9 @@ export function parseDedupeStats(raw: unknown): DedupeStats {
 const AR_OFFSET_MS = 3 * 60 * 60 * 1000; // Argentina: UTC-3 todo el año
 
 /**
- * Próxima sync automática: sábado 06:00 hora Argentina (09:00 UTC), el job
- * `catalog-sync-weekly` de la migración 20261110500000.
+ * Próxima sync automática con la agenda fija de ADR-107 (sábado 06:00 hora
+ * Argentina, 09:00 UTC). Desde ADR-113 la agenda es editable: el panel usa
+ * nextScheduledRun (catalogSyncSchedule.ts); esto queda como referencia.
  */
 export function nextWeeklySync(now: Date = new Date()): Date {
   const ar = new Date(now.getTime() - AR_OFFSET_MS); // reloj de pared AR en campos UTC
@@ -192,7 +254,7 @@ export const catalogSyncApi = {
     const { data, error } = await db()
       .from("catalog_sync_runs")
       .select(
-        "id, trigger, status, mode, current_store, nuevos, actualizados, ofertas_nuevas, ofertas_actualizadas, faltantes, errores, last_error, started_at, finished_at, heartbeat_at, stores, feed",
+        "id, trigger, status, paused_at, force_full, mode, current_store, nuevos, actualizados, ofertas_nuevas, ofertas_actualizadas, faltantes, errores, last_error, started_at, finished_at, heartbeat_at, stores, feed",
       )
       .order("started_at", { ascending: false })
       .limit(limit);
@@ -211,6 +273,24 @@ export const catalogSyncApi = {
     const { data, error } = await db().rpc("catalog_price_compare", { p_ean: ean.trim() });
     if (error) throw error;
     return ((data ?? []) as Record<string, unknown>[]).map(parseMarketOffer);
+  },
+
+  // ADR-113: agenda editable (fila única, RLS sólo staff interno).
+  getConfig: async (): Promise<SyncScheduleConfig> => {
+    const { data, error } = await db().from("catalog_sync_config").select("*").maybeSingle();
+    if (error) throw error;
+    return parseSyncConfig(data as Record<string, unknown> | null);
+  },
+
+  saveConfig: async (config: SyncScheduleConfig): Promise<SyncScheduleConfig> => {
+    const { data, error } = await db().rpc("internal_catalog_sync_config_save", { p_config: toConfigPayload(config) });
+    if (error) throw error;
+    return parseSyncConfig(data as Record<string, unknown>);
+  },
+
+  control: async (runId: string, action: SyncControlAction): Promise<void> => {
+    const { error } = await db().rpc("internal_catalog_sync_control", { p_run: runId, p_action: action });
+    if (error) throw error;
   },
 
   start: async (full = false): Promise<string> => {

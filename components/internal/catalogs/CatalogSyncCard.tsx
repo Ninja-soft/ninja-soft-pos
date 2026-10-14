@@ -1,45 +1,44 @@
 "use client";
 
 // Sincronización del catálogo Tiendita con el feed del scraper (ADR-107,
-// ADR-109): estado de la última corrida (productos únicos y ofertas por
-// tienda), próxima automática y "Sincronizar ahora" con progreso (polling de
-// catalog_sync_runs mientras haya una corrida abierta).
-import { useEffect, useRef } from "react";
-import { AlertTriangle, CalendarClock, RefreshCw } from "lucide-react";
+// ADR-109): corrida actual o última (estado, tipo, origen), progreso global
+// con tiempo transcurrido y estimación, resultados y tabla por tienda.
+// ADR-113: "Sincronizar ahora" (incremental), "Lectura completa ahora",
+// pausar / reanudar / cancelar la corrida abierta (auditado). Polling de
+// catalog_sync_runs cada 4 s mientras haya una corrida abierta.
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, DatabaseZap, Pause, Play, RefreshCw, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { SpinnerBlock } from "@/components/ui/Spinner";
-import { StoreLogo } from "@/components/catalog/StoreLogo";
-import { useCatalogSyncRuns, useStartCatalogSync } from "@/modules/internal/catalogsHooks";
-import { nextWeeklySync, syncProgress, type SyncRun, type SyncStatus } from "@/modules/internal/catalogSync";
+import { useCatalogSyncControl, useCatalogSyncRuns, useStartCatalogSync } from "@/modules/internal/catalogsHooks";
+import { estimateEta, syncProgress, type SyncControlAction, type SyncStatus } from "@/modules/internal/catalogSync";
+import { CatalogSyncStoresTable } from "./CatalogSyncStoresTable";
+import { fmtDateTime, fmtMs, fmtNum, ProgressBar, RunStatusChip, runKindLabel } from "./catalogUi";
 
-const STATUS: Record<SyncStatus, { label: string; tone: BadgeTone }> = {
-  running: { label: "Sincronizando", tone: "info" },
-  ok: { label: "Completa", tone: "success" },
-  partial: { label: "Con errores en algunas tiendas", tone: "warning" },
-  error: { label: "Falló", tone: "danger" },
+const CONTROL_DONE: Record<SyncControlAction, string> = {
+  pause: "Corrida pausada. La tanda en curso termina su página y se detiene.",
+  resume: "Corrida reanudada. Sigue en menos de un minuto.",
+  cancel: "Corrida cancelada. Lo que ya se sincronizó queda.",
 };
 
-const fmtDate = (iso: string | null) =>
-  iso
-    ? new Date(iso).toLocaleString("es-AR", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "America/Argentina/Buenos_Aires",
-      })
-    : "";
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String((e as { message?: unknown } | null)?.message ?? "");
+}
 
-const fmtNum = (n: number) => n.toLocaleString("es-AR");
-
-function modeLabel(run: SyncRun) {
-  if (run.mode === "full") return "Completa";
-  if (run.mode === "incremental") return "Sólo cambios";
-  if (run.mode === "mixed") return "Mixta";
-  return "";
+function Result({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-lg font-semibold tabular-nums text-foreground">{fmtNum(value)}</div>
+    </div>
+  );
 }
 
 export function CatalogSyncCard() {
@@ -47,8 +46,19 @@ export function CatalogSyncCard() {
   const qc = useQueryClient();
   const { data: runs, isLoading, error } = useCatalogSyncRuns();
   const start = useStartCatalogSync();
+  const control = useCatalogSyncControl();
+  const [confirm, setConfirm] = useState<"full" | "cancel" | null>(null);
   const last = runs?.[0] ?? null;
-  const running = last?.status === "running";
+  const open = last?.status === "running";
+  const paused = open && !!last?.pausedAt;
+
+  // Reloj para el tiempo transcurrido mientras hay una corrida abierta.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(t);
+  }, [open]);
 
   // Al terminar una corrida se refrescan los conteos de tiendas y catálogos.
   const prevStatus = useRef<SyncStatus | null>(null);
@@ -62,56 +72,101 @@ export function CatalogSyncCard() {
     prevStatus.current = status;
   }, [last?.status, qc]);
 
-  async function syncNow() {
+  async function syncNow(full: boolean) {
     try {
-      await start.mutateAsync(false);
-      toast({ title: "Sincronización en marcha", description: "Podés seguir el avance acá.", variant: "success" });
-    } catch (e) {
+      await start.mutateAsync(full);
+      setConfirm(null);
       toast({
-        title: "No se pudo iniciar la sincronización",
-        description: e instanceof Error ? e.message : undefined,
+        title: full ? "Lectura completa en marcha" : "Sincronización en marcha",
+        description: "Podés seguir el avance acá.",
+        variant: "success",
+      });
+    } catch (e) {
+      toast({ title: "No se pudo iniciar la sincronización", description: errorText(e) || undefined, variant: "error" });
+    }
+  }
+
+  async function runControl(action: SyncControlAction) {
+    if (!last) return;
+    try {
+      await control.mutateAsync({ runId: last.id, action });
+      setConfirm(null);
+      toast({ title: CONTROL_DONE[action], variant: "success" });
+    } catch (e) {
+      const msg = errorText(e);
+      toast({
+        title: "No se pudo completar la acción",
+        description: msg.includes("forbidden")
+          ? "Sólo un admin o super admin del panel interno puede hacerlo."
+          : msg.includes("run_not_open")
+            ? "La corrida ya no está abierta."
+            : msg || undefined,
         variant: "error",
       });
     }
   }
 
-  const next = nextWeeklySync();
   const progress = last ? syncProgress(last) : null;
+  const eta = last && open ? estimateEta(last, runs ?? [], now) : null;
+
+  const actions = !open ? (
+    <>
+      <Button onClick={() => syncNow(false)} loading={start.isPending} disabled={start.isPending || isLoading}>
+        {!start.isPending && <RefreshCw size={15} />}
+        Sincronizar ahora
+      </Button>
+      <Button variant="secondary" onClick={() => setConfirm("full")} disabled={start.isPending || isLoading}>
+        <DatabaseZap size={15} /> Lectura completa ahora
+      </Button>
+    </>
+  ) : (
+    <>
+      {paused ? (
+        <Button onClick={() => runControl("resume")} loading={control.isPending} disabled={control.isPending}>
+          {!control.isPending && <Play size={15} />}
+          Reanudar
+        </Button>
+      ) : (
+        <Button variant="secondary" onClick={() => runControl("pause")} loading={control.isPending} disabled={control.isPending}>
+          {!control.isPending && <Pause size={15} />}
+          Pausar corrida
+        </Button>
+      )}
+      <Button variant="ghost" onClick={() => setConfirm("cancel")} disabled={control.isPending}>
+        <XCircle size={15} /> Cancelar corrida
+      </Button>
+    </>
+  );
 
   return (
-    <Card className="mt-3">
-      <CardContent className="space-y-4 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1 text-sm">
+    <Card>
+      <CardContent className="space-y-5 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-sm font-medium text-muted-foreground">{open ? "Corrida en curso" : "Última corrida"}</p>
             {isLoading ? (
-              <SpinnerBlock className="py-2" />
+              <div aria-busy className="space-y-2">
+                <Skeleton className="h-6 w-56" />
+                <Skeleton className="h-4 w-40" />
+              </div>
             ) : last ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={STATUS[last.status].tone}>{STATUS[last.status].label}</Badge>
-                  {modeLabel(last) && <Badge tone="neutral">{modeLabel(last)}</Badge>}
-                  <span className="text-xs text-muted-foreground">
-                    {last.trigger === "cron" ? "Automática" : "Manual"}
-                  </span>
+                  <RunStatusChip run={last} />
+                  <Badge tone="neutral">{runKindLabel(last)}</Badge>
+                  <Badge tone="neutral">{last.trigger === "cron" ? "Automática" : "Manual"}</Badge>
                 </div>
-                <p className="text-muted-foreground">
-                  {running ? "Empezó " : "Última: "}
+                <p className="text-sm text-muted-foreground">
+                  {open ? "Empezó el " : "Terminó el "}
                   <span className="font-medium text-foreground">
-                    {fmtDate(running ? last.startedAt : last.finishedAt ?? last.startedAt)}
+                    {fmtDateTime(open ? last.startedAt : last.finishedAt ?? last.startedAt)}
                   </span>
+                  {paused && last.pausedAt && <> · en pausa desde el {fmtDateTime(last.pausedAt)}</>}
                 </p>
               </>
-            ) : (
-              <p className="text-muted-foreground">Todavía no hubo ninguna sincronización.</p>
-            )}
-            <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CalendarClock size={13} /> Próxima automática: {fmtDate(next.toISOString())}
-            </p>
+            ) : null}
           </div>
-          <Button onClick={syncNow} loading={start.isPending} disabled={running || start.isPending}>
-            {!start.isPending && <RefreshCw size={15} className={running ? "animate-spin" : undefined} />}
-            {running ? "Sincronizando…" : "Sincronizar ahora"}
-          </Button>
+          <div className="flex flex-wrap gap-2">{actions}</div>
         </div>
 
         {error && (
@@ -120,98 +175,86 @@ export function CatalogSyncCard() {
           </Callout>
         )}
 
-        {running && progress && (
-          <div className="space-y-1.5">
-            <div
-              className="h-2 w-full overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={progress.pct}
-            >
-              <div className="h-full rounded-full bg-ninja-flame transition-all" style={{ width: `${progress.pct}%` }} />
+        {!isLoading && !last && !error && (
+          <EmptyState
+            compact
+            icon={RefreshCw}
+            title="Todavía no hubo ninguna sincronización"
+            description="La primera corrida lee el catálogo maestro completo. Después corre sola según la agenda."
+          />
+        )}
+
+        {open && progress && last && (
+          <div className="space-y-2 rounded-lg bg-muted/40 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+              <span className="font-medium text-foreground">
+                {paused
+                  ? "En pausa"
+                  : progress.phase === "feed"
+                    ? `Leyendo el catálogo maestro: ${fmtNum(last.feed?.recibidos ?? 0)} productos en ${fmtNum(progress.done)} páginas`
+                    : `Cerrando tiendas: ${progress.done} de ${progress.total}`}
+              </span>
+              <span className="tabular-nums text-muted-foreground">{progress.pct} %</span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {progress.phase === "feed"
-                ? `Leyendo el catálogo maestro: ${fmtNum(last?.feed?.recibidos ?? 0)} productos (${fmtNum(progress.done)} páginas)`
-                : `Cerrando tiendas: ${progress.done} de ${progress.total}`}
-            </p>
+            <ProgressBar pct={progress.pct} label="Avance de la corrida" />
+            {eta && (
+              <p className="text-xs text-muted-foreground">
+                Lleva {fmtMs(eta.elapsedMs)}
+                {eta.etaMs !== null
+                  ? eta.etaMs > 0
+                    ? ` · faltan unos ${fmtMs(eta.etaMs)} (según la última corrida ${eta.basis === "full" ? "completa" : "de sólo cambios"})`
+                    : " · por terminar"
+                  : paused
+                    ? ""
+                    : " · sin estimación todavía"}
+              </p>
+            )}
           </div>
         )}
 
         {last && (last.nuevos > 0 || last.actualizados > 0 || last.ofertasNuevas > 0 || last.ofertasActualizadas > 0) && (
-          <p className="text-sm text-muted-foreground">
-            Productos únicos:{" "}
-            <span className="font-medium text-foreground">{fmtNum(last.nuevos)} nuevos</span> ·{" "}
-            <span className="font-medium text-foreground">{fmtNum(last.actualizados)} actualizados</span>. Ofertas:{" "}
-            <span className="font-medium text-foreground">{fmtNum(last.ofertasNuevas)} nuevas</span> ·{" "}
-            <span className="font-medium text-foreground">{fmtNum(last.ofertasActualizadas)} con cambios</span>.
-          </p>
-        )}
-
-        {last && last.stores.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-1.5 pr-3 font-medium">Tienda</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">Ofertas nuevas</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">Con cambios</th>
-                  <th className="py-1.5 pr-3 text-right font-medium">Faltantes</th>
-                  <th className="py-1.5 font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {last.stores.map((s) => (
-                  <tr key={s.key} className="border-t border-border">
-                    <td className="py-1.5 pr-3 font-medium text-foreground">
-                      <span className="flex items-center gap-2">
-                        <StoreLogo storeKey={s.key} name={s.label} size={20} />
-                        {s.label}
-                      </span>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(s.nuevos)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(s.actualizados)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(s.faltantes)}</td>
-                    <td className="py-1.5 text-xs">
-                      {s.error ? (
-                        <span className="text-danger" title={s.error}>
-                          {s.done ? "Error" : "Reintentando"}
-                        </span>
-                      ) : s.done ? (
-                        <span className="text-success">{last.feed?.full ? "Completa" : "Al día"}</span>
-                      ) : (
-                        <span className="text-muted-foreground">Pendiente</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-border font-semibold text-foreground">
-                  <td className="py-1.5 pr-3">Total</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.ofertasNuevas)}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.ofertasActualizadas)}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(last.faltantes)}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Result label="Productos nuevos" value={last.nuevos} />
+            <Result label="Productos actualizados" value={last.actualizados} />
+            <Result label="Ofertas nuevas" value={last.ofertasNuevas} />
+            <Result label="Ofertas con cambios" value={last.ofertasActualizadas} />
           </div>
         )}
 
+        {last && last.stores.length > 0 && <CatalogSyncStoresTable run={last} />}
+
         {last?.lastError && last.status !== "ok" && (
-          <Callout tone={last.status === "running" ? "warning" : "danger"} icon={AlertTriangle}>
+          <Callout tone={last.status === "running" || last.status === "cancelled" ? "warning" : "danger"} icon={AlertTriangle}>
             {last.lastError}
           </Callout>
         )}
 
         <p className="text-xs text-muted-foreground">
-          Lee el catálogo maestro del scraper de NinjaSoft: un producto por EAN con la mejor ficha de todas
-          las tiendas, más las ofertas de cada tienda y vendedor (de todas las tiendas, estén o no en un
-          catálogo). Las tiendas nuevas se agregan solas y las ofertas que ya no están quedan como no
-          disponibles (nunca se borran). Sale sola los sábados a las 6, después de la corrida del viernes.
+          Lee el catálogo maestro del scraper de NinjaSoft: un producto por EAN con la mejor ficha de todas las tiendas,
+          más las ofertas de cada tienda y vendedor. Las tiendas nuevas se agregan solas y las ofertas que ya no están
+          quedan como no disponibles (nunca se borran).
         </p>
+
+        <ConfirmDialog
+          open={confirm === "full"}
+          onOpenChange={(o) => !o && setConfirm(null)}
+          title="Lectura completa ahora"
+          description="Lee todo el catálogo maestro desde cero (con 1M de publicaciones son varias horas en tandas). Al terminar, las ofertas que ya no están en el feed quedan como no disponibles. Queda registrado en la auditoría."
+          confirmLabel="Empezar lectura completa"
+          loading={start.isPending}
+          onConfirm={() => syncNow(true)}
+        />
+        <ConfirmDialog
+          open={confirm === "cancel"}
+          onOpenChange={(o) => !o && setConfirm(null)}
+          title="Cancelar la corrida"
+          description="La corrida se corta y queda como cancelada en el historial. Lo que ya se sincronizó se queda y no se marcan faltantes. La próxima incremental pide desde la última corrida buena."
+          confirmLabel="Cancelar corrida"
+          cancelLabel="Volver"
+          danger
+          loading={control.isPending}
+          onConfirm={() => runControl("cancel")}
+        />
       </CardContent>
     </Card>
   );

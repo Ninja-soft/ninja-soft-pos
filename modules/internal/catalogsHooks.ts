@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { catalogsApi, type CatalogInput } from "./catalogs";
-import { catalogSyncApi } from "./catalogSync";
+import { catalogSyncApi, type SyncControlAction } from "./catalogSync";
+import type { SyncScheduleConfig } from "./catalogSyncSchedule";
 
 export function useCatalogStores() {
   return useQuery({
@@ -77,7 +78,7 @@ export function useRevokeCatalog() {
 export function useCatalogSyncRuns() {
   return useQuery({
     queryKey: ["internal", "catalog-sync-runs"],
-    queryFn: () => catalogSyncApi.listRuns(5),
+    queryFn: () => catalogSyncApi.listRuns(10),
     refetchInterval: (query) =>
       query.state.data?.[0]?.status === "running" ? 4000 : false,
   });
@@ -107,6 +108,36 @@ export function useStartCatalogSync() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (full: boolean) => catalogSyncApi.start(full),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "catalog-sync-runs"] });
+    },
+  });
+}
+
+// ADR-113: agenda editable de la sync automática.
+export function useCatalogSyncConfig() {
+  return useQuery({
+    queryKey: ["internal", "catalog-sync-config"],
+    queryFn: () => catalogSyncApi.getConfig(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveCatalogSyncConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: SyncScheduleConfig) => catalogSyncApi.saveConfig(config),
+    onSuccess: (saved) => {
+      qc.setQueryData(["internal", "catalog-sync-config"], saved);
+    },
+  });
+}
+
+// ADR-113: pausar / reanudar / cancelar la corrida abierta.
+export function useCatalogSyncControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { runId: string; action: SyncControlAction }) => catalogSyncApi.control(v.runId, v.action),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["internal", "catalog-sync-runs"] });
     },

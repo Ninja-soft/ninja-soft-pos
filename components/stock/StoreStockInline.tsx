@@ -107,7 +107,7 @@ export function StoreStockChips({ quantities }: { quantities: StoreQty[] }) {
         <span
           key={q.store.id}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs",
+            "inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs",
             q.current
               ? "bg-ninja-flame/10 text-foreground ring-1 ring-ninja-flame/30"
               : "bg-muted text-muted-foreground",

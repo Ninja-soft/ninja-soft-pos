@@ -498,7 +498,7 @@ function ReasonStep({
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className={cn("rounded-full px-2.5 py-0.5 text-sm font-semibold", tone)}>
+            <span className={cn("rounded-md px-2.5 py-0.5 text-sm font-semibold", tone)}>
               {destLabel}
             </span>
             <span className="text-xs text-muted-foreground">{destHint}</span>
@@ -589,7 +589,7 @@ function TakeProductsStep({
               <span className="min-w-0 truncate">
                 {p.name}
                 {p.has_variants && (
-                  <span className="ml-1.5 rounded-full bg-ninja-flame/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-ninja-flameSoft">
+                  <span className="ml-1.5 rounded-md bg-ninja-flame/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-ninja-flameSoft">
                     variantes
                   </span>
                 )}

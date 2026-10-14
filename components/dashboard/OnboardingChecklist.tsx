@@ -315,7 +315,7 @@ export function OnboardingChecklistCard({
                       href={s.href as Route}
                       aria-label={`${s.label} (listo). Revisar`}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 py-1 pl-1.5 pr-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                        "inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 py-1 pl-1.5 pr-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground",
                         FOCUS,
                       )}
                     >

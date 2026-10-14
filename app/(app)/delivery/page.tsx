@@ -267,7 +267,7 @@ export default function DeliveryPage() {
                   <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
                     {DELIVERY_STATUS_LABELS[col]}
                   </span>
-                  <span className="rounded-full bg-ninja-flame/15 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft tabular-nums">
+                  <span className="rounded-md bg-ninja-flame/15 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft tabular-nums">
                     {list.length}
                   </span>
                 </div>

@@ -277,11 +277,11 @@ export function CustomerHistoryModal({
                       </span>
                       <span className="shrink-0 text-right">
                         {c.expired && !exhausted ? (
-                          <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-warning">
+                          <span className="rounded-md bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-warning">
                             Vencido
                           </span>
                         ) : exhausted ? (
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                             Sin sesiones
                           </span>
                         ) : (

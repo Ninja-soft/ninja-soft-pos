@@ -513,7 +513,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 type="button"
                 onClick={() => setTab(t.key)}
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold outline-none transition focus-visible:bg-muted",
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold outline-none transition focus-visible:bg-muted",
                   on
                     ? "bg-ninja-flame/[0.12] text-ninja-flameSoft"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",

@@ -163,7 +163,7 @@ export function CategoryPathEditor({
         <button
           type="button"
           onClick={addLevel}
-          className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
         >
           <Plus size={13} />
           {value.length === 0 ? "Agregar rubro" : `Agregar ${levelLabel(value.length).toLowerCase()}`}

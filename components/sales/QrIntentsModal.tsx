@@ -45,7 +45,7 @@ function StatusBadge({ status }: { status: string }) {
         : "border-border bg-muted text-muted-foreground";
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${cls}`}
+      className={`inline-flex rounded-md border px-2.5 py-0.5 text-xs font-semibold ${cls}`}
     >
       {STATUS_LABELS[status] ?? status}
     </span>

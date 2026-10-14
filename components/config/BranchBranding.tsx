@@ -137,8 +137,8 @@ export function StoreGroupsCard() {
                   onClick={() => mut.assign.mutate({ storeId: b.id, groupId: inGroup ? null : g.id })}
                   className={
                     inGroup
-                      ? "flex items-center gap-1.5 rounded-full bg-ninja-flame/15 px-3 py-1 text-xs font-medium"
-                      : "flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
+                      ? "flex items-center gap-1.5 rounded-md bg-ninja-flame/15 px-3 py-1 text-xs font-medium"
+                      : "flex items-center gap-1.5 rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
                   }
                 >
                   <BranchDot branch={b} /> {b.name}

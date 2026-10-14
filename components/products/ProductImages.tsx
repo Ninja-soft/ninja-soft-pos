@@ -152,7 +152,7 @@ export function ProductImages({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img.url} alt="" className="h-full w-full object-contain p-1.5" />
               {img.is_primary && (
-                <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+                <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
                   Principal
                 </span>
               )}

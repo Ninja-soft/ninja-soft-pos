@@ -577,8 +577,8 @@ export function PaymentPlansGridModal({
                   onClick={() => toggleBrand(b.value)}
                   className={
                     on
-                      ? "inline-flex h-9 items-center gap-2 rounded-full bg-fg-10 pl-2 pr-3 text-xs font-semibold text-foreground"
-                      : "inline-flex h-9 items-center gap-2 rounded-full pl-2 pr-3 text-xs text-muted-foreground opacity-60 transition hover:bg-fg-6 hover:opacity-100"
+                      ? "inline-flex h-9 items-center gap-2 rounded-md bg-fg-10 pl-2 pr-3 text-xs font-semibold text-foreground"
+                      : "inline-flex h-9 items-center gap-2 rounded-md pl-2 pr-3 text-xs text-muted-foreground opacity-60 transition hover:bg-fg-6 hover:opacity-100"
                   }
                 >
                   <CardBrandLogo brand={b.value} label={b.label} height={18} />
@@ -634,7 +634,7 @@ export function PaymentPlansGridModal({
                   .map((n) => (
                     <span
                       key={n}
-                      className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]"
+                      className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px]"
                     >
                       {n}c
                       <button

@@ -171,7 +171,7 @@ export function StaffBranchesModal({
                 <span className="text-sm text-muted-foreground">Ninguna sucursal</span>
               ) : (
                 liveToday.map((id) => (
-                  <span key={id} className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                  <span key={id} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-medium">
                     <BranchDot branch={byId.get(id) ?? null} className="h-2 w-2" />
                     {byId.get(id)?.name}
                   </span>
@@ -262,7 +262,7 @@ export function StaffBranchesModal({
                       key={n}
                       type="button"
                       onClick={() => setUntil(addDays(from, n - 1))}
-                      className="h-8 rounded-full border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="h-8 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       {n === 1 ? "1 día" : `${n} días`}
                     </button>

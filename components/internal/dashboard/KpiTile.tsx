@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import type { LucideIcon } from "lucide-react";
 import { ArrowDownRight, ArrowUpRight, ChevronRight, Minus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -91,7 +92,7 @@ export function KpiTile({
         )}
         {href && (
           <Link
-            href={href}
+            href={href as Route}
             className="inline-flex shrink-0 items-center rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Ver detalle de ${label}`}
           >

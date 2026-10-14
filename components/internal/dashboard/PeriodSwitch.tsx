@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
+import type { Route } from "next";
 import { Segmented } from "@/components/ui/Segmented";
 import type { PeriodKey } from "@/lib/internal/saasKpis";
 
@@ -29,7 +30,7 @@ export function PeriodSwitch({ value }: { value: PeriodKey }) {
           if (v === "mes") next.delete("periodo");
           else next.set("periodo", v);
           const qs = next.toString();
-          start(() => router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false }));
+          start(() => router.push((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false }));
         }}
       />
     </div>

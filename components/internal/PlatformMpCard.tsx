@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { appOrigin } from "@/lib/site";
 import {
@@ -40,15 +41,17 @@ export function PlatformMpCard() {
     queryKey: ["platform-mp-webhook-stats"],
     queryFn: async (): Promise<MpWebhookStats> => {
       const since = new Date(Date.now() - 86_400_000).toISOString();
+      // webhook_events no está en types/database.ts (igual que /internal/webhooks).
+      const db = supabase as unknown as SupabaseClient;
       const [last, day] = await Promise.all([
-        supabase
+        db
           .from("webhook_events")
           .select("created_at")
           .eq("function_name", "mp_billing_webhook")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
-        supabase
+        db
           .from("webhook_events")
           .select("status, error, created_at")
           .eq("function_name", "mp_billing_webhook")

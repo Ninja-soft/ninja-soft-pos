@@ -354,7 +354,9 @@ begin
     'charges', v_chg,
     'allocations', v_alloc,
     'payments', v_pay
-  ) || case when p_staff then jsonb_build_object('terms', v_terms, 'timeline', v_tl) else '{}'::jsonb end;
+  ) || case when p_staff then jsonb_build_object(
+         'terms', v_terms, 'timeline', v_tl,
+         'is_test', (select t.is_test from tenants t where t.id = p_tenant)) else '{}'::jsonb end;
 end;
 $$;
 revoke all on function platform_statement(uuid, boolean) from public, anon, authenticated;
@@ -427,6 +429,13 @@ begin
          l.description, l.charge_id
     from platform_ledger l;
 
+  -- Negocios que no se cobran: aparecen en la lista con su motivo, pero no
+  -- suman en los totales ni en los próximos vencimientos.
+  create temporary table if not exists _po_excl (tenant_id uuid primary key) on commit drop;
+  truncate _po_excl;
+  insert into _po_excl
+  select distinct m.tenant_id from _po_mv m where platform_billing_exclusion(m.tenant_id) is not null;
+
   select coalesce(jsonb_agg(x.row order by (x.row ->> 'overdue_cents')::bigint desc, (x.row ->> 'balance_cents')::bigint desc), '[]'::jsonb)
     into v_rows
     from (
@@ -458,7 +467,8 @@ begin
     into v_up
     from _po_mv m
     join tenants t on t.id = m.tenant_id
-   where m.amount_cents > 0 and m.open_cents > 0 and m.due between v_today and v_today + 45;
+   where m.amount_cents > 0 and m.open_cents > 0 and m.due between v_today and v_today + 45
+     and not exists (select 1 from _po_excl e where e.tenant_id = m.tenant_id);
 
   select jsonb_build_object(
            'balance_cents', coalesce(sum(m.amount_cents), 0),
@@ -471,7 +481,8 @@ begin
            'd90_plus', coalesce(sum(m.open_cents) filter (where m.amount_cents > 0 and v_today - m.due > 90), 0),
            'tenants_overdue', count(distinct m.tenant_id) filter (where m.amount_cents > 0 and m.open_cents > 0 and m.due < v_today))
     into v_tot
-    from _po_mv m;
+    from _po_mv m
+   where not exists (select 1 from _po_excl e where e.tenant_id = m.tenant_id);
 
   select count(*) into v_excl
     from tenants t

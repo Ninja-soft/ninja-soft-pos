@@ -632,7 +632,7 @@ export function AppShell({
         </div>
       </div>
 
-      {/* Negocio activo (ADR-123): nombre de fantasía o el de la cuenta. */}
+      {/* Negocio activo (ADR-124): nombre de fantasía o el de la cuenta. */}
       <div className="mb-2 shrink-0 empty:hidden">
         <BusinessBadge />
       </div>

@@ -9,7 +9,7 @@ import { fetchTradeName } from "./businessName";
 export interface MyTenant {
   tenantId: string;
   industry: string | null;
-  // Nombre del negocio PARA MOSTRAR (ADR-123): fantasía, si no el de la cuenta.
+  // Nombre del negocio PARA MOSTRAR (ADR-124): fantasía, si no el de la cuenta.
   // Lo usan la barra lateral, impresiones y textos listos para enviar.
   name: string | null;
   /** tenants.name (nombre de la cuenta). */

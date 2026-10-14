@@ -1,4 +1,4 @@
-// Nombre del negocio que ve la gente (ADR-123). PURO.
+// Nombre del negocio que ve la gente (ADR-124). PURO.
 //
 // El negocio tiene tres nombres:
 //   · Nombre de fantasía (tenant_branding.trade_name): el comercial, el que
@@ -14,7 +14,7 @@
 //
 // Comprobantes: invoiceTradeName resuelve el encabezado comercial con el
 // override propio del comprobante (invoice_style.trade_name, Configuración >
-// Comprobantes) por encima de la marca. Ver ADR-123.
+// Comprobantes) por encima de la marca. Ver ADR-124.
 
 export const TRADE_NAME_MAX = 120;
 

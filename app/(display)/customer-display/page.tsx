@@ -72,7 +72,7 @@ export default function CustomerDisplayPage() {
           // cast vía unknown.
           .select("*")
           .maybeSingle(),
-        // ADR-123: nombre de fantasía (consulta aparte, tolerante).
+        // ADR-124: nombre de fantasía (consulta aparte, tolerante).
         fetchBusinessName().catch(() => null),
       ]);
       const settings = (s as unknown as {

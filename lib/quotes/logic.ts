@@ -64,7 +64,8 @@ export interface Quote {
   customer_address: string | null;
   customer_iva: string | null;
   issue_date: string;
-  valid_until: string;
+  /** ADR-123: null = sin vencimiento (precio de referencia, nunca vence). */
+  valid_until: string | null;
   terms: string | null;
   notes: string | null;
   service_from: string | null;
@@ -85,6 +86,13 @@ export interface Quote {
   parent_quote_id: string | null;
   created_at: string;
   updated_at: string;
+  /** ADR-123: emails del cliente (destinatarios), customer_email = el primero. */
+  customer_emails?: string[];
+  /** ADR-123: quién emitió y quién lo modificó por última vez. */
+  created_by?: string | null;
+  created_by_name?: string | null;
+  updated_by?: string | null;
+  updated_by_name?: string | null;
   items?: QuoteItem[];
 }
 
@@ -94,8 +102,9 @@ export function todayArIso(now: Date = new Date()): string {
 }
 
 /** Mismo criterio que quote_effective_status (SQL). */
-export function effectiveQuoteStatus(status: QuoteStatus, validUntil: string, today: string = todayArIso()): QuoteStatus {
-  if ((status === "draft" || status === "sent") && validUntil.slice(0, 10) < today) return "expired";
+export function effectiveQuoteStatus(status: QuoteStatus, validUntil: string | null, today: string = todayArIso()): QuoteStatus {
+  // Sin vencimiento (ADR-123): nunca pasa a vencido.
+  if ((status === "draft" || status === "sent") && validUntil && validUntil.slice(0, 10) < today) return "expired";
   return status;
 }
 
@@ -249,14 +258,28 @@ export function quoteDetailLines(it: QuoteItem): { bullet: boolean; text: string
 
 export const QUOTE_LEGEND = "PRESUPUESTO. No válido como factura.";
 
+/** Leyenda de un presupuesto sin vencimiento (ADR-123). */
+export const QUOTE_NO_EXPIRY_LEGEND = "Presupuesto de referencia: precios sujetos a cambio sin previo aviso.";
+
+/** Validez en una línea ("Válido hasta el 29/10/2026" / "Precio de referencia, sujeto a cambios"). */
+export function quoteValidityText(validUntil: string | null): string {
+  return validUntil ? `Válido hasta el ${fmtDate(validUntil)}` : "Precio de referencia, sujeto a cambios";
+}
+
 /** Leyendas del presupuesto (validez y condiciones). */
 export function quoteLegends(
   q: Pick<Quote, "valid_until" | "terms" | "version"> &
-    Partial<Pick<Quote, "notes" | "service_from" | "service_to" | "show_signature" | "status" | "accepted_at" | "accepted_by_name" | "accepted_via">>,
+    Partial<
+      Pick<
+        Quote,
+        "notes" | "service_from" | "service_to" | "show_signature" | "status" | "accepted_at" | "accepted_by_name" | "accepted_via" | "created_by_name"
+      >
+    >,
 ): string[] {
   const accepted = Boolean(q.accepted_at) && (q.status === "accepted" || q.status === "converted");
   return [
-    `Válido hasta el ${fmtDate(q.valid_until)}.`,
+    q.valid_until ? `Válido hasta el ${fmtDate(q.valid_until)}.` : QUOTE_NO_EXPIRY_LEGEND,
+    ...(q.created_by_name?.trim() ? [`Emitido por: ${q.created_by_name.trim()}.`] : []),
     ...(q.version > 1 ? [`Revisión ${q.version}.`] : []),
     ...(q.service_from ? [`Período del servicio: ${fmtDate(q.service_from)} al ${fmtDate(q.service_to ?? q.service_from)}.`] : []),
     ...(q.terms?.trim() ? [`Condiciones: ${q.terms.trim()}`] : []),
@@ -322,7 +345,7 @@ export function quoteToInvoiceDoc(
     currency: { code: "ARS" },
     issuer: {
       name: issuerName,
-      // ADR-123: encabezado comercial (fantasía); no se repite si es la razón social.
+      // ADR-124: encabezado comercial (fantasía); no se repite si es la razón social.
       tradeName: brand?.trade_name?.trim() && brand.trade_name.trim() !== issuerName ? brand.trade_name.trim() : null,
       cuit: brand?.cuit ?? null,
       ivaCondition: brand?.iva_condition ?? null,
@@ -336,7 +359,7 @@ export function quoteToInvoiceDoc(
       docNumber: q.customer_doc ?? null,
       docType: q.customer_doc ? q.customer_doc.split(" ")[0] ?? null : null,
       address: q.customer_address ?? null,
-      email: q.customer_email ?? null,
+      email: q.customer_emails?.length ? q.customer_emails.join(", ") : (q.customer_email ?? null),
     },
     lines,
     totals: {
@@ -349,7 +372,7 @@ export function quoteToInvoiceDoc(
     transparency: null,
     authorization: null,
     qrUrl: null,
-    qrFallbackText: `Presupuesto ${numberText} | ${formatCurrency(Number(q.total))} | válido hasta ${fmtDate(q.valid_until)}`,
+    qrFallbackText: `Presupuesto ${numberText} | ${formatCurrency(Number(q.total))} | ${q.valid_until ? `válido hasta ${fmtDate(q.valid_until)}` : "precio de referencia"}`,
     associated: [],
     payments: [],
     footer: null,
@@ -379,7 +402,7 @@ export function whatsappPhone(raw: string | null | undefined): string | null {
 
 export function quoteShareText(q: Pick<Quote, "pto_vta" | "number" | "total" | "valid_until">, businessName: string, url: string | null): string {
   return [
-    `Hola, te enviamos el presupuesto N° ${quoteNumberLabel(q.pto_vta, q.number)} de ${businessName} por ${formatCurrency(Number(q.total))}, válido hasta el ${fmtDate(q.valid_until)}.`,
+    `Hola, te enviamos el presupuesto N° ${quoteNumberLabel(q.pto_vta, q.number)} de ${businessName} por ${formatCurrency(Number(q.total))}, ${q.valid_until ? `válido hasta el ${fmtDate(q.valid_until)}` : "como precio de referencia sujeto a cambios"}.`,
     ...(url ? [`Podés verlo y aceptarlo acá: ${url}`] : []),
   ].join("\n");
 }
@@ -389,8 +412,101 @@ export function whatsappUrl(phone: string | null, text: string): string {
   return `https://wa.me/${p ?? ""}?text=${encodeURIComponent(text)}`;
 }
 
-export function mailtoUrl(email: string | null, subject: string, text: string): string {
-  return `mailto:${encodeURIComponent(email ?? "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+// ---------------------------------------------------------------------------
+// Envío por email (ADR-123)
+// ---------------------------------------------------------------------------
+
+export const QUOTE_EMAIL_MAX_RECIPIENTS = 10;
+
+const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+export const isEmail = (s: string) => s.trim().length <= 160 && EMAIL_RE.test(s.trim());
+
+/**
+ * Separa lo escrito en emails (coma, punto y coma, espacio o salto de línea),
+ * en minúscula, sin repetir. Devuelve los válidos y lo que no se entendió.
+ */
+export function parseEmails(raw: string): { valid: string[]; invalid: string[] } {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const part of raw.split(/[\s,;]+/)) {
+    const e = part.trim().replace(/^<|>$/g, "").toLowerCase();
+    if (!e) continue;
+    if (!isEmail(e)) invalid.push(part.trim());
+    else if (!valid.includes(e)) valid.push(e);
+  }
+  return { valid, invalid };
+}
+
+/** Emails del cliente de un presupuesto (los nuevos o el email suelto). */
+export function quoteRecipients(q: Pick<Quote, "customer_email"> & Partial<Pick<Quote, "customer_emails">>): string[] {
+  if (q.customer_emails?.length) return q.customer_emails;
+  return q.customer_email ? parseEmails(q.customer_email).valid : [];
+}
+
+export const QUOTE_EMAIL_DEFAULT_SUBJECT = "Presupuesto N° {numero} de {negocio}";
+
+export const QUOTE_EMAIL_DEFAULT_MESSAGE = [
+  "Hola {cliente},",
+  "",
+  "Te enviamos el presupuesto N° {numero} por {total}. {validez}.",
+  "",
+  "Te lo adjuntamos en PDF y también lo podés ver y aceptar en línea con el botón de abajo.",
+  "",
+  "Cualquier consulta, respondé este email.",
+  "",
+  "Saludos,",
+  "{emisor}",
+  "{negocio}",
+].join("\n");
+
+/** Variables de la plantilla del email (las muestra Configuración). */
+export const QUOTE_EMAIL_VARS = ["{cliente}", "{numero}", "{total}", "{validez}", "{emisor}", "{negocio}"] as const;
+
+export interface QuoteEmailVars {
+  cliente: string;
+  numero: string;
+  total: string;
+  validez: string;
+  emisor: string;
+  negocio: string;
+}
+
+export function quoteEmailVars(
+  q: Pick<Quote, "pto_vta" | "number" | "total" | "valid_until" | "customer_name"> & Partial<Pick<Quote, "created_by_name">>,
+  businessName: string,
+  issuer?: string | null,
+): QuoteEmailVars {
+  return {
+    cliente: q.customer_name?.trim() || "",
+    numero: quoteNumberLabel(q.pto_vta, q.number),
+    total: formatCurrency(Number(q.total)),
+    validez: quoteValidityText(q.valid_until),
+    emisor: (issuer ?? q.created_by_name ?? "").trim(),
+    negocio: businessName.trim(),
+  };
+}
+
+const VAR_RE = /\{(cliente|numero|total|validez|emisor|negocio)\}/g;
+
+/**
+ * Completa la plantilla: {variable} → valor. Sin cliente, "Hola {cliente},"
+ * queda "Hola,"; una línea que queda vacía por una variable vacía se va.
+ */
+export function fillQuoteTemplate(tpl: string, v: QuoteEmailVars): string {
+  const out: string[] = [];
+  for (const line of tpl.replace(/\r\n/g, "\n").split("\n")) {
+    const hadVar = /\{(cliente|numero|total|validez|emisor|negocio)\}/.test(line);
+    const filled = line
+      .replace(VAR_RE, (_, k: keyof QuoteEmailVars) => v[k] ?? "")
+      .replace(/[ \t]+,/g, ",")
+      .replace(/\.\./g, ".")
+      .replace(/[ \t]{2,}/g, " ")
+      .trimEnd();
+    if (hadVar && filled.trim() === "") continue;
+    out.push(filled);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -417,6 +533,12 @@ const ERRORS: Record<string, string> = {
   product_not_found: "Uno de los productos ya no existe.",
   sale_not_found: "No encontramos la venta.",
   service_period_invalid: "Revisá el período del servicio.",
+  quote_email_invalid: "Revisá los emails del cliente (hasta 10, separados por coma).",
+  quote_email_subject_required: "Escribí el asunto del email.",
+  quote_email_limit: "Llegaste al tope de envíos por email de hoy. Probá mañana o mandalo por WhatsApp.",
+  invalid_pdf: "No se pudo generar el PDF del presupuesto.",
+  pdf_too_large: "El PDF es muy pesado para mandarlo por email. Probá sin fotos o en formato ticket.",
+  send_failed: "El proveedor de email no pudo enviarlo. Revisá Configuración → Email o probá de nuevo.",
 };
 
 export function quoteErrorMessage(e: unknown): string {

@@ -31,7 +31,7 @@ const PRESET_ACCENTS = [
 ];
 
 type Branding = {
-  /** ADR-123: nombre de fantasía (el que se muestra en toda la app y al cliente). */
+  /** ADR-124: nombre de fantasía (el que se muestra en toda la app y al cliente). */
   trade_name: string | null;
   logo_path: string | null;
   logo_url: string | null;
@@ -144,7 +144,7 @@ export function BrandingCard() {
     },
     onSuccess: () => {
       toast({ title: "Marca guardada", variant: "success" });
-      // ADR-123: el nombre se ve en la barra lateral, el ticket, el login, etc.
+      // ADR-124: el nombre se ve en la barra lateral, el ticket, el login, etc.
       for (const queryKey of BUSINESS_NAME_QUERY_KEYS) qc.invalidateQueries({ queryKey: [...queryKey] });
       router.refresh();
     },
@@ -267,7 +267,7 @@ export function BrandingCard() {
           </div>
         </div>
 
-        {/* Datos comerciales. ADR-123: el nombre de fantasía es el que se
+        {/* Datos comerciales. ADR-124: el nombre de fantasía es el que se
             muestra en toda la app y al cliente; la razón social, en lo fiscal. */}
         <div className="grid gap-3 sm:grid-cols-2">
           {ctx.tradeNameReady && (

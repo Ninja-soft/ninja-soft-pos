@@ -41,7 +41,7 @@ export function RememberBusiness() {
       // Ante un error de red no se toca lo guardado (no es "sin logo").
       if (tErr || bErr) return null;
       return {
-        // ADR-123: el login saluda con el nombre de fantasía (si no, el de la cuenta).
+        // ADR-124: el login saluda con el nombre de fantasía (si no, el de la cuenta).
         name: businessDisplayNameOrNull({ tradeName, tenantName: (t as { name: string | null } | null)?.name }),
         logoUrl: (b as { logo_url: string | null } | null)?.logo_url ?? null,
       };

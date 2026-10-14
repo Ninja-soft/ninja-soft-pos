@@ -460,7 +460,7 @@ Deno.serve(async (req: Request) => {
       .select("legal_name, logo_url, accent")
       .eq("tenant_id", sale.tenant_id)
       .maybeSingle(),
-    // ADR-123: el email sale con el nombre de fantasía si el negocio lo cargó.
+    // ADR-124: el email sale con el nombre de fantasía si el negocio lo cargó.
     fetchTradeName(admin, sale.tenant_id),
   ]);
   // Sin caracteres de control: legal_name viaja en headers SMTP (From/Subject);

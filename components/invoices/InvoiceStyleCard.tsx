@@ -466,7 +466,7 @@ export function InvoiceStyleCard() {
                   value={form.activity_start}
                   onChange={(e) => setForm({ ...form, activity_start: e.target.value })}
                 />
-                {/* ADR-123: el nombre de fantasía vive en Marca; esto sólo lo pisa en los comprobantes. */}
+                {/* ADR-124: el nombre de fantasía vive en Marca; esto sólo lo pisa en los comprobantes. */}
                 <Input
                   label="Nombre en el comprobante (opcional)"
                   placeholder={businessDisplayName({ tradeName: brand?.trade_name, tenantName: brand?.tenant_name }, "El de Marca")}

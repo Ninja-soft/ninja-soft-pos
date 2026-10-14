@@ -213,7 +213,7 @@ export default async function DashboardTeamPage() {
     (brandingRes.data as { logo_url: string | null; accent: string | null } | null) ?? null;
   const accent = brandAccent(branding?.accent);
   const tenantLogo = branding?.logo_url ?? null;
-  // ADR-123: el tile "Negocio" muestra el nombre de fantasía (si no, el de la cuenta).
+  // ADR-124: el tile "Negocio" muestra el nombre de fantasía (si no, el de la cuenta).
   const tenantDisplayName = businessDisplayName({ tradeName: await fetchTradeName(supabase, tenant.id), tenantName: tenant.name });
 
   const gating = (gatingRes.data ?? null) as {

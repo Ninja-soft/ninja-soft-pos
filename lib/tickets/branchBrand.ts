@@ -23,7 +23,7 @@ export function storeAddressLine(s: StoreContact): string | null {
   return parts.length ? parts.join(", ") : null;
 }
 
-// ADR-123: trade_name (nombre de fantasía) también se pisa por grupo o sucursal.
+// ADR-124: trade_name (nombre de fantasía) también se pisa por grupo o sucursal.
 const TICKET_FIELDS = ["trade_name", "legal_name", "cuit", "phone", "address", "ticket_title", "ticket_legend", "ticket_footer"] as const;
 
 export function effectiveTicketBrand(

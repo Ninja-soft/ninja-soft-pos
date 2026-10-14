@@ -60,7 +60,7 @@ export interface InvoiceStyleSettings {
   /** Leyendas propias (una por línea). */
   legends: string;
   /**
-   * Nombre de fantasía SÓLO para comprobantes (override, ADR-123). Vacío =
+   * Nombre de fantasía SÓLO para comprobantes (override, ADR-124). Vacío =
    * el de Configuración > Marca (tenant_branding.trade_name).
    */
   trade_name: string;
@@ -227,7 +227,7 @@ export interface InvoiceEntitlements {
 export interface InvoiceBrandInput {
   accent?: string | null;
   logo_url?: string | null;
-  /** ADR-123: nombre de fantasía de la marca, nombre de la cuenta y razón social. */
+  /** ADR-124: nombre de fantasía de la marca, nombre de la cuenta y razón social. */
   trade_name?: string | null;
   tenant_name?: string | null;
   legal_name?: string | null;
@@ -361,7 +361,7 @@ export function resolveInvoiceStyle(
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean),
-    // ADR-123: override del comprobante > fantasía de la marca > nombre de la cuenta.
+    // ADR-124: override del comprobante > fantasía de la marca > nombre de la cuenta.
     tradeName: invoiceTradeName({
       override: s.trade_name,
       tradeName: brand?.trade_name,

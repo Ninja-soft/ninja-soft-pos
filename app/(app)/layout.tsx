@@ -6,7 +6,7 @@ import { businessDisplayNameOrNull } from "@/lib/branding/businessName";
 import { fetchTradeName } from "@/lib/branding/tradeName";
 import type { Metadata } from "next";
 
-// ADR-123: el nombre del negocio en la pestaña ("Kiosco Juan · NinjaSoft POS"),
+// ADR-124: el nombre del negocio en la pestaña ("Kiosco Juan · NinjaSoft POS"),
 // con el nombre de fantasía si lo tiene. Ante cualquier error, el título de siempre.
 export async function generateMetadata(): Promise<Metadata> {
   try {

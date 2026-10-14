@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
       provider: "getnet",
       status: row.status,
       amount: Number(row.amount),
-      // ADR-123: nombre de fantasía → nombre de la cuenta → razón social.
+      // ADR-124: nombre de fantasía → nombre de la cuenta → razón social.
       tenant_name: businessDisplayName(
         { tradeName: await fetchTradeName(admin, row.tenant_id), tenantName: tenant?.name, legalName: branding?.legal_name },
         "Tu compra",

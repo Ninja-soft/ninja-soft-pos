@@ -1,9 +1,9 @@
-// Nombre del negocio para mostrar al cliente (ADR-123). Espejo de
+// Nombre del negocio para mostrar al cliente (ADR-124). Espejo de
 // lib/branding/businessName.ts para las Edge Functions (Deno no importa lib/).
 //
 // Orden: nombre de fantasía (tenant_branding.trade_name) → nombre de la cuenta
 // (tenants.name) → razón social. trade_name se lee APARTE y un error se toma
-// como "sin fantasía": si la migración 20261121100000_nombre_fantasia todavía
+// como "sin fantasía": si la migración 20261121200000_nombre_fantasia todavía
 // no se aplicó, la columna no existe y el envío sigue como antes.
 
 // deno-lint-ignore no-explicit-any

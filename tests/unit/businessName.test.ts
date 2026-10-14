@@ -15,7 +15,7 @@ import type { SampleBrand } from "@/lib/tickets/sample";
 
 const ENT = { pro: true, unbranded: true };
 
-describe("businessDisplayName (ADR-123)", () => {
+describe("businessDisplayName (ADR-124)", () => {
   it("fantasía, si no la cuenta, si no la razón social, si no el fallback", () => {
     expect(businessDisplayName({ tradeName: "Kiosco Pepe", tenantName: "Pepe SRL cuenta", legalName: "Pepe SRL" })).toBe("Kiosco Pepe");
     expect(businessDisplayName({ tradeName: "  ", tenantName: "Mi cuenta", legalName: "Pepe SRL" })).toBe("Mi cuenta");

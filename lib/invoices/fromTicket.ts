@@ -123,7 +123,7 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
   ];
 
   const methods = payments.map((p) => p.method);
-  // ADR-123: la razón social va en los datos fiscales; sin razón social cargada,
+  // ADR-124: la razón social va en los datos fiscales; sin razón social cargada,
   // el emisor se nombra con el nombre comercial (fantasía o el de la cuenta).
   const issuerName =
     brand?.legal_name?.trim() || opts.tradeName?.trim() || brand?.tenant_name?.trim() || "Mi negocio";

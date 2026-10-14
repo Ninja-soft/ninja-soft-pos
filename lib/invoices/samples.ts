@@ -37,7 +37,7 @@ export function previewBrand(brand: SampleBrand | null | undefined, kind: Sample
     logo_url: b?.logo_url ?? null,
     accent: b?.accent ?? null,
     legal_name: pick(b?.legal_name, DEMO_ISSUER.legal_name),
-    // ADR-123: el encabezado comercial de la vista previa es el real del negocio.
+    // ADR-124: el encabezado comercial de la vista previa es el real del negocio.
     trade_name: b?.trade_name ?? null,
     tenant_name: b?.tenant_name ?? null,
     cuit: pick(b?.cuit, DEMO_ISSUER.cuit),

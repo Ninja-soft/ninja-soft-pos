@@ -268,7 +268,7 @@ Deno.serve(async (req: Request) => {
     if ((perChargeRes.count ?? 0) >= MAX_PER_CHARGE) return json({ error: "rate_limited" }, 429);
 
     const brand = brandRes.data as { legal_name?: string | null; logo_url?: string | null; accent?: string | null } | null;
-    // ADR-123: nombre de fantasía → nombre de la cuenta → razón social.
+    // ADR-124: nombre de fantasía → nombre de la cuenta → razón social.
     const tradeName = await fetchTradeName(admin, tenantId);
     const businessName = businessDisplayName({
       tradeName,

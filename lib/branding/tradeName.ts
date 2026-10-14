@@ -1,6 +1,6 @@
-// Lectura del nombre de fantasía (ADR-123), isomórfica: recibe el cliente de
+// Lectura del nombre de fantasía (ADR-124), isomórfica: recibe el cliente de
 // Supabase (navegador o servidor). Se pide en una consulta APARTE y un error
-// se toma como "sin fantasía": si la migración 20261121100000_nombre_fantasia
+// se toma como "sin fantasía": si la migración 20261121200000_nombre_fantasia
 // todavía no se aplicó, la columna no existe y la pantalla no se rompe.
 import { cleanTradeName } from "./businessName";
 

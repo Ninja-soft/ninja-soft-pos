@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261121100000_nombre_fantasia (ADR-123)
+-- 20261121200000_nombre_fantasia (ADR-124)
 --
 -- Nombre de fantasía como dato de la MARCA del negocio (Configuración > Marca),
 -- no sólo como opción del comprobante.
@@ -31,7 +31,7 @@ alter table tenant_branding add constraint tenant_branding_trade_name_len
   check (trade_name is null or (char_length(btrim(trade_name)) between 1 and 120));
 
 comment on column tenant_branding.trade_name is
-  'ADR-123: nombre de fantasía del negocio (Configuración > Marca). Es el nombre que se muestra en toda la app y al cliente (fallback tenants.name). BASE: cualquier plan. invoice_style.trade_name lo pisa sólo en comprobantes.';
+  'ADR-124: nombre de fantasía del negocio (Configuración > Marca). Es el nombre que se muestra en toda la app y al cliente (fallback tenants.name). BASE: cualquier plan. invoice_style.trade_name lo pisa sólo en comprobantes.';
 
 -- 2. Backfill desde invoice_style
 alter table tenant_branding disable trigger tenant_branding_assert_invoice_style;
@@ -96,7 +96,7 @@ as $$
       case
         when p_scope = 'register' then null
         when p_field = 'use_store_contact' then 'bool'
-        -- ADR-123: nombre de fantasía por grupo o sucursal.
+        -- ADR-124: nombre de fantasía por grupo o sucursal.
         when p_field in ('trade_name', 'legal_name', 'cuit', 'phone', 'address', 'ticket_title',
                          'ticket_legend', 'ticket_footer') then 'text'
         else null
@@ -118,7 +118,7 @@ as $function$
     'branding', (
       select jsonb_build_object(
         'logo_url', b.logo_url, 'accent', b.accent, 'legal_name', b.legal_name,
-        -- ADR-123: nombre de fantasía (el catálogo lo usa como título).
+        -- ADR-124: nombre de fantasía (el catálogo lo usa como título).
         'trade_name', nullif(btrim(b.trade_name), ''),
         'phone', b.phone, 'address', b.address
       ) from tenant_branding b where b.tenant_id = tt.id
@@ -163,7 +163,7 @@ as $function$
   ) tt;
 $function$;
 
--- 5. Presupuesto público (copia de 20261120100100 con el nombre de fantasía).
+-- 5. Presupuesto público (copia de 20261121100000_presupuestos_v2 con el nombre de fantasía).
 create or replace function quote_public_get(p_token text)
 returns jsonb
 language plpgsql
@@ -175,6 +175,7 @@ declare
   v_q  quotes%rowtype;
   v_b  record;
   v_t  record;
+  v_s  record;
 begin
   if p_token is null or char_length(p_token) < 32 or char_length(p_token) > 80 then
     return null;
@@ -187,6 +188,7 @@ begin
          b.trade_name, b.invoice_style ->> 'trade_name' as style_trade_name
     into v_b from tenant_branding b where b.tenant_id = v_q.tenant_id;
   select t.name into v_t from tenants t where t.id = v_q.tenant_id;
+  select s.contact_email, s.contact_phone into v_s from quote_settings s where s.tenant_id = v_q.tenant_id;
   return jsonb_build_object(
     'pto_vta', v_q.pto_vta,
     'number', v_q.number,
@@ -194,6 +196,8 @@ begin
     'status', quote_effective_status(v_q.status, v_q.valid_until),
     'issue_date', v_q.issue_date,
     'valid_until', v_q.valid_until,
+    'no_expiry', v_q.valid_until is null,
+    'issued_by_name', v_q.created_by_name,
     'customer_name', v_q.customer_name,
     'customer_doc', v_q.customer_doc,
     'customer_address', v_q.customer_address,
@@ -211,13 +215,14 @@ begin
     'rejected_at', v_q.rejected_at,
     'issuer', jsonb_build_object(
       'name', coalesce(nullif(btrim(v_b.legal_name), ''), v_t.name),
-      -- ADR-123: override del comprobante > fantasía de la marca > nombre de la cuenta.
+      -- ADR-124: override del comprobante > fantasía de la marca > nombre de la cuenta.
       'trade_name', coalesce(nullif(btrim(v_b.style_trade_name), ''), nullif(btrim(v_b.trade_name), ''), v_t.name),
       'logo_url', v_b.logo_url,
       'accent', v_b.accent,
       'cuit', v_b.cuit,
       'address', v_b.address,
-      'phone', v_b.phone,
+      'phone', coalesce(nullif(btrim(v_s.contact_phone), ''), v_b.phone),
+      'email', nullif(btrim(v_s.contact_email), ''),
       'iva_condition', v_b.iva_condition),
     'items', coalesce((
       select jsonb_agg(jsonb_build_object(

@@ -12,7 +12,7 @@ type Catalog = {
     logo_url: string | null;
     accent: string | null;
     legal_name: string | null;
-    /** ADR-123: nombre de fantasía (sin la migración aplicada, no viene). */
+    /** ADR-124: nombre de fantasía (sin la migración aplicada, no viene). */
     trade_name?: string | null;
     phone: string | null;
     address: string | null;
@@ -26,7 +26,7 @@ type Catalog = {
   }[];
 };
 
-// ADR-123: el catálogo se presenta con el nombre de fantasía (si no, el de la cuenta).
+// ADR-124: el catálogo se presenta con el nombre de fantasía (si no, el de la cuenta).
 function catalogTitle(c: Catalog): string {
   return businessDisplayName(
     { tradeName: c.branding?.trade_name, tenantName: c.tenant.name, legalName: c.branding?.legal_name },

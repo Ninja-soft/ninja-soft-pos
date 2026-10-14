@@ -9,10 +9,24 @@ import nodemailer from "npm:nodemailer@6.9.16";
 // deno-lint-ignore no-explicit-any
 type Admin = any;
 
+export interface SendAttachment {
+  filename: string;
+  /** base64 crudo (sin prefijo data:). */
+  content: string;
+  contentType?: string;
+}
+
 export interface SendArgs {
   to: string;
   subject: string;
   html: string;
+  /** Opcionales (ADR-123, presupuestos): texto plano, respuesta, adjuntos y
+   * nombre del remitente (pisa el from_name del proveedor; el email sigue
+   * siendo el del proveedor). */
+  text?: string;
+  replyTo?: string | null;
+  attachments?: SendAttachment[];
+  fromName?: string | null;
 }
 
 export interface ChainResult {
@@ -44,9 +58,9 @@ async function sendViaResend(
   apiKey: string,
   fromName: string,
   fromEmail: string,
-  { to, subject, html }: SendArgs,
+  { to, subject, html, text, replyTo, attachments, fromName: nameOverride }: SendArgs,
 ): Promise<void> {
-  const from = `${safeFromName(fromName)} <${fromEmail}>`;
+  const from = `${safeFromName(nameOverride || fromName)} <${fromEmail}>`;
   const res = await withTimeout(
     fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -54,7 +68,17 @@ async function sendViaResend(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to, subject, html }),
+      body: JSON.stringify({
+        from,
+        to,
+        subject,
+        html,
+        ...(text ? { text } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(attachments?.length
+          ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) }
+          : {}),
+      }),
     }),
     20000,
     "resend",
@@ -75,7 +99,7 @@ async function sendViaSmtp(
   },
   fromName: string,
   fromEmail: string,
-  { to, subject, html }: SendArgs,
+  { to, subject, html, text, replyTo, attachments, fromName: nameOverride }: SendArgs,
 ): Promise<void> {
   // 465 = SSL directo (forzar tls); 587 = STARTTLS (nodemailer lo negocia solo).
   const port = cfg.port || 587;
@@ -92,11 +116,22 @@ async function sendViaSmtp(
   try {
     await withTimeout(
       transporter.sendMail({
-        from: `"${safeFromName(fromName)}" <${fromEmail}>`,
+        from: `"${safeFromName(nameOverride || fromName)}" <${fromEmail}>`,
         to,
         subject,
-        text: "Este mensaje se ve mejor con un cliente que soporte HTML.",
+        text: text || "Este mensaje se ve mejor con un cliente que soporte HTML.",
         html,
+        ...(replyTo ? { replyTo } : {}),
+        ...(attachments?.length
+          ? {
+              attachments: attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                encoding: "base64",
+                contentType: a.contentType ?? "application/octet-stream",
+              })),
+            }
+          : {}),
       }),
       25000,
       "smtp_send",

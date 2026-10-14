@@ -90,7 +90,7 @@ export function useTenantTicketBranding(enabled = true) {
     queryKey: ["ticket-branding"],
     enabled,
     queryFn: async (): Promise<SampleBrand | null> => {
-      // ADR-123: el nombre de fantasía y el de la cuenta van aparte (tolerante a
+      // ADR-124: el nombre de fantasía y el de la cuenta van aparte (tolerante a
       // la migración sin aplicar) para el encabezado comercial del comprobante.
       const [{ data }, names] = await Promise.all([
         supabase

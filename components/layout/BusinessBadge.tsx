@@ -5,7 +5,7 @@ import { useTenantTicketBranding } from "@/modules/tickets/hooks";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { cn } from "@/lib/utils/cn";
 
-// Negocio activo en la barra lateral y el encabezado mobile (ADR-123): logo de
+// Negocio activo en la barra lateral y el encabezado mobile (ADR-124): logo de
 // la marca (o la inicial) y el nombre para mostrar (fantasía, si no el de la
 // cuenta). Sin negocio cargado todavía, no ocupa lugar.
 export function BusinessBadge({ compact = false }: { compact?: boolean }) {

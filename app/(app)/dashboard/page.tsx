@@ -79,7 +79,7 @@ export default async function DashboardPage() {
     string,
     { logo_url: string | null; accent: string | null }
   >();
-  // ADR-123: nombre de fantasía de cada negocio (consulta aparte, tolerante).
+  // ADR-124: nombre de fantasía de cada negocio (consulta aparte, tolerante).
   const tradeNames = await fetchTradeNames(supabase, tenantIds);
   const displayName = (t: MembershipRow["tenants"]) =>
     businessDisplayName({ tradeName: t?.id ? tradeNames.get(t.id) : null, tenantName: t?.name }, "Negocio");

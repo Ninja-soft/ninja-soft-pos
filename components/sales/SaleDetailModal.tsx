@@ -144,7 +144,7 @@ export function SaleDetailModal(props: Props) {
     : [];
 
   const numberLabel = sale ? props.numberLabel(sale.number) : "";
-  // ADR-123: nombre de fantasía (o el de la cuenta) en la cabecera de la venta.
+  // ADR-124: nombre de fantasía (o el de la cuenta) en la cabecera de la venta.
   const businessName = brand ? brandDisplayName(brand, "") || me?.name || null : me?.name || null;
   const customer = sale?.customers?.name?.trim() || null;
   const canReturn = sale?.status === "completed" && ret !== "full";

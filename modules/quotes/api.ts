@@ -25,9 +25,61 @@ export interface QuoteSettings {
   validity_days: number;
   default_terms: string | null;
   show_signature: boolean;
+  /** ADR-123: cada alta nace "sin vencimiento" (precio de referencia). */
+  no_expiry_default: boolean;
+  /** ADR-123: contacto del negocio impreso en el presupuesto (vacío = el de la marca). */
+  contact_email: string | null;
+  contact_phone: string | null;
+  /** ADR-123: plantilla del email (vacía = la de NinjaSoft). */
+  email_subject: string | null;
+  email_message: string | null;
 }
 
-export const DEFAULT_QUOTE_SETTINGS: QuoteSettings = { pto_vta: 1, validity_days: 15, default_terms: null, show_signature: true };
+export const DEFAULT_QUOTE_SETTINGS: QuoteSettings = {
+  pto_vta: 1,
+  validity_days: 15,
+  default_terms: null,
+  show_signature: true,
+  no_expiry_default: false,
+  contact_email: null,
+  contact_phone: null,
+  email_subject: null,
+  email_message: null,
+};
+
+/** Un envío por email (uno por destinatario, ADR-123). */
+export interface QuoteEmailLog {
+  id: string;
+  batch_id: string;
+  quote_version: number;
+  recipient: string;
+  subject: string;
+  status: "pending" | "sent" | "failed";
+  provider: "tenant" | "platform" | null;
+  error_message: string | null;
+  sent_by_name: string | null;
+  created_at: string;
+  sent_at: string | null;
+}
+
+export interface QuoteEmailResult {
+  ok: boolean;
+  sent: number;
+  failed: number;
+  provider: "tenant" | "platform";
+  results: { recipient: string; ok: boolean }[];
+}
+
+/** Presupuestos por emisor (comisiones, ADR-123). */
+export interface QuoteIssuerRow {
+  issuer_id: string | null;
+  issuer_name: string;
+  count: number;
+  total: number;
+  accepted: number;
+  converted: number;
+  converted_total: number;
+}
 
 export interface QuoteSaveInput {
   id?: string;
@@ -35,8 +87,12 @@ export interface QuoteSaveInput {
   customer_name?: string | null;
   customer_doc?: string | null;
   customer_email?: string | null;
+  /** ADR-123: emails del cliente (hasta 10). */
+  customer_emails?: string[];
   customer_phone?: string | null;
   customer_address?: string | null;
+  /** ADR-123: sin vencimiento (precio de referencia). */
+  no_expiry?: boolean;
   valid_until?: string | null;
   validity_days?: number | null;
   terms?: string | null;
@@ -65,7 +121,9 @@ export interface PublicQuote {
   version: number;
   status: QuoteStatus;
   issue_date: string;
-  valid_until: string;
+  valid_until: string | null;
+  no_expiry?: boolean;
+  issued_by_name?: string | null;
   customer_name: string | null;
   customer_doc: string | null;
   customer_address: string | null;
@@ -89,6 +147,7 @@ export interface PublicQuote {
     cuit: string | null;
     address: string | null;
     phone: string | null;
+    email?: string | null;
     iva_condition: string | null;
   };
   items: QuoteItem[];
@@ -122,6 +181,7 @@ const num = (v: unknown) => Number(v ?? 0);
 function normQuote(r: Record<string, unknown>): Quote {
   return {
     ...(r as unknown as Quote),
+    customer_emails: Array.isArray(r.customer_emails) ? (r.customer_emails as string[]) : [],
     subtotal: num(r.subtotal),
     discount_total: num(r.discount_total),
     total: num(r.total),
@@ -201,9 +261,76 @@ export const quotesApi = {
   settings: async (): Promise<QuoteSettings> => {
     const { data } = await loose()
       .from("quote_settings")
-      .select("pto_vta, validity_days, default_terms, show_signature")
+      .select(
+        "pto_vta, validity_days, default_terms, show_signature, no_expiry_default, contact_email, contact_phone, email_subject, email_message",
+      )
       .maybeSingle();
     return { ...DEFAULT_QUOTE_SETTINGS, ...((data ?? {}) as Partial<QuoteSettings>) };
+  },
+
+  /** Email y WhatsApp de la ficha del cliente (destinatarios por defecto). */
+  customerContact: async (id: string): Promise<{ email: string | null; phone: string | null } | null> => {
+    const { data, error } = await loose().from("customers").select("email, phone").eq("id", id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data ?? null) as { email: string | null; phone: string | null } | null;
+  },
+
+  /** Envíos por email del presupuesto (historial). */
+  emails: async (id: string): Promise<QuoteEmailLog[]> => {
+    const { data, error } = await loose()
+      .from("quote_emails")
+      .select("id, batch_id, quote_version, recipient, subject, status, provider, error_message, sent_by_name, created_at, sent_at")
+      .eq("quote_id", id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as QuoteEmailLog[];
+  },
+
+  /**
+   * Envía el presupuesto por email (Edge send_quote_email): el PDF sale del
+   * mismo nodo que la vista previa. Lanza Error con el código (quoteErrorMessage
+   * lo traduce).
+   */
+  sendEmail: async (v: {
+    quoteId: string;
+    to: string[];
+    subject: string;
+    message: string;
+    node: HTMLElement;
+    pdfName: string;
+  }): Promise<QuoteEmailResult> => {
+    const { exportInvoicePdfBase64 } = await import("@/lib/invoices/exportPdf");
+    const pdf = await exportInvoicePdfBase64(v.node);
+    const { data, error } = await createClient().functions.invoke("send_quote_email", {
+      body: { quote_id: v.quoteId, to: v.to, subject: v.subject, message: v.message, pdf, pdf_name: v.pdfName },
+    });
+    const res = (data ?? null) as (QuoteEmailResult & { error?: string }) | null;
+    if (error || !res) {
+      let code: string | null = res?.error ?? null;
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (!code && ctx && typeof ctx.json === "function") {
+        try {
+          code = ((await ctx.json()) as { error?: string }).error ?? null;
+        } catch {
+          /* cuerpo no JSON */
+        }
+      }
+      throw new Error(code ?? error?.message ?? "send_failed");
+    }
+    return res;
+  },
+
+  issuerReport: async (fromISO: string, toISO: string): Promise<QuoteIssuerRow[]> => {
+    const data = await rpc<QuoteIssuerRow[] | null>("quote_issuer_report", { p_from: fromISO, p_to: toISO });
+    return (data ?? []).map((r) => ({
+      ...r,
+      count: num(r.count),
+      total: num(r.total),
+      accepted: num(r.accepted),
+      converted: num(r.converted),
+      converted_total: num(r.converted_total),
+    }));
   },
 
   saveSettings: async (s: QuoteSettings): Promise<void> => {
@@ -218,6 +345,11 @@ export const quotesApi = {
           validity_days: Math.max(1, Math.min(365, Math.trunc(s.validity_days))),
           default_terms: s.default_terms?.trim() ? s.default_terms.trim().slice(0, 2000) : null,
           show_signature: s.show_signature,
+          no_expiry_default: s.no_expiry_default,
+          contact_email: s.contact_email?.trim() ? s.contact_email.trim().toLowerCase().slice(0, 160) : null,
+          contact_phone: s.contact_phone?.trim() ? s.contact_phone.trim().slice(0, 40) : null,
+          email_subject: s.email_subject?.trim() ? s.email_subject.trim().slice(0, 200) : null,
+          email_message: s.email_message?.trim() ? s.email_message.trim().slice(0, 4000) : null,
         },
         { onConflict: "tenant_id" },
       );

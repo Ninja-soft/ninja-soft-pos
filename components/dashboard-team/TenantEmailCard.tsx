@@ -814,7 +814,7 @@ function ResendGuide() {
   );
 }
 
-// ADR-123: la vista previa del email usa el nombre de fantasía, igual que la Edge.
+// ADR-124: la vista previa del email usa el nombre de fantasía, igual que la Edge.
 function tradeNameOf(b: { trade_name?: string | null } | null | undefined): string {
   return (b?.trade_name ?? "").trim();
 }

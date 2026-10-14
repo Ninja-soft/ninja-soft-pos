@@ -20,6 +20,15 @@ import { cn } from "@/lib/utils/cn";
 // hacia adelante), cada una a su velocidad y sentido, con parallax suave al
 // mover el mouse. Todo plano: capas, bordes de 1px y la grilla de puntos de
 // soft.ninja; sin degradados ni sombras.
+//
+// Layout (14/10/2026): columna flex en tres zonas. El bloque central tiene su
+// alto reservado (no se encoge) y las cintas viven en dos franjas (arriba y
+// abajo) que se reparten el resto, con overflow oculto y margen de respiro
+// hacia el centro: una ficha nunca puede pisar el texto ni el CTA. La cantidad
+// de cintas depende del alto disponible (media queries en el <style>):
+//   >= 900 px de alto (y ancho >= 640): 4 cintas (2 por franja)
+//   600-900 px de alto o celular:       2 cintas (1 por franja, las internas)
+//   < 600 px de alto:                   sin cintas
 
 // Duración total antes de auto-cerrar (ms) y del fade-out antes de desmontar.
 const AUTO_DISMISS_MS = 3800;
@@ -125,16 +134,22 @@ export function TienditaIntroScene({
     >
       <TechBackground dotColor="rgba(128,120,160,0.16)" className="ti-dots" />
 
-      <div className="ti-stage relative flex h-full flex-col justify-center gap-[5vh] py-[4vh] sm:justify-between sm:gap-0 sm:py-[5vh]">
-        {/* Cintas de arriba */}
-        <div className="flex flex-col gap-3 sm:gap-4">
+      <div className="ti-stage relative flex h-full flex-col">
+        {/* Franja de arriba: la cinta interna queda del lado del centro. */}
+        <div className="ti-band ti-band-top">
           {rows.slice(0, 2).map((row, i) => (
-            <MarqueeRow key={`top-${i}`} items={row} cfg={ROWS[i]!} index={i} />
+            <MarqueeRow
+              key={`top-${i}`}
+              items={row}
+              cfg={ROWS[i]!}
+              index={i}
+              ring={i === 0 ? "outer" : "inner"}
+            />
           ))}
         </div>
 
-        {/* Centro */}
-        <div className="ti-center relative z-10 mx-auto w-full max-w-3xl px-6 text-center">
+        {/* Centro: alto reservado, nunca se encoge ni lo invade una cinta. */}
+        <div className="ti-center relative z-10 mx-auto w-full max-w-3xl shrink-0 px-6 text-center">
           <div className="ti-up mx-auto inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground" style={{ ["--d" as string]: "80ms" }}>
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[var(--pos-solid)] text-white">
               <Sparkles size={12} />
@@ -142,19 +157,19 @@ export function TienditaIntroScene({
             NinjaSoft · Catálogos
           </div>
           <h1
-            className="ti-up mt-4 font-display text-[4.25rem] font-black leading-[0.9] tracking-[-0.04em] text-foreground sm:text-8xl lg:text-[9rem]"
+            className="ti-up ti-title mt-3 font-display font-black leading-[0.9] tracking-[-0.04em] text-foreground sm:mt-4"
             style={{ ["--d" as string]: "160ms" }}
           >
             Tiendita<span className="text-ninja-flame">.</span>
           </h1>
           <p
-            className="ti-up mx-auto mt-4 max-w-md text-balance text-[15px] text-muted-foreground sm:text-lg"
+            className="ti-up mx-auto mt-3 max-w-md text-balance text-[15px] text-muted-foreground sm:mt-4 sm:text-lg"
             style={{ ["--d" as string]: "240ms" }}
           >
             Catálogos de las marcas más grandes, listos para sumar a tu tienda.
           </p>
           <p
-            className="ti-up mt-4 min-h-[1.75rem] text-base text-foreground sm:text-xl"
+            className="ti-up mt-3 min-h-[1.75rem] text-base text-foreground sm:mt-4 sm:text-xl"
             style={{ ["--d" as string]: "320ms" }}
           >
             {label && (
@@ -166,7 +181,7 @@ export function TienditaIntroScene({
               </>
             )}
           </p>
-          <div className="ti-up mt-7 flex flex-col items-center gap-3" style={{ ["--d" as string]: "400ms" }}>
+          <div className="ti-up mt-5 flex flex-col items-center gap-3 sm:mt-7" style={{ ["--d" as string]: "400ms" }}>
             <button
               type="button"
               onClick={(e) => {
@@ -182,10 +197,16 @@ export function TienditaIntroScene({
           </div>
         </div>
 
-        {/* Cintas de abajo */}
-        <div className="flex flex-col gap-3 sm:gap-4">
+        {/* Franja de abajo */}
+        <div className="ti-band ti-band-bottom">
           {rows.slice(2, 4).map((row, i) => (
-            <MarqueeRow key={`bottom-${i}`} items={row} cfg={ROWS[i + 2]!} index={i + 2} />
+            <MarqueeRow
+              key={`bottom-${i}`}
+              items={row}
+              cfg={ROWS[i + 2]!}
+              index={i + 2}
+              ring={i === 0 ? "inner" : "outer"}
+            />
           ))}
         </div>
       </div>
@@ -198,6 +219,25 @@ export function TienditaIntroScene({
         @keyframes tiFadeOut { from { opacity: 1; } to { opacity: 0; transform: scale(1.04); } }
 
         .ti-dots { opacity: 0.9; }
+
+        /* Zonas. Las franjas se reparten el alto que deja el centro; el
+           overflow oculto garantiza que una cinta (con su inclinación y su
+           parallax) no salga de su franja. El padding hacia el centro es el
+           respiro mínimo entre la ficha más cercana y el texto. */
+        .ti-band {
+          display: flex; flex: 1 1 0; min-height: 0; flex-direction: column;
+          justify-content: center; gap: clamp(10px, 2.2vh, 24px);
+          overflow: hidden;
+        }
+        .ti-band-top { padding: clamp(8px, 2vh, 28px) 0 clamp(16px, 4vh, 48px); }
+        .ti-band-bottom { padding: clamp(16px, 4vh, 48px) 0 clamp(8px, 2vh, 28px); }
+        .ti-center { padding-block: clamp(4px, 1.5vh, 16px); }
+        .ti-title { font-size: clamp(4.25rem, min(14vw, 17vh), 9rem); }
+
+        /* Cuántas cintas según el alto disponible. */
+        .ti-slot { display: none; }
+        @media (min-height: 600px) { .ti-slot[data-ring=inner] { display: block; } }
+        @media (min-height: 900px) and (min-width: 640px) { .ti-slot[data-ring=outer] { display: block; } }
 
         /* Centro: contra-parallax leve (se mueve al revés que las cintas). */
         .ti-center {
@@ -232,15 +272,15 @@ export function TienditaIntroScene({
           to   { transform: translate3d(-50%, 0, 0); }
         }
 
-        /* Fichas. El ícono va sobre una placa del tema; los que se pierden en
-           un tema llevan una placa de contraste SOLO en ese tema. Selectores
-           sin comillas: el style se hidrata y las comillas se escapan distinto
-           en el server. Sin data-theme rige el oscuro. */
-        .ti-plate { background: var(--muted); }
-        [data-theme=ninja-light] .ti-plate[data-ink=light],
-        [data-theme=ninja-sand] .ti-plate[data-ink=light] { background: #1b1528; }
-        :root:not([data-theme=ninja-light]):not([data-theme=ninja-sand]) .ti-plate[data-ink=dark] {
-          background: #f4f2fb;
+        /* Fichas: sin placa de contraste (nada de fondo blanco). Los íconos
+           que se pierden en un tema tienen una variante recoloreada
+           (lib/catalog/storeLogos.ts): se renderizan las dos y el tema elige.
+           Selectores sin comillas: el style se hidrata y las comillas se
+           escapan distinto en el server. Sin data-theme rige el oscuro. */
+        [data-theme=ninja-light] .ti-ic[data-tone=dark],
+        [data-theme=ninja-sand] .ti-ic[data-tone=dark] { display: none; }
+        :root:not([data-theme=ninja-light]):not([data-theme=ninja-sand]) .ti-ic[data-tone=light] {
+          display: none;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -258,15 +298,19 @@ function MarqueeRow({
   items,
   cfg,
   index,
+  ring,
 }: {
   items: IntroStore[];
   cfg: (typeof ROWS)[number];
   index: number;
+  /** inner = del lado del centro (desde 600 px de alto); outer = sólo desde 900. */
+  ring: "inner" | "outer";
 }) {
   return (
     <div
       aria-hidden
-      className="ti-row pointer-events-none"
+      data-ring={ring}
+      className="ti-slot ti-row pointer-events-none"
       style={{
         ["--tilt" as string]: `${cfg.tilt}deg`,
         ["--scale" as string]: cfg.scale,
@@ -303,26 +347,46 @@ function MarqueeRow({
 }
 
 // Ficha de tienda propia de la portada (no reutiliza StoreLogo a propósito:
-// necesita tamaño grande y la placa de contraste por tema).
+// necesita tamaño grande, sin baldosa blanca y la variante de ícono por tema).
 function StoreChip({ store }: { store: IntroStore }) {
   // Cadena de fallback: ícono oficial → logo_url → iniciales.
   const sources = [store.icon, store.logoUrl].filter((x): x is string => Boolean(x));
   const [failed, setFailed] = useState(0);
+  const onError = () => setFailed((f) => f + 1);
   const src = sources[failed] ?? null;
+  // Mientras se muestra el ícono oficial, si tiene variante por tono se
+  // renderizan las dos y el CSS deja visible la del tema activo.
+  const byTone =
+    src && src === store.icon && store.iconOnDark && store.iconOnLight && store.iconOnDark !== store.iconOnLight
+      ? ([
+          ["dark", store.iconOnDark],
+          ["light", store.iconOnLight],
+        ] as const)
+      : null;
   return (
     <div className="flex h-14 shrink-0 items-center gap-2.5 rounded-lg border border-border bg-card pl-2 pr-4 sm:h-[4.5rem] sm:gap-3 sm:pl-2.5 sm:pr-5">
-      <span
-        className="ti-plate grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md sm:h-[3.25rem] sm:w-[3.25rem]"
-        data-ink={store.ink ?? undefined}
-      >
-        {src ? (
+      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md sm:h-[3.25rem] sm:w-[3.25rem]">
+        {byTone ? (
+          byTone.map(([tone, toneSrc]) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={tone}
+              src={toneSrc}
+              alt=""
+              draggable={false}
+              data-tone={tone}
+              className="ti-ic h-[88%] w-[88%] object-contain"
+              onError={onError}
+            />
+          ))
+        ) : src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}
             alt=""
             draggable={false}
-            className="h-[82%] w-[82%] object-contain"
-            onError={() => setFailed((f) => f + 1)}
+            className="h-[88%] w-[88%] object-contain"
+            onError={onError}
           />
         ) : (
           <span className="text-xs font-bold text-foreground">{store.initials}</span>

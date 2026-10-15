@@ -29,11 +29,9 @@
 // se loguean ni se guardan.
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
-import { endpointsFor, type ArcaEnv } from "../_shared/arca/config.ts";
-import { loginCms, postSoap, type FetchLike } from "../_shared/arca/client.ts";
-import { buildTra, classifyWsaaFault, ticketUsable } from "../_shared/arca/wsaa.ts";
-import { signCms } from "../_shared/arca/pki.ts";
-import { decryptSecret, keyAad } from "../_shared/arca/crypto.ts";
+import type { ArcaEnv } from "../_shared/arca/config.ts";
+import { postSoap, type FetchLike } from "../_shared/arca/client.ts";
+import { platformAuth } from "../_shared/arca/platformAuth.ts";
 import {
   buildGetPersonaV2,
   cuitIsValid,
@@ -66,59 +64,6 @@ async function padronStatus(admin: SupabaseClient): Promise<PadronStatus> {
   const { data: ready } = await admin.rpc("arca_platform_ready", { p_env: ip.environment });
   if (!ready) return { available: false, reason: "certificate_missing", environment: ip.environment };
   return { available: true, reason: null, environment: ip.environment };
-}
-
-type Auth = { ok: true; token: string; sign: string; cuit: string } | { ok: false; transient: boolean; code: string; message: string };
-
-/** Ticket de WSAA para el padrón con el certificado de la plataforma (cache 12 h en arca_platform_tickets). */
-async function platformAuth(admin: SupabaseClient, env: ArcaEnv): Promise<Auth> {
-  const { data } = await admin.from("arca_platform").select("cuit, cert_pem, key_enc, not_after").eq("environment", env).maybeSingle();
-  const p = data as { cuit: string | null; cert_pem: string | null; key_enc: string | null; not_after: string | null } | null;
-  if (!p?.cuit || !p.cert_pem || !p.key_enc) {
-    return { ok: false, transient: false, code: "platform_not_configured", message: "Falta el certificado de la plataforma" };
-  }
-  const readTicket = async () => {
-    const { data: t } = await admin
-      .from("arca_platform_tickets")
-      .select("token, sign, expires_at")
-      .eq("environment", env)
-      .eq("service", PADRON_SERVICE)
-      .maybeSingle();
-    return (t as { token: string; sign: string; expires_at: string } | null) ?? null;
-  };
-  const cached = await readTicket();
-  if (cached && ticketUsable(cached.expires_at)) return { ok: true, token: cached.token, sign: cached.sign, cuit: p.cuit };
-
-  let cms: string;
-  try {
-    const keyPem = await decryptSecret(p.key_enc, Deno.env.get("ARCA_KEY_ENC") ?? "", keyAad("platform", env));
-    cms = signCms(buildTra(PADRON_SERVICE), p.cert_pem, keyPem);
-  } catch {
-    return { ok: false, transient: false, code: "certificado_ilegible", message: "No se pudo firmar con el certificado de la plataforma" };
-  }
-  const r = await loginCms(fetcher, endpointsFor(env, Deno.env.toObject()).wsaa, cms);
-  if (r.transport || !r.result) return { ok: false, transient: true, code: "sin_respuesta", message: "El servicio de acceso de ARCA no respondió" };
-  if (r.result.ok) {
-    const t = r.result.ticket;
-    await admin.from("arca_platform_tickets").upsert(
-      {
-        environment: env,
-        service: PADRON_SERVICE,
-        token: t.token,
-        sign: t.sign,
-        generated_at: t.generationTime || new Date().toISOString(),
-        expires_at: t.expirationTime,
-      },
-      { onConflict: "environment,service" },
-    );
-    return { ok: true, token: t.token, sign: t.sign, cuit: p.cuit };
-  }
-  if (classifyWsaaFault(r.result.code) === "already") {
-    const again = await readTicket();
-    if (again && ticketUsable(again.expires_at, new Date(), 60_000)) return { ok: true, token: again.token, sign: again.sign, cuit: p.cuit };
-  }
-  // Típico: el certificado no tiene autorizado ws_sr_constancia_inscripcion.
-  return { ok: false, transient: false, code: r.result.code || "wsaa_error", message: r.result.message };
 }
 
 Deno.serve(async (req) => {
@@ -208,7 +153,7 @@ Deno.serve(async (req) => {
   const limited = rateLimited({ tenantHour: tenantHour ?? 0, globalHour: globalHour ?? 0 });
   if (limited) return json({ ok: false, error: "rate_limited", scope: limited }, 429);
 
-  const auth = await platformAuth(admin, env);
+  const auth = await platformAuth(admin, env, PADRON_SERVICE, fetcher);
   if (!auth.ok) {
     console.error(JSON.stringify({ fn: "platform_billing", step: "wsaa", code: auth.code }));
     return json({ ok: false, error: auth.code === "platform_not_configured" ? "platform_not_configured" : "arca_auth_failed", code: auth.code, message: auth.message, transient: auth.transient });

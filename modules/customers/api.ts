@@ -69,6 +69,19 @@ function payload(input: CustomerOutput) {
     is_active: input.is_active,
     credit_limit: input.credit_limit ?? 0,
     group_id: input.group_id ?? null,
+    ...fiscalVerification(input),
+  };
+}
+
+/** ADR-133: verificación fiscal sólo si el formulario la tocó (la columna es nueva). */
+function fiscalVerification(input: {
+  fiscal_verification?: "padron" | "manual" | null;
+  fiscal_verified_at?: string | null;
+}): Record<string, unknown> {
+  if (input.fiscal_verification === undefined) return {};
+  return {
+    fiscal_verification: input.fiscal_verification,
+    ...(input.fiscal_verification === "padron" && input.fiscal_verified_at ? { fiscal_verified_at: input.fiscal_verified_at } : {}),
   };
 }
 
@@ -475,6 +488,13 @@ export const customersApi = {
     // Fecha de nacimiento (ISO yyyy-mm-dd). El alta rápida desde el DNI escaneado
     // la trae parseada del PDF417 (H31); se persiste igual que el alta completa.
     birth_date?: string | null;
+    // Alta rápida con datos fiscales (ADR-133): condición, domicilio,
+    // jurisdicción y verificación en ARCA (la valida el servidor).
+    iva_condition?: string | null;
+    address?: string | null;
+    iibb_jurisdiction?: string | null;
+    fiscal_verification?: "padron" | "manual" | null;
+    fiscal_verified_at?: string | null;
   }): Promise<{ id: string; name: string }> => {
     const supabase = createClient();
     const { data, error } = await insertWithStore<{ id: string; name: string }>(
@@ -485,6 +505,10 @@ export const customersApi = {
         document_type: input.document_type?.trim() || null,
         document_number: input.document_number?.trim() || null,
         birth_date: input.birth_date?.trim() || null,
+        ...(input.iva_condition !== undefined ? { iva_condition: input.iva_condition || null } : {}),
+        ...(input.address !== undefined ? { address: input.address?.trim() || null } : {}),
+        ...(input.iibb_jurisdiction !== undefined ? { iibb_jurisdiction: input.iibb_jurisdiction || null } : {}),
+        ...fiscalVerification(input),
         is_active: true,
       },
       (r) => supabase.from("customers").insert(r as never).select("id, name").single(),

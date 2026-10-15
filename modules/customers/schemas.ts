@@ -71,6 +71,11 @@ export const CustomerSchema = z
       .nullable()
       .optional()
       .transform((v) => (v ? v : null)),
+    // ADR-133: "padron" lo valida el servidor contra una consulta real a ARCA
+    // (trigger de customers); fiscal_verified_at distinto del guardado pide
+    // reverificar. Sólo viajan si el formulario los tocó.
+    fiscal_verification: z.enum(["padron", "manual"]).nullable().optional(),
+    fiscal_verified_at: z.string().nullable().optional(),
   })
   .refine(
     (d) =>

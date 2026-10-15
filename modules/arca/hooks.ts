@@ -125,5 +125,12 @@ export function usePlatformMutations() {
       mutationFn: (v: { env: ArcaEnv; cert: string }) => arcaApi.platformSubirCertificado(v.env, v.cert),
       onSuccess: done,
     }),
+    subirPar: useMutation({
+      mutationFn: (v: { env: ArcaEnv; cert: string; key: string }) => arcaApi.platformSubirPar(v.env, v.cert, v.key),
+      onSuccess: () => {
+        done();
+        void qc.invalidateQueries({ queryKey: ["arca-padron"] });
+      },
+    }),
   };
 }

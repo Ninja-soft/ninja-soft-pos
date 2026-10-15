@@ -259,6 +259,11 @@ export function useCustomerMutations() {
         document_type?: string | null;
         document_number?: string | null;
         birth_date?: string | null;
+        iva_condition?: string | null;
+        address?: string | null;
+        iibb_jurisdiction?: string | null;
+        fiscal_verification?: "padron" | "manual" | null;
+        fiscal_verified_at?: string | null;
       }) => customersApi.createQuick(input),
       onSuccess: invalidate,
     }),

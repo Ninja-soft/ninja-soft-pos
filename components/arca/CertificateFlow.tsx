@@ -67,7 +67,7 @@ export function CertificateFlow({ config, env, canWrite }: { config: ArcaConfig;
       }
       setCert("");
       setReplacing(false);
-      toast({ title: "Certificado cargado", description: "Ya podés seguir con el paso siguiente.", variant: "success" });
+      toast({ title: "Certificado cargado", description: `${venceText(r) ?? ""} Ya podés seguir con el paso siguiente.`.trim(), variant: "success" });
     } catch (e) {
       toast({ title: "No se pudo cargar el certificado", description: arcaErrorMessage(e), variant: "error" });
     }
@@ -317,3 +317,9 @@ export function CertificateFlow({ config, env, canWrite }: { config: ArcaConfig;
   );
 }
 CertificateFlow.displayName = "CertificateFlow";
+
+/** "Certificado vence el 10/09/2028" a partir de la respuesta de la Edge. */
+function venceText(r: unknown): string | undefined {
+  const na = (r as { certificate?: { not_after?: string | null } } | null)?.certificate?.not_after;
+  return na ? `Certificado vence el ${formatFiscalDate(na)}.` : undefined;
+}

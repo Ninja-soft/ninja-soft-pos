@@ -20,6 +20,7 @@ import { parseIntegration } from "@/lib/payments/terminal/config";
 import { INTEGRATED_CARD_TENDER_ID, integratedCardTender, normalizeTenderId } from "@/lib/pos/tenders";
 import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
 import { CheckoutSheet, type CheckoutSheetProps } from "./CheckoutSheet";
+import { CheckoutLetter } from "./CheckoutLetter";
 import type { AccountPayRequest, ElectronicRequest, TerminalChargeRequest } from "./types";
 
 // Cobros electrónicos: los modales existentes de cada proveedor, en su chunk.
@@ -272,6 +273,7 @@ export function CheckoutSheetConnected({
   return (
     <CheckoutSheet
       {...props}
+      fiscalSlot={<CheckoutLetter open={props.open} customerId={customerId} offline={offline} />}
       tenders={tenders}
       initialTenderId={initialTenderId}
       renderTerminal={renderTerminal}

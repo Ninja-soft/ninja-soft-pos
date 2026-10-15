@@ -154,6 +154,7 @@ const loadVoucherRedeem = () => import("@/components/pos/VoucherRedeemModal");
 const loadSellPack = () => import("@/components/pos/SellPackModal");
 const loadBarcodeScanner = () => import("@/components/pos/BarcodeScanner");
 const loadDniScan = () => import("@/components/customers/DniScanModal");
+const loadQuickCustomer = () => import("@/components/customers/QuickCustomerModal");
 const loadSalon = () => import("@/components/pos/screen/SalonTablesConnected");
 // Diálogos chicos (cliente, venta libre, peso, serie, precio), ventas pausadas y
 // atajos: tampoco hacen falta para pintar la primera pantalla.
@@ -172,6 +173,7 @@ const VoucherRedeemModal = dynamic(() => loadVoucherRedeem().then((m) => m.Vouch
 const SellPackModal = dynamic(() => loadSellPack().then((m) => m.SellPackModal), { ssr: false });
 const BarcodeScanner = dynamic(() => loadBarcodeScanner().then((m) => m.BarcodeScanner), { ssr: false });
 const DniScanModal = dynamic(() => loadDniScan().then((m) => m.DniScanModal), { ssr: false });
+const QuickCustomerModal = dynamic(() => loadQuickCustomer().then((m) => m.QuickCustomerModal), { ssr: false });
 const SalonTablesConnected = dynamic(() => loadSalon().then((m) => m.SalonTablesConnected), { ssr: false });
 const CustomerPickerDialog = dynamic(() => loadPosDialogs().then((m) => m.CustomerPickerDialog), { ssr: false });
 const FreeSaleDialog = dynamic(() => loadPosDialogs().then((m) => m.FreeSaleDialog), { ssr: false });
@@ -437,6 +439,8 @@ function PosPageInner() {
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [custOpen, setCustOpen] = useState(false);
   const [dniOpen, setDniOpen] = useState(false);
+  const [newCustOpen, setNewCustOpen] = useState(false);
+  const [newCustSearch, setNewCustSearch] = useState("");
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [sellPackOpen, setSellPackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
@@ -1971,7 +1975,25 @@ function PosPageInner() {
           setCustOpen(false);
         }}
         onScanDni={() => setDniOpen(true)}
+        onNewCustomer={() => {
+          setNewCustSearch(custSearch);
+          setNewCustOpen(true);
+        }}
       />
+
+      <MountWhenOpened open={newCustOpen}>
+        <QuickCustomerModal
+          open={newCustOpen}
+          onOpenChange={setNewCustOpen}
+          initialSearch={newCustSearch}
+          onCreated={(c) => {
+            setCustomer(c);
+            setNewCustOpen(false);
+            setCustOpen(false);
+            setCustSearch("");
+          }}
+        />
+      </MountWhenOpened>
 
       <MountWhenOpened open={dniOpen}>
         <DniScanModal open={dniOpen} onOpenChange={setDniOpen} onConfirm={quickAddFromDni} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, ScanBarcode } from "lucide-react";
+import { ExternalLink, ScanBarcode, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -30,6 +30,7 @@ export function CustomerPickerDialog({
   current,
   onPick,
   onScanDni,
+  onNewCustomer,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -41,6 +42,8 @@ export function CustomerPickerDialog({
   current: { id: string; name: string } | null;
   onPick: (c: { id: string; name: string } | null) => void;
   onScanDni: () => void;
+  /** Alta rápida con verificación en ARCA (ADR-133). */
+  onNewCustomer?: () => void;
 }) {
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Cliente de la venta">
@@ -64,10 +67,17 @@ export function CustomerPickerDialog({
             <ExternalLink size={15} className="shrink-0 text-muted-foreground" aria-hidden />
           </a>
         )}
-        {/* Alta rápida por DNI (H31). */}
-        <Button type="button" variant="secondary" className="w-full" onClick={onScanDni}>
-          <ScanBarcode size={16} /> Escanear DNI y agregar cliente
-        </Button>
+        {/* Alta rápida: con CUIT verificado en ARCA (ADR-133) o por DNI (H31). */}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {onNewCustomer && (
+            <Button type="button" variant="secondary" className="w-full" onClick={onNewCustomer}>
+              <UserPlus size={16} /> Nuevo cliente
+            </Button>
+          )}
+          <Button type="button" variant="secondary" className={cn("w-full", !onNewCustomer && "sm:col-span-2")} onClick={onScanDni}>
+            <ScanBarcode size={16} /> Escanear DNI
+          </Button>
+        </div>
         <div className="max-h-72 space-y-0.5 overflow-y-auto">
           <button type="button" onClick={() => onPick(null)} className={cn(row, !current && "choice-on")}>
             <span>Consumidor final</span>

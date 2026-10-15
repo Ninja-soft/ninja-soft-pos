@@ -73,6 +73,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, el IVA queda fijo en 21 % y no se pueden cargar los datos fiscales del negocio (las ventas siguen funcionando).",
     minPlan: "Start",
   },
+  padron_arca: {
+    desc: "Verificar clientes en ARCA: al cargar un CUIT o CUIL (en Clientes o desde el POS) se consulta el padrón de ARCA con el certificado de NinjaSoft y se completan razón social, condición frente al IVA, domicilio fiscal y jurisdicción, con las actividades, el estado de la CUIT y la factura que le corresponde. También trae los datos del propio negocio en Configuración › Marca. El cliente queda marcado como verificado (con la fecha) o cargado a mano.",
+    impact: "Desactivado, los datos fiscales se cargan a mano y el servidor no marca clientes como verificados en ARCA.",
+    minPlan: "Start",
+    requires: ["impuestos_iva"],
+  },
   impuestos_internos: {
     desc: "Impuestos internos por producto: monto fijo por unidad, porcentaje sobre el precio (tasa nominal, que integra su propia base) o sobre el costo, incluido en el precio o adicional, discriminados en cada venta y fuera de la base del IVA.",
     impact: "Desactivado, los internos no se discriminan: todo el precio se toma como neto más IVA (el servidor rechaza cargarlos).",

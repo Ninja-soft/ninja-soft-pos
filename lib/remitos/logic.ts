@@ -232,6 +232,31 @@ export function remitoFormErrors(f: RemitoFormInput): string[] {
 }
 
 /** Payload de remito_issue a partir del formulario. */
+/** Vista previa del remito (remito_preview, ADR-149). */
+export interface RemitoPreview {
+  items: { product_id: string | null; variant_id: string | null; description: string; sku: string | null; unit: string; qty: number; unit_price: number | null }[];
+  declared_value: number;
+  /** Lo que ya está en otro remito vigente de la venta (A13). */
+  already: number;
+  sale_status: string;
+  cot_jurisdiction: CotJurisdiction;
+  cot_threshold: number | null;
+  cot_required: boolean;
+}
+
+/**
+ * A9: valor que mira el aviso de COT antes de emitir: el que tipea el usuario
+ * o, si lo deja vacío, el que calcula el servidor con los precios de la venta.
+ */
+export function remitoValueForCot(typed: string, preview: number | null | undefined): number | null {
+  const t = typed.trim();
+  if (t) {
+    const n = Number(t.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+  return preview == null || !Number.isFinite(Number(preview)) ? null : Number(preview);
+}
+
 export function remitoIssuePayload(
   source: { dispatchId: string | null; saleId: string | null; items?: { product_id: string; variant_id: string | null; qty: number }[] },
   f: RemitoFormInput,
@@ -268,6 +293,7 @@ const ERRORS: [RegExp, string][] = [
   [/sale_not_found/, "No encontramos esa venta."],
   [/sale_not_completed/, "Esa venta está anulada."],
   [/remito_empty/, "No quedan productos para el remito (¿ya se devolvieron?)."],
+  [/remito_already_covered/, "Esos productos ya están en otro remito vigente de la venta. Anulalo para emitir otro."],
   [/remito_voided/, "El remito está anulado."],
   [/remito_not_found/, "No encontramos el remito."],
   [/invalid_cot_jurisdiction/, "Elegí la jurisdicción del COT."],

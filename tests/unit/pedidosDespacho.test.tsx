@@ -46,6 +46,8 @@ import type { SaleOrder } from "@/modules/orders/api";
 const MIG_DIR = join(process.cwd(), "supabase", "migrations");
 const MAIN = readFileSync(join(MIG_DIR, "20261123100100_pedidos_despacho.sql"), "utf8");
 const FEAT = readFileSync(join(MIG_DIR, "20261123100000_features_pedidos_despacho.sql"), "utf8");
+// ADR-149 (L0): _dispatch_can vigente (lo despachado se puede marcar entregado).
+const L0 = readFileSync(join(MIG_DIR, "20261221100000_logistica_l0_arreglos.sql"), "utf8");
 
 function fnBody(sql: string, name: string): string {
   const start = sql.indexOf(`create or replace function ${name}(`);
@@ -93,7 +95,8 @@ describe("expedición: transiciones espejo de _dispatch_can", () => {
 
   // Evalúa el CASE del SQL con los mismos argumentos (traducción literal).
   function sqlCan(from: string, to: string, type: string, cross: boolean, arrived: boolean): boolean {
-    if (["entregado", "despachado", "cancelado"].includes(from)) return false;
+    if (["entregado", "cancelado"].includes(from)) return false;
+    if (from === "despachado") return to === "entregado" && type === "envio";
     if (to === "cancelado") return true;
     if (from === "pendiente") return ["armando", "listo"].includes(to);
     if (from === "armando") return ["pendiente", "listo"].includes(to);
@@ -109,9 +112,12 @@ describe("expedición: transiciones espejo de _dispatch_can", () => {
   }
 
   it("el SQL tiene exactamente esas ramas", () => {
-    const body = fnBody(MAIN, "_dispatch_can");
+    const start = L0.indexOf("create or replace function public._dispatch_can(");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const body = L0.slice(start, L0.indexOf("$function$;", start));
     for (const frag of [
-      "when p_from in ('entregado', 'despachado', 'cancelado') then false",
+      "when p_from in ('entregado', 'cancelado') then false",
+      "when p_from = 'despachado' then p_to = 'entregado' and p_type = 'envio'",
       "when p_to = 'cancelado' then true",
       "when p_from = 'pendiente' then p_to in ('armando', 'listo')",
       "when p_from = 'armando' then p_to in ('pendiente', 'listo')",
@@ -148,6 +154,11 @@ describe("expedición: transiciones espejo de _dispatch_can", () => {
     expect(primaryDispatchAction({ ...cross, status: "en_transito" })).toBe("recibir");
     expect(primaryDispatchAction({ ...cross, status: "listo", arrived_at: "2026-10-14T10:00:00Z" })).toBe("entregar");
     expect(primaryDispatchAction({ ...base, status: "entregado" })).toBeNull();
+    // ADR-149: despachado con cadete se entrega a mano; con logística, lo cierra el seguimiento.
+    expect(primaryDispatchAction({ ...base, delivery_type: "envio", status: "despachado" })).toBe("entregar");
+    expect(primaryDispatchAction({ ...base, delivery_type: "envio", status: "despachado", shipment_id: "s1" })).toBeNull();
+    // ADR-149 (A4): la sucursal que vendió también la ve.
+    expect(dispatchIsForStore({ ...base, status: "pendiente", sale_store_id: "C" }, "C")).toBe(true);
     expect(dispatchIsForStore({ ...cross, status: "listo", arrived_at: "x" }, "A")).toBe(false);
     expect(dispatchIsForStore({ ...cross, status: "listo", arrived_at: "x" }, "B")).toBe(true);
     expect(dispatchIsForStore({ ...cross, status: "pendiente" }, "B")).toBe(true);

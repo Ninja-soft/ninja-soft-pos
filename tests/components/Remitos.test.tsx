@@ -9,9 +9,15 @@ import type { Remito } from "@/lib/remitos/logic";
 
 const issue = vi.fn(async () => ({ id: "r1", pto_vta: 1, number: 3, cot_required: true }));
 const toast = vi.fn();
+// ADR-149 (A8 y A9): la configuración y la vista previa se pueden cambiar por test.
+const remitoState = vi.hoisted(() => ({
+  cfg: { cot_threshold: 1000, cot_jurisdiction: "pba", show_prices: false, legend: null } as Record<string, unknown> | undefined,
+  preview: null as Record<string, unknown> | null,
+}));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => ({ toast }) }));
 vi.mock("@/modules/remitos/api", () => ({
-  useRemitoConfig: () => ({ data: { cot_threshold: 1000, cot_jurisdiction: "pba", show_prices: false, legend: null } }),
+  useRemitoConfig: () => ({ data: remitoState.cfg }),
+  useRemitoPreview: () => ({ data: remitoState.preview }),
   useRemitoMutations: () => ({ issue: { mutateAsync: issue, isPending: false } }),
 }));
 
@@ -121,5 +127,53 @@ describe("RemitoIssueModal", () => {
     await vi.waitFor(() => expect(onIssued).toHaveBeenCalledWith("r1"));
     const [{ data }] = issue.mock.calls[0] as unknown as [{ data: Record<string, unknown> }];
     expect(data).toMatchObject({ dispatch_id: "d1", kind: "envio", receiver_name: "Ana", delivery_address: "Calle 9 123", declared_value: 5000, cot_jurisdiction: "pba" });
+  });
+});
+
+describe("RemitoIssueModal · ADR-149 (L0)", () => {
+  const source = { dispatchId: "d2", saleId: "v2", label: "Entrega N° 5 · Venta #341", kind: "entrega" as const, receiverName: "Ana", deliveryAddress: null };
+
+  it("A9: muestra lo que lleva y avisa el COT con el valor del servidor, antes de emitir", () => {
+    remitoState.cfg = { cot_threshold: 1000, cot_jurisdiction: "pba", show_prices: false, legend: null };
+    remitoState.preview = {
+      items: [{ product_id: "p1", variant_id: null, description: "Mesa", sku: null, unit: "un", qty: 2, unit_price: 2500 }],
+      declared_value: 5000,
+      already: 0,
+      sale_status: "completed",
+      cot_jurisdiction: "pba",
+      cot_threshold: 1000,
+      cot_required: true,
+    };
+    render(<RemitoIssueModal source={source} onClose={vi.fn()} onIssued={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "Qué lleva el remito" }).textContent).toContain("Mesa");
+    expect(screen.getByText(/El valor de lo que lleva supera tu monto de aviso/)).toBeTruthy();
+    remitoState.preview = null;
+  });
+
+  it("A13: si todo ya está en otro remito vigente, lo dice y no deja emitir", () => {
+    remitoState.preview = {
+      items: [],
+      declared_value: 0,
+      already: 2,
+      sale_status: "completed",
+      cot_jurisdiction: "pba",
+      cot_threshold: null,
+      cot_required: false,
+    };
+    render(<RemitoIssueModal source={source} onClose={vi.fn()} onIssued={vi.fn()} />);
+    expect(screen.getByText(/ya está en otro remito vigente/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Emitir" }) as HTMLButtonElement).disabled).toBe(true);
+    remitoState.preview = null;
+  });
+
+  it("A8: la configuración que llega después de abrir aplica jurisdicción y precios", () => {
+    remitoState.cfg = undefined;
+    const { rerender } = render(<RemitoIssueModal source={source} onClose={vi.fn()} onIssued={vi.fn()} />);
+    expect((screen.getByLabelText("Jurisdicción del COT") as HTMLSelectElement).value).toBe("pba");
+    remitoState.cfg = { cot_threshold: null, cot_jurisdiction: "caba", show_prices: true, legend: null };
+    rerender(<RemitoIssueModal source={{ ...source }} onClose={vi.fn()} onIssued={vi.fn()} />);
+    expect((screen.getByLabelText("Jurisdicción del COT") as HTMLSelectElement).value).toBe("caba");
+    expect(screen.getByRole("switch", { name: "Mostrar precios" }).getAttribute("aria-checked")).toBe("true");
+    remitoState.cfg = { cot_threshold: 1000, cot_jurisdiction: "pba", show_prices: false, legend: null };
   });
 });

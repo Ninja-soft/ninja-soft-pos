@@ -15,7 +15,6 @@ import {
   groupDeliveries,
   isTrivialPlan,
   lineKey,
-  planSummary,
   shortInSalon,
   sourceLabel,
   sourcesFor,
@@ -161,7 +160,6 @@ describe("ADR-136 · entregas y validación", () => {
       ["ahora", A, A, 1],
       ["retiro", B, B, 2],
     ]);
-    expect(planSummary(g, (id) => (id === A ? "Centro" : "Norte"))).toBe("2 se lleva ahora · 4 retira en Norte");
   });
 
   it("la suma de cada renglón tiene que ser lo vendido", () => {

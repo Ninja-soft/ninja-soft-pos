@@ -22,7 +22,6 @@ import {
   remitoTotals,
   type RemitoFormInput,
 } from "@/lib/remitos/logic";
-import { cotProviderFor } from "@/lib/remitos/cot";
 import { remitoPages, REMITO_ROWS_FIRST, REMITO_ROWS_NEXT } from "@/components/remitos/RemitoDocument";
 
 const MIG = readFileSync(join(process.cwd(), "supabase", "migrations", "20261202100200_remitos.sql"), "utf8");
@@ -87,8 +86,7 @@ describe("ADR-136 · aviso de COT (espejo de remito_cot_required)", () => {
   it("SQL equivalente", () => {
     expect(CODE).toMatch(/p_threshold is not null\s+and coalesce\(p_jurisdiction, 'pba'\) in \('pba', 'caba'\)\s+and coalesce\(p_value, 0\) >= p_threshold/);
   });
-  it("hoy el COT es manual (hook para ARBA pendiente)", () => {
-    expect(cotProviderFor("pba").key).toBe("manual");
+  it("hoy el COT es manual; la base ya acepta 'arba_ws' para L4 (ADR-149)", () => {
     expect(CODE).toContain("'arba_ws'");
   });
 });

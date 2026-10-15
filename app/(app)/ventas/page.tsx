@@ -32,6 +32,8 @@ import { CHANNEL_LABEL, filterByChannel, presentChannels, type SaleChannel } fro
 import { SaleCard, SaleCardSkeleton } from "@/components/sales/SaleCard";
 import { SalesSummary } from "@/components/sales/SalesSummary";
 import { PaymentLogo } from "@/components/sales/SalePaymentLogo";
+import { useFeature } from "@/modules/saas/gating";
+import { FULFILLMENT_MODE_LABEL, type FulfillmentMode } from "@/lib/orders/logic";
 
 // Modales en chunks aparte, montados recién al abrirlos (detalle, ticket,
 // devolución / cambio y cobros QR son pesados y no hacen falta para listar).
@@ -75,6 +77,9 @@ export default function VentasPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [methodFilter, setMethodFilter] = useState<string>("all");
+  // ADR-149 (R18): retiro o envío (sales.fulfillment_mode, server-side).
+  const [modeFilter, setModeFilter] = useState<string>("all");
+  const logisticsOn = useFeature("pedidos_despacho") === true;
   const [channelFilter, setChannelFilter] = useState<SaleChannel | "all">("all");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search, 350);
@@ -85,6 +90,7 @@ export default function VentasPage() {
   const showBranch = branch.isMulti && !storeId;
   const status = statusFilter === "all" ? "" : statusFilter;
   const method = methodFilter === "all" ? null : methodFilter;
+  const fulfillment = modeFilter === "all" ? null : modeFilter;
 
   // Reloj para los tiempos relativos ("hace 5 min"): se refresca cada minuto.
   const [now, setNow] = useState(() => Date.now());
@@ -100,7 +106,7 @@ export default function VentasPage() {
   // Volver a la página 1 cuando cambian los filtros.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, methodFilter, range?.from, range?.to, pageSize, storeId]);
+  }, [debouncedSearch, statusFilter, methodFilter, modeFilter, range?.from, range?.to, pageSize, storeId]);
 
   const { data, isLoading, isPlaceholderData, isError, refetch } = useSalesPaged({
     page,
@@ -110,6 +116,7 @@ export default function VentasPage() {
     range: saleRange,
     storeId,
     method,
+    fulfillment,
   });
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const total = data?.total ?? 0;
@@ -201,6 +208,7 @@ export default function VentasPage() {
         range: saleRange,
         storeId,
         method,
+        fulfillment,
       });
       await exportXlsx("ventas", [
         {
@@ -272,11 +280,23 @@ export default function VentasPage() {
     { value: "all", label: "Todos los canales" },
     ...channels.map((c) => ({ value: c, label: CHANNEL_LABEL[c] })),
   ];
+  const modeOptions: SelectOption<string>[] = [
+    { value: "all", label: "Cualquier entrega" },
+    ...(["retiro", "envio", "logistica", "mixto", "en_mostrador"] as FulfillmentMode[]).map((m) => ({
+      value: m,
+      label: FULFILLMENT_MODE_LABEL[m],
+    })),
+  ];
   const filtersActive =
-    statusFilter !== "all" || methodFilter !== "all" || channelFilter !== "all" || Boolean(range?.from);
+    statusFilter !== "all" ||
+    methodFilter !== "all" ||
+    modeFilter !== "all" ||
+    channelFilter !== "all" ||
+    Boolean(range?.from);
   function clearFilters() {
     setStatusFilter("all");
     setMethodFilter("all");
+    setModeFilter("all");
     setChannelFilter("all");
     setRange(undefined);
   }
@@ -361,6 +381,9 @@ export default function VentasPage() {
             aria-label="Medio de pago"
             className="sm:w-52"
           />
+          {(logisticsOn || modeFilter !== "all") && (
+            <Select value={modeFilter} options={modeOptions} onChange={setModeFilter} aria-label="Entrega" className="sm:w-48" />
+          )}
           {branch.isMulti && branch.allowed.length > 1 && (
             <Select
               value={storeId ?? ALL_BRANCHES}

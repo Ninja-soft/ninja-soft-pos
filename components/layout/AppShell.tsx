@@ -61,9 +61,9 @@ import {
   PackageSearch,
   Radar,
   ShieldAlert,
-  Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { isLogisticsPath } from "@/components/logistics/LogisticsNav";
 import { useStores } from "@/modules/stock/hooks";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
@@ -301,15 +301,13 @@ const NAV: { groups: Group[] } = {
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
         { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
-        // Pedidos de salón y expedición (F11 · H32, ADR-129): OPTIONAL Pro+.
+        // Pedidos de salón (F11 · H32, ADR-129): OPTIONAL Pro+.
         { href: "/pedidos", label: "Pedidos de salón", icon: ClipboardList, feature: "pedidos_despacho" },
-        { href: "/expedicion", label: "Expedición", icon: PackageCheck, feature: "pedidos_despacho" },
-        // Remitos de entrega y envío con COT (ADR-136): OPTIONAL Pro+.
-        { href: "/remitos", label: "Remitos", icon: FileText, feature: "entregas_remitos" },
+        // Logística (ADR-149 · L0): un solo ítem para Expedición, Remitos y
+        // Envíos (sub-páginas con su barra arriba). OPTIONAL Pro+.
+        { href: "/logistica", label: "Logística", icon: Truck, feature: "pedidos_despacho" },
         // Presupuestos (ADR-122): OPTIONAL Pro+, con candado si no está.
         { href: "/presupuestos", label: "Presupuestos", icon: FileSignature, feature: "presupuestos" },
-        // Envíos con etiquetas de logísticas integradas (ADR-103).
-        { href: "/envios", label: "Envíos", icon: Send, feature: "envios" },
         { href: "/caja", label: "Caja", icon: Wallet },
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
@@ -412,7 +410,11 @@ const ITEM_BY_HREF = new Map(NAV.groups.flatMap((g) => g.items.map((it) => [it.h
 const GROUP_LABELS: Record<string, string> = Object.fromEntries(NAV.groups.map((g) => [g.id, g.label]));
 
 function isActiveHref(pathname: string, href: string) {
-  return pathname === href || (href === "/escuela" && pathname.startsWith("/escuela/"));
+  return (
+    pathname === href ||
+    (href === "/escuela" && pathname.startsWith("/escuela/")) ||
+    (href === "/logistica" && isLogisticsPath(pathname))
+  );
 }
 
 // Datos de cada ítem para el modo personalizar (con el candado del plan).

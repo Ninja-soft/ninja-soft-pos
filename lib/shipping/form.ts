@@ -26,6 +26,8 @@ export const shipmentFormSchema = z
     store_id: z.string().uuid("Elegí la sucursal que despacha"),
     source: z.enum(["pos_sale", "order", "manual"]),
     sale_id: z.string().uuid().optional().nullable(),
+    /** ADR-149 (A11): entrega de Expedición que lleva este envío. */
+    dispatch_id: z.string().uuid().optional().nullable(),
     order_ref: z.string().max(80).optional(),
     service_type: z.enum(["door", "branch"]),
     recipient: z.object({
@@ -99,6 +101,7 @@ export function buildCreatePayload(
     store_id: form.store_id,
     source: form.source,
     sale_id: form.source === "pos_sale" ? form.sale_id : null,
+    dispatch_id: form.source === "pos_sale" ? (form.dispatch_id ?? null) : null,
     order_ref: form.source === "order" ? form.order_ref?.trim() : null,
     service_type: opts.quote?.service_type ?? form.service_type,
     service_code: opts.quote?.service_code ?? null,
@@ -135,6 +138,10 @@ export function shippingErrorMessage(e: unknown): string {
     [/invalid_package/, "Revisá peso y medidas de los bultos."],
     [/packages_required|too_many_packages/, "Cargá entre 1 y 20 bultos."],
     [/sale_not_found|sale_not_completed/, "La venta no existe o no está completada."],
+    [/dispatch_has_shipment/, "Esa entrega ya tiene un envío creado."],
+    [/dispatch_closed/, "Esa entrega ya se despachó, se entregó o se canceló."],
+    [/dispatch_not_envio/, "Sólo las entregas con envío a domicilio van con logística."],
+    [/dispatch_not_found/, "No encontramos la entrega."],
     [/reason_required/, "Escribí el motivo."],
     [/carrier_cannot_cancel/, "La logística no cancela por API: confirmá cancelarlo sólo en NinjaSoft y avisale al carrier."],
     [/create_in_progress/, "El envío se está generando en este momento: probá en unos segundos."],

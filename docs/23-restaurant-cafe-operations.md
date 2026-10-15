@@ -96,11 +96,13 @@ Referencias de mercado usadas como inspiración:
 
 ## 9. Delivery, take away y despacho
 
-- [ ] Canal del pedido: mostrador, teléfono, WhatsApp, QR, delivery propio, marketplace futuro.
-- [ ] Cliente, teléfono, dirección, referencia, horario prometido y costo de envío.
-- [ ] Estados: recibido, aceptado, en preparación, listo, en camino, entregado, cancelado.
+> Estado al 2026-10-15 (auditoría de [ADR-149](./17-decision-log.md), A27): H49 está hecho; lo que sigue de reparto propio (cadete real, hojas de ruta, mapa) va en F22 ([`45-logistica-reparto.md`](./45-logistica-reparto.md)).
+
+- [x] Canal del pedido: mostrador, teléfono, WhatsApp, QR, delivery propio, marketplace futuro. *H49 (`delivery_orders.channel`) y canales de apps (ADR-102). El pedido por QR de mesa quedó afuera (ver H43).*
+- [x] Cliente, teléfono, dirección, referencia, horario prometido y costo de envío. *H49 y zonas con tarifa (follow-up de H49). La dirección sigue siendo texto: se estructura en F22 · L1.*
+- [x] Estados: recibido, aceptado, en preparación, listo, en camino, entregado, cancelado. *H49 sin "aceptado" (recibido hace de aceptado). Desde ADR-149 (A7), cobrar antes de que salga no lo marca entregado.*
 - [ ] Etiqueta/ticket para bolsa.
-- [ ] Repartidor/cadete asignable.
+- [~] Repartidor/cadete asignable. *H49 lo asigna como texto (`assign_courier`); el repartidor real con usuario y app llega en F22 · L2 y L6.*
 - [ ] Conciliación de pago por canal.
 
 ## 10. Inventario gastronómico y recetas

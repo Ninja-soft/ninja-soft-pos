@@ -4,8 +4,12 @@
 // Expedición o una venta. El servidor arma los ítems (los de la entrega o los
 // de la venta), el emisor y el número del punto de venta interno; acá se
 // cargan receptor, domicilio, bultos, transporte y COT.
+// ADR-149 (L0): la jurisdicción y "mostrar precios" toman la configuración
+// aunque llegue después de abrir (A8), y antes de emitir se ve qué lleva el
+// remito, su valor y si pide COT con el valor que calcula el servidor (A9).
+// Lo que ya está en otro remito vigente de la venta no se repite (A13).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -19,11 +23,13 @@ import {
   remitoErrorMessage,
   remitoFormErrors,
   remitoIssuePayload,
+  remitoValueForCot,
   type CotJurisdiction,
   type RemitoFormInput,
   type RemitoKind,
 } from "@/lib/remitos/logic";
-import { useRemitoConfig, useRemitoMutations } from "@/modules/remitos/api";
+import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { useRemitoConfig, useRemitoMutations, useRemitoPreview } from "@/modules/remitos/api";
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
@@ -52,9 +58,12 @@ export function RemitoIssueModal({
   const { data: cfg } = useRemitoConfig(Boolean(source));
   const [id, setId] = useState("");
   const [f, setF] = useState<RemitoFormInput>(() => empty("entrega", "pba"));
+  // Lo que el usuario tocó no lo pisa la configuración que llega tarde (A8).
+  const touched = useRef<Set<keyof RemitoFormInput>>(new Set());
 
   useEffect(() => {
     if (!source) return;
+    touched.current = new Set();
     setId(crypto.randomUUID());
     setF({
       ...empty(source.kind, cfg?.cot_jurisdiction ?? "pba"),
@@ -66,13 +75,40 @@ export function RemitoIssueModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source?.dispatchId, source?.saleId]);
 
+  // A8: la configuración llegó después de abrir: aplica sus defaults.
+  useEffect(() => {
+    if (!source || !cfg) return;
+    setF((cur) => ({
+      ...cur,
+      cot_jurisdiction: touched.current.has("cot_jurisdiction") ? cur.cot_jurisdiction : cfg.cot_jurisdiction,
+      show_prices: touched.current.has("show_prices") ? cur.show_prices : cfg.show_prices,
+    }));
+  }, [cfg, source]);
+
+  // A9: qué lleva y cuánto vale, según el servidor, antes de emitir.
+  const previewInput = useMemo(
+    () =>
+      source
+        ? {
+            ...(source.dispatchId ? { dispatch_id: source.dispatchId } : { sale_id: source.saleId }),
+            cot_jurisdiction: f.cot_jurisdiction,
+          }
+        : null,
+    [source, f.cot_jurisdiction],
+  );
+  const preview = useRemitoPreview(previewInput);
+
   const errors = useMemo(() => remitoFormErrors(f), [f]);
-  const declared = f.declared_value.trim() ? Number(f.declared_value.replace(",", ".")) : null;
+  const valueForCot = remitoValueForCot(f.declared_value, preview.data?.declared_value);
   const cotWarn =
-    declared != null && !f.cot_number.trim() && cotRequired(cfg?.cot_threshold ?? null, f.cot_jurisdiction, declared);
+    valueForCot != null && !f.cot_number.trim() && cotRequired(cfg?.cot_threshold ?? null, f.cot_jurisdiction, valueForCot);
+  const nothingLeft = Boolean(preview.data && preview.data.items.length === 0);
 
   if (!source) return null;
-  const set = <K extends keyof RemitoFormInput>(k: K, v: RemitoFormInput[K]) => setF((cur) => ({ ...cur, [k]: v }));
+  const set = <K extends keyof RemitoFormInput>(k: K, v: RemitoFormInput[K]) => {
+    touched.current.add(k);
+    setF((cur) => ({ ...cur, [k]: v }));
+  };
 
   async function submit() {
     if (!source) return;
@@ -101,13 +137,47 @@ export function RemitoIssueModal({
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={submit} disabled={errors.length > 0} loading={m.issue.isPending}>
+          <Button onClick={submit} disabled={errors.length > 0 || nothingLeft} loading={m.issue.isPending}>
             Emitir
           </Button>
         </>
       }
     >
       <div className="space-y-5">
+        {preview.data && (
+          <section aria-label="Qué lleva el remito" className="rounded-lg bg-muted/50 p-3 text-sm">
+            {nothingLeft ? (
+              <p className="text-warning">
+                {preview.data.already > 0
+                  ? "Todo lo de esta venta ya está en otro remito vigente. Anulalo para emitir otro."
+                  : "No quedan productos para el remito."}
+              </p>
+            ) : (
+              <>
+                <ul className="space-y-0.5">
+                  {preview.data.items.slice(0, 8).map((i, idx) => (
+                    <li key={`${i.product_id ?? "libre"}:${i.variant_id ?? ""}:${idx}`} className="flex justify-between gap-3">
+                      <span className="truncate">{i.description}</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatQty(i.qty)} {i.unit}
+                      </span>
+                    </li>
+                  ))}
+                  {preview.data.items.length > 8 && (
+                    <li className="text-xs text-muted-foreground">+{preview.data.items.length - 8} renglones más</li>
+                  )}
+                </ul>
+                <p className="mt-2 flex justify-between gap-3 font-medium">
+                  <span>Valor de lo que lleva</span>
+                  <span className="tabular-nums">{formatCurrency(preview.data.declared_value)}</span>
+                </p>
+                {preview.data.already > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">Lo que ya está en otro remito de la venta no se repite.</p>
+                )}
+              </>
+            )}
+          </section>
+        )}
         <Segmented<RemitoKind>
           aria-label="Tipo de remito"
           size="sm"
@@ -178,7 +248,11 @@ export function RemitoIssueModal({
               </option>
             ))}
           </select>
-          {cotWarn && <p className="text-xs text-warning">El valor declarado supera tu monto de aviso: este traslado suele necesitar COT.</p>}
+          {cotWarn && (
+            <p className="text-xs text-warning" role="status">
+              {f.declared_value.trim() ? "El valor declarado" : "El valor de lo que lleva"} supera tu monto de aviso: este traslado suele necesitar COT.
+            </p>
+          )}
         </fieldset>
 
         <Input label="Observaciones" value={f.notes} onChange={(e) => set("notes", e.target.value)} maxLength={500} />

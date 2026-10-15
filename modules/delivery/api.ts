@@ -78,19 +78,23 @@ export const TAKEAWAY_BOARD_COLUMNS: DeliveryStatus[] = [
   "entregado",
 ];
 
-// Próximo estado "natural" según tipo (botón "avanzar" en la tarjeta). No incluye
-// 'entregado' como avance manual (la entrega se confirma al cobrar).
+// Próximo estado "natural" según tipo (botón "avanzar" en la tarjeta). Sin
+// cobrar, 'entregado' llega al cobrar. Ya cobrado (ADR-149, A7: cobrar un
+// pedido que todavía no salió no lo entrega), el último paso es "Entregado".
 export function nextDeliveryStatus(
   type: DeliveryOrderType,
   status: DeliveryStatus,
+  paid = false,
 ): DeliveryStatus | null {
   if (type === "takeaway" || type === "mostrador") {
     if (status === "recibido") return "preparando";
     if (status === "preparando") return "listo";
+    if (status === "listo" && paid) return "entregado";
     return null;
   }
   if (status === "recibido") return "preparando";
   if (status === "preparando") return "en_camino";
+  if (status === "en_camino" && paid) return "entregado";
   return null;
 }
 

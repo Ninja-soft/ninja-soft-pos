@@ -1,6 +1,6 @@
 # 45 · Logística y reparto: auditoría y plan de integración
 
-> **Estado:** propuesta (2026-10-15). Nada de esto está construido todavía salvo lo que la §2 marca como "existe". Decisión: [ADR-149](./17-decision-log.md). Hitos: F22 en [`02-roadmap.md`](./02-roadmap.md) (H143 a H149).
+> **Estado:** L0 (H143) hecho en código, sin aplicar (2026-10-15, ver ADR-149 § L0); L1 a L6 propuestas. Salvo L0, nada de esto está construido todavía fuera de lo que la §2 marca como "existe". Decisión: [ADR-149](./17-decision-log.md). Hitos: F22 en [`02-roadmap.md`](./02-roadmap.md) (H143 a H149).
 >
 > **Para quién:** producto, backend, frontend, QA y el dueño (la §13 dice qué tiene que conseguir él).
 

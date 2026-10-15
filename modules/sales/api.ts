@@ -181,6 +181,8 @@ export interface SalesPageParams {
   // Medio de pago (payments.method): entran las ventas con al menos un cobro
   // en ese medio. Server-side con inner join a payments.
   method?: string | null;
+  // ADR-149 (R18): cómo se entrega (sales.fulfillment_mode). Server-side.
+  fulfillment?: string | null;
 }
 
 // Solo dígitos del N°: evita romper filtros / inyección.
@@ -222,7 +224,7 @@ export const salesApi = {
   // nombre de cliente (ilike con inner join). Nunca tira error si está vacío.
   listPaged: async (params: SalesPageParams): Promise<Paged<SaleRow>> => {
     const supabase = createClient();
-    const { page, pageSize, search, status, range, storeId, method } = params;
+    const { page, pageSize, search, status, range, storeId, method, fulfillment } = params;
     const start = Math.max(0, (page - 1) * pageSize);
     const end = start + pageSize - 1;
     const q = (search ?? "").trim();
@@ -257,6 +259,7 @@ export const salesApi = {
     if (asNumber !== null) query = query.eq("number", asNumber);
     if (byName) query = query.ilike("customers.name", `%${q}%`);
     if (method) query = query.eq("payments.method" as never, method as never);
+    if (fulfillment) query = query.eq("fulfillment_mode" as never, fulfillment as never);
 
     const { data, error, count } = await query.range(start, end);
     if (error) throw error;

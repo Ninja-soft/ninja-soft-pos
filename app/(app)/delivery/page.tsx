@@ -147,7 +147,7 @@ export default function DeliveryPage() {
   }
 
   function advance(o: DeliveryOrder) {
-    const next = nextDeliveryStatus(o.order_type, o.status);
+    const next = nextDeliveryStatus(o.order_type, o.status, Boolean(o.sale_id));
     if (!next) return;
     setStatus.mutate(
       { orderId: o.id, status: next },
@@ -333,7 +333,7 @@ function OrderCard({
 }) {
   const isDelivery = order.order_type === "delivery";
   // Los pedidos de apps avanzan con sus propias acciones (la app se entera).
-  const next = channelOrder ? null : nextDeliveryStatus(order.order_type, order.status);
+  const next = channelOrder ? null : nextDeliveryStatus(order.order_type, order.status, Boolean(order.sale_id));
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <button
@@ -406,8 +406,8 @@ function OrderCard({
 
       {channelOrder && <ChannelOrderActions order={channelOrder} canManage={canManage} />}
 
-      {/* Avanzar de estado (recibido → preparando → …). 'entregado' se alcanza al
-          cobrar (no por este botón). */}
+      {/* Avanzar de estado (recibido → preparando → …). Sin cobrar, 'entregado'
+          llega al cobrar; ya cobrado (ADR-149, A7), con este botón. */}
       {next && (
         <button
           type="button"

@@ -55,6 +55,27 @@ export function useDispatches(storeId: string | null, open: boolean, enabled = t
   });
 }
 
+/** ADR-149 (R18): entregas y remitos de una venta (detalle de la venta). */
+export function useSaleDeliveries(saleId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...DISPATCHES_KEY, "sale", saleId],
+    enabled: enabled && Boolean(saleId),
+    staleTime: 15_000,
+    queryFn: () => ordersApi.saleDeliveries(saleId!),
+  });
+}
+
+/** ADR-149 (A1): lo que falta entregar de una venta, por número. */
+export function useSalePending(saleNumber: number | null) {
+  return useQuery({
+    queryKey: [...DISPATCHES_KEY, "pending", saleNumber],
+    enabled: Boolean(saleNumber && saleNumber > 0),
+    staleTime: 5_000,
+    retry: false,
+    queryFn: async () => ordersApi.salePending(await ordersApi.saleIdByNumber(saleNumber!)),
+  });
+}
+
 export function useOrderMutations() {
   const qc = useQueryClient();
   const invalidate = () => {
@@ -80,7 +101,8 @@ export function useOrderMutations() {
       onSuccess: invalidate,
     }),
     ship: useMutation({
-      mutationFn: (v: { id: string; tracking: string | null }) => ordersApi.dispatchShip(v.id, v.tracking),
+      mutationFn: (v: { id: string; tracking: string | null; shipmentId?: string | null }) =>
+        ordersApi.dispatchShip(v.id, v.tracking, v.shipmentId ?? null),
       onSuccess: invalidate,
     }),
     cancelDispatch: useMutation({
@@ -94,6 +116,7 @@ export function useOrderMutations() {
           fulfillment_store_id: v.fulfillment_store_id,
           pickup_name: v.pickup_name,
           ship_address: v.ship_address,
+          ...(v.items ? { items: v.items } : {}),
         }),
       onSuccess: invalidate,
     }),

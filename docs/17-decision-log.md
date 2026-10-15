@@ -4736,7 +4736,7 @@ Hasta hoy la mora era el `saas-dunning` fijo: un negocio con el período vencido
 
 ## ADR-129: Pedidos de salón con reserva por minutos sobre las reservas de stock, cobro atómico con create_sale sin recrearlo y cola de expedición con retiro en otra sucursal (F11 · H32)
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h32-pedidos-despacho`; migraciones `20261123100000_features_pedidos_despacho` y `20261123100100_pedidos_despacho` sin aplicar; sin Edges) · **Base:** ADR-091 (reservas de stock), ADR-096 (create_sale conoce las reservas y el extra `{kind: 'reservation', id}`), ADR-106 y ADR-108 (pausar venta: formato del carrito), ADR-122 y ADR-123 (botón junto a Cobrar, vendedor para comisiones), ADR-103 (envíos), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 128 queda para otra rama abierta.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h32-pedidos-despacho`; migraciones `20261123100000_features_pedidos_despacho` y `20261123100100_pedidos_despacho` aplicadas en producción, verificado el 2026-10-15 en la auditoría de ADR-149; sin Edges) · **Base:** ADR-091 (reservas de stock), ADR-096 (create_sale conoce las reservas y el extra `{kind: 'reservation', id}`), ADR-106 y ADR-108 (pausar venta: formato del carrito), ADR-122 y ADR-123 (botón junto a Cobrar, vendedor para comisiones), ADR-103 (envíos), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 128 queda para otra rama abierta.
 
 ### Contexto
 
@@ -5033,7 +5033,7 @@ El dueño pidió: "Para las garantías extendidas debo poder configurar varios t
 - **Tests:** PGlite (49 chequeos: migración dos veces, precio SQL = TS, RPC con roles, plan y validaciones, alcance SQL = TS en todas las combinaciones, reemplazo con baja lógica, auditoría, RLS entre negocios, trigger con precio, exclusión, tipo pausado, vínculo inválido, offline auditado y vencimiento en hora de Argentina). `tests/unit/garantiasExtendidas.test.ts`, `tests/unit/warrantyOptionCards.test.tsx` y `tests/integration/rls-garantias-extendidas.test.ts` (se salta sin base local).
 ## ADR-136: Depósitos vendibles por sucursal, venta de stock de otras sucursales, entregas partidas sobre la expedición de H32 y remitos de entrega y envío con COT (F11 · H33 y H32)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/depositos-entregas-remitos` (PR A: depósitos, configuración, venta de otras sucursales y entregas partidas) y `feat/depositos-entregas-remitos-b` (PR B: remitos con COT), apilados; migraciones `20261202100000_features_entregas_remitos`, `20261202100100_depositos_venta_entregas` y `20261202100200_remitos` sin aplicar; Edge `send_receipt_email` con remitos sin desplegar) · **Base:** ADR-085 (depósitos como desglose del stock de la sucursal), ADR-088 (`_sale_salon_take`, vender de la reserva), ADR-046 (stock por sucursal, invariante del total), ADR-129 (pedidos de salón, `dispatches`, cross-branch), ADR-112 y ADR-119 (motor de comprobantes, PDF del email), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 132, 134 y 135 pueden estar tomadas en ramas abiertas.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/depositos-entregas-remitos` (PR A: depósitos, configuración, venta de otras sucursales y entregas partidas) y `feat/depositos-entregas-remitos-b` (PR B: remitos con COT), apilados; migraciones `20261202100000_features_entregas_remitos`, `20261202100100_depositos_venta_entregas` y `20261202100200_remitos` aplicadas en producción, verificado el 2026-10-15 en la auditoría de ADR-149; Edge `send_receipt_email` con remitos sin desplegar) · **Base:** ADR-085 (depósitos como desglose del stock de la sucursal), ADR-088 (`_sale_salon_take`, vender de la reserva), ADR-046 (stock por sucursal, invariante del total), ADR-129 (pedidos de salón, `dispatches`, cross-branch), ADR-112 y ADR-119 (motor de comprobantes, PDF del email), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 132, 134 y 135 pueden estar tomadas en ramas abiertas.
 
 ### Contexto
 
@@ -5367,7 +5367,7 @@ El dueño reportó que la vista previa de `/etiquetas` se veía bien pero al imp
 - Tests: `tests/unit/etiquetasPro.test.tsx` (grilla, mm, EAN-13, documento de impresión, diseños, contenido neto, cuotas, link corto, ZPL, contratos de la migración y la ficha renderizada). Verificado con Playwright y Chrome: PDF de 50×25 (3 páginas de 50×25 mm), 60×40, rollo de 2 columnas (84×25 mm) y A4 (2 hojas, salteo y marcas de corte) sin estirar; UI en 4 temas y 390 px.
 ## ADR-146: Cliente y entrega dentro de la hoja de cobro (alta con ARCA, retiro en otra sucursal, envío con costo y reparto) sobre el mismo plan de ADR-136
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/cobro-cliente-envio`; migración `20261215100000_cobro_envio_costo` sin aplicar) · **Base:** ADR-133 (alta rápida con padrón de ARCA, `CheckoutLetter`), ADR-136 (entregas partidas, `pos_sale_create_fulfilled`, remitos con COT), ADR-129 (expedición y tipos de entrega), ADR-100 (atajos del POS).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/cobro-cliente-envio`; migración `20261215100000_cobro_envio_costo` aplicada en producción: `pos_sale_create_fulfilled` ya arma el renglón Envío, verificado el 2026-10-15 en la auditoría de ADR-149) · **Base:** ADR-133 (alta rápida con padrón de ARCA, `CheckoutLetter`), ADR-136 (entregas partidas, `pos_sale_create_fulfilled`, remitos con COT), ADR-129 (expedición y tipos de entrega), ADR-100 (atajos del POS).
 
 ### Contexto
 
@@ -5462,7 +5462,7 @@ Relevamiento del 15/10/2026:
 
 ## ADR-149: Logística unificada sobre la entrega, reparto propio con hojas de ruta, rol Repartidor, mapas y ruteo con servicios gratuitos y COT automático por el web service de ARBA (F22)
 
-**Fecha:** 2026-10-15 · **Estado:** propuesta (sin código, sin migraciones) · **Hitos:** F22 · H143 a H149 · **Base:** ADR-129 (pedidos y expedición), ADR-136 (depósitos, entregas y remitos con COT), ADR-146 (cliente y entrega en la hoja de cobro), ADR-103 (envíos con logísticas), ADR-137/138 (permisos por capacidad), ADR-046 (traslados), ADR-087 (PWA y venta offline), H49 (delivery gastronómico). Auditoría y diseño completos: [`45-logistica-reparto.md`](./45-logistica-reparto.md).
+**Fecha:** 2026-10-15 · **Estado:** aceptada; L0 (H143) en código en `feat/logistica-l0` con la migración `20261221100000_logistica_l0_arreglos` sin aplicar; L1 a L6 propuestas · **Hitos:** F22 · H143 a H149 · **Base:** ADR-129 (pedidos y expedición), ADR-136 (depósitos, entregas y remitos con COT), ADR-146 (cliente y entrega en la hoja de cobro), ADR-103 (envíos con logísticas), ADR-137/138 (permisos por capacidad), ADR-046 (traslados), ADR-087 (PWA y venta offline), H49 (delivery gastronómico). Auditoría y diseño completos: [`45-logistica-reparto.md`](./45-logistica-reparto.md).
 
 ### Contexto
 
@@ -5495,7 +5495,26 @@ La auditoría (doc 45 §2) encontró 28 hallazgos. Los centrales: cinco circuito
 ### Consecuencias
 
 - Producción sin datos de logística: las migraciones pueden cambiar estados y columnas sin backfill, salvo `pos_settings.order_config`/`remito_config` (se copian a `logistics_settings`).
-- La documentación de ADR-129, ADR-136 y ADR-146 dice "migración sin aplicar" pero las tablas y funciones existen en producción (incluida `20261215100000_cobro_envio_costo`); se corrige en L0.
+- La documentación de ADR-129, ADR-136 y ADR-146 decía "migración sin aplicar" pero las tablas y funciones existen en producción (incluida `20261215100000_cobro_envio_costo`); corregido en L0.
 - Dependencias nuevas previstas: `maplibre-gl` (sólo en pantallas con mapa); opcional `signature_pad`.
 - Cuentas para el dueño: OpenRouteService (gratis), contacto para User-Agent, clave de transporte de ARBA de prueba y del piloto, consulta a AGIP, contador del piloto para umbral y códigos de producto. Costo externo cero hasta L5.
 - Pendiente de confirmar: diseño de registro vigente del TXT de ARBA campo por campo, umbral y validez del COT, `token`/`sign` de AGIP y régimen de confirmación de recepción.
+
+### L0 · H143 (2026-10-15)
+
+Hecho en `feat/logistica-l0`, migración `20261221100000_logistica_l0_arreglos` (sin aplicar). Cada función parte de `pg_get_functiondef` de producción.
+
+- **A1** `dispatch_create_for_sale` suma una entrega a una venta que ya tiene partes, con `dispatch_items` de lo pendiente por producto (vendido menos lo que está en entregas vigentes menos lo devuelto que nunca se le dio); acepta `items` para elegir y rechaza pasarse (`delivery_qty_mismatch`) o no tener nada (`nothing_pending`). Una entrega de H32 sin renglones sigue cubriendo toda la venta. `dispatch_sale_pending` lo muestra en el modal.
+- **A2** Trigger en `sales` (anulada) cancela las entregas abiertas y deja `sale_voided_logistics` con los remitos emitidos y lo despachado. Trigger en `sale_return_items`: devolver algo que todavía no se recibió cancela las entregas abiertas de ese producto. Se cancela la entrega entera (no se recorta): lo que falte se vuelve a agregar con A1.
+- **A3** `_dispatch_close` (interna, la usan `dispatch_cancel` y los triggers) devuelve lo que `pos_sale_create_fulfilled` movió: a la sucursal de origen o, si ya llegó, a la de entrega; al depósito si no era el salón. `stock_returned_at` evita devolver dos veces. La venta sigue debiendo esas unidades en su sucursal (stock en negativo si hace falta) hasta que se entregan o se anula.
+- **A4** `_dispatch_lock` deja operar a la sucursal que vendió; `dispatchIsForStore` la incluye. Cambia lo que ADR-136 había dejado ("pero la arma Norte").
+- **A5 y A6** `shipments.dispatch_id` (un envío vivo por entrega); `dispatch_ship` engancha el de la entrega o el único libre de la venta (con dos, no adivina) y escribe `shipped_at`; trigger en `shipments`: `delivered` cierra la entrega, `cancelled` la devuelve a Listo. `_dispatch_can` permite despachado → entregado para el cadete propio (espejo TS).
+- **A7** Trigger en `delivery_orders`: el cobro (create_sale) sólo marca entregado si el pedido ya estaba en camino (delivery) o listo (take away y mostrador); los pedidos de apps siguen su circuito. El tablero ofrece "Entregado" para lo cobrado.
+- **A8, A9, A13** `_remito_lines` arma los renglones sin repetir lo que ya está en otro remito vigente de la venta (`remito_already_covered`) y con la venta bloqueada; `remito_preview` da renglones, valor y si pide COT antes de emitir; el modal aplica la configuración aunque llegue tarde.
+- **A11 y A12** `shipment_create` acepta `dispatch_id`; "Crear envío con logística" precarga la dirección de entrega (separada en calle, altura, localidad, provincia y CP cuando se puede), cliente, contenido y valor. Buscar la venta en Envíos usa la dirección de entrega.
+- **A15** Un solo renglón "Envío" en la hoja de cobro (los dos costos nunca conviven: el reparto no corre en un pedido de delivery).
+- **A24 y A25** Un solo ítem **Logística** con barra de sub-páginas (Expedición, Remitos, Envíos); pestañas Pendientes, Armando, Listos, En camino (incluye despachado) y Entregados; filtro por modo; Entregados filtra por sucursal y oculta "se lo lleva ahora" salvo pedido. Un solo nombre: "Se lo lleva ahora".
+- **R18** `sales.fulfillment_mode` por trigger desde las entregas, chip y filtro en Ventas, entregas con estado y remito en el detalle de la venta.
+- **A27 y A28** Documentación corregida; fuera `lib/remitos/cot.ts`, `useRemitoForDispatch` y `planSummary`.
+- **Verificación:** PGlite sobre la cadena de ADR-136 y ADR-146 más L0 (148 chequeos, incluye el circuito venta repartida → agregar entrega → cancelar la parte cruzada → anular con stock correcto por sucursal y depósito; guardarraíles en 0); `db-audit-perf --strict` sin hallazgos de la migración; suite completa verde. Integración RLS en `tests/integration/rls-logistica-l0.test.ts` (corre con Supabase local).
+- **Quedan para L1+:** pestaña Con problemas, número de remito en la tarjeta de la entrega (A13, parte "no se ven entre sí"), unificar circuitos (A10, A14), cliente obligatorio y dirección estructurada (A16, A17), el resto de A18 a A23.

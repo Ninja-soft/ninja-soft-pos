@@ -597,6 +597,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Una cuenta de Mercado Libre del dueño (usuario administrador, no colaborador) y la app de Mercado Libre de NinjaSoft configurada.",
   },
+  mercadolibre_gestor: {
+    desc: "Gestor de Mercado Libre: métricas de reputación como las de un vendedor grande (nivel, MercadoLíder, ventas, calificaciones y, para reclamos, cancelaciones y despachos con demora, cuánto margen te queda antes de perder el verde), evolución diaria y los casos que afectan la reputación. Posventa con los reclamos, mediaciones y devoluciones y su vencimiento: responder con adjuntos y plantillas, pedir la mediación de Mercado Libre, aceptar la devolución u ofrecer un reintegro parcial con confirmación, y los mensajes de la venta. Embudos de ventas y de posventa con etapas propias y asignación al equipo. Avisos en el centro de notificaciones.",
+    impact: "Desactivado, no se ven métricas, posventa ni embudos y el servidor rechaza responder reclamos, cambiar etapas o guardar plantillas; la integración de Mercado Libre sigue igual.",
+    minPlan: "Pro",
+    requires: ["mercadolibre"],
+    needs: "Una cuenta de Mercado Libre conectada.",
+  },
   integracion_nubceo: {
     desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
     impact: "Desactivado, no se mandan ventas a NubCeo ni se importan asientos (el servidor lo rechaza); lo ya enviado se puede seguir mirando.",

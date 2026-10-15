@@ -266,10 +266,11 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
       - [x] Mismo producto en varios tipos (Clásica, Premium) con reglas de precio por tipo (recargo o lista, redondeo, mínimo) y override por producto, calculadas en el servidor.
       - [x] Stock publicable con % de reserva y tope; visitas de 30 días; orden por visitas, ventas y calidad.
       - [ ] *Criterio:* un producto típico con GTIN publicado en menos de un minuto (con los 40 de prueba: 30 sin completar nada; falta habilitar Mercado Envíos en la cuenta de prueba para publicar de verdad).
-    - **Parte B: métricas, posventa y embudos** *(rama `feat/ml-gestor-posventa`, apilada; feature `mercadolibre_gestor`)*:
-      - [ ] Reputación como en ANDESMAR (nivel, MercadoLíder, márgenes con umbral, evolución diaria, casos que la afectan) con foto diaria.
-      - [ ] Reclamos, mediaciones y devoluciones con vencimiento, responder con adjuntos, pedir la mediación, aceptar devolución y reintegro parcial con confirmación fuerte; mensajes postventa.
-      - [ ] Embudos de ventas y posventa con etapas configurables y asignación; plantillas de respuesta; umbrales y avisos.
+    - **Parte B: métricas, posventa y embudos** *(rama `feat/ml-gestor-posventa`, apilada; feature `mercadolibre_gestor`; migraciones `20261127100100` a `20261127100300` sin aplicar; Edge nueva `ml_gestor` y `ml_worker` / `ml_webhook` sin desplegar; tildar `claims` y `claims_actions` en DevCenter)*:
+      - [x] Reputación como en ANDESMAR (nivel, MercadoLíder, márgenes con umbral, evolución diaria, casos que la afectan) con foto diaria.
+      - [x] Reclamos, mediaciones y devoluciones con vencimiento, responder con adjuntos, pedir la mediación, aceptar devolución y reintegro parcial con confirmación fuerte; mensajes postventa.
+      - [x] Embudos de ventas y posventa con etapas configurables y asignación; plantillas de respuesta; umbrales y avisos.
+      - [ ] *Criterio:* con un reclamo real, responder y pedir la mediación desde el POS (ruta de `open_dispute` a confirmar) y ver el caso moverse solo de etapa al cerrarse.
   - [ ] Tienda Nube.
   - [~] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07; base hecha 2026-06-08)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan). — *Addon completo: config por proveedor, contexto amplio, cuota, burbuja con compra y explicador sin addon. Falta el tool-use que aplica cambios al ticket (hoy guía/consulta).*
     - [x] **Burbuja de chat** en el shell (visible solo con el addon activo) con **Gemini o Claude** vía Edge Function `ai_assistant` (la key vive en `platform_secrets` por proveedor, nunca en el cliente); burbuja con spinner/gif/ícono de proveedor y **botón de compra** cuando no está el addon. — *PRs #208, #231, #238.*

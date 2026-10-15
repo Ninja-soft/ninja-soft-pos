@@ -33,7 +33,7 @@ const order = (over: Record<string, unknown> = {}) => ({
   uuid: ORDER,
   external_reference: INTENT,
   status: "APPROVED",
-  amount: 125050,
+  amount: 1250.5,
   ...over,
 });
 
@@ -61,24 +61,25 @@ describe("ambientes y credenciales", () => {
 });
 
 describe("montos", () => {
-  it("la orden viaja en centavos enteros como string", () => {
-    expect(orderAmount(30.21)).toEqual({ ok: true, cents: "3021" });
-    expect(orderAmount(1250.5)).toEqual({ ok: true, cents: "125050" });
-    expect(orderAmount(0.1 + 0.2 + 99.7)).toEqual({ ok: true, cents: "10000" });
+  it("la orden viaja en PESOS como string (cobro real: centavos cobraban x100)", () => {
+    expect(orderAmount(30.21)).toEqual({ ok: true, value: "30.21" });
+    expect(orderAmount(1250.5)).toEqual({ ok: true, value: "1250.50" });
+    expect(orderAmount(0.1 + 0.2 + 99.7)).toEqual({ ok: true, value: "100" });
+    expect(orderAmount(100)).toEqual({ ok: true, value: "100" });
   });
 
   it("respeta el mínimo de $25 y el máximo de $9.999.999", () => {
     expect(orderAmount(24.99)).toEqual({ ok: false, error: "ualabis_min_amount" });
-    expect(orderAmount(25)).toEqual({ ok: true, cents: "2500" });
-    expect(orderAmount(9_999_999)).toEqual({ ok: true, cents: "999999900" });
+    expect(orderAmount(25)).toEqual({ ok: true, value: "25" });
+    expect(orderAmount(9_999_999)).toEqual({ ok: true, value: "9999999" });
     expect(orderAmount(10_000_000)).toEqual({ ok: false, error: "ualabis_max_amount" });
     expect(orderAmount(-1)).toEqual({ ok: false, error: "invalid_amount" });
     expect(orderAmount(Number.NaN)).toEqual({ ok: false, error: "invalid_amount" });
   });
 
-  it("acepta el monto informado como centavos o como pesos", () => {
-    expect(amountMatches(125050, 1250.5)).toBe(true);
-    expect(amountMatches("125050", 1250.5)).toBe(true);
+  it("el monto informado vale sólo en pesos (nunca como centavos)", () => {
+    expect(amountMatches(125050, 1250.5)).toBe(false);
+    expect(amountMatches("10000", 100)).toBe(false);
     expect(amountMatches(1250.5, 1250.5)).toBe(true);
     expect(amountMatches("1250.50", 1250.5)).toBe(true);
     expect(amountMatches(125000, 1250.5)).toBe(false);
@@ -96,7 +97,7 @@ describe("montos", () => {
       externalReference: INTENT,
     });
     expect(b).toEqual({
-      amount: "150000",
+      amount: "1500",
       description: "Venta NinjaPos",
       callback_success: "https://hooks.soft.ninja/ualabis?view=success",
       callback_fail: "https://hooks.soft.ninja/ualabis?view=failed",
@@ -246,7 +247,7 @@ describe("cliente HTTP (fetch simulado)", () => {
     const checkout = calls.find((x) => x.url.endsWith("/checkout"))!;
     expect(checkout.url).toBe("https://checkout.stage.developers.ar.ua.la/v2/api/checkout");
     expect((checkout.init?.headers as Record<string, string>).Authorization).toBe("Bearer tk-1");
-    expect(JSON.parse(String(checkout.init?.body)).amount).toBe("125050");
+    expect(JSON.parse(String(checkout.init?.body)).amount).toBe("1250.50");
     expect(calls.at(-1)!.url).toBe(`https://checkout.stage.developers.ar.ua.la/v2/api/orders/${ORDER}`);
   });
 
@@ -281,7 +282,7 @@ describe("cliente HTTP (fetch simulado)", () => {
     expect(r).toEqual({ ok: false, httpStatus: 401, detail: "Invalid username" });
   });
 
-  it("devolución: total en centavos con notification_url", async () => {
+  it("devolución: total en pesos con notification_url", async () => {
     let body: unknown = null;
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/auth/token")) return res(200, { access_token: "tk", expires_in: 86400 });
@@ -291,6 +292,6 @@ describe("cliente HTTP (fetch simulado)", () => {
     });
     const r = await ualabisClient({ creds: CREDS, env: "prod", fetchImpl }).refund(ORDER, 1250.5, "https://h/r");
     expect(r).toEqual({ httpStatus: 200, body: { status: "INITIATED" } });
-    expect(body).toEqual({ amount: "125050", notification_url: "https://h/r" });
+    expect(body).toEqual({ amount: "1250.50", notification_url: "https://h/r" });
   });
 });

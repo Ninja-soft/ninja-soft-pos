@@ -175,11 +175,14 @@ Deno.serve(async (req: Request) => {
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
     const intentId = (intent as { id: string }).id;
 
+    const appUrl = (Deno.env.get("APP_URL") ?? "https://pos.soft.ninja").replace(/\/+$/, "");
     const input = {
       amount,
       description,
-      callbackSuccess: `${hooks}?view=success`,
-      callbackFail: `${hooks}?view=failed`,
+      // Regreso del cliente a una página real de la app: las Edge Functions
+      // sirven HTML como texto plano (se veía el código de la página).
+      callbackSuccess: `${appUrl}/pagar/listo?estado=ok&medio=ualabis`,
+      callbackFail: `${appUrl}/pagar/listo?estado=error&medio=ualabis`,
       notificationUrl: `${hooks}?intent=${intentId}`,
       externalReference: intentId,
     };

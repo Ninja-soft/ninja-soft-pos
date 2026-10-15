@@ -31,7 +31,7 @@ export type Admin = SupabaseClient<any, "public", any>;
 
 export const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-ninja-scope",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 export const json = (b: unknown, s = 200) =>

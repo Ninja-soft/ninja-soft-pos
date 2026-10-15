@@ -224,6 +224,8 @@ export interface CheckoutSheetProps {
   prepaid?: { amount: number; label: string } | null;
   /** Pausar la venta (y Limpiar) desde la hoja (ADR-106). */
   pause?: SheetPauseOptions | null;
+  /** Comprobante de la venta y "Cambiar tipo" (ADR-133). Lo provee CheckoutSheetConnected. */
+  fiscalSlot?: React.ReactNode;
   /** Estado de la hoja a restaurar al abrir (venta pausada que se retoma). */
   restore?: CheckoutSnapshot | null;
   /** El POS llama acá para pausar con el atajo de teclado. */
@@ -291,6 +293,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     taxPreview = null,
     prepaid = null,
     pause = null,
+    fiscalSlot = null,
     restore = null,
     pauseRef,
     clearRef,
@@ -1762,6 +1765,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-6 md:pt-6">
           <div className="pr-10">{totalBlock}</div>
           {breakdown}
+          {fiscalSlot}
           {paidList}
           <div className="mb-2 mt-5">{heading}</div>
           {picker("list", {
@@ -1779,6 +1783,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           <section className="px-4 pb-4 pt-3 md:slim-scrollbar md:overflow-y-auto md:px-6 md:pt-6">
             <div className="pr-10 md:pr-0">{totalBlock}</div>
             {breakdown}
+          {fiscalSlot}
             {showEditor && active && (
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
@@ -1906,6 +1911,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             </button>
             <div className="pr-10 md:pr-8">{totalBlock}</div>
             {breakdown}
+          {fiscalSlot}
             {paidList}
             {editorCard}
             {extras}

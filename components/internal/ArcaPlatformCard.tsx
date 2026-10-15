@@ -28,6 +28,9 @@ export function ArcaPlatformCard() {
   const info = q.data?.[env];
   const [cuit, setCuit] = useState("");
   const [cert, setCert] = useState("");
+  const [pairOpen, setPairOpen] = useState(false);
+  const [pairCert, setPairCert] = useState("");
+  const [pairKey, setPairKey] = useState("");
   const [csr, setCsr] = useState<string | null>(null);
   const [problems, setProblems] = useState<{ code: string; title: string; action: string }[]>([]);
 
@@ -190,6 +193,65 @@ export function ArcaPlatformCard() {
                 ))}
               </ul>
             </Callout>
+          )}
+          {/* ADR-133: certificado y clave generados fuera de NinjaSoft. */}
+          <button
+            type="button"
+            className="text-sm font-medium text-ninja-flameSoft hover:underline"
+            onClick={() => setPairOpen((o) => !o)}
+            aria-expanded={pairOpen}
+          >
+            {pairOpen ? "Ocultar" : "¿Ya tenés el certificado y la clave privada? Cargalos juntos"}
+          </button>
+          {pairOpen && (
+            <div className="space-y-2 rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground">
+                La clave se guarda cifrada en el servidor y no se vuelve a mostrar. Tiene que ser la clave del certificado,
+                sin contraseña, de la CUIT de arriba.
+              </p>
+              <textarea
+                value={pairCert}
+                onChange={(e) => setPairCert(e.target.value)}
+                rows={4}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                aria-label="Certificado"
+                className="w-full rounded-lg border border-border bg-background p-3 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <textarea
+                value={pairKey}
+                onChange={(e) => setPairKey(e.target.value)}
+                rows={4}
+                placeholder="-----BEGIN PRIVATE KEY-----"
+                aria-label="Clave privada"
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full rounded-lg border border-border bg-background p-3 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <Button
+                disabled={!info?.cuit || pairCert.trim().length < 50 || pairKey.trim().length < 50}
+                loading={m.subirPar.isPending}
+                onClick={async () => {
+                  setProblems([]);
+                  try {
+                    const r = await m.subirPar.mutateAsync({ env, cert: pairCert, key: pairKey });
+                    if (!r.ok) {
+                      setProblems(r.messages ?? (r.problems ?? [r.error ?? "cert_invalido"]).map((code) => ({ code, ...humanError(code) })));
+                      return;
+                    }
+                    setPairCert("");
+                    setPairKey("");
+                    setPairOpen(false);
+                    toast({ title: "Certificado y clave cargados", variant: "success" });
+                  } catch (e) {
+                    toast({ title: "No se pudo cargar", description: arcaErrorMessage(e), variant: "error" });
+                  } finally {
+                    setPairKey("");
+                  }
+                }}
+              >
+                <ShieldCheck size={16} /> Validar y guardar los dos
+              </Button>
+            </div>
           )}
         </section>
       </div>

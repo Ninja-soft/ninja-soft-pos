@@ -12,6 +12,8 @@ import { useToast } from "@/components/ui/Toast";
 import { DniScanModal } from "@/components/customers/DniScanModal";
 import { CustomerPricingFields } from "@/components/customers/CustomerPricingFields";
 import { CustomerFiscalFields } from "@/components/customers/CustomerFiscalFields";
+import { PadronVerify } from "@/components/customers/PadronVerify";
+import { padronToCustomer, type FiscalVerification, type PadronPersona } from "@/lib/customers/padron";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import {
   CustomerSchema,
@@ -74,6 +76,23 @@ export function CustomerFormModal({
     toast({ title: "Datos del DNI cargados", variant: "success" });
   }
 
+  // ADR-133: datos del padrón de ARCA. "verificado" lo confirma el servidor
+  // con la consulta real; fiscal_verified_at nuevo pide (re)verificar.
+  const saved = customer as unknown as { fiscal_verification?: FiscalVerification; fiscal_verified_at?: string | null } | null;
+  function applyPadron(p: PadronPersona) {
+    const c = padronToCustomer(p);
+    const opts = { shouldValidate: true, shouldDirty: true } as const;
+    if (c.name) setValue("name", c.name, opts);
+    // Para factura A hace falta el tipo CUIT (ARCA no la acepta con CUIL).
+    if (c.iva_condition !== "consumidor_final") setValue("document_type", "cuit", opts);
+    setValue("iva_condition", c.iva_condition, opts);
+    if (c.address) setValue("address", c.address, opts);
+    if (c.iibb_jurisdiction) setValue("iibb_jurisdiction", c.iibb_jurisdiction, opts);
+    setValue("fiscal_verification", "padron", { shouldDirty: true });
+    setValue("fiscal_verified_at", new Date().toISOString(), { shouldDirty: true });
+    toast({ title: "Datos de ARCA cargados", description: "Revisalos y guardá el cliente.", variant: "success" });
+  }
+
   const req = required?.fields ?? {};
   // require_customer_doc (default true): exige tipo + número de documento.
   const requireDoc = required?.requireDoc ?? true;
@@ -114,6 +133,8 @@ export function CustomerFormModal({
         is_active: customer?.is_active ?? true,
         credit_limit: customer?.credit_limit ?? 0,
         group_id: (customer?.group_id as string | null) ?? "",
+        fiscal_verification: undefined,
+        fiscal_verified_at: undefined,
       });
     }
   }, [open, customer, reset]);
@@ -213,6 +234,13 @@ export function CustomerFormModal({
             {...register("document_number")}
           />
         </div>
+        <PadronVerify
+          docType={watch("document_type")}
+          docNumber={watch("document_number")}
+          verification={watch("fiscal_verification") ?? saved?.fiscal_verification ?? null}
+          verifiedAt={watch("fiscal_verification") === "padron" ? null : saved?.fiscal_verified_at ?? null}
+          onApply={applyPadron}
+        />
         <div>
           <label className="mb-2 block text-sm font-medium text-muted-foreground">
             Condición IVA{star("iva_condition")}
@@ -220,7 +248,14 @@ export function CustomerFormModal({
           {errors.iva_condition?.message && (
             <p className="mb-1 text-xs text-destructive">{errors.iva_condition.message}</p>
           )}
-          <select className={selectCls} {...register("iva_condition")}>
+          <select
+            className={selectCls}
+            {...register("iva_condition", {
+              // Elegida a mano: queda como "cargado a mano" (el servidor
+              // igual la compara con lo que informó ARCA).
+              onChange: () => setValue("fiscal_verification", "manual", { shouldDirty: true }),
+            })}
+          >
             <option value="">Sin especificar</option>
             {IVA_CONDITIONS.map((c) => (
               <option key={c} value={c} className="bg-popover text-popover-foreground">

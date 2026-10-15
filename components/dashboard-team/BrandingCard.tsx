@@ -14,8 +14,14 @@ import { resizeToWebp } from "@/lib/utils/image";
 import { cn } from "@/lib/utils/cn";
 import { cleanTradeName, TRADE_NAME_MAX } from "@/lib/branding/businessName";
 import { BUSINESS_NAME_QUERY_KEYS } from "@/modules/tenants/businessName";
+import { BrandingPadron, type BrandingPadronValues } from "@/components/dashboard-team/BrandingPadron";
+import { EMITTER_CONDITIONS, FISCAL_CONDITION_LABEL, JURISDICTIONS, isValidCuit } from "@/lib/tax/catalog";
+import { useSaveTaxSettings, useTaxSettings } from "@/modules/tax/hooks";
+import type { TaxSettings } from "@/modules/tax/api";
 
 const BUCKET = "tenant-assets";
+const selectCls =
+  "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15 disabled:opacity-60";
 
 type LooseSelect = {
   from: (t: string) => {
@@ -40,6 +46,17 @@ type Branding = {
   cuit: string | null;
   phone: string | null;
   address: string | null;
+  // ADR-133: datos fiscales para la factura (el comprobante lee iibb y
+  // activity_start de tenant_branding; la condición y la jurisdicción viven en
+  // tax_settings).
+  iibb: string | null;
+  activity_start: string | null;
+  iva_condition: string | null;
+  iibb_jurisdiction: string | null;
+  convenio_multilateral: boolean;
+  fiscal_source: "padron" | "manual" | null;
+  /** Se trajeron datos de ARCA en esta edición (pide verificar al servidor). */
+  verify_now: boolean;
 };
 const EMPTY: Branding = {
   trade_name: null,
@@ -50,6 +67,13 @@ const EMPTY: Branding = {
   cuit: null,
   phone: null,
   address: null,
+  iibb: null,
+  activity_start: null,
+  iva_condition: null,
+  iibb_jurisdiction: null,
+  convenio_multilateral: false,
+  fiscal_source: null,
+  verify_now: false,
 };
 
 type BrandingRow = { [K in keyof Branding]?: string | boolean | null };
@@ -61,6 +85,9 @@ type Ctx = {
   tenantName: string | null;
   /** false si la columna trade_name todavía no existe (migración sin aplicar). */
   tradeNameReady: boolean;
+  /** false si fiscal_source todavía no existe (migración de ADR-133 sin aplicar). */
+  fiscalReady: boolean;
+  fiscalVerifiedAt: string | null;
 } | null;
 
 export function BrandingCard() {
@@ -71,6 +98,8 @@ export function BrandingCard() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<Branding | null>(null);
   const [busy, setBusy] = useState(false);
+  const tax = useTaxSettings();
+  const saveTax = useSaveTaxSettings();
 
   const { data: ctx } = useQuery<Ctx>({
     queryKey: ["my-branding-ctx"],
@@ -88,10 +117,11 @@ export function BrandingCard() {
         .maybeSingle();
       if (!mem) return null;
       const canManage = ["owner", "manager"].includes(mem.role);
-      if (!canManage) return { tenantId: mem.tenant_id, canManage, branding: {}, tenantName: null, tradeNameReady: false };
+      if (!canManage)
+        return { tenantId: mem.tenant_id, canManage, branding: {}, tenantName: null, tradeNameReady: false, fiscalReady: false, fiscalVerifiedAt: null };
       // trade_name en consulta aparte: sin la migración aplicada la columna no
       // existe y el resto de la marca se tiene que poder editar igual.
-      const [{ data: b }, trade, { data: t }] = await Promise.all([
+      const [{ data: b }, trade, { data: t }, fiscal, invoice] = await Promise.all([
         supabase
           .from("tenant_branding")
           .select("logo_path, logo_url, accent, legal_name, cuit, phone, address")
@@ -103,14 +133,34 @@ export function BrandingCard() {
           .eq("tenant_id", mem.tenant_id)
           .maybeSingle(),
         supabase.from("tenants").select("name").eq("id", mem.tenant_id).maybeSingle(),
+        (supabase as unknown as LooseSelect)
+          .from("tenant_branding")
+          .select("fiscal_source, fiscal_verified_at")
+          .eq("tenant_id", mem.tenant_id)
+          .maybeSingle(),
+        (supabase as unknown as LooseSelect)
+          .from("tenant_branding")
+          .select("iibb, activity_start")
+          .eq("tenant_id", mem.tenant_id)
+          .maybeSingle(),
       ]);
+      const f = (fiscal.data as { fiscal_source?: string | null; fiscal_verified_at?: string | null } | null) ?? null;
+      const inv = (invoice.data as { iibb?: string | null; activity_start?: string | null } | null) ?? null;
       const tradeName = (trade.data as { trade_name?: string | null } | null)?.trade_name ?? null;
       return {
         tenantId: mem.tenant_id,
         canManage,
-        branding: { ...(b ?? {}), trade_name: tradeName },
+        branding: {
+          ...(b ?? {}),
+          trade_name: tradeName,
+          iibb: inv?.iibb ?? null,
+          activity_start: inv?.activity_start ?? null,
+          fiscal_source: f?.fiscal_source ?? null,
+        },
         tenantName: t?.name ?? null,
         tradeNameReady: !trade.error,
+        fiscalReady: !fiscal.error,
+        fiscalVerifiedAt: f?.fiscal_verified_at ?? null,
       };
     },
   });
@@ -128,19 +178,59 @@ export function BrandingCard() {
       cuit: (b.cuit as string | null) ?? null,
       phone: (b.phone as string | null) ?? null,
       address: (b.address as string | null) ?? null,
+      iibb: (b.iibb as string | null) ?? tax.data?.iibb_number ?? null,
+      activity_start: (b.activity_start as string | null) ?? tax.data?.activity_start ?? null,
+      iva_condition: tax.data?.iva_condition ?? null,
+      iibb_jurisdiction: tax.data?.iibb_jurisdiction ?? null,
+      convenio_multilateral: tax.data?.convenio_multilateral ?? false,
+      fiscal_source: (b.fiscal_source as "padron" | "manual" | null) ?? null,
+      verify_now: false,
     });
-  }, [ctx]);
+  }, [ctx, tax.data]);
 
   const save = useMutation({
     mutationFn: async () => {
       if (!form || !ctx) return;
-      const { trade_name, ...rest } = form;
-      const row: Record<string, unknown> = { tenant_id: ctx.tenantId, ...rest };
+      const {
+        trade_name,
+        iva_condition,
+        iibb_jurisdiction,
+        convenio_multilateral,
+        fiscal_source,
+        verify_now,
+        iibb,
+        activity_start,
+        ...rest
+      } = form;
+      const row: Record<string, unknown> = {
+        tenant_id: ctx.tenantId,
+        ...rest,
+        iibb: iibb?.trim() || null,
+        activity_start: activity_start || null,
+      };
       if (ctx.tradeNameReady) row.trade_name = cleanTradeName(trade_name);
+      // ADR-133: "padron" lo valida el trigger con la consulta real.
+      if (ctx.fiscalReady && fiscal_source) {
+        row.fiscal_source = fiscal_source;
+        if (fiscal_source === "padron" && verify_now) row.fiscal_verified_at = new Date().toISOString();
+      }
       const { error } = await supabase
         .from("tenant_branding")
         .upsert(row as never, { onConflict: "tenant_id" });
       if (error) throw error;
+      // Condición, IIBB e inicio también en Impuestos (la letra y ARCA los leen de ahí).
+      const t = tax.data;
+      if (t?.can_write && t.features.iva) {
+        const cuitDigits = (form.cuit ?? "").replace(/\D/g, "");
+        const patch: Partial<TaxSettings> = {};
+        if ((iva_condition ?? null) !== (t.iva_condition ?? null)) patch.iva_condition = iva_condition as TaxSettings["iva_condition"];
+        if (isValidCuit(cuitDigits) && cuitDigits !== (t.cuit ?? "")) patch.cuit = cuitDigits;
+        if ((iibb?.trim() || null) !== (t.iibb_number ?? null)) patch.iibb_number = iibb?.trim() || null;
+        if ((iibb_jurisdiction ?? null) !== (t.iibb_jurisdiction ?? null)) patch.iibb_jurisdiction = iibb_jurisdiction;
+        if (convenio_multilateral !== t.convenio_multilateral) patch.convenio_multilateral = convenio_multilateral;
+        if ((activity_start || null) !== (t.activity_start ?? null)) patch.activity_start = activity_start || null;
+        if (Object.keys(patch).length > 0) await saveTax.mutateAsync(patch);
+      }
     },
     onSuccess: () => {
       toast({ title: "Marca guardada", variant: "success" });
@@ -148,7 +238,14 @@ export function BrandingCard() {
       for (const queryKey of BUSINESS_NAME_QUERY_KEYS) qc.invalidateQueries({ queryKey: [...queryKey] });
       router.refresh();
     },
-    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
+    onError: (e) =>
+      toast({
+        title: "No se pudo guardar",
+        description: /padron_verification_missing/.test(String((e as { message?: string } | null)?.message ?? ""))
+          ? "Volvé a consultar ARCA con ese CUIT antes de guardar."
+          : undefined,
+        variant: "error",
+      }),
   });
 
   if (!ctx || !ctx.canManage || !form) return null;
@@ -156,6 +253,10 @@ export function BrandingCard() {
 
   function set<K extends keyof Branding>(k: K, v: Branding[K]) {
     setForm((f) => (f ? { ...f, [k]: v } : f));
+  }
+  // Editar a mano un dato que puede venir de ARCA lo marca "cargado a mano".
+  function setFiscal<K extends keyof Branding>(k: K, v: Branding[K]) {
+    setForm((f) => (f ? { ...f, [k]: v, fiscal_source: "manual", verify_now: false } : f));
   }
 
   async function onLogo(file: File | undefined) {
@@ -282,10 +383,95 @@ export function BrandingCard() {
               />
             </div>
           )}
-          <Input label="Razón social" value={form.legal_name ?? ""} onChange={(e) => set("legal_name", e.target.value)} />
-          <Input label="CUIT" value={form.cuit ?? ""} onChange={(e) => set("cuit", e.target.value)} />
+          <Input
+            label="CUIT"
+            inputMode="numeric"
+            value={form.cuit ?? ""}
+            onChange={(e) => set("cuit", e.target.value)}
+            error={(form.cuit ?? "").replace(/\D/g, "").length === 11 && !isValidCuit(form.cuit) ? "CUIT inválida: revisá los 11 números" : undefined}
+            hint="Con el CUIT completo traemos tus datos de ARCA."
+          />
           <Input label="Teléfono" value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
-          <Input label="Dirección" value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} />
+          {ctx.fiscalReady && (
+            <div className="sm:col-span-2">
+              <BrandingPadron
+                cuit={form.cuit}
+                current={{
+                  legal_name: form.legal_name,
+                  iva_condition: form.iva_condition,
+                  address: form.address,
+                  activity_start: form.activity_start,
+                  iibb_jurisdiction: form.iibb_jurisdiction,
+                }}
+                source={form.fiscal_source}
+                verifiedAt={form.verify_now ? null : ctx.fiscalVerifiedAt}
+                onAccept={(v: Partial<BrandingPadronValues>) =>
+                  setForm((f) => (f ? { ...f, ...v, fiscal_source: "padron", verify_now: true } : f))
+                }
+              />
+            </div>
+          )}
+          <Input label="Razón social" value={form.legal_name ?? ""} onChange={(e) => setFiscal("legal_name", e.target.value)} />
+          <Input label="Dirección" value={form.address ?? ""} onChange={(e) => setFiscal("address", e.target.value)} />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">Condición frente al IVA</label>
+            <select
+              className={selectCls}
+              value={form.iva_condition ?? ""}
+              disabled={!tax.data?.can_write}
+              onChange={(e) => setFiscal("iva_condition", e.target.value || null)}
+            >
+              <option value="">Sin definir</option>
+              {EMITTER_CONDITIONS.map((c) => (
+                <option key={c} value={c} className="bg-popover text-popover-foreground">
+                  {FISCAL_CONDITION_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Input
+            label="Inicio de actividades"
+            type="date"
+            value={form.activity_start ?? ""}
+            onChange={(e) => setFiscal("activity_start", e.target.value || null)}
+          />
+          <Input
+            label="N° de Ingresos Brutos"
+            value={form.iibb ?? ""}
+            maxLength={30}
+            onChange={(e) => set("iibb", e.target.value)}
+            hint="Sale en tus facturas. ARCA no lo informa: cargalo a mano."
+          />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">Ingresos Brutos</label>
+            <select
+              className={selectCls}
+              value={form.convenio_multilateral ? "cm" : "local"}
+              disabled={!tax.data?.can_write}
+              onChange={(e) => set("convenio_multilateral", e.target.value === "cm")}
+            >
+              <option value="local">Local (una sola provincia)</option>
+              <option value="cm">Convenio Multilateral</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              {form.convenio_multilateral ? "Jurisdicción sede" : "Jurisdicción"}
+            </label>
+            <select
+              className={selectCls}
+              value={form.iibb_jurisdiction ?? ""}
+              disabled={!tax.data?.can_write}
+              onChange={(e) => set("iibb_jurisdiction", e.target.value || null)}
+            >
+              <option value="">Sin especificar</option>
+              {JURISDICTIONS.map((j) => (
+                <option key={j.code} value={j.code} className="bg-popover text-popover-foreground">
+                  {j.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {/* Las opciones del ticket (ancho, textos, logo) viven en su propia
             sección: Configuración › Ticket. Acá sólo marca y datos. */}

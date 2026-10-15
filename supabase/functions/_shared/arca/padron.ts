@@ -42,6 +42,28 @@ export function rateLimited(counts: { tenantHour: number; globalHour: number }):
   return null;
 }
 
+/**
+ * Cupo de la consulta para los negocios (ADR-133): configurable en internal
+ * (arca_padron_config). Cuenta sólo las consultas que llegan a ARCA (la cache
+ * no consume cupo). null = hay cupo; si no, cuál se agotó.
+ */
+export interface PadronQuota {
+  tenant_per_hour: number;
+  tenant_per_day: number;
+  global_per_hour: number;
+}
+export interface PadronUsage {
+  tenant_hour: number;
+  tenant_day: number;
+  global_hour: number;
+}
+export function quotaExceeded(u: PadronUsage, q: PadronQuota): "global" | "tenant_hour" | "tenant_day" | null {
+  if (u.global_hour >= q.global_per_hour) return "global";
+  if (u.tenant_hour >= q.tenant_per_hour) return "tenant_hour";
+  if (u.tenant_day >= q.tenant_per_day) return "tenant_day";
+  return null;
+}
+
 export function isFresh(fetchedAt: string | Date | null | undefined, now: Date = new Date(), days = PADRON_CACHE_DAYS): boolean {
   if (!fetchedAt) return false;
   const t = new Date(fetchedAt).getTime();
@@ -102,6 +124,33 @@ export interface PadronPersona {
   monotributo_categoria: string | null;
   /** Errores informativos de la constancia (p. ej. sin impuestos activos). */
   avisos: string[];
+  /** Actividades declaradas (régimen general o monotributo), en orden. ADR-133. */
+  actividades?: PadronActividad[];
+  /** Domicilio fiscal en partes (para autocompletar el cliente). ADR-133. */
+  domicilio_partes?: PadronDomicilio | null;
+  /**
+   * Inicio de actividades APROXIMADO (AAAA-MM-01): ARCA no lo informa en la
+   * constancia; sale del período de alta más viejo de los impuestos activos
+   * (IVA, monotributo, ganancias). Se muestra como sugerencia a confirmar.
+   */
+  inicio_actividades?: string | null;
+  /** Fecha del contrato social (sólo personas jurídicas, si viene). */
+  fecha_contrato_social?: string | null;
+}
+
+export interface PadronActividad {
+  id: string | null;
+  descripcion: string;
+  orden: number | null;
+}
+
+export interface PadronDomicilio {
+  direccion: string | null;
+  localidad: string | null;
+  provincia: string | null;
+  cod_postal: string | null;
+  /** Código de provincia de ARCA (0 = CABA, 1 = Buenos Aires, ...). */
+  id_provincia: number | null;
 }
 
 export type PadronResult =
@@ -133,6 +182,38 @@ function impuestosDe(block: string | null): number[] {
     .filter((n): n is number => n != null);
 }
 
+function actividadesDe(rg: string | null, mt: string | null): PadronActividad[] {
+  const out: PadronActividad[] = [];
+  const add = (block: string) => {
+    const descripcion = text(block, "descripcionActividad") ?? "";
+    if (!descripcion) return;
+    out.push({ id: text(block, "idActividad"), descripcion, orden: num(block, "orden") });
+  };
+  if (rg) for (const a of rawAll(rg, "actividad")) add(a);
+  if (mt) for (const a of rawAll(mt, "actividadMonotributista")) add(a);
+  return out
+    .filter((a, i, all) => all.findIndex((b) => b.id === a.id && b.descripcion === a.descripcion) === i)
+    .sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
+}
+
+/** Período AAAAMM más viejo de los impuestos → "AAAA-MM-01". */
+export function inicioDesdePeriodos(blocks: (string | null)[]): string | null {
+  let min: number | null = null;
+  for (const b of blocks) {
+    if (!b) continue;
+    for (const imp of [...rawAll(b, "impuesto"), ...rawAll(b, "categoriaMonotributo")]) {
+      const per = num(imp, "periodo");
+      if (per == null || per < 190001 || per > 299912) continue;
+      if (min == null || per < min) min = per;
+    }
+  }
+  if (min == null) return null;
+  const y = Math.floor(min / 100);
+  const m = min % 100;
+  if (m < 1 || m > 12) return null;
+  return `${y}-${String(m).padStart(2, "0")}-01`;
+}
+
 function joinParts(parts: (string | null | undefined)[]): string | null {
   const s = parts.map((p) => (p ?? "").trim()).filter(Boolean).join(", ");
   return s || null;
@@ -144,6 +225,9 @@ export function parsePersonaV2(xml: string, cuitConsultado?: string): PadronResu
   if (fault) {
     const m = fault.message || fault.code;
     if (/no existe persona/i.test(m)) return { status: "no_encontrado", message: m };
+    if (/no autorizad|not authorized|sin permiso|no tiene permiso/i.test(m)) {
+      return { status: "error", code: "padron_no_autorizado", message: m };
+    }
     return { status: "error", code: fault.code || "padron_fault", message: m };
   }
   const ret = raw(xml, "personaReturn");
@@ -167,7 +251,8 @@ export function parsePersonaV2(xml: string, cuitConsultado?: string): PadronResu
     ? joinParts([text(dom, "direccion"), text(dom, "localidad"), provincia, text(dom, "codPostal") ? `CP ${text(dom, "codPostal")}` : null])
     : null;
 
-  const rg = impuestosDe(raw(ret, "datosRegimenGeneral"));
+  const rgBlock = raw(ret, "datosRegimenGeneral");
+  const rg = impuestosDe(rgBlock);
   const mtBlock = raw(ret, "datosMonotributo");
   const mt = impuestosDe(mtBlock);
   const cat = mtBlock ? raw(mtBlock, "categoriaMonotributo") : null;
@@ -188,6 +273,18 @@ export function parsePersonaV2(xml: string, cuitConsultado?: string): PadronResu
       impuestos: [...rg, ...mt],
       monotributo_categoria: cat ? text(cat, "descripcionCategoria") : null,
       avisos,
+      actividades: actividadesDe(rgBlock, mtBlock),
+      inicio_actividades: inicioDesdePeriodos([rgBlock, mtBlock]),
+      fecha_contrato_social: (text(gen, "fechaContratoSocial") ?? "").slice(0, 10) || null,
+      domicilio_partes: dom
+        ? {
+            direccion: text(dom, "direccion"),
+            localidad: text(dom, "localidad"),
+            provincia,
+            cod_postal: text(dom, "codPostal"),
+            id_provincia: num(dom, "idProvincia"),
+          }
+        : null,
     },
   };
 }

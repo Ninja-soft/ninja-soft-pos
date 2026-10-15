@@ -20,7 +20,7 @@
 //        { action: "subir_certificado", environment, cert_pem }
 //        { action: "caea_tareas" }                pedir/informar CAEA ya
 //      staff interno (app_metadata.is_internal):
-//        { action: "platform_set_cuit" | "platform_generar_csr" | "platform_subir_certificado", ... }
+//        { action: "platform_set_cuit" | "platform_generar_csr" | "platform_subir_certificado" | "platform_subir_par" (ADR-133), ... }
 //
 // Secretos: ARCA_KEY_ENC (32 bytes base64) cifra las claves privadas; nunca
 // sale de acá. Token y Sign de WSAA no se loguean ni se guardan en el XML.
@@ -491,6 +491,43 @@ async function platformAction(admin: SupabaseClient, userId: string, action: str
     const keyEnc = await encryptSecret(keyPem, masterKey(), keyAad("platform", env));
     await admin.rpc("arca_platform_store", { p_user: userId, p_env: env, p: { csr_pem: csr, key_enc: keyEnc, audit_action: "arca_platform_csr" } });
     return json({ ok: true, csr_pem: csr, alias });
+  }
+  // ADR-133: certificado y clave privada que ya tiene NinjaSoft (generados
+  // fuera, p. ej. con openssl). Se valida el par contra la CUIT y ARCA, la
+  // clave se cifra con ARCA_KEY_ENC y nunca vuelve al navegador ni se loguea.
+  if (action === "platform_subir_par") {
+    const certPem = String(body.cert_pem ?? "");
+    const keyPem = String(body.key_pem ?? "").trim();
+    if (!/^-----BEGIN (RSA |EC )?PRIVATE KEY-----/.test(keyPem) || keyPem.length > 20_000) {
+      return json({ ok: false, error: "cert_check_failed", problems: ["clave_invalida"], messages: [{ code: "clave_invalida", title: "La clave privada no es válida", action: "Pegá la clave en formato PEM (empieza con -----BEGIN PRIVATE KEY----- o -----BEGIN RSA PRIVATE KEY-----)." }] });
+    }
+    let chk: ReturnType<typeof checkCertificate>;
+    try {
+      chk = checkCertificate(certPem, keyPem, { cuit: p.cuit, issuerCn: EXPECTED_ISSUER_CN[env] });
+    } catch {
+      return json({ ok: false, error: "cert_check_failed", problems: ["clave_invalida"], messages: [{ code: "clave_invalida", title: "No se pudo leer la clave privada", action: "Revisá que sea la clave del certificado y que no tenga contraseña." }] });
+    }
+    if (!chk.ok || !chk.info) {
+      return json({ ok: false, error: "cert_check_failed", problems: chk.problems, messages: chk.problems.map((x) => ({ code: x, ...humanError(x) })) });
+    }
+    const i = chk.info;
+    const keyEnc = await encryptSecret(keyPem + "\n", masterKey(), keyAad("platform", env));
+    await admin.rpc("arca_platform_store", {
+      p_user: userId,
+      p_env: env,
+      p: {
+        key_enc: keyEnc,
+        csr_pem: null,
+        cert_pem: certPem.trim() + "\n",
+        subject: i.subject,
+        issuer: i.issuer,
+        serial: i.serial,
+        not_after: i.notAfter,
+        fingerprint_sha256: i.fingerprintSha256,
+        audit_action: "arca_platform_key_pair",
+      },
+    });
+    return json({ ok: true, certificate: { environment: env, cuit: i.cuit, subject: i.subject, not_after: i.notAfter } });
   }
   if (action === "platform_subir_certificado") {
     if (!p.key_enc) return json({ ok: false, error: "csr_faltante" });

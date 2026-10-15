@@ -79,10 +79,10 @@ export const SECTION_INFO: Record<string, SectionInfo> = {
   },
   etiquetas: {
     title: "Etiquetas",
-    what: "El generador de etiquetas de góndola/producto, listas para imprimir.",
+    what: "El generador de etiquetas de góndola y producto para etiquetadoras térmicas o en hoja A4 / Carta.",
     enables:
-      "Elegir productos y la cantidad de etiquetas por cada uno, e imprimir nombre, precio y código de barras (barcode o SKU).",
-    tip: "Si un producto no tiene barcode, se imprime el SKU. Cargá los códigos en Productos para escanear más rápido.",
+      "Etiquetar todo lo que tiene stock o todo el catálogo, por sucursal, depósito, categorías y marcas, con una por producto, igual al stock o una cantidad fija; elegir modelo y tamaño (rollos de 1 a 3 columnas o grillas A4 con marcas de corte) e imprimir tal cual se ve, o sacar ZPL para la Zebra.",
+    tip: "En el diálogo de impresión dejá márgenes en Ninguno y escala 100%. Con Etiquetas PRO personalizás el diseño, guardás plantillas y sumás un QR a la ficha pública del producto.",
     feature: "productos",
   },
   configuracion: {

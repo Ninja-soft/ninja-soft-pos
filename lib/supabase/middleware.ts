@@ -57,6 +57,8 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/c/") ||
+    // Ficha pública del producto (QR de la etiqueta, ADR-148).
+    pathname.startsWith("/p/") ||
     pathname.startsWith("/pagar/") ||
     // Link de aceptación de un presupuesto (ADR-122): lo abre el cliente.
     pathname.startsWith("/presupuesto/");

@@ -981,6 +981,12 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] Webhooks para venta, pago, stock, cliente, turno, factura, comanda, notificación y cambio de plan.
   - [ ] Marketplace de apps: integración aprobada, permisos visibles, instalación/desinstalación y health por app.
   - [ ] *Criterio:* un partner recibe webhook de venta, consulta detalle por API y queda auditado por tenant.
+- [ ] **H68b — Portal de desarrolladores de la API pública (pedido del dueño, 15/10).** Ordenar Configuración › Integraciones › API como un portal estilo docs de API (referencia: developers-sandbox.andreani.com), no un JSON crudo.
+  - [ ] Documentación navegable por recurso (autenticación, productos, variantes, atributos, imágenes, precios y listas, stock por sucursal y depósito, clientes, ventas): descripción, parámetros, ejemplos de request y respuesta, errores y límites, en español claro. Descargable (PDF/HTML) y para compartir por email.
+  - [ ] Colección de Postman completa para descargar, con las credenciales del negocio ya cargadas como variables de entorno (sin exponer secretos en la página: se completan al generar o al descargar con confirmación), carpetas por recurso y notas explicativas en cada pedido.
+  - [ ] Alta de productos robusta por API: todos los atributos (marca, categoría, códigos, medidas, impuestos, variantes, atributos libres, costos y precios por lista) y carga de imágenes en el alta (URL o archivo), lectura completa del producto.
+  - [ ] Sandbox de prueba de libre acceso (página pública): pegar credenciales, elegir endpoint, editar el cuerpo y probar lectura y escritura contra un entorno de prueba aislado, con la respuesta formateada.
+  - [ ] *Criterio:* un integrador nuevo descarga la colección, prueba en el sandbox y da de alta un producto con atributos e imágenes sin pedir soporte.
 
 ### F15 — Escuela NinjaSoft + onboarding guiado configurable
 

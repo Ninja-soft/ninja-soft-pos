@@ -43,6 +43,7 @@ const METHOD_LABEL: Record<string, string> = {
   account: "Cuenta corriente",
   store_credit: "Saldo a favor",
   directo: "Directo",
+  ualabis: "Ualá Bis",
   sena: "Seña del turno",
   plataforma: "App de delivery",
   other: "Otro medio",
@@ -65,6 +66,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   fiserv_point: "Clover",
   gocuotas: "GO Cuotas",
   directo: "Directo",
+  ualabis: "Ualá Bis",
   modo: "MODO",
   mobbex: "Mobbex",
   pagos360: "Pagos360",
@@ -91,6 +93,7 @@ const vstr = (v: Record<string, unknown> | null, k: string): string | null => {
 export function paymentProviderKey(p: SalePaymentRow, intent: PaymentIntentRow | null): string | null {
   if (intent) return intent.provider_key;
   if (p.method === "directo") return "directo";
+  if (p.method === "ualabis") return "ualabis";
   return vstr(p.card_voucher, "adquirente");
 }
 

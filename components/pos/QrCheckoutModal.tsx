@@ -186,6 +186,14 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
       return "Falta la URL de la API de Directo. Cargala en Configuración → Medios de pago.";
     case "directo_error":
       return "Directo devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
+    case "ualabis_min_amount":
+      return "Ualá Bis acepta cobros desde $25. Para montos menores usá otro medio de pago.";
+    case "ualabis_max_amount":
+      return "Ualá Bis acepta cobros de hasta $9.999.999 por link. Dividí el cobro o usá otro medio.";
+    case "ualabis_auth_failed":
+      return "Ualá Bis rechazó las credenciales. Probalas en Configuración → Medios de pago → Ualá Bis (y revisá que sean del mismo ambiente que el switch Sandbox).";
+    case "ualabis_error":
+      return "Ualá Bis devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "nave_auth_failed":
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
@@ -231,7 +239,8 @@ export function QrCheckoutModal({
     | "getnet"
     | "nave"
     | "gocuotas"
-    | "directo";
+    | "directo"
+    | "ualabis";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -269,6 +278,7 @@ export function QrCheckoutModal({
   // GO Cuotas: checkout de GO Cuotas (el cliente elige 2 a 4 cuotas con su
   // débito ahí).
   // Directo: el cliente arma su crédito en la página de Directo.
+  // Ualá Bis: checkout de Ualá (tarjeta y cuotas se eligen ahí).
   const selfManaged = QR_SELF_MANAGED.has(provider);
   const { toast } = useToast();
   // Caja QR de MP registrada para esta caja (F17 · H93, ADR-049).
@@ -428,7 +438,9 @@ export function QrCheckoutModal({
                     ? posApi.createGoCuotasLink
                     : provider === "directo"
                       ? posApi.createDirectoLink
-                      : posApi.createMpQr;
+                      : provider === "ualabis"
+                        ? posApi.createUalaBisLink
+                        : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => {
@@ -483,7 +495,8 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
-  //  - GO Cuotas y Directo: baja local del intent (no anulan órdenes por API).
+  //  - GO Cuotas, Directo y Ualá Bis: baja local del intent (no anulan órdenes
+  //    por API).
   function close() {
     if (intentId && phase === "waiting" && !parkedRef.current && !parkingRef.current) {
       if (provider === "mercadopago" && mpChannel === "order") {
@@ -494,6 +507,8 @@ export function QrCheckoutModal({
         posApi.cancelGoCuotasIntent(intentId).catch(() => null);
       } else if (provider === "directo") {
         posApi.cancelDirectoIntent(intentId).catch(() => null);
+      } else if (provider === "ualabis") {
+        posApi.cancelUalaBisIntent(intentId).catch(() => null);
       }
     }
     onOpenChange(false);
@@ -585,7 +600,9 @@ export function QrCheckoutModal({
                   ? posApi.gocuotasIntentStatus(intentId!)
                   : provider === "directo"
                     ? posApi.directoIntentStatus(intentId!)
-                    : posApi.mpIntentStatus(intentId!),
+                    : provider === "ualabis"
+                      ? posApi.ualabisIntentStatus(intentId!)
+                      : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching && !parking,

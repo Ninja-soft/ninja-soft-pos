@@ -7,7 +7,7 @@
 // reporte; esto lo usa la UI para la vista previa del editor y los tests.
 // =============================================================================
 
-export const FEE_METHODS = ["debit", "credit", "qr", "transfer", "other", "directo"] as const;
+export const FEE_METHODS = ["debit", "credit", "qr", "transfer", "other", "directo", "ualabis"] as const;
 export type FeeMethod = (typeof FEE_METHODS)[number];
 
 /** IVA sobre la comisión del procesador (Argentina, 21 %). */

@@ -60,6 +60,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   fiserv_point: "El monto viaja a tu terminal Clover: tarjeta, contactless y cuotas",
   gocuotas: "2 a 4 cuotas sin interés con débito",
   directo: "QR y link de Directo, o registro manual de la operación",
+  ualabis: "Link de pago y QR por API, o registro de tu QR, POS o Tap",
 };
 
 // Explicación desplegable por canal: qué pasa al activarlo y cómo es el cobro.
@@ -178,6 +179,15 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "GO Cuotas nos avisa, verificamos la orden y la venta se cierra sola.",
     ],
   },
+  ualabis: {
+    activa:
+      "Conectada la API, el POS arma un link de pago de Ualá Bis (también como QR) y la venta se cierra sola al acreditarse. Sin conectar, o para tu QR, POS Mini, POS Pro o Tap en tu celu, cobrás en la app de Ualá y cargás el número de operación.",
+    pasos: [
+      "En el POS elegís Ualá Bis: Link, QR o QR, POS o Tap.",
+      "Con Link o QR el cliente paga con tarjeta en el checkout de Ualá Bis.",
+      "Ualá nos avisa, verificamos la orden y la venta se cierra sola.",
+    ],
+  },
   pagos360: {
     activa: "Se genera una solicitud de pago y el cliente paga desde el link o el QR.",
     pasos: [
@@ -210,6 +220,7 @@ export const CHANNEL_CAPS: Record<string, ChannelCap[]> = {
   pagos360: ["qr", "link"],
   gocuotas: ["qr", "link"],
   directo: ["qr", "link"],
+  ualabis: ["qr", "link"],
   fiserv: ["point"],
   fiserv_point: ["point"],
 };
@@ -340,6 +351,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
     ],
     where: "Mail de integración de Directo (comercial o soporte de comercios)",
     note: "QA y producción usan credenciales y URL distintas. Sin conectar, igual podés cobrar en su portal y registrar el número de operación.",
+  },
+  ualabis: {
+    steps: [
+      { icon: "login", text: "Entrá a la app o a la web de Ualá con tu cuenta de Ualá Bis." },
+      { icon: "code", text: "Abrí Ualá Bis › Cobros online › API." },
+      { icon: "key", text: "Copiá el usuario, el Client ID y el Client Secret del ambiente que vas a usar." },
+    ],
+    where: "Ualá Bis › Cobros online › API",
+    note: "Prueba y producción tienen credenciales distintas. Sin conectar, igual podés registrar los cobros de tu QR, POS o Tap con el número de operación.",
   },
   mobbex: {
     steps: [

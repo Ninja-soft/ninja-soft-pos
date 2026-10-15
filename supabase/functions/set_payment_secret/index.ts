@@ -25,6 +25,7 @@ import {
 } from "../_shared/paymentSecrets.ts";
 import { assessGetnetCredential, getnetPanRelayEnabled } from "../_shared/getnet_server.ts";
 import { webCheckoutSaveVerdict } from "../_shared/getnet_api.ts";
+import { isAuthFailure, parseCreds as parseUalaCreds, ualabisClient } from "../_shared/ualabis.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -58,6 +59,10 @@ const ALLOWED = new Set([
   // merchant_name, subscription_key (opcional, APIM) y api_base_url (la URL
   // de la API que Directo le da al comercio para QA o producción).
   "directo",
+  // Ualá Bis (ADR-143): username, client_id y client_secret_id de Ualá Bis ›
+  // Cobros online › API. El ambiente lo define el switch Sandbox del medio
+  // (stage vs producción). Se prueban antes de guardarlas.
+  "ualabis",
 ]);
 
 Deno.serve(async (req: Request) => {
@@ -173,6 +178,18 @@ Deno.serve(async (req: Request) => {
       if (verdict === "checkout_api_credentials") return json({ error: "getnet_checkout_api_credentials" }, 422);
       if (verdict === "invalid_credentials") return json({ error: "getnet_invalid_credentials" }, 422);
     }
+  }
+
+  // Ualá Bis (ADR-143): credenciales nuevas se prueban pidiendo un token en el
+  // ambiente elegido. Si Ualá las rechaza, no se guardan (un corte de red no
+  // frena el guardado: "Probar conexión" lo muestra después).
+  if (providerKey === "ualabis") {
+    const creds = parseUalaCreds(clean);
+    if (!creds) return json({ error: "ualabis_missing_fields" }, 400);
+    const env = clean.environment === "test" ? "stage" : "prod";
+    const t = await ualabisClient({ creds, env }).token(true);
+    if (!t.ok && isAuthFailure(t.httpStatus)) return json({ error: "ualabis_invalid_credentials" }, 422);
+    delete clean.environment;
   }
 
   // merge (ADR-032): agrega/quita claves sin pisar el resto del secreto. Lo

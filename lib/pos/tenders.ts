@@ -22,6 +22,8 @@ export type SaleMethod =
   | "store_credit"
   | "account"
   | "directo"
+  // Ualá Bis (ADR-143): QR, POS o Tap registrados con número de operación.
+  | "ualabis"
   // Seña del turno ya cobrada (ADR-088): la agrega la hoja, no es un tender.
   | "sena";
 
@@ -67,7 +69,8 @@ export type QrProviderKey =
   | "getnet"
   | "nave"
   | "gocuotas"
-  | "directo";
+  | "directo"
+  | "ualabis";
 export type PointProviderKey = "mercadopago_point" | "nave_point" | "fiserv_point";
 
 export interface TenderDef {
@@ -104,6 +107,11 @@ export interface TenderDef {
   qrMode?: "own";
   /** Exige un número de operación (viaja como reference del pago). */
   requiresReference?: boolean;
+  /**
+   * Ayuda bajo el número de operación ({monto} = total a cobrar). Sin ella:
+   * "Cobrá {monto} en el portal de {marca}...".
+   */
+  referenceHelp?: string;
   /** Monto mínimo que acepta el proveedor. */
   minAmount?: number;
   /**
@@ -164,6 +172,7 @@ const LOGO = {
   pagos360: icon("pagos360"),
   gocuotas: icon("gocuotas"),
   directo: icon("directo"),
+  ualabis: icon("ualabis"),
   clover: icon("fiserv_point"),
 } as const;
 
@@ -369,6 +378,29 @@ export const TENDERS: TenderDef[] = [
     requiresReference: true,
     manualFallback: true,
   },
+  // Ualá Bis (ADR-143): con la API conectada, link de pago y QR del checkout
+  // de Ualá (desde $25). El registro manual cubre lo que no tiene API (QR de
+  // Ualá, POS Mini / Pro, Tap en tu celu) y se ofrece siempre: no es respaldo.
+  { ...qr("ualabis", "Ualá Bis", "wallets", "link", "Link de pago con tarjeta"), minAmount: 25 },
+  { ...qr("ualabis", "Ualá Bis", "wallets", "qr", "Tarjeta desde el celular"), minAmount: 25 },
+  {
+    id: "ualabis",
+    group: "wallets",
+    brand: "ualabis",
+    brandLabel: "Ualá Bis",
+    channel: "manual",
+    label: "QR, POS o Tap",
+    method: "ualabis",
+    provider: "ualabis",
+    connection: null,
+    featureKey: providerFeature("ualabis"),
+    logo: LOGO.ualabis,
+    flow: "direct",
+    hint: "Con número de operación",
+    requiresReference: true,
+    referenceHelp:
+      "Cobrá {monto} con el QR, el POS o Tap en tu celu de Ualá Bis y cargá el número de operación que te muestra la app.",
+  },
   {
     id: "store_credit",
     group: "customer",
@@ -440,7 +472,7 @@ export interface ProviderStatus {
 // Medios con checkout propio: medio y cuotas se resuelven en su pantalla, así
 // que el recargo plano del medio se suma siempre al monto del QR / link.
 // Espejo del criterio de QrCheckoutModal.
-export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo"]);
+export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis"]);
 
 export interface TenderContext {
   /** Todas las filas de tenant_payment_methods (habilitadas o no). */

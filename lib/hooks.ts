@@ -14,6 +14,7 @@ export const WEBHOOK_FUNCTIONS: Record<string, string> = {
   nave: "nave_webhook",
   gocuotas: "gocuotas_webhook",
   directo: "directo_webhook",
+  ualabis: "ualabis_webhook",
   clover: "clover_webhook",
   modo: "modo_webhook",
   mobbex: "mobbex_webhook",

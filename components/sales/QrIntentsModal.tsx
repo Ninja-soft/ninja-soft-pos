@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Download } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +17,9 @@ import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
 import { paymentIcon } from "@/lib/payments/logos";
 import { ThemedLogo } from "@/components/ui/ThemedLogo";
+import { posApi } from "@/modules/pos/api";
+import { latestRefundByIntent } from "@/lib/payments/ualabis";
+import { UalaBisRefundAction } from "@/components/sales/UalaBisRefundAction";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -29,6 +33,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   fiserv_point: "Clover Point",
   gocuotas: "GO Cuotas",
   directo: "Directo",
+  ualabis: "Ualá Bis",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -79,6 +84,19 @@ export function QrIntentsModal({
       ),
     [intents, provider, status],
   );
+
+  // Ualá Bis (ADR-143): devoluciones de sus cobros aprobados.
+  const qc = useQueryClient();
+  const ualaIds = useMemo(
+    () => filtered.filter((i) => i.provider_key === "ualabis" && i.status === "approved").map((i) => i.id),
+    [filtered],
+  );
+  const { data: ualaRefunds } = useQuery({
+    queryKey: ["ualabis-refunds", ualaIds],
+    queryFn: () => posApi.listUalaBisRefunds(ualaIds),
+    enabled: open && ualaIds.length > 0,
+  });
+  const refundByIntent = useMemo(() => latestRefundByIntent(ualaRefunds ?? []), [ualaRefunds]);
 
   const orphans = useMemo(
     () => filtered.filter((i) => i.status === "approved" && i.saleNumber === null),
@@ -146,6 +164,7 @@ export function QrIntentsModal({
           <option value="">Todos los medios</option>
           <option value="mercadopago">Mercado Pago</option>
           <option value="mobbex">Mobbex</option>
+          <option value="ualabis">Ualá Bis</option>
         </select>
         <select
           value={status}
@@ -246,6 +265,16 @@ export function QrIntentsModal({
                       </span>
                     ) : (
                       <NoData />
+                    )}
+                    {i.provider_key === "ualabis" && (
+                      <div className="mt-1">
+                        <UalaBisRefundAction
+                          intent={i}
+                          refund={refundByIntent.get(i.id)}
+                          onRefund={posApi.refundUalaBisIntent}
+                          onDone={() => void qc.invalidateQueries({ queryKey: ["ualabis-refunds"] })}
+                        />
+                      </div>
                     )}
                   </td>
                 </tr>

@@ -4,13 +4,14 @@
 //
 // Cron (pg_cron + pg_net, cada 2 min): header X-Cron-Secret ==
 // platform_secrets('internal_cron').token. Toma los cobros 'waiting' sin
-// vencer de los proveedores sin webhook (hoy Pagos360) y re-consulta cada
+// vencer de los proveedores sin webhook (Pagos360) o con un webhook de pocos
+// reintentos (Ualá Bis, ADR-143: 4 intentos sin firma) y re-consulta cada
 // intent. Si el proveedor acreditó, el intent pasa a 'approved' y el trigger
 // de la base (pending_charges_on_intent_status) registra la venta en el acto.
 // Nunca confía en nada que no venga de la API del proveedor con la credencial
 // del negocio (misma regla que la Edge del proveedor).
 //
-// Los proveedores con webhook (Mercado Pago, MODO, Mobbex, Payway, Getnet,
+// Los demás proveedores con webhook (Mercado Pago, MODO, Mobbex, Payway, Getnet,
 // Nave, GO Cuotas, Directo) no pasan por acá: su webhook ya actualiza el intent
 // y el trigger completa. El POS además sondea mientras está abierto.
 //
@@ -20,6 +21,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { loadPagos360, syncPagos360Intent } from "../_shared/pagos360_server.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
+import {
+  INTENT_COLS as UALA_INTENT_COLS,
+  loadCredsScoped as loadUala,
+  syncIntent as syncUala,
+  type IntentRow as UalaIntentRow,
+} from "../_shared/ualabis_server.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -56,13 +63,14 @@ Deno.serve(async (req: Request) => {
     .eq("status", "waiting")
     .is("deleted_at", null)
     .gt("expires_at", new Date().toISOString())
-    .in("provider_key", ["pagos360"])
+    .in("provider_key", ["pagos360", "ualabis"])
     .order("created_at", { ascending: true })
     .limit(MAX_PER_RUN);
   if (error) return json({ error: "query_failed", detail: error.message }, 500);
 
-  const byTenant = new Map<string, { id: string; intent_id: string }[]>();
-  for (const c of (charges ?? []) as { id: string; tenant_id: string; intent_id: string }[]) {
+  type Charge = { id: string; tenant_id: string; intent_id: string; provider_key: string };
+  const byTenant = new Map<string, Charge[]>();
+  for (const c of (charges ?? []) as Charge[]) {
     const list = byTenant.get(c.tenant_id) ?? [];
     list.push(c);
     byTenant.set(c.tenant_id, list);
@@ -71,6 +79,22 @@ Deno.serve(async (req: Request) => {
   let checked = 0;
   let approved = 0;
   let failed = 0;
+  // Ualá Bis: re-consulta la orden con la credencial exacta del cobro.
+  const syncUalaCharge = async (tenantId: string, intentId: string) => {
+    const { data: row } = await admin
+      .from("mp_payment_intents")
+      .select(UALA_INTENT_COLS)
+      .eq("id", intentId)
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "ualabis")
+      .maybeSingle();
+    if (!row) return null;
+    const conn = await loadUala(admin, tenantId, { scopeStoreId: await intentSecretScope(admin, intentId) });
+    if (!conn) return null;
+    const r = await syncUala(admin, row as UalaIntentRow, conn.creds, "cron", null);
+    return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
+  };
+
   // Un negocio a la vez, sus intents en paralelo de a 5. ADR-057: cada intent
   // se verifica con la API key (negocio o sucursal) con la que se creó; las
   // conexiones se cachean por alcance.
@@ -86,6 +110,7 @@ Deno.serve(async (req: Request) => {
       const chunk = list.slice(i, i + 5);
       const results = await Promise.all(
         chunk.map(async (c) => {
+          if (c.provider_key === "ualabis") return await syncUalaCharge(tenantId, c.intent_id).catch(() => null);
           const conn = await connFor(c.intent_id);
           if (!conn) return null;
           return await syncPagos360Intent(admin, conn, tenantId, c.intent_id).catch(() => null);

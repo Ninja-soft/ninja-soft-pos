@@ -101,6 +101,7 @@ export const SETTLEMENT_PROVIDERS: SettlementProvider[] = [
   // settlement_import_lines; ADR-061, pendiente "por archivo con preset").
   { key: "directo", label: "Directo", api: false, logo: "directo" },
   { key: "gocuotas", label: "GO Cuotas", api: false, logo: "gocuotas" },
+  { key: "ualabis", label: "Ualá Bis", api: false, logo: "ualabis" },
   { key: "modo", label: "MODO", api: false, logo: "modo" },
   { key: "transfer", label: "Transferencias", api: false, logo: "transfer" },
   { key: "otro", label: "Otro adquirente", api: false, logo: null },

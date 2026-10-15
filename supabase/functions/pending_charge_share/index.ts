@@ -38,6 +38,7 @@ const PROVIDER_NAME: Record<string, string> = {
   nave: "Nave",
   gocuotas: "GO Cuotas",
   directo: "Directo",
+  ualabis: "Ualá Bis",
 };
 
 function money(n: number): string {

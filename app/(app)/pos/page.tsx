@@ -115,7 +115,12 @@ import type { PausedCart, PausedSale } from "@/modules/paused-sales/logic";
 import { buildPausedCart } from "@/modules/paused-sales/logic";
 // H32 (ADR-129): pedidos de salón (vendedor arma, caja cobra) y disponible sin lo reservado.
 import { useOrderOrigin } from "@/modules/orders/useOrderOrigin";
-import { useReservedStock, useSaleOrders } from "@/modules/orders/hooks";
+import { useOrderConfig, useReservedStock, useSaleOrders } from "@/modules/orders/hooks";
+import { useFulfillmentSources } from "@/modules/pos/fulfillment";
+import { fulfillmentLines, groupDeliveries, planSummary, type PlanPayload } from "@/lib/stock/fulfillment";
+import type { FulfillmentState } from "@/components/pos/fulfillment/FulfillmentModal";
+import { DeliveriesDoneModal, DeliveryBar } from "@/components/pos/fulfillment/DeliveryBar";
+import type { CreateSaleResult } from "@/modules/pos/api";
 import { OrdersBar } from "@/components/orders/OrdersBar";
 import { DELIVERY_TYPE_LABEL, availableStock, reservationLabel } from "@/lib/orders/logic";
 import { useProfessionals } from "@/modules/pos/hooks";
@@ -191,6 +196,8 @@ const PausedSalesPanel = dynamic(() => loadPausedPanel().then((m) => m.PausedSal
 const QuoteFromCartModal = dynamic(() => import("@/components/quotes/QuoteFromCartModal").then((m) => m.QuoteFromCartModal), { ssr: false });
 // H32 (ADR-129): "Pedido" junto a Pausar (chunk aparte, se baja al abrirlo).
 const OrderFromCartModal = dynamic(() => import("@/components/orders/OrderFromCartModal").then((m) => m.OrderFromCartModal), { ssr: false });
+// ADR-136: entregas de la venta (chunk aparte, se baja al abrirlo).
+const FulfillmentModal = dynamic(() => import("@/components/pos/fulfillment/FulfillmentModal").then((m) => m.FulfillmentModal), { ssr: false });
 const PosShortcutsHelp = dynamic(() => loadShortcutsHelp().then((m) => m.PosShortcutsHelp), { ssr: false });
 // Cobros en espera (ADR-048): la pestaña se abre como hoja dentro del POS.
 const PendingChargesPanel = dynamic(
@@ -789,11 +796,24 @@ function PosPageInner() {
     const where = branchStock.storeName ?? "esta sucursal";
     const detail = `En ${where} quedan ${formatQty(Math.max(have, 0))}.${others ? ` En otras sucursales: ${others}.` : ""}`;
     if (check === "block") {
+      // ADR-136: con stock en otra sucursal o depósito habilitado, se agrega y
+      // al cobrar se elige de dónde sale (Entregas). El servidor valida.
+      if (fulfillEnabled && others) {
+        toast({ title: `No alcanza en ${where}`, description: `${detail} Al cobrar elegí de dónde sale en Entregas.`, variant: "info" });
+        return true;
+      }
       toast({ title: `Sin stock suficiente en ${where}`, description: detail, variant: "error" });
       return false;
     }
     toast({ title: `Queda en negativo en ${where}`, description: detail, variant: "info" });
     return true;
+  }
+
+  // ADR-136: ¿algún renglón no alcanza en esta sucursal? (sin avisar).
+  function branchShortfallExists(): boolean {
+    const storeId = branchStock.storeId;
+    if (allowNegativeStock || !branchStock.loaded || !storeId) return false;
+    return branchShortfalls(lines, branchStock.rows, storeId, trackedSeen.current).length > 0;
   }
 
   // Al cobrar: si la sucursal no permite vender sin stock, se corta antes de
@@ -818,6 +838,86 @@ function PosPageInner() {
   // ADR-096 / ADR-139: líneas con garantías disponibles según el alcance de
   // cada tipo (producto > categoría > todos), con el precio ya calculado. La
   // garantía se enlaza a una de ellas (con serie primero, después la más cara).
+  // ── Entregas (ADR-136): vender de otra sucursal o depósito y partir la
+  // entrega (retira ahora, retira en una sucursal o envío). Sin reparto, la
+  // venta va por create_sale como siempre. ─────────────────────────────────
+  const entregasFeature = useFeature("entregas_remitos");
+  const { config: orderCfg } = useOrderConfig(entregasFeature === true);
+  const posStoreId = register?.store_id ?? branchStock.storeId ?? null;
+  const fulfillEnabled =
+    entregasFeature === true &&
+    Boolean(posStoreId) &&
+    !offline.isOffline &&
+    !origins.tableOrderId &&
+    !origins.deliveryOrderId &&
+    !origins.reservationId &&
+    !orderOrigin.active;
+  const productMeta = useMemo(() => {
+    const map = new Map<string, { track: boolean; kit: boolean }>();
+    for (const p of [...(allProducts ?? []), ...(topProducts ?? [])]) {
+      map.set(p.id, { track: Boolean(p.track_stock), kit: Boolean((p as { is_kit?: boolean }).is_kit) });
+    }
+    return map;
+  }, [allProducts, topProducts]);
+  const fLines = useMemo(
+    () =>
+      fulfillEnabled
+        ? fulfillmentLines(lines, (id) => {
+            const line = lines.find((l) => l.productId === id);
+            if (line && isServiceLine(line)) return { service: true, localOnly: true };
+            const meta = productMeta.get(id);
+            const tracked = meta ? meta.track : trackedSeen.current.has(id);
+            return { service: false, localOnly: !tracked || Boolean(meta?.kit) };
+          })
+        : [],
+    [fulfillEnabled, lines, productMeta, isServiceLine],
+  );
+  const [fulfillOpen, setFulfillOpen] = useState(false);
+  const [fulfill, setFulfill] = useState<FulfillmentState | null>(null);
+  const [doneDeliveries, setDoneDeliveries] = useState<{ saleNumber: number; list: NonNullable<CreateSaleResult["deliveries"]> } | null>(null);
+  const planRef = useRef<PlanPayload | null>(null);
+  // Cobro que esperaba el reparto (no alcanzaba en esta sucursal).
+  const pendingChargeRef = useRef<unknown[] | null>(null);
+  const fSources = useFulfillmentSources(
+    posStoreId,
+    fLines.map((l) => ({ product_id: l.productId, variant_id: l.variantId })),
+    fulfillEnabled && fulfillOpen,
+  );
+  const fulfillRules = useMemo(
+    () => ({
+      storeId: posStoreId ?? "",
+      retiroEnabled: ordersFeature === true && orderCfg.delivery_types.retiro.enabled,
+      envioEnabled: ordersFeature === true && orderCfg.delivery_types.envio.enabled,
+      retiroCrossBranch: orderCfg.delivery_types.retiro.cross_branch,
+    }),
+    [posStoreId, ordersFeature, orderCfg],
+  );
+  const fulfillGroups = useMemo(
+    () => (fulfill && planRef.current ? groupDeliveries(fulfill.allocations, fulfillRules.storeId) : []),
+    [fulfill, fulfillRules.storeId],
+  );
+  const storeNameOf = (id: string) => branchStock.names.get(id) ?? (id === posStoreId ? (branchStock.storeName ?? "Esta sucursal") : "Otra sucursal");
+  // El reparto deja de valer si cambia el carrito (cantidades o productos).
+  const fLinesKey = fLines.map((l) => `${l.key}:${l.quantity}`).join(",");
+  useEffect(() => {
+    if (!fulfill) return;
+    const fits =
+      fLines.length > 0 &&
+      fLines.every(
+        (l) => Math.abs(fulfill.allocations.filter((a) => a.key === l.key).reduce((t, a) => t + a.qty, 0) - l.quantity) < 0.0005,
+      ) &&
+      fulfill.allocations.every((a) => fLines.some((l) => l.key === a.key));
+    if (!fits) {
+      planRef.current = null;
+      setFulfill(null);
+      if (fLines.length > 0) toast({ title: "Cambió el carrito: volvé a repartir las entregas", variant: "info" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fLinesKey]);
+
+  // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
+  const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
+  // ADR-096: la garantía extendida se enlaza a una de estas líneas (con serie primero).
   const warrantyTargets = useMemo(
     () =>
       warrantyFeature === true && warrantyCatalog
@@ -1167,7 +1267,12 @@ function PosPageInner() {
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
     // ADR-116: sólo con servicios en el carrito.
     service: hasServiceLines ? (servicePeriod ?? defaultServicePeriod()) : null,
+    // ADR-136: reparto de entregas y aviso con los códigos de retiro.
+    fulfillmentRef: planRef,
+    onDeliveries: (list, saleNumber) => setDoneDeliveries({ saleNumber, list }),
     onSuccess: ({ saleId, change, hadCash }) => {
+      planRef.current = null;
+      setFulfill(null);
       // Cajón al cobrar en efectivo (ADR-063): la venta ya está; un fallo sólo avisa.
       void posHw.openOnSale(saleId, hadCash).then((warn) => {
         if (warn) toast({ title: warn, variant: "info" });
@@ -1643,6 +1748,14 @@ function PosPageInner() {
       serviceSlot={
         hasServiceLines ? (
           <ServicePeriodBar period={servicePeriod ?? defaultServicePeriod()} onChange={setServicePeriod} />
+        ) : null
+      }
+      deliverySlot={
+        fulfillEnabled && fLines.length > 0 && preset !== "caja_rapida" ? (
+          <DeliveryBar
+            summary={planRef.current && fulfillGroups.length > 0 ? planSummary(fulfillGroups, storeNameOf) : null}
+            onOpen={() => setFulfillOpen(true)}
+          />
         ) : null
       }
       priceSlot={
@@ -2167,7 +2280,14 @@ function PosPageInner() {
           style={accentVars(effectiveLayout.accent)}
           loading={saving}
           onConfirm={(...args: Parameters<typeof handleSale>) => {
-            if (branchStockBlocksSale()) return;
+            // ADR-136: con reparto, el servidor valida cada origen.
+            if (!planRef.current && fulfillEnabled && fLines.length > 0 && branchShortfallExists()) {
+              pendingChargeRef.current = args;
+              toast({ title: "No alcanza en esta sucursal", description: "Elegí de dónde sale y cómo se entrega.", variant: "info" });
+              setFulfillOpen(true);
+              return;
+            }
+            if (!planRef.current && branchStockBlocksSale()) return;
             return handleSale(...args);
           }}
           onQrState={handleQrState}
@@ -2191,6 +2311,41 @@ function PosPageInner() {
           }}
         />
       </MountWhenOpened>
+
+      {/* ADR-136: entregas (otra sucursal, depósito, retiro, envío). */}
+      {fulfillOpen && (
+        <FulfillmentModal
+          open={fulfillOpen}
+          onOpenChange={(o) => {
+            setFulfillOpen(o);
+            if (!o) pendingChargeRef.current = null;
+          }}
+          lines={fLines}
+          sources={fSources.data ?? []}
+          loading={fSources.isLoading}
+          rules={fulfillRules}
+          stores={[...branchStock.names.entries()].map(([id, name]) => ({ id, name })).concat(
+            posStoreId && !branchStock.names.has(posStoreId) ? [{ id: posStoreId, name: branchStock.storeName ?? "Esta sucursal" }] : [],
+          )}
+          customerName={customer?.name ?? null}
+          initial={fulfill}
+          onConfirm={(state, plan) => {
+            planRef.current = plan;
+            setFulfill(plan ? state : null);
+            setFulfillOpen(false);
+            const pending = pendingChargeRef.current;
+            pendingChargeRef.current = null;
+            if (pending) void handleSale(...(pending as Parameters<typeof handleSale>));
+          }}
+          onClear={() => {
+            planRef.current = null;
+            setFulfill(null);
+            setFulfillOpen(false);
+            pendingChargeRef.current = null;
+          }}
+        />
+      )}
+      <DeliveriesDoneModal done={doneDeliveries} storeName={storeNameOf} onClose={() => setDoneDeliveries(null)} />
 
       <OfflineTicketModal entry={offlineTicket} onOpenChange={(o) => !o && setOfflineTicket(null)} />
       {tickets.map((t) => (

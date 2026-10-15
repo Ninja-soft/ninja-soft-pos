@@ -11,7 +11,8 @@ import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
 import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
-import { toSalePayments, type SaleServiceInput } from "@/modules/pos/api";
+import { toSalePayments, type CreateSaleResult, type SaleServiceInput } from "@/modules/pos/api";
+import { fulfillmentErrorMessage, type PlanPayload } from "@/lib/stock/fulfillment";
 import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
 import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflinePos";
 
@@ -182,6 +183,14 @@ export function usePosSale(ctx: {
   onOfflineSuccess?: (r: { entry: OfflineQueueEntry; change: number; hadCash: boolean }) => void;
   /** H32 (ADR-129): el origen (pedido) resuelve el error y avisa él (true = ya avisó). */
   onError?: (msg: string) => boolean;
+  /**
+   * ADR-136: reparto de entregas armado en el POS (otra sucursal, depósito,
+   * retiro o envío). Ref para leer el último plan aunque se confirme en el
+   * mismo render en que se eligió.
+   */
+  fulfillmentRef?: { current: PlanPayload | null };
+  /** ADR-136: entregas abiertas por la venta (códigos de retiro, una vez). */
+  onDeliveries?: (deliveries: NonNullable<CreateSaleResult["deliveries"]>, saleNumber: number) => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -215,7 +224,16 @@ export function usePosSale(ctx: {
     appliedPromo?: Promo | null,
   ) {
     const deviceOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const plan = ctx.fulfillmentRef?.current ?? null;
     if (ctx.offline && (ctx.offline.isOffline || deviceOffline)) {
+      if (plan) {
+        toast({
+          title: "Sin conexión no se reparten entregas",
+          description: "Vender de otra sucursal o partir la entrega necesita conexión. Sacá el reparto para cobrar todo acá.",
+          variant: "error",
+        });
+        return;
+      }
       await handleOfflineSale(payments, extras, change, appliedPromo);
       return;
     }
@@ -247,7 +265,10 @@ export function usePosSale(ctx: {
         couponId: ctx.couponId,
         // ADR-116: período del servicio y vencimiento del pago.
         service: ctx.service ?? null,
+        // ADR-136: con reparto, la venta y las entregas en una transacción.
+        fulfillment: plan,
       });
+      if (res.deliveries && res.deliveries.length > 0) ctx.onDeliveries?.(res.deliveries, res.number);
       // Turno (H38): enlazar la venta y marcarlo 'realizado' (best-effort).
       if (ctx.appointmentId) {
         try {
@@ -290,8 +311,14 @@ export function usePosSale(ctx: {
       }
       // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
       if (handlePriceMismatch(e, ctx.lines)) return;
-      const msg = e instanceof Error ? e.message : "";
+      const msg = e instanceof Error ? e.message : String((e as { message?: string } | null)?.message ?? "");
       if (ctx.onError?.(msg)) return;
+      // ADR-136: errores del reparto de entregas.
+      const planMsg = plan ? fulfillmentErrorMessage(msg) : null;
+      if (planMsg) {
+        toast({ title: "No se pudo repartir la entrega", description: planMsg, variant: "error" });
+        return;
+      }
       // Promos que cambiaron (alta, baja, tope de usos): se vuelven a leer.
       if (msg.includes("promo_")) void qc.invalidateQueries({ queryKey: ["promotions"] });
       const title = saleErrorTitle(msg);

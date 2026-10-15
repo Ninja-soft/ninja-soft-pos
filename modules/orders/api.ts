@@ -104,6 +104,21 @@ export interface Dispatch {
   cancel_reason: string | null;
   created_at: string;
   sale: { number: number; total: number; items: DispatchItem[] } | null;
+  /** ADR-136: entrega N de M de la venta y sucursal que vendió. */
+  part?: number;
+  parts_total?: number;
+  sale_store_id?: string | null;
+  /** ADR-136: renglones de esta entrega (venta partida); sin ellos, toda la venta. */
+  items?: DispatchPartItem[];
+}
+
+export interface DispatchPartItem {
+  product_name: string;
+  variant_label: string | null;
+  qty: number;
+  unit: string;
+  source_store_id: string;
+  source_warehouse_id: string | null;
 }
 
 const DISPATCH_COLS =
@@ -111,6 +126,9 @@ const DISPATCH_COLS =
   "pickup_name, has_pickup_code, failed_attempts, ship_address, shipment_id, tracking, notes, prepared_at, ready_at, sent_at, " +
   "arrived_at, delivered_at, delivered_to, cancel_reason, created_at, " +
   "sale:sales(number, total, items:sale_items(product_name, quantity, returned_qty, unit_label))";
+// ADR-136: partes y renglones por entrega. Sin la migración, se reintenta sin ellos.
+const DISPATCH_COLS_PARTS = `${DISPATCH_COLS}, part, parts_total, sale_store_id, items:dispatch_items(product_name, variant_label, qty, unit, source_store_id, source_warehouse_id)`;
+const MISSING_PART_COLS = /part|sale_store_id|dispatch_items|relationship/;
 
 export interface CreateOrderInput {
   id: string;
@@ -200,19 +218,31 @@ export const ordersApi = {
     rpc<{ ok: boolean; already?: boolean }>("sale_order_complete", { p_id: id, p_sale_id: saleId }),
 
   dispatches: async (opts: { storeId: string | null; open: boolean }): Promise<Dispatch[]> => {
-    let q = createClient()
-      .from("dispatches" as never)
-      .select(DISPATCH_COLS)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: opts.open })
-      .limit(opts.open ? 200 : 100);
-    if (opts.storeId) q = q.or(`store_id.eq.${opts.storeId},fulfillment_store_id.eq.${opts.storeId}`);
-    q = opts.open
-      ? q.in("status", ["pendiente", "armando", "listo", "en_transito"])
-      : q.in("status", ["entregado", "despachado", "cancelado"]);
-    const { data, error } = await q;
+    const run = (cols: string, parts: boolean) => {
+      let q = createClient()
+        .from("dispatches" as never)
+        .select(cols)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: opts.open })
+        .limit(opts.open ? 200 : 100);
+      if (opts.storeId) {
+        q = q.or(
+          parts
+            ? `store_id.eq.${opts.storeId},fulfillment_store_id.eq.${opts.storeId},sale_store_id.eq.${opts.storeId}`
+            : `store_id.eq.${opts.storeId},fulfillment_store_id.eq.${opts.storeId}`,
+        );
+      }
+      return opts.open
+        ? q.in("status", ["pendiente", "armando", "listo", "en_transito"])
+        : q.in("status", ["entregado", "despachado", "cancelado"]);
+    };
+    let { data, error } = await run(DISPATCH_COLS_PARTS, true);
+    if (error && MISSING_PART_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS, false));
     if (error) throw error;
-    return (data ?? []) as unknown as Dispatch[];
+    return ((data ?? []) as unknown as Dispatch[]).map((d) => ({
+      ...d,
+      items: (d.items ?? []).map((i) => ({ ...i, qty: Number(i.qty) })),
+    }));
   },
 
   dispatchAdvance: (id: string, to: "pendiente" | "armando" | "listo" | "en_transito") =>

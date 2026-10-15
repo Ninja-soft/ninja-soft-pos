@@ -329,9 +329,17 @@ export const arcaApi = {
     edge<{ ok: boolean; csr_pem: string }>({ action: "platform_generar_csr", environment, alias: alias || null, organization: organization || null }),
   platformSubirCertificado: (environment: ArcaEnv, certPem: string) =>
     edge<CertUploadResult>({ action: "platform_subir_certificado", environment, cert_pem: certPem }),
-  // ADR-133: certificado + clave que ya tiene NinjaSoft (la clave se cifra en el servidor).
-  platformSubirPar: (environment: ArcaEnv, certPem: string, keyPem: string) =>
-    edge<CertUploadResult>({ action: "platform_subir_par", environment, cert_pem: certPem, key_pem: keyPem }),
+  // ADR-133: certificado + clave que ya tiene NinjaSoft (la clave se cifra en el
+  // servidor y nunca vuelve). `cuit`: empresa titular; tiene que coincidir con la
+  // del certificado y queda como CUIT de la plataforma del ambiente.
+  platformSubirPar: (environment: ArcaEnv, certPem: string, keyPem: string, cuit?: string) =>
+    edge<CertUploadResult>({
+      action: "platform_subir_par",
+      environment,
+      cert_pem: certPem,
+      key_pem: keyPem,
+      ...(cuit ? { cuit: cuit.replace(/\D/g, "") } : {}),
+    }),
 };
 
 /** Fire-and-forget después de una venta: jamás frena ni avisa al cajero. */

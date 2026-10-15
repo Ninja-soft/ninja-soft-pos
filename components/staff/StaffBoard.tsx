@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRightLeft,
@@ -12,6 +13,7 @@ import {
   MoreHorizontal,
   Pencil,
   ShieldAlert,
+  ShieldCheck,
   Star,
   UserCheck,
   UserPlus,
@@ -20,7 +22,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
 import { SearchField } from "@/components/ui/SearchField";
@@ -229,6 +231,9 @@ export function StaffBoard({
           actions={
             canManage ? (
               <>
+                <Link href={"/dashboard-team/permisos" as never} className={buttonVariants({ size: "sm", variant: "secondary" })}>
+                  <ShieldCheck size={16} /> Roles y permisos
+                </Link>
                 <Button size="sm" variant="secondary" onClick={() => setProfileOpen(true)}>
                   <IdCard size={16} /> Perfil sin cuenta
                 </Button>

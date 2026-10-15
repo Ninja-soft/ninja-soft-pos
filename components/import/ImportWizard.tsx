@@ -76,25 +76,31 @@ function Stepper({ step }: { step: Step }) {
   );
 }
 
-function CountTile({ action, value }: { action: ImportAction; value: number }) {
+type Labels = Record<ImportAction, string>;
+
+function labelsOf<R>(definition: ImportDefinition<R>): Labels {
+  return { ...ACTION_LABEL, ...definition.actionLabels };
+}
+
+function CountTile({ action, value, labels }: { action: ImportAction; value: number; labels: Labels }) {
   return (
     <div className="rounded-md bg-muted px-3 py-2">
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", ACTION_DOT[action])} />
-        {ACTION_LABEL[action]}
+        {labels[action]}
       </p>
       <p className="mt-0.5 text-xl font-bold tabular-nums">{value}</p>
     </div>
   );
 }
 
-function Counts({ counts }: { counts: ImportCounts }) {
+function Counts({ counts, labels }: { counts: ImportCounts; labels: Labels }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <CountTile action="create" value={counts.create} />
-      <CountTile action="update" value={counts.update} />
-      <CountTile action="skip" value={counts.skip} />
-      <CountTile action="error" value={counts.error} />
+      <CountTile action="create" value={counts.create} labels={labels} />
+      <CountTile action="update" value={counts.update} labels={labels} />
+      <CountTile action="skip" value={counts.skip} labels={labels} />
+      <CountTile action="error" value={counts.error} labels={labels} />
     </div>
   );
 }
@@ -130,7 +136,7 @@ function OutcomeTable<R>({
               <td className="px-2 py-1.5">
                 <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium">
                   <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", ACTION_DOT[o.action])} />
-                  {ACTION_LABEL[o.action]}
+                  {labelsOf(definition)[o.action]}
                 </span>
                 {o.messages.length > 0 && (
                   <ul className="mt-1 max-w-[240px] space-y-0.5">
@@ -194,6 +200,7 @@ export function ImportWizard<R>({ definition, open, onOpenChange, context = {}, 
     [outcomes, filter],
   );
   const toWrite = counts.create + counts.update;
+  const labels = labelsOf(definition);
 
   function reset() {
     setStep(1);
@@ -390,7 +397,7 @@ export function ImportWizard<R>({ definition, open, onOpenChange, context = {}, 
               Revisamos <span className="font-medium text-foreground">{fileName}</span> contra los datos de tu negocio.
               Todavía no se guardó nada.
             </p>
-            <Counts counts={counts} />
+            <Counts counts={counts} labels={labels} />
             {ignored.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 Columnas que no se usan y se ignoran: {ignored.join(", ")}.
@@ -404,9 +411,9 @@ export function ImportWizard<R>({ definition, open, onOpenChange, context = {}, 
                 aria-label="Filtrar filas"
                 options={[
                   { value: "all", label: `Todas (${outcomes.length})` },
-                  { value: "create", label: `Crear (${counts.create})` },
-                  { value: "update", label: `Actualizar (${counts.update})` },
-                  { value: "skip", label: `Omitir (${counts.skip})` },
+                  { value: "create", label: `${definition.actionLabels?.create ?? "Crear"} (${counts.create})` },
+                  { value: "update", label: `${definition.actionLabels?.update ?? "Actualizar"} (${counts.update})` },
+                  { value: "skip", label: `${definition.actionLabels?.skip ?? "Omitir"} (${counts.skip})` },
                   { value: "error", label: `Errores (${counts.error})` },
                 ]}
               />
@@ -428,9 +435,11 @@ export function ImportWizard<R>({ definition, open, onOpenChange, context = {}, 
 
         {step === 3 && !applied && (
           <>
-            <Counts counts={counts} />
+            <Counts counts={counts} labels={labels} />
             <Callout tone="brand" icon={CheckCircle2} title="¿Confirmás la importación?">
-              Se van a crear {counts.create} y actualizar {counts.update} {definition.plural}.
+              {definition.confirmText
+                ? definition.confirmText(counts, false)
+                : `Se van a crear ${counts.create} y actualizar ${counts.update} ${definition.plural}.`}
               {counts.skip + counts.error > 0 && ` ${counts.skip + counts.error} filas se omiten.`} Queda registrado
               en la auditoría con tu usuario y el nombre del archivo.
             </Callout>
@@ -447,10 +456,15 @@ export function ImportWizard<R>({ definition, open, onOpenChange, context = {}, 
               icon={applied.errors > 0 ? AlertTriangle : CheckCircle2}
               title="Importación terminada"
             >
-              Se crearon {applied.created} y se actualizaron {applied.updated} {definition.plural}.
+              {definition.confirmText
+                ? definition.confirmText(
+                    { create: applied.created, update: applied.updated, skip: applied.skipped, error: applied.errors },
+                    true,
+                  )
+                : `Se crearon ${applied.created} y se actualizaron ${applied.updated} ${definition.plural}.`}
               {applied.errors > 0 && " Algunas filas no se pudieron guardar: descargá el detalle para corregirlas."}
             </Callout>
-            <Counts counts={counts} />
+            <Counts counts={counts} labels={labels} />
             {errorsButton}
           </>
         )}

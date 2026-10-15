@@ -983,3 +983,35 @@ html {
     color: #000;
   }
 }
+
+/* -----------------------------------------------------------------------------
+ * Menú lateral personalizable (ADR-134): lugar donde caería lo que se arrastra.
+ * Borde punteado que avanza ("hormigas"), dibujado con background-image para
+ * poder animarlo; el color sale del tema (sin degradados de color ni sombras).
+ * -------------------------------------------------------------------------- */
+.nav-drop-placeholder {
+  --ants: var(--muted-foreground);
+  background-color: var(--muted);
+  background-image:
+    linear-gradient(90deg, var(--ants) 50%, transparent 50%),
+    linear-gradient(90deg, var(--ants) 50%, transparent 50%),
+    linear-gradient(0deg, var(--ants) 50%, transparent 50%),
+    linear-gradient(0deg, var(--ants) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 10px 1.5px, 10px 1.5px, 1.5px 10px, 1.5px 10px;
+  background-position: 0 0, 100% 100%, 0 100%, 100% 0;
+  animation: nav-ants 0.7s linear infinite;
+}
+.nav-drop-placeholder:not(.is-lifted) > * {
+  visibility: hidden;
+}
+@keyframes nav-ants {
+  to {
+    background-position: 10px 0, calc(100% - 10px) 100%, 0 calc(100% - 10px), 100% 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-drop-placeholder {
+    animation: none;
+  }
+}

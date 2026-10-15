@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Handshake, Lock, MessageCircleQuestion, Plug, Receipt, Tag, Truck } from "lucide-react";
+import { Handshake, Lock, MessageCircleQuestion, Plug, Receipt, Tag, Truck, Warehouse } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonVariants } from "@/components/ui/Button";
@@ -20,13 +20,15 @@ import { MlItemsTab } from "@/components/mercadolibre/MlItemsTab";
 import { MlOrdersTab } from "@/components/mercadolibre/MlOrdersTab";
 import { MlQuestionsTab } from "@/components/mercadolibre/MlQuestionsTab";
 import { MlShipmentsTab } from "@/components/mercadolibre/MlShipmentsTab";
+import { MlFullTab } from "@/components/mercadolibre/full/MlFullTab";
 
-type Tab = "items" | "orders" | "questions" | "shipments";
+type Tab = "items" | "orders" | "questions" | "shipments" | "full";
 
 // Mercado Libre (H87 · ADR-104): publicaciones vinculadas con el catálogo,
 // ventas que entraron al POS con su comisión y factura, preguntas para
 // responder y envíos con etiquetas. Dueño o encargado; el servidor exige la
-// feature `mercadolibre` en cada escritura.
+// feature `mercadolibre` en cada escritura. Full (ADR-142): depósito virtual,
+// envíos a Full y etiquetas, con la feature `mercadolibre_full`.
 export default function MercadoLibrePage() {
   const enabled = useFeature("mercadolibre");
   const { data: me } = useMyTenant();
@@ -118,12 +120,14 @@ export default function MercadoLibrePage() {
                 { value: "orders", label: "Ventas", icon: <Receipt size={15} /> },
                 { value: "questions", label: "Preguntas", icon: <MessageCircleQuestion size={15} /> },
                 { value: "shipments", label: "Envíos", icon: <Truck size={15} /> },
+                { value: "full", label: "Full", icon: <Warehouse size={15} /> },
               ]}
             />
             {account && tab === "items" && <MlItemsTab accountId={account.id} />}
             {account && tab === "orders" && <MlOrdersTab accountId={account.id} />}
             {account && tab === "questions" && <MlQuestionsTab accountId={account.id} />}
             {account && tab === "shipments" && <MlShipmentsTab key={account.id} account={account} />}
+            {account && tab === "full" && <MlFullTab key={account.id} account={account} canManage={canManage} />}
           </>
         )}
       </div>

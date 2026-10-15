@@ -1015,3 +1015,14 @@ html {
     animation: none;
   }
 }
+
+/* Carrusel infinito de logos (login): la pista lleva la lista dos veces. */
+@keyframes ninja-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ninja-marquee-track { animation: ninja-marquee 38s linear infinite; }
+.ninja-marquee:hover .ninja-marquee-track { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .ninja-marquee-track { animation: none; flex-wrap: wrap; width: auto; }
+}

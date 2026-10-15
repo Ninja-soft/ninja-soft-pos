@@ -184,15 +184,18 @@ describe("TicketModal · ventana visible", () => {
   it("ADR-119: todo sale del motor, en ticket por defecto, y se puede cambiar a A4 ahí mismo", async () => {
     setup({});
     const tickets = await screen.findAllByTestId("ticket");
-    // Vista previa, nodo que se imprime y nodo del email: modelo Clásico, rollo de 80 mm.
+    // Vista previa y nodo que se imprime: modelo Clásico, rollo de 80 mm. El
+    // del email sale en hoja A4 (default del PDF del email).
     expect(tickets.length).toBeGreaterThanOrEqual(3);
-    expect(tickets.every((t) => t.getAttribute("data-format") === "80" && t.getAttribute("data-invoice-model") === "clasico")).toBe(true);
+    expect(tickets.every((t) => t.getAttribute("data-invoice-model") === "clasico")).toBe(true);
+    expect(tickets.filter((t) => t.getAttribute("data-format") === "80").length).toBeGreaterThanOrEqual(2);
+    expect(tickets.some((t) => t.getAttribute("data-format") === "a4")).toBe(true);
     screen.getAllByRole("radio", { name: "A4" })[0]!.click();
     await waitFor(() => expect(screen.getByRole("button", { name: /Imprimir A4/ })).toBeInTheDocument());
     const after = screen.getAllByTestId("ticket");
-    // La vista previa y la impresión pasan a A4; el email sigue con su formato.
-    expect(after.filter((t) => t.getAttribute("data-format") === "a4")).toHaveLength(2);
-    expect(after.filter((t) => t.getAttribute("data-format") === "80")).toHaveLength(1);
+    // La vista previa y la impresión pasan a A4; el email sigue en A4.
+    expect(after.filter((t) => t.getAttribute("data-format") === "a4")).toHaveLength(3);
+    expect(after.filter((t) => t.getAttribute("data-format") === "80")).toHaveLength(0);
   });
 
   it("ADR-119: el perfil en A4 preselecciona A4 y la impresión automática lo usa", async () => {

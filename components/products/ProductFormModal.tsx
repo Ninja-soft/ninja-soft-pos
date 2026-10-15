@@ -252,6 +252,9 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   // el negocio prendió la portada automática; el dueño lo cambia por ítem.
   const [imageMode, setImageMode] = useState<ImageMode>("upload");
   const [imageModeTouched, setImageModeTouched] = useState(false);
+  // Imagen recién generada y aplicada: el producto que llega por props no se
+  // refresca solo, así que la mostramos acá hasta cerrar el editor.
+  const [freshImage, setFreshImage] = useState<string | null>(null);
   useEffect(() => {
     if (!open || product || imageModeTouched) return;
     setImageMode(aiEnabled && aiSettings?.auto_cover ? "ai" : "upload");
@@ -263,8 +266,17 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       { productId, apply: true },
       {
         onSuccess: (r) => {
-          if (!r.ok) toast({ title: "No se generó la imagen", description: aiCoverError(r.error), variant: "error" });
-          else qc.invalidateQueries({ queryKey: ["products"] });
+          if (!r.ok) {
+            toast({ title: "No se generó la imagen", description: aiCoverError(r.error), variant: "error" });
+            return;
+          }
+          if (r.applied) setFreshImage(r.generation.url);
+          toast({
+            title: r.applied ? "Imagen lista" : "Imagen generada",
+            description: r.applied ? "Quedó como imagen principal." : "Elegila en Imágenes con Usar esta.",
+            variant: "success",
+          });
+          qc.invalidateQueries({ queryKey: ["products"] });
         },
         onError: (e) => toast({ title: "No se generó la imagen", description: aiCoverError(e instanceof Error ? e.message : null), variant: "error" }),
       },
@@ -327,6 +339,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     setCreated(null);
     setTab("general");
     setImageModeTouched(false);
+    setFreshImage(null);
     setMarginDraft(null);
     setAddingBrand(false);
     setAttributes(normalizeAttributes(product?.attributes));
@@ -681,7 +694,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               aiEnabled={aiEnabled}
               styleName={aiSettings?.style ? coverStyleInfo(aiSettings.style).name : null}
               saved={Boolean(active)}
-              imageUrl={active?.image_url ?? null}
+              imageUrl={freshImage ?? active?.image_url ?? null}
               noun={noun}
               generating={aiMut.generate.isPending}
               onGenerate={() => active && generateAiCover(active.id)}

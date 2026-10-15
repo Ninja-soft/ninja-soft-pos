@@ -150,18 +150,21 @@ Deno.serve(async (req: Request) => {
 
     const { data: product } = await admin
       .from("products")
-      .select("id, name, description, invoice_detail, is_service, service_type_id")
+      .select("id, name, description, invoice_detail, is_service, service_type_id, category_id")
       .eq("id", productId)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
       .maybeSingle();
     if (!product) return fail("product_not_found");
 
-    const [{ data: settings }, { data: tenant }, typeRes] = await Promise.all([
+    const [{ data: settings }, { data: tenant }, typeRes, catRes] = await Promise.all([
       admin.from("ai_image_settings").select("style, accent, base_prompt").eq("tenant_id", tenantId).maybeSingle(),
       admin.from("tenants").select("industry").eq("id", tenantId).maybeSingle(),
       product.service_type_id
         ? admin.from("service_types").select("name").eq("id", product.service_type_id).eq("tenant_id", tenantId).maybeSingle()
+        : Promise.resolve({ data: null }),
+      product.category_id
+        ? admin.from("categories").select("name").eq("id", product.category_id).eq("tenant_id", tenantId).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
     const style = isCoverStyle(body.style) ? body.style : coverStyleInfo(settings?.style).key;
@@ -174,6 +177,9 @@ Deno.serve(async (req: Request) => {
       style,
       accent: settings?.accent ?? null,
       basePrompt: settings?.base_prompt ?? null,
+      // Productos: prompt centrado en el producto, sin el rubro del negocio.
+      kind: product.is_service ? "service" : "product",
+      category: (catRes.data as { name?: string } | null)?.name ?? null,
     });
 
     // Reserva (gating del addon, rol, producto y tope del día en la base).

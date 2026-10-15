@@ -8,8 +8,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { AttrField, PublishInput } from "@/supabase/functions/_shared/mercadolibre/items";
+import type { ShippingInput, ShippingMode, ShippingPlan } from "@/supabase/functions/_shared/mercadolibre/shipping";
 
-export type { AttrField, PublishInput };
+export type { AttrField, PublishInput, ShippingInput, ShippingMode, ShippingPlan };
+
+/** Respuesta de validar o publicar (ml_api). */
+export interface MlPublishResult {
+  ok: boolean;
+  errors?: string[];
+  /** Ajustes automáticos que hizo el servidor (atributo sacado, envío cambiado). */
+  notices?: string[];
+  warnings?: string[];
+  shipping?: ShippingPlan;
+  applied_shipping?: ShippingInput;
+  removed_attributes?: string[];
+  items?: Array<{ ml_item_id: string; permalink: string | null }>;
+}
 
 // ---------------------------------------------------------------------------
 // Tipos de las filas
@@ -449,10 +463,12 @@ export function useMlMutations() {
 export const mlPublishApi = {
   predict: (title: string) => mlEdge<{ suggestions: MlDomainSuggestion[] }>("ml_api", { action: "predict_category", title }),
   category: (categoryId: string) => mlEdge<MlCategoryInfo>("ml_api", { action: "category", category_id: categoryId }),
+  shipping: (accountId: string, categoryId: string) =>
+    mlEdge<{ shipping: ShippingPlan }>("ml_api", { action: "shipping_options", account_id: accountId, category_id: categoryId }),
   validate: (accountId: string, input: PublishInput) =>
-    mlEdge<{ ok: boolean; errors?: string[] }>("ml_api", { action: "validate", account_id: accountId, input }),
+    mlEdge<MlPublishResult>("ml_api", { action: "validate", account_id: accountId, input }),
   publish: (accountId: string, productId: string, input: PublishInput) =>
-    mlEdge<{ ok: boolean; errors?: string[]; items?: Array<{ ml_item_id: string; permalink: string | null }> }>("ml_api", {
+    mlEdge<MlPublishResult>("ml_api", {
       action: "publish",
       account_id: accountId,
       product_id: productId,

@@ -11,6 +11,7 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { KpiCard } from "@/components/reports/KpiCard";
+import { C360Warranties } from "./C360Warranties";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatInt } from "@/lib/utils/format";
@@ -333,6 +334,7 @@ export function Customer360({ customerId }: { customerId: string | null }) {
         <div className="space-y-6 lg:col-span-2">
           <C360Charts summary={s} />
           {customerId && <C360Notes customerId={customerId} pinned={s.pinned_notes} />}
+          {customerId && <C360Warranties customerId={customerId} />}
         </div>
       </div>
 

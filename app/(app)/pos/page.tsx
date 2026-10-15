@@ -13,8 +13,9 @@ import {
   useFavoriteProducts,
   useProductSerials,
   useCategories,
-  useWarrantyPlans,
 } from "@/modules/products/hooks";
+import { useWarrantyCatalog } from "@/modules/warranty/hooks";
+import { buildWarrantyTargets } from "@/lib/warranty/pos";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import {
   useCustomersForPicker,
@@ -424,10 +425,11 @@ function PosPageInner() {
   const [orderOpen, setOrderOpen] = useState(false);
   const { data: posSettings, isFetched: posSettingsFetched } = usePosSettings();
   const offerWarranty = posSettings?.offerWarranty ?? true;
-  // La oferta de garantía sólo aparece con algo en el carrito: los planes se
-  // piden recién ahí (antes, en cada arranque del POS).
+  // Garantías extendidas (ADR-139): los tipos y su alcance se piden recién con
+  // algo en el carrito (antes, en cada arranque del POS) y si el plan las incluye.
   const cartHasLines = useCartStore((s) => s.lines.length > 0);
-  const { data: warrantyPlans } = useWarrantyPlans(true, offerWarranty && cartHasLines);
+  const warrantyFeature = useFeature("garantias");
+  const { data: warrantyCatalog } = useWarrantyCatalog(cartHasLines && warrantyFeature === true);
   const role = myTenant?.role ?? "cashier";
   // Venta libre (H36): flag del negocio Y sólo owner/manager.
   const allowFreeSale = posSettings?.allowFreeSale ?? true;
@@ -813,20 +815,18 @@ function PosPageInner() {
     return true;
   }
 
-  // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
-  const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
-  // ADR-096: la garantía extendida se enlaza a una de estas líneas (con serie primero).
+  // ADR-096 / ADR-139: líneas con garantías disponibles según el alcance de
+  // cada tipo (producto > categoría > todos), con el precio ya calculado. La
+  // garantía se enlaza a una de ellas (con serie primero, después la más cara).
   const warrantyTargets = useMemo(
     () =>
-      lines
-        .filter((l) => l.productId && (l.warrantyMonths ?? 0) > 0)
-        .sort((a, b) => Number(Boolean(b.serial)) - Number(Boolean(a.serial)))
-        .map((l) => ({
-          lineId: l.lineId,
-          label: `${l.name}${l.variantLabel ? ` (${l.variantLabel})` : ""}${l.serial ? ` · ${l.serial}` : ""}`,
-        })),
-    [lines],
+      warrantyFeature === true && warrantyCatalog
+        ? buildWarrantyTargets(lines, warrantyCatalog.plans, warrantyCatalog.scopes, categories ?? [])
+        : [],
+    [lines, warrantyCatalog, categories, warrantyFeature],
   );
+  // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
+  const hasEligibleWarranty = warrantyTargets.length > 0;
   useEffect(() => {
     if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
   }, [hasEligibleWarranty, offeredWarrantyId]);
@@ -1659,9 +1659,7 @@ function PosPageInner() {
       warrantySlot={
         offerWarranty ? (
           <WarrantyOfferCard
-            lines={lines}
-            plans={warrantyPlans ?? []}
-            base={rawTotal}
+            targets={warrantyTargets}
             selectedWarrantyId={offeredWarrantyId}
             onSelect={setOfferedWarrantyId}
           />

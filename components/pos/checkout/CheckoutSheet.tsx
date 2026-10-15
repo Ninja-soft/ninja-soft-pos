@@ -58,6 +58,8 @@ import { PosSheet } from "../ui/PosSheet";
 import { TenderLogo, tenderColorIcon, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
+import { WarrantyOptionCards } from "../WarrantyOptionCards";
+import { pickOption, type WarrantyTarget } from "@/lib/warranty/pos";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, VoucherFields, type CardStep } from "./CardWizard";
 import { Select } from "@/components/ui/Select";
 import { bankBySlug } from "@/lib/payments/banks";
@@ -108,13 +110,6 @@ export interface CheckoutPlan {
   surcharge_pct: number | string | null;
   /** Medio del plan (payment_plans.provider_key): define el n° de comercio. */
   provider_key?: string | null;
-}
-export interface CheckoutWarrantyPlan {
-  id: string;
-  label: string;
-  months: number;
-  price: number | string;
-  price_pct: number | string | null;
 }
 export interface CheckoutProfessional {
   id: string;
@@ -171,13 +166,13 @@ export interface CheckoutSheetProps {
   onAcquirerUsed?: (key: string) => void;
   /** Reglas del cupón efectivas de la sucursal y caja (pos_settings.card_voucher_rules). */
   voucherRules?: CardVoucherRules | null;
-  warrantyPlans: CheckoutWarrantyPlan[];
   initialWarrantyId?: string;
   /**
-   * ADR-096: líneas del carrito que puede cubrir la garantía extendida
-   * (garantía de fábrica > 0). La garantía queda enlazada a la elegida.
+   * ADR-096 / ADR-139: líneas del carrito con garantías disponibles, cada una
+   * con sus opciones y el precio calculado (el mismo que valida el servidor).
+   * La garantía queda enlazada a la línea elegida.
    */
-  warrantyTargets?: { lineId: string; label: string }[];
+  warrantyTargets?: WarrantyTarget[];
   professionals: CheckoutProfessional[];
   voucherRequired: boolean;
   storeCreditBalance: number;
@@ -249,7 +244,7 @@ const SPLITS = [
 ];
 let keySeq = 0;
 const NO_ACQUIRERS: AcquirerDef[] = [];
-const NO_TARGETS: { lineId: string; label: string }[] = [];
+const NO_TARGETS: WarrantyTarget[] = [];
 
 export function CheckoutSheet(props: CheckoutSheetProps) {
   const {
@@ -271,7 +266,6 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     rememberedAcquirer = null,
     onAcquirerUsed,
     voucherRules = null,
-    warrantyPlans,
     initialWarrantyId = "",
     warrantyTargets = NO_TARGETS,
     professionals,
@@ -468,12 +462,11 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   );
   const pfm = useCallback((m: string): Promo | null => pfp([{ method: m }]), [pfp]);
 
-  const wplan = warrantyPlans.find((p) => p.id === warrantyId) ?? null;
-  const warranty = wplan
-    ? Number(wplan.price_pct) > 0
-      ? round2((base * Number(wplan.price_pct)) / 100)
-      : Number(wplan.price) || 0
-    : 0;
+  // ADR-139: el precio sale de la línea que cubre (% de su precio, mínimo,
+  // máximo y redondeo del tipo); create_sale lo vuelve a calcular.
+  const wpick = pickOption(warrantyTargets, warrantyLineId, warrantyId);
+  const wTarget = warrantyTargets.find((t) => t.lineId === warrantyLineId) ?? warrantyTargets[0] ?? null;
+  const warranty = wpick?.option.total ?? 0;
 
   const totalsFor = useCallback(
     (ls: PaidLine[], promo: Promo | null, tip: number) =>
@@ -739,15 +732,14 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const finalPromo = promoFor(ls, null, t);
     const tt = totalsFor(ls, finalPromo, t);
     const extras: PaymentExtra[] = [];
-    if (warranty > 0 && wplan) {
+    if (warranty > 0 && wpick) {
       // ADR-096: la garantía queda enlazada al producto que cubre.
-      const target = warrantyTargets.find((t) => t.lineId === warrantyLineId) ?? warrantyTargets[0];
       extras.push({
         kind: "warranty",
-        name: `Garantía ${wplan.label}`,
+        name: `Garantía ${wpick.option.label}`,
         amount: warranty,
-        planId: wplan.id,
-        ...(target ? { forLineId: target.lineId } : {}),
+        planId: wpick.option.planId,
+        forLineId: wpick.target.lineId,
       });
     }
     for (const l of ls) {
@@ -1148,7 +1140,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const breakdown = hasBreakdown ? (
     <dl className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
       {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
-      {warranty > 0 && <Row label={`Garantía ${wplan?.label ?? ""}`} value={`+${money(warranty)}`} />}
+      {warranty > 0 && <Row label={`Garantía ${wpick?.option.label ?? ""}`} value={`+${money(warranty)}`} />}
       {totals.surcharges > 0 && <Row label="Recargos" value={`+${money(totals.surcharges)}`} />}
       {promoExtra > 0 && (
         <Row label={promo?.name ?? "Promo por medio de pago"} value={`-${money(promoExtra)}`} tone="success" />
@@ -1572,7 +1564,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   ) : null;
 
   const extras =
-    tipPresets.length > 0 || warrantyPlans.length > 0 || professionals.length > 0 ? (
+    tipPresets.length > 0 || warrantyTargets.length > 0 || professionals.length > 0 ? (
       <div className="mt-4 rounded-lg border border-border bg-card">
         <button
           type="button"
@@ -1621,33 +1613,31 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                 </div>
               </div>
             )}
-            {warrantyPlans.length > 0 && (
+            {wTarget && (
               <div>
                 <p className={cn(LABEL, "mb-1.5 flex items-center gap-1.5")}>
                   <ShieldCheck size={12} /> Garantía extendida
                 </p>
-                <Segmented scrollOnMobile
-                  size="sm"
-                  aria-label="Garantía extendida"
-                  value={warrantyId || "none"}
-                  onChange={(v) => setWarrantyId(v === "none" ? "" : v)}
-                  options={[
-                    { value: "none", label: "Sin garantía" },
-                    ...warrantyPlans.map((w) => ({ value: w.id, label: `${w.label} · ${w.months} meses` })),
-                  ]}
-                />
-                {warrantyId && warrantyTargets.length > 1 && (
-                  <div className="mt-2">
+                {warrantyTargets.length > 1 && (
+                  <div className="mb-2">
                     <p className={cn(LABEL, "mb-1.5")}>Cubre a</p>
                     <Segmented
+                      scrollOnMobile
                       size="sm"
                       aria-label="Producto que cubre la garantía"
-                      value={warrantyTargets.some((t) => t.lineId === warrantyLineId) ? warrantyLineId : warrantyTargets[0]!.lineId}
+                      value={wTarget.lineId}
                       onChange={setWarrantyLineId}
                       options={warrantyTargets.map((t) => ({ value: t.lineId, label: t.label }))}
                     />
                   </div>
                 )}
+                <WarrantyOptionCards
+                  options={wTarget.options}
+                  value={wpick ? warrantyId : ""}
+                  onChange={setWarrantyId}
+                  quantity={wTarget.quantity}
+                  factoryMonths={wTarget.factoryMonths}
+                />
               </div>
             )}
             {professionals.length > 0 && (

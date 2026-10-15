@@ -207,7 +207,18 @@ export default function ExpedicionPage() {
             {list.map((d) => {
               const action = primaryDispatchAction(d);
               const cross = d.fulfillment_store_id !== d.store_id;
-              const items = (d.sale?.items ?? []).filter((i) => Number(i.quantity) - Number(i.returned_qty ?? 0) > 0);
+              // ADR-136: una entrega de una venta partida trae sus propios renglones.
+              const partItems = d.items ?? [];
+              const items =
+                partItems.length > 0
+                  ? partItems.map((i) => ({
+                      product_name: i.variant_label ? `${i.product_name} (${i.variant_label})` : i.product_name,
+                      quantity: i.qty,
+                      returned_qty: 0,
+                      unit_label: i.unit,
+                    }))
+                  : (d.sale?.items ?? []).filter((i) => Number(i.quantity) - Number(i.returned_qty ?? 0) > 0);
+              const soldElsewhere = Boolean(d.sale_store_id && d.sale_store_id !== d.store_id);
               return (
                 <li key={d.id} className="flex flex-col rounded-xl bg-card p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -217,7 +228,8 @@ export default function ExpedicionPage() {
                         {d.pickup_name || d.customer_name ? ` · ${d.pickup_name ?? d.customer_name}` : ""}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Venta #{d.sale?.number ?? "-"} · {fmtDateTime(d.created_at)}
+                        Venta #{d.sale?.number ?? "-"}
+                        {(d.parts_total ?? 1) > 1 ? ` · entrega ${d.part} de ${d.parts_total}` : ""} · {fmtDateTime(d.created_at)}
                       </p>
                     </div>
                     <Badge tone={STATUS_TONE[d.status]}>{DISPATCH_STATUS_LABEL[d.status]}</Badge>
@@ -233,6 +245,7 @@ export default function ExpedicionPage() {
                       stores.length > 1 && <span>{storeName(d.store_id)}</span>
                     )}
                     {d.has_pickup_code && d.delivery_type === "retiro" && <span>· pide código</span>}
+                    {soldElsewhere && <span>· vendida en {storeName(d.sale_store_id ?? null)}</span>}
                   </div>
                   <ul className="mt-3 space-y-0.5 text-sm">
                     {items.slice(0, 6).map((i, idx) => (

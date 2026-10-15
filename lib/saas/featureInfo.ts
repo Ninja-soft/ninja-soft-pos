@@ -125,6 +125,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["pos"],
   },
+  entregas_remitos: {
+    desc: "Entregas partidas y remitos: vendé desde el POS el stock de otra sucursal o de un depósito habilitado (retira allá o se envía), partí la entrega de una venta (una parte se la lleva ahora, otra la retira en otra sucursal y otra se envía) con estados por entrega en Expedición, y emití remitos de entrega y de envío con numeración propia, bultos, transporte, COT y PDF A4 para imprimir o mandar por email.",
+    impact: "Desactivado, cada venta sale entera del salón de la sucursal que cobra y no se emiten remitos desde el sistema (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["pedidos_despacho", "depositos"],
+    needs: "Vender de otra sucursal pide además el stock por sucursal (Business).",
+  },
   cuenta_corriente: {
     desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
     impact: "Desactivado, no se puede vender en cuenta corriente ni llevar el saldo deudor de los clientes.",
@@ -374,7 +381,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Al menos dos sucursales activas.",
   },
   depositos: {
-    desc: "Depósitos internos: dentro de cada sucursal, el salón de ventas y los depósitos que quieras (reserva, devoluciones, merma) con su stock, movimientos internos que quedan en tránsito, recepción parcial con faltantes y sobrantes con motivo, conteo por depósito, reposición del salón sugerida por mínimos e importación desde Excel.",
+    desc: "Depósitos internos: dentro de cada sucursal, el salón de ventas y los depósitos que quieras (reserva, devoluciones, merma) con su stock, qué depósitos se venden y con qué prioridad, qué otras sucursales los pueden vender, movimientos internos que quedan en tránsito, recepción parcial con faltantes y sobrantes con motivo, conteo por depósito, reposición del salón sugerida por mínimos e importación desde Excel.",
     impact: "Desactivado, el stock de cada sucursal es un solo número: no se distingue lo que está en el salón de lo que está en el depósito (el servidor lo rechaza).",
     minPlan: "Pro",
     requires: ["stock"],

@@ -11,6 +11,7 @@ import type {
   Warehouse,
   WarehouseDifferenceReason,
   WarehouseKind,
+  WarehouseLink,
   WarehouseMoveReason,
   WarehouseMoveStatus,
   WarehouseOverviewRow,
@@ -64,16 +65,71 @@ function from(table: string) {
   return createClient().from(table as never);
 }
 
+const WH_COLS = "id, store_id, name, code, kind, sort";
+// ADR-136: columnas de la configuración. Sin la migración, la lectura
+// reintenta sin ellas (vendible por tipo).
+const WH_COLS_CONFIG = `${WH_COLS}, sellable, sale_priority`;
+const MISSING_CONFIG_COLS = /sellable|sale_priority/;
+
 export const warehousesApi = {
   list: async (storeId: string): Promise<Warehouse[]> => {
-    const { data, error } = await from("warehouses")
-      .select("id, store_id, name, code, kind, sort")
-      .eq("store_id", storeId)
-      .is("deleted_at", null)
-      .order("sort")
-      .order("name");
+    const run = (cols: string) =>
+      from("warehouses").select(cols).eq("store_id", storeId).is("deleted_at", null).order("sort").order("name");
+    let { data, error } = await run(WH_COLS_CONFIG);
+    if (error && MISSING_CONFIG_COLS.test(error.message)) ({ data, error } = await run(WH_COLS));
     if (error) throw error;
     return (data ?? []) as unknown as Warehouse[];
+  },
+
+  /** ADR-136: depósitos de otras sucursales habilitados para `storeId` y vínculos de los de `storeId`. */
+  links: async (storeId: string): Promise<{ own: WarehouseLink[]; incoming: (Warehouse & { store_name: string })[] }> => {
+    const own = await from("warehouse_store_links")
+      .select("warehouse_id, store_id, warehouses!inner(store_id)")
+      .is("deleted_at", null)
+      .eq("warehouses.store_id", storeId);
+    if (own.error) {
+      // Sin la migración no hay vínculos.
+      if (/warehouse_store_links|does not exist|schema cache/i.test(own.error.message)) return { own: [], incoming: [] };
+      throw own.error;
+    }
+    const inc = await from("warehouse_store_links")
+      .select(`warehouse:warehouses!inner(${WH_COLS_CONFIG}, deleted_at, store:stores(name))`)
+      .is("deleted_at", null)
+      .eq("store_id", storeId);
+    if (inc.error) throw inc.error;
+    type Inc = { warehouse: (Warehouse & { deleted_at: string | null; store: { name: string } | null }) | null };
+    return {
+      own: ((own.data ?? []) as unknown as WarehouseLink[]).map((l) => ({ warehouse_id: l.warehouse_id, store_id: l.store_id })),
+      incoming: ((inc.data ?? []) as unknown as Inc[])
+        .map((r) => r.warehouse)
+        .filter((w): w is NonNullable<Inc["warehouse"]> => Boolean(w) && !w!.deleted_at)
+        .map(({ store, deleted_at: _d, ...w }) => ({ ...w, store_name: store?.name ?? "Sucursal" })),
+    };
+  },
+
+  /** ADR-136: vendible, prioridad y sucursales que lo usan (dueño o encargado). */
+  saveConfig: (v: { id: string; sellable: boolean; priority: number; storeIds: string[] }) =>
+    rpc<{ id: string }>("warehouse_config_save", {
+      p_id: v.id,
+      p_sellable: v.sellable,
+      p_priority: v.priority,
+      p_store_ids: v.storeIds,
+    }),
+
+  /** ADR-136: el salón como fila, para habilitarlo a otras sucursales. */
+  setupPrincipal: (storeId: string) => rpc<string>("warehouse_principal_setup", { p_store_id: storeId }),
+
+  /** Miniaturas de los productos de la tabla (image_url). */
+  thumbs: async (productIds: string[]): Promise<Record<string, string>> => {
+    if (productIds.length === 0) return {};
+    const { data, error } = await createClient()
+      .from("products")
+      .select("id, image_url")
+      .in("id", productIds.slice(0, 500));
+    if (error) throw error;
+    const out: Record<string, string> = {};
+    for (const p of (data ?? []) as { id: string; image_url: string | null }[]) if (p.image_url) out[p.id] = p.image_url;
+    return out;
   },
 
   overview: async (storeId: string, search: string): Promise<WarehouseOverviewRow[]> => {
@@ -198,6 +254,26 @@ export function useWarehouses(storeId: string | null) {
   });
 }
 
+/** ADR-136: vínculos de los depósitos de la sucursal y depósitos de otras habilitados para ella. */
+export function useWarehouseLinks(storeId: string | null) {
+  return useQuery({
+    queryKey: ["warehouse-links", storeId],
+    queryFn: () => warehousesApi.links(storeId!),
+    enabled: Boolean(storeId),
+  });
+}
+
+/** Miniaturas por producto (para la tabla de Depósitos). */
+export function useProductThumbs(productIds: string[]) {
+  const key = [...new Set(productIds)].sort();
+  return useQuery({
+    queryKey: ["product-thumbs", key.join(",")],
+    queryFn: () => warehousesApi.thumbs(key),
+    enabled: key.length > 0,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useWarehouseOverview(storeId: string | null, search: string, enabled = true) {
   return useQuery({
     queryKey: ["warehouse-overview", storeId, search],
@@ -218,7 +294,7 @@ export function useWarehouseMoves(storeId: string | null, open: boolean) {
 export function useWarehouseMutations() {
   const qc = useQueryClient();
   const invalidate = () => {
-    for (const key of ["warehouses", "warehouse-overview", "warehouse-moves", "stock-by-store", "products"]) {
+    for (const key of ["warehouses", "warehouse-overview", "warehouse-moves", "warehouse-links", "stock-by-store", "products"]) {
       void qc.invalidateQueries({ queryKey: [key] });
     }
   };
@@ -230,5 +306,7 @@ export function useWarehouseMutations() {
     createMove: useMutation({ mutationFn: warehousesApi.createMove, ...opts }),
     receive: useMutation({ mutationFn: warehousesApi.receive, ...opts }),
     cancel: useMutation({ mutationFn: warehousesApi.cancel, ...opts }),
+    saveConfig: useMutation({ mutationFn: warehousesApi.saveConfig, ...opts }),
+    setupPrincipal: useMutation({ mutationFn: warehousesApi.setupPrincipal, ...opts }),
   };
 }

@@ -312,6 +312,8 @@ export interface CartSummaryProps {
   priceSlot?: React.ReactNode;
   /** ADR-116: período del servicio y vencimiento del pago (con servicios). */
   serviceSlot?: React.ReactNode;
+  /** ADR-136: entregas de la venta (otra sucursal, retiro o envío). */
+  deliverySlot?: React.ReactNode;
   /** Pausar y Limpiar la venta en curso (ADR-106). */
   actionsSlot?: React.ReactNode;
   /** ADR-122: botón "Presupuesto" junto a Cobrar (guarda sin cobrar). */
@@ -330,6 +332,7 @@ export function CartSummary(p: CartSummaryProps) {
       {p.warrantySlot}
       {p.priceSlot}
       {p.serviceSlot}
+      {p.deliverySlot}
 
       {/* Cliente + acciones de cuenta */}
       <div className="flex items-center gap-1.5">

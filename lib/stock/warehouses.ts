@@ -19,6 +19,55 @@ export interface Warehouse {
   code: string | null;
   kind: WarehouseKind;
   sort: number;
+  /** ADR-136: su stock cuenta para la venta (el salón siempre). Sin la migración, por tipo. */
+  sellable?: boolean;
+  /** ADR-136: orden en que la venta toma de los depósitos vendibles (menor = primero). */
+  sale_priority?: number;
+}
+
+/** ADR-136: sucursal (distinta de la del depósito) que puede vender su stock. */
+export interface WarehouseLink {
+  warehouse_id: string;
+  store_id: string;
+}
+
+/** Tipos que nacen no vendibles (lo mismo que hace el servidor al crearlos). */
+export const NON_SELLABLE_KINDS: WarehouseKind[] = ["merma", "devolucion"];
+
+/** ¿El stock del depósito cuenta para la venta? (columna o, sin la migración, por tipo). */
+export function isSellable(w: Pick<Warehouse, "kind" | "sellable">): boolean {
+  if (w.kind === "principal") return true;
+  return w.sellable ?? !NON_SELLABLE_KINDS.includes(w.kind);
+}
+
+/** Vendible de la sucursal: salón + depósitos vendibles (sin los que no se venden). */
+export function sellableQty(row: WarehouseOverviewRow, warehouses: Pick<Warehouse, "id" | "kind" | "sellable">[]): number {
+  let total = Number(row.principal_qty);
+  for (const w of warehouses) {
+    if (w.kind === "principal" || !isSellable(w)) continue;
+    total += Number(row.by_warehouse?.[w.id] ?? 0);
+  }
+  return round3(total);
+}
+
+/** Sucursales (por nombre) que pueden vender un depósito, además de la suya. */
+export function warehouseUsedBy(
+  w: Pick<Warehouse, "id">,
+  links: WarehouseLink[],
+  storeName: (id: string) => string | undefined,
+): string[] {
+  return links
+    .filter((l) => l.warehouse_id === w.id)
+    .map((l) => storeName(l.store_id))
+    .filter((n): n is string => Boolean(n))
+    .sort((a, b) => a.localeCompare(b, "es"));
+}
+
+/** Columnas visibles por defecto con muchos depósitos: el salón y los primeros. */
+export function defaultVisibleWarehouses<T extends Pick<Warehouse, "id" | "kind" | "sort" | "name">>(list: T[], max = 4): string[] {
+  return sortWarehouses(list)
+    .slice(0, Math.max(1, max))
+    .map((w) => w.id);
 }
 
 /** Fila de warehouse_stock_overview. */
@@ -272,6 +321,9 @@ const ERROR_MESSAGES: [RegExp, string][] = [
   [/untracked_not_transferable/, "Ese producto no controla stock."],
   [/variant_required/, "Elegí la variante (talle o color)."],
   [/invalid_qty/, "Revisá las cantidades."],
+  [/invalid_priority/, "La prioridad va de 0 a 999."],
+  [/warehouse_not_found/, "Ese depósito ya no existe. Actualizá la página."],
+  [/store_not_found/, "Una de las sucursales elegidas ya no existe."],
 ];
 
 export function warehouseErrorMessage(e: unknown): string {

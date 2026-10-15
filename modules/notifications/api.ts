@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
+import { activeTenantIdOf } from "@/lib/tenant/scope";
 import type { Tables } from "@/types/database";
 
 export type NotificationRow = Tables<"notifications">;
@@ -27,11 +28,19 @@ export type NotificationType =
   // Pedidos desde el catálogo público (ADR-130).
   | "pedidos";
 
+/**
+ * De dónde viene (ADR-152): `business` = del negocio activo (incluye las
+ * personales, que siempre llevan negocio); `platform` = aviso de NinjaSoft
+ * sin negocio (se ve igual en todos los negocios del usuario y se marca así).
+ */
+export type NotificationScope = "business" | "platform";
+
 /** Notificación con el estado de lectura propio del usuario resuelto. */
 export type Notification = NotificationRow & {
   read: boolean;
   archived: boolean;
   acked: boolean;
+  scope: NotificationScope;
 };
 
 type ReadState = {
@@ -39,6 +48,20 @@ type ReadState = {
   archived_at: string | null;
   acked_at: string | null;
 };
+
+/**
+ * Defensa en profundidad sobre la RLS: sólo quedan las del negocio activo y
+ * las de plataforma. Una notificación de otro negocio del mismo usuario nunca
+ * se muestra, aunque una policy o un cache la dejen pasar.
+ */
+export function scopeNotifications<T extends Pick<NotificationRow, "target_tenant_id">>(
+  rows: T[],
+  activeTenantId: string | null,
+): (T & { scope: NotificationScope })[] {
+  return rows
+    .filter((n) => n.target_tenant_id === null || (activeTenantId !== null && n.target_tenant_id === activeTenantId))
+    .map((n) => ({ ...n, scope: n.target_tenant_id === null ? "platform" : "business" }));
+}
 
 async function currentUserId(): Promise<string> {
   const user = await getCurrentUser();
@@ -54,19 +77,24 @@ export const notificationsApi = {
    */
   list: async (includeArchived = false): Promise<Notification[]> => {
     const supabase = createClient();
+    const user = await getCurrentUser();
+    if (!user) return [];
+    // El estado de lectura embebido se pide SÓLO del usuario actual: la RLS de
+    // notification_reads deja ver al staff (en /internal) las de todos.
     const { data, error } = await supabase
       .from("notifications")
-      .select("*, notification_reads(read_at, archived_at, acked_at)")
+      .select("*, notification_reads(read_at, archived_at, acked_at, user_id)")
+      .eq("notification_reads.user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw error;
 
-    const rows = (data ?? []) as (NotificationRow & {
-      notification_reads: ReadState[] | null;
+    const rows = (data ?? []) as unknown as (NotificationRow & {
+      notification_reads: (ReadState & { user_id: string })[] | null;
     })[];
 
-    const mapped: Notification[] = rows.map((n) => {
-      const r = n.notification_reads?.[0];
+    const mapped: Notification[] = scopeNotifications(rows, activeTenantIdOf(user)).map((n) => {
+      const r = n.notification_reads?.find((x) => x.user_id === user.id);
       const { notification_reads: _ignored, ...rest } = n;
       return {
         ...rest,

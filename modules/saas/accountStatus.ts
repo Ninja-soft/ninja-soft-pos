@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 // =============================================================================
 // Estado de la CUENTA (suscripción) del tenant activo, para gatear el acceso a
@@ -96,11 +97,14 @@ export function useAccountStatus() {
           pastDueDaysLeft: null,
         };
       }
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       if (!mem) {

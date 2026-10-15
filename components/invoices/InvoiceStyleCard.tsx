@@ -39,6 +39,7 @@ import { uploadTicketImage } from "@/lib/tickets/uploadTicketImage";
 import { InvoiceDocument, type InvoiceFormat } from "@/components/invoices/InvoiceDocument";
 import { InvoiceFit } from "@/components/invoices/InvoiceFit";
 import { docOptions } from "@/lib/invoices/fromTicket";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -59,11 +60,14 @@ function useManageCtx() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id, role")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       if (!mem) return null;

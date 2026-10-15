@@ -54,6 +54,7 @@ const ProfileEditModal = dynamic(
 );
 import { PinQuickAccess } from "@/components/security/PinQuickAccess";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 import {
   Dropdown,
   DropdownContent,
@@ -117,11 +118,14 @@ export function InternalShell({
       // Cuenta (users) con fallback a la foto/nombre de membresía (POS).
       const [acc, mem] = await Promise.all([
         supabase.from("users").select("full_name, avatar_url").eq("id", user.id).maybeSingle(),
-        supabase
-          .from("tenant_users")
-          .select("display_name, avatar")
-          .eq("user_id", user.id)
-          .eq("status", "active")
+        onlyActiveTenant(
+          supabase
+            .from("tenant_users")
+            .select("display_name, avatar")
+            .eq("user_id", user.id)
+            .eq("status", "active"),
+          user,
+        )
           .limit(1)
           .maybeSingle(),
       ]);

@@ -40,6 +40,7 @@ import {
   type ChecklistStep,
   type ChecklistStatus,
 } from "@/lib/onboarding/activationChecklist";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 // Pasos dinámicos por rubro y plan (F15 · H71 · ADR-086): la lista sale de
 // lib/onboarding/activationChecklist.ts con el perfil por rubro (ADR-075).
@@ -423,11 +424,14 @@ export function OnboardingChecklist() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       if (!mem) return null;

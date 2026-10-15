@@ -105,6 +105,15 @@ function NotificationItem({
           >
             {n.title}
           </span>
+          {n.scope === "platform" && (
+            // Aviso de NinjaSoft (sin negocio): se ve en todos tus negocios.
+            <span
+              title="Aviso de NinjaSoft para todos tus negocios"
+              className="shrink-0 rounded bg-info/15 px-1.5 py-0.5 text-[10px] font-medium text-info"
+            >
+              NinjaSoft
+            </span>
+          )}
           <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             {typeLabel(n.type)}
           </span>

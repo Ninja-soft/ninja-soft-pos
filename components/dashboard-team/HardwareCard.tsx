@@ -56,6 +56,7 @@ import {
   exportDiagnosticJson,
   exportDiagnosticXlsx,
 } from "@/lib/hardware/export";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 // =============================================================================
 // Centro de diagnostico de hardware (F10 - H26)
@@ -183,11 +184,14 @@ export function HardwareCard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, tenants(name, slug)")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id, tenants(name, slug)")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       const t = (mem as { tenants?: { name?: string; slug?: string } } | null)?.tenants;

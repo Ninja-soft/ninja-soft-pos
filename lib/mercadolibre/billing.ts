@@ -8,9 +8,15 @@ import type {
   LogisticKind,
   MlInvoicePlan,
   PerceptionStrategy,
+  PlanInput,
   PlanReceptor,
+  PlanSettings,
   ReceptorChoice,
 } from "@/supabase/functions/_shared/mercadolibre/invoicePlan";
+import {
+  resolveLogisticStore,
+  type LogisticStores,
+} from "@/supabase/functions/_shared/mercadolibre/billingConfig";
 
 export type { MlInvoicePlan, PlanReceptor, ReceptorChoice };
 
@@ -81,7 +87,7 @@ export const INVOICE_MODES: Array<{ key: string; label: string; hint: string; pr
 ];
 
 export const COUPON_MODES: Array<{ key: CouponMode; label: string; hint: string }> = [
-  { key: "discount_line", label: "Renglón de descuento", hint: "Los productos a su precio y el cupón como descuento (como ANDESMAR)." },
+  { key: "discount_line", label: "Renglón de descuento", hint: "Los productos a su precio y el cupón como un renglón de descuento aparte." },
   { key: "prorate", label: "Repartido en los precios", hint: "El cupón baja el precio de cada producto en proporción." },
   { key: "none", label: "No descontar", hint: "Se factura el precio completo (si tu contador lo indica cuando el cupón lo paga Mercado Libre)." },
 ];
@@ -254,4 +260,113 @@ export function billingErrorMessage(e: unknown): string | null {
   const msg = e instanceof Error ? e.message : String(e ?? "");
   for (const [re, text] of BILLING_ERRORS) if (re.test(msg)) return text;
   return null;
+}
+
+// -----------------------------------------------------------------------------
+// Configuración (ADR-145): venta de ejemplo para la vista previa, sucursal
+// por tipo de envío y textos de cada paso.
+// -----------------------------------------------------------------------------
+export type SampleLogistic = "me2" | "full" | "flex" | "me1" | "a_convenir";
+export type SampleBuyer = "ri" | "cf";
+
+export interface SampleOptions {
+  logistic: SampleLogistic;
+  buyer: SampleBuyer;
+  coupon: boolean;
+  shippingPaid: boolean;
+}
+
+export const SAMPLE_DEFAULT: SampleOptions = { logistic: "me2", buyer: "ri", coupon: true, shippingPaid: true };
+
+export const SAMPLE_LOGISTICS: Array<{ key: SampleLogistic; label: string }> = [
+  { key: "me2", label: "Mercado Envíos" },
+  { key: "full", label: "Full" },
+  { key: "flex", label: "Flex" },
+  { key: "me1", label: "Envío propio" },
+  { key: "a_convenir", label: "A convenir" },
+];
+
+const SAMPLE_SHIPMENT: Record<SampleLogistic, { mode: string; logistic_type: string | null }> = {
+  me2: { mode: "me2", logistic_type: "drop_off" },
+  full: { mode: "me2", logistic_type: "fulfillment" },
+  flex: { mode: "me2", logistic_type: "self_service" },
+  me1: { mode: "me1", logistic_type: null },
+  a_convenir: { mode: "not_specified", logistic_type: null },
+};
+
+/** CUIT de ejemplo (dígito verificador válido). */
+export const SAMPLE_CUIT = "30712345671";
+export const SAMPLE_SHIPPING = 6875;
+export const SAMPLE_COUPON = 5000;
+
+/**
+ * Venta de ejemplo con lo elegido en la pantalla: dos productos ($ 125.000),
+ * cupón de $ 5.000 que paga Mercado Libre, envío de $ 6.875 pagado por el
+ * comprador y, si las percepciones están prendidas, el CUIT en el padrón de
+ * cada jurisdicción con regla (alícuota de ejemplo 3 %). Pura: la usa la
+ * vista previa y los tests.
+ */
+export function sampleInvoiceInput(
+  settings: PlanSettings,
+  emitter: { iva_condition: string | null; issues_m: boolean },
+  o: SampleOptions,
+  canPerceive: boolean,
+  today = "2026-10-15",
+): PlanInput {
+  const ship = SAMPLE_SHIPMENT[o.logistic];
+  const shipping = o.shippingPaid && o.logistic !== "a_convenir" ? SAMPLE_SHIPPING : 0;
+  const coupon = o.coupon ? SAMPLE_COUPON : 0;
+  const ri = o.buyer === "ri";
+  return {
+    orders: [
+      {
+        ml_order_id: "2000012345678901",
+        status: "paid",
+        total_amount: 125000,
+        lines: [
+          { ml_order_id: "2000012345678901", ml_item_id: "MLA1", ml_variation_id: null, title: "Zapatillas urbanas", seller_sku: null, quantity: 1, unit_price: 120000, iva_rate: 21 },
+          { ml_order_id: "2000012345678901", ml_item_id: "MLA2", ml_variation_id: null, title: "Medias deportivas", seller_sku: null, quantity: 2, unit_price: 2500, iva_rate: 21 },
+        ],
+        payments: [{ id: "1", status: "approved", transaction_amount: 125000, coupon_amount: coupon, shipping_cost: shipping }],
+      },
+    ],
+    shipment: { mode: ship.mode, logistic_type: ship.logistic_type, cost: shipping, state: "Buenos Aires" },
+    billing: ri
+      ? { docType: "cuit", docNumber: SAMPLE_CUIT, name: "Distribuidora Sur SRL", ivaCondition: "responsable_inscripto", address: "Av. Siempreviva 742", state: "Buenos Aires" }
+      : { docType: "dni", docNumber: "30123456", name: "Martina Gómez", ivaCondition: "consumidor_final", address: null, state: "Buenos Aires" },
+    padron: null,
+    iibb: settings.perc_rules
+      .filter((r) => r.enabled)
+      .map((r) => ({ jurisdiction: r.jurisdiction, rate: 3, valid_from: "2026-01-01", valid_to: "2099-12-31" })),
+    iibb_loaded: [],
+    emitter: { iva_condition: emitter.iva_condition ?? "responsable_inscripto", issues_m: emitter.issues_m, cf_id_threshold: null, can_perceive: canPerceive },
+    settings,
+    today,
+  };
+}
+
+export const LOGISTIC_RULE_LABELS: Record<string, { label: string; hint: string }> = {
+  default: { label: "Por defecto", hint: "Todo lo que no tenga una regla propia." },
+  me2: { label: "Mercado Envíos", hint: "Colecta, despacho en agencia o cross docking." },
+  full: { label: "Full", hint: "El stock sale siempre del depósito virtual Full." },
+  flex: { label: "Flex", hint: "Lo llevás vos o tu cadete en el día." },
+  me1: { label: "Envío propio (ME1)", hint: "Lo despachás con tu transporte." },
+  custom: { label: "Envío personalizado", hint: "Costo de envío propio de la publicación." },
+  a_convenir: { label: "A convenir", hint: "Retiro o envío que arreglás con el comprador." },
+};
+
+/** Punto de venta con el que saldría una venta de este tipo de envío (mismo orden que el servidor). */
+export function previewPtoVta(
+  v: {
+    logistic: string;
+    rules: LogisticStores;
+    accountStore: { store_id: string | null; warehouse_id: string | null } | null;
+    accountPtoVta: number | null;
+    stores: Array<{ id: string; name: string; pto_vta: number | null }>;
+  },
+): { pto_vta: number | null; store: string | null; source: "logistic" | "default" | "account" } {
+  const r = resolveLogisticStore(v.rules, v.logistic, v.accountStore ?? { store_id: null, warehouse_id: null });
+  const store = v.stores.find((s) => s.id === r.store_id) ?? null;
+  const pv = r.source === "account" ? (v.accountPtoVta ?? store?.pto_vta ?? null) : (store?.pto_vta ?? v.accountPtoVta ?? null);
+  return { pto_vta: pv, store: store?.name ?? null, source: r.source };
 }

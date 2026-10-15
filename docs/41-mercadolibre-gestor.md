@@ -115,6 +115,22 @@ El precio que se manda a ML lo calcula **siempre el servidor** (al publicar y en
 
 Dos tableros: **Ventas** (Nueva, A preparar, Despachada, Entregada, Con reclamo, Resuelta) y **Posventa** (Nuevo, En gestión, Esperando, Resuelto). Etapas configurables (nombre, orden, estado automático asociado). Cada tarjeta entra sola en la etapa que corresponde a su estado (orden pagada, envío listo, entregado, reclamo abierto, reclamo cerrado) hasta que alguien la mueve a mano; desde ahí el sistema no la mueve. Asignación a una persona del negocio y nota corta. Kanban con scroll lateral en mobile y "Mover a" accesible por teclado.
 
+### 3.6 Maestro de motivos de reclamo (ADR-147)
+
+Cada reclamo trae un `reason_id` (PDD9939, PNR9501, CS9527). El maestro `ml_claim_reasons` (tabla de plataforma) le pone título y descripción en castellano:
+
+| Tipo | Prefijo | Qué es |
+|---|---|---|
+| Producto distinto o defectuoso | PDD | El producto llegó: distinto, roto, incompleto, o el comprador se arrepintió |
+| Producto no recibido | PNR | El comprador dice que no lo recibió (`PNR34xx` son alias de `PNR95xx`) |
+| Cancelación de la venta | CS | Cancelaciones (problemas con el envío, stock, etc.) |
+
+- Fuente: `GET /post-purchase/v1/claims/reasons/{id}` (✓, sólo GET). Campos: `id`, `flow` (circuito: `post_purchase_delivered`, `mediations_undelivered`, `cancel_sale`, ...), `name` (clave en inglés), `detail` (texto que ve el comprador), `parent_id`, `status`, `filter.site_id[]`, `settings.expected_resolutions[]` (`refund`, `return_product`, `change_product`, `product`) y `settings.rules_engine_triage[]` (`repentant`, `defective`, `different`, `incomplete`, `not_working`, `rejected`). No hay endpoint de listado (404).
+- Seed: 622 motivos del sitio MLA leídos el 15/10/2026. Lo que falte lo completa la Edge `ml_api` (`reasons_fill`) la primera vez que aparece el código.
+- Los 4 por defecto de la exclusión: **PDD9939** "Llegó lo que compré en buenas condiciones pero no lo quiero", **PNR9501** "Me arrepentí de la compra", **PDD9502** "Me arrepentí de comprarlo" y **PDD9829** "Lo compré por error".
+- "Suele poder excluirse" es orientativo (arrepentimiento, compra por error, mejor precio, ya no lo necesita, compra no reconocida): Mercado Libre decide cada pedido.
+- En Configuración, el selector guarda la misma lista de códigos de siempre (`exclusion_reasons`).
+
 ---
 
 ## 4. Modelo de datos
@@ -143,6 +159,8 @@ Todas con `tenant_id` NOT NULL sin default, RLS de lectura `tenant_id = (select 
 | `ml_board_stages`, `ml_board_cards` | Etapas y tarjetas de los embudos |
 | `ml_sync_jobs.kind` | Suma `claim_refresh` |
 
+**Maestro de motivos** (`20261214100000_ml_claim_reasons`, ADR-147): `ml_claim_reasons`, tabla de plataforma sin `tenant_id` (clave = código de ML), lectura `authenticated`, escritura sólo service_role (seed y Edge `ml_api`).
+
 ---
 
 ## 5. Endpoints de Mercado Libre
@@ -163,6 +181,7 @@ Todos con el token del negocio por las Edges (`ml_api`, `ml_gestor`, `ml_worker`
 | `GET /post-purchase/v1/claims/search?status=opened&sort=date_created:desc` ✓ | Reclamos (sin filtro: 400 `atLeastOneFilterProvided`) | Comunicación pre y postventa |
 | `GET /post-purchase/v1/claims/{id}`, `/detail`, `/messages`, `/affects-reputation`, `/partial-refund/available-offers` | Detalle | Comunicación pre y postventa |
 | `GET /post-purchase/v2/claims/{id}/returns` | Devolución | Comunicación pre y postventa |
+| `GET /post-purchase/v1/claims/reasons/{id}` ✓ | Maestro de motivos (ADR-147) | Comunicación pre y postventa |
 | `POST /post-purchase/v1/claims/{id}/actions/send-message` | Responder | Comunicación (escritura) |
 | `POST /post-purchase/v1/claims/{id}/attachments` | Adjuntos | Comunicación (escritura) |
 | `POST /post-purchase/v1/claims/{id}/actions/open-dispute` **[confirmar ruta]** | Pedir la mediación | Comunicación (escritura) |

@@ -21,7 +21,8 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { readJsonLimited } from "../_shared/requestGuard.ts";
-import { MlApiError, type MlClient } from "../_shared/mercadolibre/client.ts";
+import { MlApiError } from "../_shared/mercadolibre/client.ts";
+import { sendBuyerMessage } from "../_shared/mercadolibre/buyerMessage.ts";
 import { fetchPack, planForPack } from "../_shared/mercadolibre/worker.ts";
 import { perceptionPreference, perceptionTexts } from "../_shared/mercadolibre/perceptionLink.ts";
 import type { PerceptionLine } from "../_shared/mercadolibre/invoicePlan.ts";
@@ -41,27 +42,6 @@ interface PlanRow {
     receptors?: { billing?: { name?: string } };
   };
   fiscal_document_id: string | null;
-}
-
-/** Envía el mensaje al comprador: guía de acciones (OTHER) y, si falla, postventa. */
-async function sendBuyerMessage(
-  client: MlClient,
-  pack: string,
-  sellerId: number,
-  buyerId: number | null,
-  texts: { full: string; short: string },
-): Promise<void> {
-  try {
-    await client.post(`/messages/action_guide/packs/${encodeURIComponent(pack)}/option`, { option_id: "OTHER", text: texts.short });
-    return;
-  } catch (e) {
-    if (!(e instanceof MlApiError) || !buyerId) throw e;
-  }
-  await client.post(`/messages/packs/${encodeURIComponent(pack)}/sellers/${sellerId}?tag=post_sale`, {
-    from: { user_id: sellerId },
-    to: { user_id: buyerId },
-    text: texts.full,
-  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -178,7 +158,7 @@ Deno.serve(async (req: Request) => {
             .eq("status", "link_sent")
             .maybeSingle();
           if (!charge?.init_point) return json({ error: "no_open_link" }, 409);
-          const texts = perceptionTexts({ template: s.perc_message, buyer: name, amount, link: charge.init_point, days, lines: perc.lines ?? [] });
+          const texts = perceptionTexts({ template: s.perc_message, buyer: name, amount, link: charge.init_point, days, lines: perc.lines ?? [], packKey: plan.pack_key });
           try {
             await sendBuyerMessage(client, plan.pack_key, account.ml_user_id, buyer?.buyer_id ?? null, texts);
             await rpc("ml_perception_message_sent", { p_charge: charge.id, p_ok: true });
@@ -191,7 +171,7 @@ Deno.serve(async (req: Request) => {
 
         // Vista previa: monto y mensaje, sin crear nada.
         if (b.dry_run === true) {
-          const texts = perceptionTexts({ template: s.perc_message, buyer: name, amount, link: "https://mpago.la/…", days, lines: perc.lines ?? [] });
+          const texts = perceptionTexts({ template: s.perc_message, buyer: name, amount, link: "https://mpago.la/…", days, lines: perc.lines ?? [], packKey: plan.pack_key });
           return json({ ok: true, dry_run: true, amount, days, message: texts.full });
         }
 
@@ -228,7 +208,7 @@ Deno.serve(async (req: Request) => {
         // Link completo (nunca acortado).
         const link = cred.env === "test" ? pref.sandbox_init_point || pref.init_point || "" : pref.init_point || pref.sandbox_init_point || "";
         await admin.from("mp_payment_intents").update({ preference_id: pref.id, init_point: link }).eq("id", intentId);
-        const texts = perceptionTexts({ template: s.perc_message, buyer: name, amount, link, days, lines: perc.lines ?? [] });
+        const texts = perceptionTexts({ template: s.perc_message, buyer: name, amount, link, days, lines: perc.lines ?? [], packKey: plan.pack_key });
         const created = (await rpc("ml_perception_charge_create", {
           p_plan: plan.id,
           p_user: user.id,

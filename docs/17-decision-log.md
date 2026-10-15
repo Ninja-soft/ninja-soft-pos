@@ -5329,3 +5329,72 @@ El dueño factura las ventas de Mercado Libre a gran escala en ANDESMAR (MeliOmn
 - Para percepciones hace falta el padrón de IIBB completo (no "sólo mis clientes"). El tramo D/C del padrón de ARBA no se importa: se configura un % de base por jurisdicción.
 - A confirmar con la cuenta real: ruta del `DELETE` del documento fiscal, NC en el pack y mensaje por la guía de acciones. Deuda: NC parcial automática, factura aparte del envío a convenir, corte del vencimiento a fin de mes, Facturador de ML.
 - Tests: `tests/unit/mlFacturacion.test.ts` (cupones, envío, receptor, percepciones por jurisdicción, link, PDF, worker), `tests/unit/mlLinkCandidates.test.ts`, `tests/components/MlBillingTab.test.tsx`, `tests/components/LinkProductModal.test.tsx` y `tests/integration/rls-ml-facturacion.test.ts`; migraciones corridas en PGlite con el armado real (82 chequeos: venta con cupón y envío a una RI con factura A y punto de venta de la cuenta, percepción cobrada por link y factura A con el tributo, vencida a B, matriz de ARCA, a revisar, bandeja, RLS, NC por reintegro, cancelación con pago tarde, sin la feature como ADR-104, orden cambiada después de entrar; guardarraíles en 0).
+
+---
+
+## ADR-145: Configuración de la facturación de Mercado Libre por pasos con vista previa, mensaje al facturar y leyenda con plantillas activas por defecto, y sucursal y depósito por tipo de envío (H142)
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261213100000_ml_facturacion_config_ux` sin aplicar; Edges `ml_worker` y `ml_facturacion` modificadas, sin desplegar; sin mensajes ni facturas reales en las pruebas) · **Hito:** H142 · **Base:** ADR-141 (facturación de ML), ADR-142 (Full), ADR-104, ADR-136 (depósitos). **Numeración:** si otra rama abierta tomó la 145, renumerar al mergear.
+
+### Contexto
+
+El dueño pidió una configuración de la facturación de Mercado Libre más intuitiva (era una lista larga de opciones sin un ejemplo), sacar de la pantalla las menciones a otra empresa ("como ..."), un mensaje de percepción de ejemplo precargado como el que ya usa en su otra operación, un mensaje al facturar y una leyenda en la factura activos por defecto y editables, las pestañas de Mercado Libre en una sola fila en desktop y, después, elegir desde qué sucursal y depósito se factura según el tipo de envío (ME2, Full, ME1, Flex, a convenir).
+
+### Decisión
+
+1. **Pasos con explicación corta**: 1 Cuándo facturar (tarjetas), 2 Qué factura sale (a quién y letra sugerida, punto de venta, PDF, subir a ML, sucursal y depósito por envío), 3 Cupones y envío, 4 Percepciones (estrategia por envío, link de cobro, reglas por jurisdicción), 5 Notas de crédito, 6 Mensajes y leyenda. **Modo simple** con lo esencial y el interruptor **Configuración avanzada** (padrón, DNI del CUIL, empresa como consumidor final, concepto, control de lo cobrado, provincias bloqueadas, texto del renglón de envío, modo acumulado o destino y los mínimos y bases de cada regla), recordado por navegador.
+2. **Vista previa** "Así queda la factura de una venta de ejemplo" armada con `buildInvoicePlan` (el mismo armado del worker) sobre una venta fija (`sampleInvoiceInput`: dos productos, cupón, envío pagado, CUIT o consumidor final, tipo de envío elegible) y recalculada con cada cambio: letra, punto de venta y sucursal (mismo orden que el servidor), renglones, cupón, envío, percepción, estado, avisos y leyenda.
+3. **Plantillas** (`_shared/mercadolibre/billingConfig.ts`, pura): variables entre llaves por plantilla (`{comprador}`, `{monto}`, `{link}`, `{venta}`, `{jurisdiccion}`, `{detalle}`, `{dias}`, `{factura}`, `{total}`, `{fecha}`, `{envio}`), lo desconocido queda a la vista, null en la base = el ejemplo vigente (guardar el ejemplo guarda vacío). Editor con variables de un toque, vista previa, contador contra el tope de ML y **Restaurar ejemplo**. El mensaje de percepción de ejemplo pide el pago para la A u ofrece la B, con el link completo, y entra en los 350 caracteres de la guía de mensajes; `{nombre}` y `{detalle}` siguen andando.
+4. **Mensaje al facturar** (activo por defecto): después de subir la factura, el worker manda un mensaje por la guía de mensajes (OTHER, 350) o, si ML no la deja, por postventa (`buyerMessage.ts`, compartido con el link de la percepción). Una sola vez por factura (`ml_fiscal_uploads.message_sent_at`), nunca para notas de crédito, nunca si la subida falló, y un error del mensaje no frena la subida (queda en `message_error` y en auditoría). ML ya avisa al comprador cuando se sube la factura: el mensaje es un saludo extra.
+5. **Leyenda en la factura** (activa por defecto): va impresa en el PDF debajo del CAE, en hasta 4 renglones (A4) o 6 (ticket), 240 caracteres. WSFE no tiene un campo de observaciones libres, así que no se informa a ARCA.
+6. **Sucursal y depósito por tipo de envío** (`ml_billing_settings.logistic_stores`): `{default|me2|full|flex|me1|custom|a_convenir|none: {store_id, warehouse_id}}`. `ml_ingest_pack` (recreada desde `20261212100000`, con los bloques de Full y del plan intactos) toma la regla del tipo, si no la "por defecto", si no la de la cuenta (`_ml_logistic_store`, espejo de `resolveLogisticStore`): la venta nace en esa sucursal y el stock sale de ese depósito; Full factura en la sucursal elegida y su stock sigue saliendo del depósito virtual Full. `_ml_invoice_emit` usa el punto de venta de esa sucursal (lo elegido en la venta manda; sin regla, el de la cuenta y después el de la sucursal). Validación en `ml_billing_settings_save`: claves conocidas, sucursal activa del negocio, depósito de esa sucursal, Full sin depósito.
+7. **Pestañas de Mercado Libre en una fila**: `Segmented` suma `scroll` (una fila en cualquier ancho, scroll lateral con barra fina desde sm y el activo siempre a la vista). Se usa en la pantalla de Mercado Libre y en las secciones de su configuración; el resto de las pantallas sigue con `scrollOnMobile`.
+8. **Sin menciones a otras empresas en la UI**: el texto del cupón ("como ...") y los comentarios de los archivos de la facturación se reescriben.
+
+### Gating
+
+Todo lo nuevo es parte de `mercadolibre_facturacion` (no hay feature nueva: es configuración de esa función): `ml_billing_settings_save` lo exige para cualquier campo pro, `ml_ingest_pack` aplica la sucursal por envío sólo con la feature, `ml_invoice_pdf_data` devuelve la leyenda y el mensaje sólo con la feature y `_ml_invoice_emit` ya la exigía. Sin la feature, la venta entra y se factura como antes.
+
+### Consecuencias
+
+- Migración `20261213100000_ml_facturacion_config_ux` después de `20261212100000_ml_facturacion_ingest`. Recrea `_ml_billing_settings`, `ml_billing_settings_get`, `ml_billing_settings_save`, `_ml_invoice_emit`, `ml_invoice_pdf_data` y **`ml_ingest_pack`** (una migración futura que la toque tiene que partir de esta). Nuevas: `_ml_logistic_kind`, `_ml_logistic_store` (internas) y `ml_invoice_message_sent` (service_role).
+- Edges a desplegar: `ml_worker` (leyenda y mensaje) y `ml_facturacion` (mensaje de percepción con las variables nuevas). Sin secrets nuevos. Permiso de Comunicación de la app de ML (ya pedido en ADR-141).
+- Verificado en PGlite con la cadena completa de 422 migraciones: 38 chequeos (reglas guardadas y validadas, sucursal y depósito por ME2, Full en la sucursal elegida sin tocar el stock propio, Flex sin regla, regla por defecto, sin envío, sin la feature, sucursal dada de baja, emisión con el PV de la sucursal de la regla, con el de la cuenta sin regla y con el de la cuenta si la regla se agregó después de que la venta entró en otra sucursal, leyenda y mensaje en `ml_invoice_pdf_data`, mensaje una sola vez, sin la feature, permisos de las internas) y guardarraíles de RLS en 0.
+- A confirmar con la cuenta real: si la guía de mensajes deja usar OTHER dos veces en la misma venta (percepción y factura); si no, el mensaje de la factura va por postventa y, si ML tampoco lo deja, queda anotado.
+- Tests: `tests/unit/mlFacturacionConfig.test.ts`, `tests/components/MlBillingSettings.test.tsx`, `tests/components/SegmentedScroll.test.tsx` y ajustes en `tests/unit/mlFacturacion.test.ts` y `tests/components/MlBillingTab.test.tsx`.
+## ADR-147: Maestro de motivos de reclamo de Mercado Libre como tabla de plataforma, sembrado con GET reales y completado por la Edge, con selector en la configuración del gestor
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261214100000_ml_claim_reasons` sin aplicar; Edge `ml_api` con la acción `reasons_fill`, sin desplegar) · **Hito:** H141 · **Base:** ADR-132 (gestor de ML), ADR-104. Diseño: [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md) §3.6.
+
+### Contexto
+
+En Mercado Libre › Configuración, "Motivos para pedir exclusión" era un campo de texto con códigos separados por coma (`PDD9939, PNR9501, PDD9502, PDD9829`). El dueño: "no se entiende porque no hay un maestro para entender qué es cada uno". En Métricas y Posventa el motivo se mostraba sólo por familia ("Producto distinto o con fallas").
+
+Relevamiento del 15/10/2026:
+
+- **API.** `GET /post-purchase/v1/claims/reasons/{id}` responde `{ id, flow, name, detail, position, parent_id, children_title, status, filter: { group[], site_id[] }, settings: { allowed_flows[], expected_resolutions[], rules_engine_triage[] }, date_created, last_updated }`. `detail` es el texto en castellano que ve el comprador. **No hay listado**: `/post-purchase/v1/claims/reasons`, `/reasons/search`, `/reasons/{id}/children` y `/v2/claims/reasons` dan 404. Los `PNR34xx` responden con otro id (`PNR3430` → `PNR9502`).
+- **ANDESMAR** (sólo lectura) no tiene maestro: sólo un mapa por familia (`MOTIVO_FAMILIA` en `js/jsPosventa/posventaMetricasLogica.js:104`), la misma lista de 4 por defecto (`posventaConfig.js:175`) y la validación `^[A-Z]{2,4}\d{3,5}$`. La única API de motivos que usa es `/post-purchase/v1/returns/reasons` (SRF2 a SRF7, revisión de devoluciones), que es otra cosa.
+- **Producción:** `ml_claims` está vacía (la cuenta de prueba no tiene reclamos), así que no aportó códigos.
+- **Barrido con la cuenta conectada** (sólo GET, token leído en el servidor y nunca impreso): PDD9500-9999, PNR9500-9560, PNR3400-3460 y CS9500-9560. 616 motivos existen (604 del sitio MLA, 17 inactivos) y 18 alias. Los 4 por defecto resultaron ser: PDD9939 "Llegó lo que compré en buenas condiciones pero no lo quiero", PNR9501 "Me arrepentí de la compra", PDD9502 "Me arrepentí de comprarlo" y PDD9829 "Lo compré por error".
+
+### Decisión
+
+1. **Tabla de plataforma `ml_claim_reasons`** (sin `tenant_id`: un código significa lo mismo para todos). Clave = el código de ML, no un uuid, como `features.key` o `payment_providers.key`: es lo que traen `ml_claims.reason_id` y `ml_gestor_settings.exclusion_reasons`. Columnas: familia (PDD, PNR, CS, OTRO), título y descripción en castellano, `ml_name`, `ml_detail`, `flow`, `parent_id`, `alias_of`, resoluciones, triage, `excludable`, `recommended`, `active`, `source` (`seed` o `api`). RLS: lectura `authenticated` (`using (true)`), sin policies de escritura, `revoke all` a anon y authenticated; escribe sólo service_role.
+2. **Seed** con los 622 motivos MLA (604 + 18 alias), generado con `reasonFromApi` (`_shared/mercadolibre/reasons.ts`), la misma función que usa la Edge. Título = `detail`; si no se entiende solo ("Otro", "Llegó bien", 14 caracteres o menos) va con el del padre adelante ("El producto está dañado: llegó bien"). Descripción = el circuito (`flow`) y lo que puede pedir el comprador (`expected_resolutions`).
+3. **"Suele poder excluirse" es orientativo**: arrepentimiento, compra por error, mejor precio, ya no lo necesita o compra no reconocida (por `name` y `rules_engine_triage = repentant`), sin las demoras ni "la calidad no es la que esperaba". ML decide cada pedido. "Recomendados" son los 4 que ya venían por defecto.
+4. **Edge `ml_api`, acción `reasons_fill {ids[]}`**: completa los códigos que no estén en el maestro (hasta 20 por llamada, sólo GET, el padre sólo si hace falta para el título, memo de 6 h por isolate también para los 404, inserta sin pisar). Gating: `ml_edge_guard` sin `p_manage` (cualquier miembro activo con `mercadolibre`; escribe el servidor y sólo lo que ML confirma). La UI la llama una vez por código y sesión cuando ve un código que no está (en la configuración, Posventa y Métricas).
+5. **UI.** El campo de texto pasa a `MlReasonPicker`: chips con código y título (al tocarlos, la descripción y si suele poder excluirse), buscador sin acentos por código, título o descripción con resultados agrupados por tipo, "Recomendados" sin búsqueda, filtro "Sólo los que suelen poder excluirse" y **Agregar a mano** para un código que no está (se muestra "Sin descripción" o "Buscando descripción" y se completa desde la API). Se guarda lo mismo de antes: la lista de códigos en `exclusion_reasons` (la RPC `ml_gestor_settings_save` y la marca `candidato` de la ingesta no cambian). Métricas, Posventa (lista, detalle y búsqueda) y Embudos muestran el título del motivo con el código.
+
+### Alternativas descartadas
+
+- **Mapa fijo en el código (TS)**: 600 motivos que ML cambia (17 ya están inactivos); una tabla con fill desde la API se actualiza sola y la leen la UI y el SQL.
+- **Tabla por negocio**: duplicaría el mismo dato en cada tenant.
+- **Consultar la API en cada render**: un GET por código y por usuario; el maestro más el memo dejan a ML afuera del camino caliente.
+- **Mostrar sólo `detail`**: muchos hijos no se entienden solos ("Llegó bien", "Otro").
+
+### Consecuencias
+
+- Deploy: migración `20261214100000_ml_claim_reasons` (no depende de otras de ML; usa `set_updated_at()`) y Edge `ml_api`. Sin la migración, el selector muestra "Todavía no está el maestro de motivos" y permite agregar códigos a mano; la configuración se sigue guardando igual.
+- El barrido no cubre todos los rangos posibles: un código fuera de ellos entra por `reasons_fill` la primera vez que aparece.
+- Guardarraíles `rls_internal_scope_leaks()`, `rls_bare_current_tenant_policies()` y `rls_policies_without_initplan()` en 0 en PGlite con la migración (dos veces, idempotente) y `db-audit-perf --strict` sin hallazgos nuevos.
+- Tests: `tests/unit/mlClaimReasons.test.ts` (armado desde respuestas reales, alias, título con padre, excluibles, `fillReasons` con fetch falso que sólo hace GET, búsqueda, agrupado, seed de la migración), `tests/components/MlReasonPicker.test.tsx` y `tests/components/MlGestorTabs.test.tsx` (título del motivo en Métricas y Posventa).

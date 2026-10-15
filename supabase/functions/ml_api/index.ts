@@ -42,6 +42,14 @@
 //                                                  variaciones de la publicación
 //                                                  (sólo GET) para sugerir el
 //                                                  producto del POS
+//
+// Maestro de motivos (ADR-147):
+//   reasons_fill {ids[]}                           completa en ml_claim_reasons los
+//                                                  códigos de motivo que falten con
+//                                                  GET /post-purchase/v1/claims/
+//                                                  reasons/{id} (sólo GET, hasta 20,
+//                                                  memo de 6 h por isolate, también
+//                                                  para los que ML no conoce)
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { readJsonLimited } from "../_shared/requestGuard.ts";
@@ -90,6 +98,7 @@ import {
   type MlListingPrice,
   type MlProductSearch,
 } from "../_shared/mercadolibre/listing.ts";
+import { fillReasons, type ClaimReasonRow, type MlReasonApi } from "../_shared/mercadolibre/reasons.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MANAGE = new Set(["validate", "publish", "import_items", "sync_account", "refresh_order", "visits"]);
@@ -101,6 +110,8 @@ const caches = newPublishCaches();
 type CatInfo = { id: string; name: string; settings?: Record<string, unknown> };
 const catAttrs = new Map<string, { at: number; value: Promise<MlCategoryAttribute[]> }>();
 const catInfo = new Map<string, { at: number; value: Promise<CatInfo> }>();
+// Motivos de reclamo (ADR-147): son iguales para todas las cuentas.
+const reasonMemo = new Map<string, { at: number; value: Promise<MlReasonApi | null> }>();
 function memo<T>(map: Map<string, { at: number; value: Promise<T> }>, key: string, load: () => Promise<T>, ttl = 30 * 60_000): Promise<T> {
   const hit = map.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.value;
@@ -548,6 +559,35 @@ Deno.serve(async (req: Request) => {
         if (!/^[A-Z]{3}\d{4,16}$/.test(id)) return json({ error: "invalid_item" }, 400);
         await refreshItem(deps, account.id, id);
         return json({ ok: true });
+      }
+      case "reasons_fill": {
+        const raw = (Array.isArray(b.ids) ? b.ids : []).slice(0, 50).map(String);
+        const res = await fillReasons(raw, {
+          known: async (ids) => {
+            const { data, error } = await admin.from("ml_claim_reasons").select("id").in("id", ids);
+            if (error) throw error;
+            return new Set((data ?? []).map((r: { id: string }) => r.id));
+          },
+          get: (id) =>
+            memo(
+              reasonMemo,
+              id,
+              () =>
+                client.get<MlReasonApi>(`/post-purchase/v1/claims/reasons/${encodeURIComponent(id)}`).catch((e) => {
+                  if (e instanceof MlApiError && e.status === 404) return null;
+                  throw e;
+                }),
+              6 * 3600_000,
+            ),
+          save: async (rows: ClaimReasonRow[]) => {
+            const at = new Date().toISOString();
+            const { error } = await admin
+              .from("ml_claim_reasons")
+              .upsert(rows.map((r) => ({ ...r, fetched_at: at })), { onConflict: "id", ignoreDuplicates: true });
+            if (error) throw error;
+          },
+        });
+        return json({ ok: true, ...res });
       }
       default:
         return json({ error: "unknown_action" }, 400);

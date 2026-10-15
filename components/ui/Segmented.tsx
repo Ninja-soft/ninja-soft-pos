@@ -27,6 +27,12 @@ interface SegmentedProps<T extends string> {
    * en lugar de pasar a otra línea. Desde sm, igual que siempre.
    */
   scrollOnMobile?: boolean;
+  /**
+   * En cualquier ancho los segmentos van en una sola fila; si no entran,
+   * scroll lateral (con barra fina desde sm) y el activo siempre a la vista.
+   * Para barras de secciones con muchas pestañas.
+   */
+  scroll?: boolean;
   className?: string;
 }
 
@@ -37,7 +43,8 @@ type Thumb = { x: number; y: number; w: number; h: number };
  * relleno (--seg-thumb) que se desliza al segmento activo. Sin bordes de
  * color. Accesible como radiogroup: flechas / Inicio / Fin mueven la
  * selección. Sin `fill` los segmentos toman su ancho natural y pueden pasar
- * a otra línea; el pulgar se mide sobre el segmento activo.
+ * a otra línea (o, con `scroll`, quedan en una fila con scroll lateral); el
+ * pulgar se mide sobre el segmento activo.
  */
 export function Segmented<T extends string>({
   value,
@@ -48,9 +55,11 @@ export function Segmented<T extends string>({
   fill = false,
   iconOnlyOnMobile = false,
   scrollOnMobile = false,
+  scroll = false,
   className,
 }: SegmentedProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const [thumb, setThumb] = useState<Thumb | null>(null);
   const n = options.length;
@@ -73,6 +82,18 @@ export function Segmented<T extends string>({
     ro.observe(container);
     return () => ro.disconnect();
   }, [index, optionsKey]);
+
+  // Con scroll, el segmento activo queda a la vista (al cargar y al cambiar).
+  useEffect(() => {
+    if (!scroll && !scrollOnMobile) return;
+    const box = scrollerRef.current;
+    const el = index >= 0 ? refs.current[index] : null;
+    if (!box || !el || box.scrollWidth <= box.clientWidth) return;
+    const left = el.offsetLeft;
+    const right = left + el.offsetWidth;
+    if (left < box.scrollLeft) box.scrollLeft = Math.max(0, left - 8);
+    else if (right > box.scrollLeft + box.clientWidth) box.scrollLeft = right - box.clientWidth + 8;
+  }, [index, scroll, scrollOnMobile]);
 
   function select(i: number) {
     const j = (i + n) % n;
@@ -108,6 +129,7 @@ export function Segmented<T extends string>({
         "relative max-w-full gap-1 rounded-xl bg-[var(--seg-track)] p-1",
         fill ? "grid auto-cols-fr grid-flow-col" : "inline-flex flex-wrap",
         scrollOnMobile && !fill && "max-sm:max-w-none max-sm:flex-nowrap",
+        scroll && !fill && "max-w-none flex-nowrap",
         className,
       )}
     >
@@ -160,10 +182,24 @@ export function Segmented<T extends string>({
       })}
     </div>
   );
-  if (!scrollOnMobile || fill) return group;
+  if (fill || (!scroll && !scrollOnMobile)) return group;
   // 4px de aire alrededor para que el anillo de foco no se corte al scrollear.
+  if (scroll) {
+    return (
+      <div
+        ref={scrollerRef}
+        data-segmented-scroll=""
+        className="-m-1 max-w-[calc(100%+0.5rem)] overflow-x-auto overscroll-x-contain p-1 [scrollbar-width:none] sm:[scrollbar-width:thin] max-sm:[&::-webkit-scrollbar]:hidden sm:[&::-webkit-scrollbar]:h-1.5 sm:[&::-webkit-scrollbar-thumb]:rounded-full sm:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/30"
+      >
+        {group}
+      </div>
+    );
+  }
   return (
-    <div className="-m-1 max-w-[calc(100%+0.5rem)] overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:m-0 sm:max-w-full sm:overflow-visible sm:p-0">
+    <div
+      ref={scrollerRef}
+      className="-m-1 max-w-[calc(100%+0.5rem)] overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:m-0 sm:max-w-full sm:overflow-visible sm:p-0"
+    >
       {group}
     </div>
   );

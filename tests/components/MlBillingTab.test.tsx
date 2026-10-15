@@ -168,11 +168,12 @@ describe("MlBillingTab", () => {
     pro = false;
     render(<MlBillingExtension account={account} canManage />);
     expect(screen.getByText("Facturación de Mercado Libre con reglas")).toBeTruthy();
-    const mode = screen.getByLabelText("Cuándo facturar") as HTMLSelectElement;
-    expect(Array.from(mode.options).find((o) => o.value === "on_delivered")!.disabled).toBe(true);
-    expect(screen.queryByText("Qué va en la factura")).toBeNull();
-    fireEvent.change(mode, { target: { value: "manual" } });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar facturación" }));
+    const mode = screen.getByRole("radiogroup", { name: "Cuándo facturar" });
+    expect((within(mode).getByRole("radio", { name: /Al entregarse/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("2. Qué factura sale")).toBeNull();
+    expect(screen.queryByLabelText("Vista previa de la factura")).toBeNull();
+    fireEvent.click(within(mode).getByRole("radio", { name: /A mano, por lote/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Guardar facturación/ }));
     expect(saveSettings).toHaveBeenCalledWith({ accountId: "acc", p: { invoice_mode: "manual", upload_invoice: true } }, expect.anything());
   });
 });

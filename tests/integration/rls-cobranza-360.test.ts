@@ -178,7 +178,7 @@ describe.skipIf(!enabled)("H136 · prorrateo, conciliación y cobranza 360", () 
   });
 
   it("capacidades finas sobre Cobranzas", async () => {
-    const caps = async (c: SupabaseClient) => ((await rpc(c, "internal_my_billing_access")).data as { capabilities: string[] }).capabilities;
+    const caps = async (c: SupabaseClient) => ((await rpc(c, "internal_my_billing_access")).data as { capabilities: string[] }).capabilities.slice().sort();
     expect(await caps(ctx.support)).toEqual([]);
     expect(await caps(ctx.viewer)).toEqual(["view"]);
     expect(await caps(ctx.assigner)).toEqual(["assign", "view"]);

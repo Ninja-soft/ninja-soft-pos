@@ -24,6 +24,7 @@ import type {
   QtyBreak,
 } from "@/lib/prices/resolve";
 import type { BulkPreviewRow, TermRateMode } from "@/lib/prices/bulk";
+import type { BulkFlag, BulkV2Mode, RepriceMode, UtilityMode } from "@/lib/prices/costing";
 import type { PriceChannel } from "./api";
 
 // Filas y respuestas de RPC fuera de los tipos generados.
@@ -52,6 +53,7 @@ export const COST_BASES: { value: ListCostBasis; label: string }[] = [
   { value: "replacement", label: "Costo de reposición" },
   { value: "average", label: "Costo promedio" },
   { value: "last", label: "Último costo" },
+  { value: "final", label: "Costo final (con flete e impuestos)" },
 ];
 
 export interface ProList extends ProPriceList {
@@ -89,6 +91,14 @@ export interface PriceSettings {
   require_approval: boolean;
   label_queue: boolean;
   pro: boolean;
+  /** ADR-140: piso global de margen sobre el costo final (PRO, sólo el dueño). */
+  floor_margin_pct: number | null;
+  /** ADR-140: fuente del dólar por defecto. */
+  fx_source: FxSource;
+  /** ADR-140: el plan tiene precios_usd. */
+  usd: boolean;
+  /** ADR-140: el plan tiene costo_final (BASE). */
+  final_cost: boolean;
 }
 
 export const DEFAULT_PRICE_SETTINGS: PriceSettings = {
@@ -96,7 +106,108 @@ export const DEFAULT_PRICE_SETTINGS: PriceSettings = {
   require_approval: false,
   label_queue: true,
   pro: false,
+  floor_margin_pct: null,
+  fx_source: "oficial",
+  usd: false,
+  final_cost: true,
 };
+
+// ── ADR-140: cotización, asistente v2 y regla automática ─────────────────────
+
+export interface FxQuote {
+  rate: number | null;
+  rate_date: string | null;
+  origin: "negocio" | "plataforma" | null;
+  source: FxSource;
+}
+
+export interface BulkV2Scope {
+  category_ids?: string[];
+  brand_ids?: string[];
+  supplier_ids?: string[];
+  tag?: string | null;
+  product_ids?: string[];
+  usd_only?: boolean;
+  include_inactive?: boolean;
+}
+
+export interface BulkV2Request {
+  mode: BulkV2Mode;
+  value?: number;
+  markup_mode?: UtilityMode;
+  reprice?: RepriceMode;
+  targets: { base: boolean; list_ids: string[] };
+  scope: BulkV2Scope;
+  rounding?: RoundingRule | null;
+  fx?: { source?: FxSource; rate?: number | null } | null;
+  effective_at?: string | null;
+  reason?: string | null;
+}
+
+export interface BulkV2Row {
+  product_id: string;
+  variant_id: string | null;
+  list_id: string | null;
+  list_name?: string | null;
+  name: string;
+  sku: string | null;
+  image_url: string | null;
+  old_price: number;
+  new_price: number;
+  old_cost: number | null;
+  new_cost: number | null;
+  final_cost: number | null;
+  margin_pct: number | null;
+  flags: BulkFlag[];
+}
+
+export interface BulkV2Preview {
+  count: number;
+  products: number;
+  usd_products: number;
+  fx: { rate: number; rate_date: string; origin: string; source: string } | null;
+  before: number;
+  after: number;
+  price_changes: number;
+  cost_changes: number;
+  below_cost: number;
+  below_floor: number;
+  low_margin: number;
+  skipped: number;
+  rows: BulkV2Row[];
+}
+
+export interface FxRule {
+  id: string;
+  name: string;
+  is_active: boolean;
+  threshold_pct: number;
+  fx_source: FxSource;
+  request: Omit<BulkV2Request, "mode" | "fx" | "effective_at">;
+  require_approval: boolean;
+  last_rate: number | null;
+  last_rate_date: string | null;
+  last_checked_at: string | null;
+  last_batch_id: string | null;
+  last_result: string | null;
+}
+
+function nn(v: unknown): number | null {
+  return v == null ? null : Number(v);
+}
+
+function normalizeV2Row(r: Any): BulkV2Row {
+  return {
+    ...r,
+    old_price: num(r.old_price),
+    new_price: num(r.new_price),
+    old_cost: nn(r.old_cost),
+    new_cost: nn(r.new_cost),
+    final_cost: nn(r.final_cost),
+    margin_pct: nn(r.margin_pct),
+    flags: (r.flags ?? []) as BulkFlag[],
+  };
+}
 
 export interface PaymentTerm extends PaymentTermLike {
   rate_mode: TermRateMode;
@@ -146,8 +257,15 @@ export interface BulkPreview {
 export interface BulkBatch {
   id: string;
   target_list_id: string | null;
-  scope: BulkScope;
-  mode: "pct" | "amount" | "index";
+  scope: BulkScope & BulkV2Scope;
+  mode: "pct" | "amount" | "index" | BulkV2Mode;
+  /** ADR-140: 2 = asistente con costos, varias listas y dólar. */
+  engine?: number;
+  origin?: "manual" | "auto";
+  list_ids?: string[] | null;
+  fx_rate?: number | null;
+  fx_rate_date?: string | null;
+  options?: { targets?: { base?: boolean; list_ids?: string[] }; reprice?: RepriceMode; markup_mode?: UtilityMode } | null;
   value: number;
   index_info: (BulkIndex & { pct?: number }) | null;
   effective_at: string | null;
@@ -245,12 +363,15 @@ function normalizeSnapshot(raw: Any): PricingSnapshot {
           avg_cost: c.avg_cost == null ? null : Number(c.avg_cost),
           replacement_cost: c.replacement_cost == null ? null : Number(c.replacement_cost),
           min_price: c.min_price == null ? null : Number(c.min_price),
+          final_cost: c.final_cost == null ? null : Number(c.final_cost),
+          iva_pct: c.iva_pct == null ? null : Number(c.iva_pct),
         } satisfies ProductCostsLike,
       ]),
     ),
     assigned: (raw.assigned ?? []) as (string | null)[],
     customerTermId: raw.customerTermId ?? null,
     tax: normalizeTax(raw.tax),
+    floorMarginPct: raw.floorMarginPct == null ? null : Number(raw.floorMarginPct),
   };
 }
 
@@ -300,7 +421,65 @@ export const priceProApi = {
       return DEFAULT_PRICE_SETTINGS;
     }
   },
-  saveSettings: (p: Partial<Omit<PriceSettings, "pro">>) => rpc<PriceSettings>("price_settings_save", { p }),
+  saveSettings: (p: Partial<Omit<PriceSettings, "pro" | "usd" | "final_cost">>) =>
+    rpc<PriceSettings>("price_settings_save", { p }),
+
+  // ── Dólar (ADR-140): del día o la última anterior, negocio o plataforma ────
+  fxQuote: async (source: FxSource = "oficial"): Promise<FxQuote | null> => {
+    try {
+      const raw = await rpc<Any>("price_fx_quote", { p_date: null, p_source: source });
+      return { rate: nn(raw?.rate), rate_date: raw?.rate_date ?? null, origin: raw?.origin ?? null, source };
+    } catch {
+      return null;
+    }
+  },
+
+  // ── Asistente v2 (ADR-140) ────────────────────────────────────────────────
+  bulkV2Preview: async (p: BulkV2Request): Promise<BulkV2Preview> => {
+    const raw = await rpc<Any>("price_bulk_v2_preview", { p });
+    return {
+      count: num(raw.count),
+      products: num(raw.products),
+      usd_products: num(raw.usd_products),
+      fx: raw.fx ? { ...raw.fx, rate: num(raw.fx.rate) } : null,
+      before: num(raw.before),
+      after: num(raw.after),
+      price_changes: num(raw.price_changes),
+      cost_changes: num(raw.cost_changes),
+      below_cost: num(raw.below_cost),
+      below_floor: num(raw.below_floor),
+      low_margin: num(raw.low_margin),
+      skipped: num(raw.skipped),
+      rows: ((raw.rows ?? []) as Any[]).map(normalizeV2Row),
+    };
+  },
+  bulkV2Create: (p: BulkV2Request) =>
+    withPriceSource("bulk", () =>
+      rpc<{ id: string; status: BulkBatch["status"]; count: number }>("price_bulk_v2_create", { p }),
+    ),
+  bulkLines: async (batchId: string): Promise<BulkV2Row[]> =>
+    ((await rpc<Any[]>("price_bulk_lines_get", { p_batch: batchId })) ?? []).map(normalizeV2Row),
+
+  // ── Regla automática por dólar (ADR-140) ──────────────────────────────────
+  fxRules: async (): Promise<FxRule[]> => {
+    const tenantId = await tenantOrThrow();
+    const { data, error } = await db()
+      .from("price_fx_rules")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .order("created_at");
+    if (error) return [];
+    return ((data ?? []) as Any[]).map((r) => ({
+      ...r,
+      threshold_pct: num(r.threshold_pct),
+      last_rate: nn(r.last_rate),
+    }));
+  },
+  saveFxRule: (
+    p: Partial<Omit<FxRule, "last_rate" | "last_rate_date" | "last_checked_at" | "last_batch_id" | "last_result">>,
+  ) => rpc<string>("price_fx_rule_save", { p }),
+  deleteFxRule: (id: string) => rpc<void>("price_fx_rule_delete", { p_id: id }),
 
   // ── Listas ────────────────────────────────────────────────────────────────
   lists: async (): Promise<ProList[]> => {
@@ -500,7 +679,7 @@ export const priceProApi = {
   bulkDecide: (id: string, approve: boolean, note?: string) =>
     rpc<{ id: string; status: string }>("price_bulk_decide", { p_batch: id, p_approve: approve, p_note: note ?? null }),
   bulkRevert: (id: string) =>
-    rpc<{ reverted: number; skipped: number; cancelled: number }>("price_bulk_revert", { p_batch: id }),
+    rpc<{ reverted: number; skipped: number; cancelled: number; costs?: number }>("price_bulk_revert", { p_batch: id }),
   batches: async (): Promise<BulkBatch[]> => {
     const tenantId = await tenantOrThrow();
     const { data, error } = await db()

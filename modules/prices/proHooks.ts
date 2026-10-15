@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { resolvePrice, resolveUnitPrice, type PriceResolution } from "@/lib/prices/resolve";
 import { usePricingContext } from "@/lib/prices/pricingContext";
-import { priceProApi, type BulkRequest, type ProListInput } from "./proApi";
+import { priceProApi, type BulkRequest, type BulkV2Request, type FxSource, type ProListInput } from "./proApi";
 import { useMostradorPricing } from "./hooks";
 
 const KEY = ["price-pro"] as const;
@@ -43,6 +43,28 @@ export function useIndexValues(enabled = true) {
 
 export function usePriceBatches() {
   return useQuery({ queryKey: [...KEY, "batches"], queryFn: () => priceProApi.batches() });
+}
+
+/** ADR-140: dólar del día o la última anterior (negocio o plataforma). */
+export function useFxQuote(source: FxSource = "oficial", enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, "fx-quote", source],
+    queryFn: () => priceProApi.fxQuote(source),
+    enabled,
+    staleTime: 10 * 60_000,
+  });
+}
+
+export function useFxRules(enabled = true) {
+  return useQuery({ queryKey: [...KEY, "fx-rules"], queryFn: () => priceProApi.fxRules(), enabled });
+}
+
+export function useBatchLines(batchId: string | null) {
+  return useQuery({
+    queryKey: [...KEY, "batch-lines", batchId],
+    queryFn: () => priceProApi.bulkLines(batchId!),
+    enabled: Boolean(batchId),
+  });
 }
 
 export function useUpcomingPrices(enabled = true) {
@@ -117,6 +139,9 @@ export function usePriceProMutations() {
     saveFx: useMutation({ mutationFn: priceProApi.saveFxRate, onSuccess: inv }),
     saveIndex: useMutation({ mutationFn: priceProApi.saveIndexValue, onSuccess: inv }),
     bulkCreate: useMutation({ mutationFn: (p: BulkRequest) => priceProApi.bulkCreate(p), onSuccess: invProducts }),
+    bulkV2Create: useMutation({ mutationFn: (p: BulkV2Request) => priceProApi.bulkV2Create(p), onSuccess: invProducts }),
+    saveFxRule: useMutation({ mutationFn: priceProApi.saveFxRule, onSuccess: inv }),
+    deleteFxRule: useMutation({ mutationFn: (id: string) => priceProApi.deleteFxRule(id), onSuccess: inv }),
     bulkDecide: useMutation({
       mutationFn: (v: { id: string; approve: boolean; note?: string }) => priceProApi.bulkDecide(v.id, v.approve, v.note),
       onSuccess: invProducts,

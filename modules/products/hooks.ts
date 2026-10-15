@@ -15,7 +15,6 @@ import {
   productsApi,
   serialsApi,
   variantsApi,
-  warrantyPlansApi,
   type ProductsPageParams,
   type VariantRow,
 } from "./api";
@@ -80,38 +79,6 @@ export function useDecidePlu() {
       qc.invalidateQueries({ queryKey: ["pos-settings"] });
     },
   });
-}
-
-export function useWarrantyPlans(activeOnly = false, enabled = true) {
-  return useQuery({
-    queryKey: ["warranty-plans", activeOnly],
-    queryFn: () => warrantyPlansApi.list(activeOnly),
-    enabled,
-  });
-}
-
-export function useWarrantyPlanMutations() {
-  const qc = useQueryClient();
-  const inv = () => qc.invalidateQueries({ queryKey: ["warranty-plans"] });
-  return {
-    create: useMutation({
-      mutationFn: (v: {
-        label: string;
-        months: number;
-        price: number;
-        price_pct: number;
-        commission_pct: number;
-        description: string | null;
-      }) => warrantyPlansApi.create(v),
-      onSuccess: inv,
-    }),
-    setActive: useMutation({
-      mutationFn: (v: { id: string; is_active: boolean }) =>
-        warrantyPlansApi.setActive(v.id, v.is_active),
-      onSuccess: inv,
-    }),
-    remove: useMutation({ mutationFn: (id: string) => warrantyPlansApi.remove(id), onSuccess: inv }),
-  };
 }
 
 // La búsqueda se debouncea acá (no una request por tecla) y se mantiene el

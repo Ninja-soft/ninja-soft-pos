@@ -755,40 +755,6 @@ export function buildCategoryTree(list: Category[]): CategoryTreeNode[] {
 // límite de profundidad, así que el control vive acá y en la UI.
 export const CATEGORY_MAX_DEPTH = 9;
 
-export type WarrantyPlan = Tables<"warranty_plans">;
-
-export const warrantyPlansApi = {
-  list: async (activeOnly = false): Promise<WarrantyPlan[]> => {
-    const supabase = createClient();
-    let q = supabase.from("warranty_plans").select("*").order("sort").order("label");
-    if (activeOnly) q = q.eq("is_active", true);
-    const { data } = await q;
-    return (data ?? []) as WarrantyPlan[];
-  },
-  create: async (v: {
-    label: string;
-    months: number;
-    price: number;
-    price_pct: number;
-    commission_pct: number;
-    description: string | null;
-  }): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase.from("warranty_plans").insert(v);
-    if (error) throw error;
-  },
-  setActive: async (id: string, is_active: boolean): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase.from("warranty_plans").update({ is_active }).eq("id", id);
-    if (error) throw error;
-  },
-  remove: async (id: string): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase.from("warranty_plans").delete().eq("id", id);
-    if (error) throw error;
-  },
-};
-
 export const categoriesApi = {
   list: async (): Promise<Category[]> => {
     const supabase = createClient();

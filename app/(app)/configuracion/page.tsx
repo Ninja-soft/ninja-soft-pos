@@ -72,8 +72,8 @@ const HardwareSetup = dynamic(
   () => import("@/components/hardware/HardwareSetup").then((m) => m.HardwareSetup),
   { loading },
 );
-const WarrantyPlansManager = dynamic(
-  () => import("@/components/products/WarrantyPlansManager").then((m) => m.WarrantyPlansManager),
+const WarrantyTypesManager = dynamic(
+  () => import("@/components/warranty/WarrantyTypesManager").then((m) => m.WarrantyTypesManager),
   { loading },
 );
 const RubroCard = dynamic(
@@ -455,7 +455,7 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "garantias":
       return (
         <SettingsCard padded>
-          <WarrantyPlansManager />
+          <WarrantyTypesManager />
         </SettingsCard>
       );
     // Integración NubCeo (ADR-062): dueño o encargado, feature en el plan.

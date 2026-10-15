@@ -110,8 +110,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Un medio de cobro por QR o link conectado (Mercado Pago, MODO, Payway, Getnet, Nave, Pagos360, GO Cuotas, Directo o Mobbex).",
   },
   garantias: {
-    desc: "Gestión de garantías de productos: registro de cobertura, plazos y reclamos de garantía por venta.",
-    impact: "Se ocultan las garantías en el POS y la ficha del producto; no se registran coberturas.",
+    desc: "Garantías extendidas por tipo (+12 meses, +24 meses, protección total) con su % sobre el precio, mínimo, máximo y redondeo, asignadas a todo el catálogo, a rubros y categorías o a productos puntuales. El POS las ofrece en tarjetas con el precio calculado, se venden como línea enlazada al producto y el vencimiento sale en el comprobante y en la ficha del cliente.",
+    impact: "Se ocultan las garantías en el POS y en la configuración; el servidor rechaza vender o configurar garantías extendidas.",
     minPlan: "Business",
   },
   presupuestos: {

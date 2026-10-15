@@ -65,6 +65,10 @@ export function saleErrorTitle(msg: string): string {
     return "La reserva ya no está vigente";
   if (msg.includes("feature_not_in_plan: reservas_stock")) return "Tu plan no incluye reservas de stock";
   if (msg.includes("warranty_link_invalid")) return "La garantía extendida no quedó enlazada a un producto: volvé a elegirla";
+  // ADR-139: el servidor recalcula la garantía al enlazarla.
+  if (msg.includes("warranty_amount_mismatch")) return "El precio de la garantía cambió: volvé a elegirla en el cobro";
+  if (msg.includes("warranty_not_applicable")) return "Esa garantía ya no se ofrece para este producto: elegí otra";
+  if (msg.includes("warranty_plan_inactive")) return "Esa garantía está pausada o archivada: elegí otra";
   if (msg.includes("payment_method_disabled_in_store"))
     return "Ese medio de pago está apagado en esta sucursal o caja";
   // ADR-055: transferencias.

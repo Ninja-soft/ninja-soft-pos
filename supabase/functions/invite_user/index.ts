@@ -12,6 +12,7 @@
 //      body viejo funciona igual.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { userHasCapability } from "../_shared/capabilities.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -90,7 +91,12 @@ Deno.serve(async (req: Request) => {
     .eq("user_id", user.id)
     .eq("status", "active")
     .maybeSingle();
-  if (!caller || !["owner", "manager"].includes(caller.role)) {
+  // ADR-138: gestionar personal es la capacidad team.manage (dueño y
+  // encargado en los roles de sistema). La jerarquía sigue por nivel.
+  if (
+    !caller ||
+    !(await userHasCapability(admin, tenantId, user.id, "team.manage", ["owner", "manager"], caller.role))
+  ) {
     return json({ error: "forbidden" }, 403);
   }
   // ADR-051: sólo el dueño suma encargados.

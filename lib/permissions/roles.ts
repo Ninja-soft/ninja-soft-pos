@@ -10,6 +10,8 @@
 // rechaza si no corresponde.
 // =============================================================================
 
+import { CAPABILITY_BY_KEY } from "./capabilities";
+
 export type TenantRole = "owner" | "manager" | "cashier" | "viewer";
 
 export type RoleAction =
@@ -84,6 +86,50 @@ export function deniedReason(
 export function can(role: string | null | undefined, action: RoleAction, ctx?: RoleContext): boolean {
   return deniedReason(role, action, ctx) === null;
 }
+
+// -----------------------------------------------------------------------------
+// Por capacidad (ADR-138). Con las capacidades efectivas del usuario (RPC
+// my_capabilities) la UI sigue a su rol real, también los personalizados y los
+// permisos puntuales. Sin capacidades (cargando o base sin la migración) usa la
+// regla por rol de arriba.
+// -----------------------------------------------------------------------------
+
+/** Capacidad que pide cada acción (sales:void de otro día pide además sales.void.past_days). */
+export const ACTION_CAPABILITY: Record<Exclude<RoleAction, "operate">, string> = {
+  "catalog:write": "products.edit",
+  "catalog:taxonomy": "products.edit",
+  "catalog:import": "products.edit",
+  "stock:adjust": "stock.adjust",
+  "customers:create": "customers.create",
+  "customers:update": "customers.edit",
+  "customers:delete": "customers.delete",
+  "sales:return": "sales.return",
+  "sales:void": "sales.void",
+};
+
+export function deniedReasonByCapability(
+  role: string | null | undefined,
+  caps: readonly string[] | null | undefined,
+  action: RoleAction,
+  ctx: RoleContext = {},
+): string | null {
+  if (!caps) return deniedReason(role, action, ctx);
+  const r = normalizeRole(role);
+  if (r === "owner") return null;
+  if (r === "viewer") return HINT_READ_ONLY;
+  if (action === "operate") return null;
+  const need = ACTION_CAPABILITY[action];
+  if (!caps.includes(need)) return `Tu rol no incluye: ${CAPABILITY_BY_KEY.get(need)?.label ?? need}`;
+  if (action === "sales:void" && ctx.saleDate) {
+    const now = ctx.now ?? Date.now();
+    if (argentinaDay(ctx.saleDate) !== argentinaDay(now) && !caps.includes("sales.void.past_days")) {
+      return HINT_VOID_PAST_DAY_CAP;
+    }
+  }
+  return null;
+}
+
+export const HINT_VOID_PAST_DAY_CAP = "Tu rol no anula ventas de días anteriores";
 
 export function isReadOnlyRole(role: string | null | undefined): boolean {
   return normalizeRole(role) === "viewer";

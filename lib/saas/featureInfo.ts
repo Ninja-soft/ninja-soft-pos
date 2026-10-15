@@ -483,8 +483,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["clientes"],
   },
   roles_permisos: {
-    desc: "Roles y permisos: define qué puede hacer cada usuario (cajero, encargado, dueño) dentro del sistema.",
-    impact: "Desactivado, no hay control granular de permisos por usuario más allá del rol base.",
+    desc: "Roles y permisos a medida: creá roles propios (desde cero o duplicando Cajero o Encargado), elegí qué puede hacer cada uno por módulo (ver, operar, administrar) o capacidad por capacidad en la matriz avanzada, asigná un rol distinto por sucursal y dale o quitale un permiso puntual a una persona. Todo queda auditado y lo hace cumplir el servidor.",
+    impact: "Sin esto se usan los roles de sistema (Dueño, Encargado, Cajero, Solo lectura, Vendedor y Auditor), que funcionan en todos los planes. Los roles propios y los permisos puntuales dejan de contar: cada persona vuelve al rol de sistema de su nivel.",
     minPlan: "Business",
   },
 

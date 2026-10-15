@@ -7,10 +7,12 @@
 //   create_profile       {display_name, avatar?, pin?}   -> cajero SIN login
 //   update_profile       {profile_id, display_name?, avatar?, pin?}
 //   set_profile_status   {profile_id, status: active|suspended}
-// Guard: el llamador debe ser owner/manager activo del tenant del JWT.
+// Guard: el llamador necesita la capacidad team.manage (ADR-138; dueño y
+// encargado en los roles de sistema) en el tenant del JWT.
 // service_role solo vive acá. Todo se audita.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { userHasCapability } from "../_shared/capabilities.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -75,7 +77,12 @@ Deno.serve(async (req: Request) => {
     .eq("user_id", user.id)
     .eq("status", "active")
     .maybeSingle();
-  if (!caller || !["owner", "manager"].includes(caller.role)) {
+  // ADR-138: gestionar personal es la capacidad team.manage (dueño y
+  // encargado en los roles de sistema). La jerarquía sigue por nivel.
+  if (
+    !caller ||
+    !(await userHasCapability(admin, tenantId, user.id, "team.manage", ["owner", "manager"], caller.role))
+  ) {
     return json({ error: "forbidden" }, 403);
   }
   const isOwner = caller.role === "owner";

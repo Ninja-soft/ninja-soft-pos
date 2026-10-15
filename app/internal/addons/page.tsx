@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Bot, FileCheck2, Gift, Puzzle, Settings2, Sparkles, Store, TriangleAlert } from "lucide-react";
+import { Bot, Gift, Puzzle, Settings2, Sparkles, Store, TriangleAlert } from "lucide-react";
 import { AiConfigCard } from "@/components/internal/AiConfigCard";
-import { ArcaPlatformCard } from "@/components/internal/ArcaPlatformCard";
-import { ArcaPadronCard } from "@/components/internal/ArcaPadronCard";
+import { CatalogCard, CatalogCardSkeleton, CatalogStat } from "@/components/internal/CatalogCard";
+import { ArcaCertificateServiceCard } from "@/components/internal/arca/ArcaCertificateServiceCard";
+import { ArcaCertificateSettings } from "@/components/internal/arca/ArcaCertificateSettings";
 import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -13,7 +14,6 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { AI_ASSISTANT_ADDON_KEY, useAddonCatalog } from "@/modules/internal/hooks";
 import type { AddonCatalogItem } from "@/modules/internal/api";
 import { formatCurrency, formatInt } from "@/lib/utils/format";
@@ -31,87 +31,45 @@ function addonIcon(key: string) {
   return key === AI_ASSISTANT_ADDON_KEY ? Bot : Puzzle;
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 truncate text-base font-semibold tabular-nums text-foreground">{value}</dd>
-      {sub && <dd className="text-xs text-muted-foreground">{sub}</dd>}
-    </div>
-  );
-}
-
 function AddonCard({ addon, onConfigure }: { addon: AddonCatalogItem; onConfigure?: () => void }) {
-  const Icon = addonIcon(addon.key);
   const paid = addon.activeTenants - addon.grantedTenants;
   return (
-    <Card className="flex min-w-0 flex-col p-4 sm:p-5">
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ninja-flame/10 text-ninja-flameSoft"
-        >
-          <Icon size={20} strokeWidth={1.75} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3 className="min-w-0 truncate text-base font-bold tracking-tight text-foreground">{addon.label}</h3>
-            {addon.isActive ? <Badge tone="success">Disponible</Badge> : <Badge>No disponible</Badge>}
-          </div>
-          <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{addon.key}</p>
-        </div>
-      </div>
-
-      <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">
-        {addon.description?.trim() || "Sin descripción cargada."}
-      </p>
-
-      <dl className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/50 p-3">
-        <Stat
-          label="Precio por mes"
-          value={addon.monthlyPrice > 0 ? formatCurrency(addon.monthlyPrice) : "Sin cargo"}
-        />
-        <Stat
-          label="Negocios"
-          value={formatInt(addon.activeTenants)}
-          sub={
-            [
-              paid > 0 ? `${formatInt(paid)} pagos` : null,
-              addon.grantedTenants > 0 ? `${formatInt(addon.grantedTenants)} bonificados` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || undefined
-          }
-        />
-      </dl>
-
-      <div className="mt-4 flex flex-1 flex-wrap items-end gap-2">
-        {onConfigure ? (
+    <CatalogCard
+      icon={addonIcon(addon.key)}
+      title={addon.label}
+      badge={addon.isActive ? <Badge tone="success">Disponible</Badge> : <Badge>No disponible</Badge>}
+      subtitle={addon.key}
+      description={addon.description?.trim() || "Sin descripción cargada."}
+      stats={
+        <>
+          <CatalogStat
+            label="Precio por mes"
+            value={addon.monthlyPrice > 0 ? formatCurrency(addon.monthlyPrice) : "Sin cargo"}
+          />
+          <CatalogStat
+            label="Negocios"
+            value={formatInt(addon.activeTenants)}
+            sub={
+              [
+                paid > 0 ? `${formatInt(paid)} pagos` : null,
+                addon.grantedTenants > 0 ? `${formatInt(addon.grantedTenants)} bonificados` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
+          />
+        </>
+      }
+      actions={
+        onConfigure ? (
           <Button size="sm" onClick={onConfigure} className="w-full sm:w-auto">
             <Settings2 size={15} /> Configurar
           </Button>
         ) : (
           <p className="text-xs text-muted-foreground">Sin configuración global. Se activa desde la ficha de cada negocio.</p>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function AddonCardSkeleton() {
-  return (
-    <Card className="p-4 sm:p-5">
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-10 w-10 rounded-lg" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-3 w-1/3" />
-        </div>
-      </div>
-      <Skeleton className="mt-4 h-10 w-full" />
-      <Skeleton className="mt-4 h-16 w-full rounded-lg" />
-      <Skeleton className="mt-4 h-9 w-28" />
-    </Card>
+        )
+      }
+    />
   );
 }
 
@@ -162,8 +120,8 @@ export default function InternalAddonsPage() {
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {isLoading ? (
               <>
-                <AddonCardSkeleton />
-                <AddonCardSkeleton />
+                <CatalogCardSkeleton />
+                <CatalogCardSkeleton />
               </>
             ) : addons.length === 0 ? (
               <Card className="md:col-span-2 xl:col-span-3">
@@ -197,7 +155,8 @@ export default function InternalAddonsPage() {
 
       {/* Servicios que NinjaSoft brinda a todos los negocios con su propia
           configuración (no se contratan): hoy, el certificado de ARCA para el
-          padrón de CUITs (ADR-133). También está en Plataforma › ARCA. */}
+          padrón de CUITs (ADR-133), con la misma tarjeta que el catálogo y el
+          mismo panel que Plataforma › ARCA. */}
       <section className="mt-10">
         <SectionHeader
           title="Servicios de la plataforma"
@@ -205,42 +164,18 @@ export default function InternalAddonsPage() {
           description="Los usan todos los negocios sin contratarlos. Se configuran una sola vez desde acá."
         />
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Card className="flex flex-col gap-3 p-5">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted">
-                <FileCheck2 size={18} aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground">Certificado y padrón de ARCA</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  El certificado de NinjaSoft con el que todos los negocios consultan CUITs en ARCA: datos del cliente,
-                  condición frente al IVA y qué factura emitirle. Muestra cuándo vence.
-                </p>
-              </div>
-            </div>
-            <div className="mt-auto flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setArcaOpen(true)}>
-                <Settings2 size={14} aria-hidden /> Configurar
-              </Button>
-              <Link href="/internal/arca" className="inline-flex h-8 items-center px-2 text-sm text-ninja-flameSoft hover:underline">
-                Ir a ARCA
-              </Link>
-            </div>
-          </Card>
+          <ArcaCertificateServiceCard onConfigure={() => setArcaOpen(true)} />
         </div>
       </section>
 
       <Modal
         open={arcaOpen}
         onOpenChange={setArcaOpen}
-        title="Certificado y padrón de ARCA"
-        description="Cargá el certificado de NinjaSoft y activá el padrón para que todos los negocios verifiquen CUITs."
+        title="Certificado de ARCA"
+        description="Producción. Con este certificado todos los negocios consultan CUITs en el padrón de ARCA."
         className="sm:max-w-3xl"
       >
-        <div className="space-y-6">
-          <ArcaPlatformCard />
-          <ArcaPadronCard />
-        </div>
+        <ArcaCertificateSettings />
       </Modal>
 
       <Modal

@@ -110,7 +110,11 @@ export function useArcaMutations() {
 
 export function usePlatformMutations() {
   const qc = useQueryClient();
-  const done = () => void qc.invalidateQueries({ queryKey: [...KEY, "platform"] });
+  // El padrón usa el mismo certificado: su estado también cambia.
+  const done = () => {
+    void qc.invalidateQueries({ queryKey: [...KEY, "platform"] });
+    void qc.invalidateQueries({ queryKey: ["arca-padron"] });
+  };
   return {
     setCuit: useMutation({
       mutationFn: (v: { env: ArcaEnv; cuit: string }) => arcaApi.platformSetCuit(v.env, v.cuit),
@@ -126,11 +130,9 @@ export function usePlatformMutations() {
       onSuccess: done,
     }),
     subirPar: useMutation({
-      mutationFn: (v: { env: ArcaEnv; cert: string; key: string }) => arcaApi.platformSubirPar(v.env, v.cert, v.key),
-      onSuccess: () => {
-        done();
-        void qc.invalidateQueries({ queryKey: ["arca-padron"] });
-      },
+      mutationFn: (v: { env: ArcaEnv; cert: string; key: string; cuit?: string }) =>
+        arcaApi.platformSubirPar(v.env, v.cert, v.key, v.cuit),
+      onSuccess: done,
     }),
   };
 }

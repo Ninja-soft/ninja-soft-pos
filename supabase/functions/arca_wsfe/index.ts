@@ -20,7 +20,7 @@
 //        { action: "subir_certificado", environment, cert_pem }
 //        { action: "caea_tareas" }                pedir/informar CAEA ya
 //      staff interno (app_metadata.is_internal):
-//        { action: "platform_set_cuit" | "platform_generar_csr" | "platform_subir_certificado" | "platform_subir_par" (ADR-133), ... }
+//        { action: "platform_set_cuit" | "platform_generar_csr" | "platform_subir_certificado" | "platform_subir_par" (ADR-133; con `cuit` opcional de la empresa titular), ... }
 //
 // Secretos: ARCA_KEY_ENC (32 bytes base64) cifra las claves privadas; nunca
 // sale de acá. Token y Sign de WSAA no se loguean ni se guardan en el XML.
@@ -38,6 +38,7 @@ import { signCms } from "../_shared/arca/pki.ts";
 import { decryptSecret, encryptSecret, keyAad } from "../_shared/arca/crypto.ts";
 import { activePointsOfSale, PARAM_OPS, type ParamTable, type WsfeAuth } from "../_shared/arca/wsfe.ts";
 import { classifyWsfeErrors, humanError, joinMsgs } from "../_shared/arca/errors.ts";
+import { cuitIsValid } from "../_shared/arca/padron.ts";
 import { processDocument, type AuthOutcome, type Snapshot, type WorkerDeps } from "../_shared/arca/worker.ts";
 import { runCaeaTasks, type CaeaTasks } from "../_shared/arca/caeaTasks.ts";
 
@@ -483,39 +484,51 @@ async function platformAction(admin: SupabaseClient, userId: string, action: str
   }
   const { data } = await admin.from("arca_platform").select("cuit, key_enc").eq("environment", env).maybeSingle();
   const p = data as { cuit: string | null; key_enc: string | null } | null;
-  if (!p?.cuit) return json({ ok: false, error: "platform_cuit_missing" });
-  if (action === "platform_generar_csr") {
-    const alias = sanitizeAlias(String(body.alias ?? "")) || "ninjasoftpos";
-    const keyPem = await generateKeyPem();
-    const csr = buildCsr(keyPem, { cuit: p.cuit, organization: String(body.organization ?? "NinjaSoft"), alias });
-    const keyEnc = await encryptSecret(keyPem, masterKey(), keyAad("platform", env));
-    await admin.rpc("arca_platform_store", { p_user: userId, p_env: env, p: { csr_pem: csr, key_enc: keyEnc, audit_action: "arca_platform_csr" } });
-    return json({ ok: true, csr_pem: csr, alias });
-  }
   // ADR-133: certificado y clave privada que ya tiene NinjaSoft (generados
   // fuera, p. ej. con openssl). Se valida el par contra la CUIT y ARCA, la
   // clave se cifra con ARCA_KEY_ENC y nunca vuelve al navegador ni se loguea.
+  // Rediseño (2026-10): llega también la CUIT de la empresa titular; tiene que
+  // coincidir con la del certificado y se guarda como CUIT de la plataforma
+  // (la representada en el padrón) en la misma escritura auditada.
   if (action === "platform_subir_par") {
+    const bodyCuit = String(body.cuit ?? "").replace(/\D/g, "");
+    if (bodyCuit && !cuitIsValid(bodyCuit)) {
+      return json({ ok: false, error: "cert_check_failed", problems: ["cuit_invalida"], messages: [{ code: "cuit_invalida", title: "La CUIT no es válida", action: "Revisá los 11 números: el último es el dígito verificador." }] });
+    }
+    const expectedCuit = bodyCuit || p?.cuit || null;
+    if (!expectedCuit) return json({ ok: false, error: "platform_cuit_missing" });
     const certPem = String(body.cert_pem ?? "");
     const keyPem = String(body.key_pem ?? "").trim();
+    if (/^-----BEGIN ENCRYPTED PRIVATE KEY-----/.test(keyPem)) {
+      return json({ ok: false, error: "cert_check_failed", problems: ["clave_con_contrasena"], messages: [{ code: "clave_con_contrasena", title: "La clave privada tiene contraseña", action: "Exportala sin contraseña (por ejemplo, openssl rsa -in clave.key -out clave-sin-pass.key) y volvé a cargarla." }] });
+    }
     if (!/^-----BEGIN (RSA |EC )?PRIVATE KEY-----/.test(keyPem) || keyPem.length > 20_000) {
-      return json({ ok: false, error: "cert_check_failed", problems: ["clave_invalida"], messages: [{ code: "clave_invalida", title: "La clave privada no es válida", action: "Pegá la clave en formato PEM (empieza con -----BEGIN PRIVATE KEY----- o -----BEGIN RSA PRIVATE KEY-----)." }] });
+      return json({ ok: false, error: "cert_check_failed", problems: ["clave_invalida"], messages: [{ code: "clave_invalida", title: "La clave privada no es válida", action: "Cargá la clave en formato PEM (empieza con -----BEGIN PRIVATE KEY----- o -----BEGIN RSA PRIVATE KEY-----)." }] });
     }
     let chk: ReturnType<typeof checkCertificate>;
     try {
-      chk = checkCertificate(certPem, keyPem, { cuit: p.cuit, issuerCn: EXPECTED_ISSUER_CN[env] });
+      chk = checkCertificate(certPem, keyPem, { cuit: expectedCuit, issuerCn: EXPECTED_ISSUER_CN[env] });
     } catch {
       return json({ ok: false, error: "cert_check_failed", problems: ["clave_invalida"], messages: [{ code: "clave_invalida", title: "No se pudo leer la clave privada", action: "Revisá que sea la clave del certificado y que no tenga contraseña." }] });
     }
     if (!chk.ok || !chk.info) {
-      return json({ ok: false, error: "cert_check_failed", problems: chk.problems, messages: chk.problems.map((x) => ({ code: x, ...humanError(x) })) });
+      // Sólo metadatos públicos del certificado (nunca la clave) para explicar el error.
+      const ci = chk.info;
+      return json({
+        ok: false,
+        error: "cert_check_failed",
+        problems: chk.problems,
+        messages: chk.problems.map((x) => ({ code: x, ...humanError(x) })),
+        certificate: ci ? { environment: env, cuit: ci.cuit, subject: ci.subject, issuer: ci.issuer, not_after: ci.notAfter } : undefined,
+      });
     }
     const i = chk.info;
     const keyEnc = await encryptSecret(keyPem + "\n", masterKey(), keyAad("platform", env));
-    await admin.rpc("arca_platform_store", {
+    const { error: storeErr } = await admin.rpc("arca_platform_store", {
       p_user: userId,
       p_env: env,
       p: {
+        ...(bodyCuit ? { cuit: bodyCuit } : {}),
         key_enc: keyEnc,
         csr_pem: null,
         cert_pem: certPem.trim() + "\n",
@@ -527,7 +540,17 @@ async function platformAction(admin: SupabaseClient, userId: string, action: str
         audit_action: "arca_platform_key_pair",
       },
     });
-    return json({ ok: true, certificate: { environment: env, cuit: i.cuit, subject: i.subject, not_after: i.notAfter } });
+    if (storeErr) return json({ ok: false, error: "store_failed" });
+    return json({ ok: true, certificate: { environment: env, cuit: i.cuit, subject: i.subject, issuer: i.issuer, not_before: i.notBefore, not_after: i.notAfter } });
+  }
+  if (!p?.cuit) return json({ ok: false, error: "platform_cuit_missing" });
+  if (action === "platform_generar_csr") {
+    const alias = sanitizeAlias(String(body.alias ?? "")) || "ninjasoftpos";
+    const keyPem = await generateKeyPem();
+    const csr = buildCsr(keyPem, { cuit: p.cuit, organization: String(body.organization ?? "NinjaSoft"), alias });
+    const keyEnc = await encryptSecret(keyPem, masterKey(), keyAad("platform", env));
+    await admin.rpc("arca_platform_store", { p_user: userId, p_env: env, p: { csr_pem: csr, key_enc: keyEnc, audit_action: "arca_platform_csr" } });
+    return json({ ok: true, csr_pem: csr, alias });
   }
   if (action === "platform_subir_certificado") {
     if (!p.key_enc) return json({ ok: false, error: "csr_faltante" });
@@ -551,7 +574,7 @@ async function platformAction(admin: SupabaseClient, userId: string, action: str
         audit_action: "arca_platform_certificate",
       },
     });
-    return json({ ok: true, certificate: { environment: env, cuit: i.cuit, subject: i.subject, not_after: i.notAfter } });
+    return json({ ok: true, certificate: { environment: env, cuit: i.cuit, subject: i.subject, issuer: i.issuer, not_before: i.notBefore, not_after: i.notAfter } });
   }
   return json({ error: "invalid_action" }, 400);
 }

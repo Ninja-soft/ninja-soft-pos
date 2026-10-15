@@ -99,7 +99,7 @@ Relevado en `main` (`884c1392`) el 2026-10-13.
 - **Interno** (está en `app/internal/*`, no en `app/(internal)`):
   - `/internal` es el dashboard.
   - `/internal/pagos` usa `PlatformMpCard`.
-  - `/internal/arca` usa `ArcaPlatformCard`.
+  - `/internal/arca` usa `ArcaCertificateSettings` (antes `ArcaPlatformCard`; sólo producción desde 2026-10).
   - En el detalle del tenant están `BillingCard` (pagos manuales, trial y descuentos) y `PlanCard`.
 
 ### 2.4 Roturas observadas
@@ -1098,7 +1098,7 @@ Permisos: dueño, todo; encargado, ver y descargar; el resto no ve la pestaña.
 
 Hay seis secciones con guardado independiente y auditoría:
 
-1. **Emisor y ARCA:** CUIT, condición, punto de venta, ambiente y checklist de producción (§16.1). Reutiliza `ArcaPlatformCard`.
+1. **Emisor y ARCA:** CUIT, condición, punto de venta, ambiente y checklist de producción (§16.1). Reutiliza `ArcaCertificateSettings` (antes `ArcaPlatformCard`).
 2. **Facturación automática:** interruptor general, cuándo facturar (al cobrar o al generar el cargo), demora en días con advertencia del límite y vista previa ("Un pago del 13/10 se factura el 16/10").
 3. **Punitorios:** políticas, con un simulador ("Deuda de $ 50.000 vencida hace 45 días → $ 3.750").
 4. **Escalera de mora:** editor de pasos con línea de tiempo visual.

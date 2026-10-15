@@ -238,6 +238,10 @@ const OrderSettingsCard = dynamic(
   () => import("@/components/orders/OrderSettingsCard").then((m) => m.OrderSettingsCard),
   { loading },
 );
+const RemitoSettingsCard = dynamic(
+  () => import("@/components/remitos/RemitoSettingsCard").then((m) => m.RemitoSettingsCard),
+  { loading },
+);
 const AiImageSettingsCard = dynamic(
   () => import("@/components/ai/AiImageSettingsCard").then((m) => m.AiImageSettingsCard),
   { loading },
@@ -479,7 +483,13 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "presupuestos":
       return <QuoteSettingsCard />;
     case "pedidos":
-      return <OrderSettingsCard />;
+      return (
+        <div className="space-y-6">
+          <OrderSettingsCard />
+          {/* ADR-136: remitos y aviso de COT (con entregas_remitos). */}
+          <RemitoSettingsCard />
+        </div>
+      );
     case "imagenes-ia":
       return <AiImageSettingsCard />;
   }

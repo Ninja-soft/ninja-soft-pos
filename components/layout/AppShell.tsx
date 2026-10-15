@@ -270,6 +270,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Pedidos de salón y expedición (F11 · H32, ADR-129): OPTIONAL Pro+.
         { href: "/pedidos", label: "Pedidos de salón", icon: ClipboardList, feature: "pedidos_despacho" },
         { href: "/expedicion", label: "Expedición", icon: PackageCheck, feature: "pedidos_despacho" },
+        // Remitos de entrega y envío con COT (ADR-136): OPTIONAL Pro+.
+        { href: "/remitos", label: "Remitos", icon: FileText, feature: "entregas_remitos" },
         // Presupuestos (ADR-122): OPTIONAL Pro+, con candado si no está.
         { href: "/presupuestos", label: "Presupuestos", icon: FileSignature, feature: "presupuestos" },
         // Envíos con etiquetas de logísticas integradas (ADR-103).

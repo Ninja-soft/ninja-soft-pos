@@ -125,7 +125,7 @@ export function MlConfigTab({
           onChange={onSection}
           aria-label="Secciones de la configuración de Mercado Libre"
           size="sm"
-          scrollOnMobile
+          scroll
           options={CONFIG_SECTIONS.map((s) => {
             const Icon = ICONS[s.key];
             return { value: s.key, label: s.label, icon: <Icon size={14} /> };

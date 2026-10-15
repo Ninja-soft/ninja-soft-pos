@@ -18,7 +18,6 @@ import {
   CLAIM_KIND_TONE,
   EXCLUSION_LABELS,
   caseGroup,
-  reasonLabel,
   type CaseFilter,
 } from "@/lib/mercadolibre/postsale";
 import {
@@ -37,6 +36,9 @@ import {
   type MetricKey,
   type ReputationSnap,
 } from "@/supabase/functions/_shared/mercadolibre/reputation";
+import { useEnsureClaimReasons, useMlClaimReasons } from "@/modules/mercadolibre/reasonHooks";
+import { MlReasonLabel } from "@/components/mercadolibre/gestor/MlReasonPicker";
+import type { ReasonIndex } from "@/lib/mercadolibre/claimReasons";
 import { useMlClaims, useMlGestorMutations, useMlGestorSettings, useMlSnapshots, type MlClaimRow } from "@/modules/mercadolibre/gestorHooks";
 import type { MlAccount } from "@/modules/mercadolibre/hooks";
 
@@ -133,6 +135,8 @@ export function MlMetricsTab({ account, canManage }: { account: MlAccount; canMa
   const { data: snaps = [], isLoading } = useMlSnapshots(account.id, Number(days));
   const { data: settings } = useMlGestorSettings(account.id);
   const { data: claims = [] } = useMlClaims(account.id, 60);
+  const { index: reasons } = useMlClaimReasons();
+  useEnsureClaimReasons(reasons, claims.filter((c) => c.affects_reputation).map((c) => c.reason_id));
   const { refreshReputation } = useMlGestorMutations();
   const th = cleanThresholds(settings?.thresholds ?? DEFAULT_THRESHOLDS);
   const last = snaps[snaps.length - 1] ?? null;
@@ -320,7 +324,7 @@ export function MlMetricsTab({ account, canManage }: { account: MlAccount; canMa
         ) : (
           <ul className="divide-y divide-border">
             {(showAll ? listed : listed.slice(0, 10)).map((c) => (
-              <CaseRow key={c.id} c={c} canManage={canManage} />
+              <CaseRow key={c.id} c={c} canManage={canManage} reasons={reasons} />
             ))}
           </ul>
         )}
@@ -334,7 +338,7 @@ export function MlMetricsTab({ account, canManage }: { account: MlAccount; canMa
   );
 }
 
-function CaseRow({ c }: { c: MlClaimRow; canManage: boolean }) {
+function CaseRow({ c, reasons }: { c: MlClaimRow; canManage: boolean; reasons: ReasonIndex | undefined }) {
   const state =
     c.status === "closed" ? "Cerrado" : c.action_responsible === "respondent" || !c.action_responsible ? "Te toca responder" : c.action_responsible === "mediator" ? "En manos de Mercado Libre" : "Esperando al comprador";
   return (
@@ -344,7 +348,7 @@ function CaseRow({ c }: { c: MlClaimRow; canManage: boolean }) {
       </span>
       <Badge tone={CLAIM_KIND_TONE[c.kind]}>{CLAIM_KIND_LABELS[c.kind]}</Badge>
       <span className="min-w-0 flex-1 truncate">
-        {reasonLabel(c.reason_id)}
+        <MlReasonLabel id={c.reason_id} index={reasons} />
         {c.resource_id ? <span className="text-muted-foreground"> · venta {c.resource_id}</span> : null}
       </span>
       <span className="text-xs text-muted-foreground">{state}</span>

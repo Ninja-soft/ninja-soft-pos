@@ -43,6 +43,8 @@ import {
   type PlanPadron,
 } from "./invoicePlan.ts";
 import type { PackPayload } from "./orders.ts";
+import { dateAr, invoiceMessageTexts, invoiceNotesText, moneyAr } from "./billingConfig.ts";
+import { sendBuyerMessage } from "./buyerMessage.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<any>;
@@ -441,8 +443,12 @@ async function runAnswer(deps: WorkerDeps, job: JobRow): Promise<Outcome> {
 async function runInvoiceUpload(deps: JobDeps, job: JobRow): Promise<Outcome> {
   const docId = String(job.payload.fiscal_document_id ?? "");
   const pack = String(job.payload.pack_key ?? job.ref ?? "");
-  const data = (await deps.rpc("ml_invoice_pdf_data", { p_doc: docId })) as InvoicePdfData | null;
+  const data = (await deps.rpc("ml_invoice_pdf_data", { p_doc: docId })) as InvoicePdfWithConfig | null;
   if (!data) return { status: "done", note: "invoice_not_approved" };
+  // ADR-145: la leyenda configurada (o ninguna si está apagada).
+  if (data.notes_config) {
+    data.notes = data.notes_config.enabled ? invoiceNotesText(data.notes_config.template, notesVars(data.notes_config.vars)) : null;
+  }
   const pdf = buildInvoicePdf(data);
   if (pdf.length > 1_000_000) {
     await deps.rpc("ml_invoice_uploaded", { p_account: job.account_id, p_pack: pack, p_doc: docId, p_ok: false, p_error: "El PDF supera 1 MB" });
@@ -466,6 +472,8 @@ async function runInvoiceUpload(deps: JobDeps, job: JobRow): Promise<Outcome> {
     await deps.rpc("ml_invoice_uploaded", {
       p_account: job.account_id, p_pack: pack, p_doc: docId, p_ok: true, p_ml_id: (res?.ids ?? [])[0] ?? null,
     });
+    // ADR-145: aviso al comprador. Nunca frena la subida (ya quedó hecha).
+    if (data.buyer_message) await notifyBuyer(deps, job.account_id, pack, docId, data.buyer_message);
     return { status: "done" };
   } catch (e) {
     // ML ya tiene un documento de ese tipo en la venta: no se reintenta a ciegas.
@@ -478,6 +486,58 @@ async function runInvoiceUpload(deps: JobDeps, job: JobRow): Promise<Outcome> {
       if (dup) return { status: "done", note: "already_uploaded" };
     }
     throw e;
+  }
+}
+
+const LOGISTIC_NAMES: Record<string, string> = {
+  me2: "Mercado Envíos", me1: "Envío propio", custom: "Envío propio", a_convenir: "A convenir",
+  flex: "Flex", full: "Full", none: "Sin envío",
+};
+
+/** Lo que agrega ml_invoice_pdf_data con la facturación pro (ADR-145). */
+export interface InvoicePdfWithConfig extends InvoicePdfData {
+  notes_config?: { enabled: boolean; template: string | null; vars: Record<string, string | null> } | null;
+  buyer_message?: {
+    template: string | null;
+    seller_id: number;
+    buyer_id: number | null;
+    vars: { comprador?: string | null; factura?: string | null; total?: number | null; venta?: string | null; fecha?: string | null };
+  } | null;
+}
+
+function notesVars(v: Record<string, string | null>): Record<string, string> {
+  return {
+    venta: v.venta ?? "",
+    comprador: v.comprador ?? "",
+    envio: LOGISTIC_NAMES[v.envio ?? ""] ?? "",
+    fecha: v.fecha ?? "",
+  };
+}
+
+async function notifyBuyer(
+  deps: JobDeps,
+  accountId: string,
+  pack: string,
+  docId: string,
+  m: NonNullable<InvoicePdfWithConfig["buyer_message"]>,
+): Promise<void> {
+  const texts = invoiceMessageTexts(m.template, {
+    comprador: m.vars.comprador ?? "",
+    factura: m.vars.factura ?? "",
+    total: moneyAr(Number(m.vars.total ?? 0)),
+    venta: m.vars.venta ?? pack,
+    fecha: dateAr(m.vars.fecha),
+  });
+  try {
+    await sendBuyerMessage(deps.client(accountId), pack, Number(m.seller_id), m.buyer_id == null ? null : Number(m.buyer_id), texts);
+    await deps.rpc("ml_invoice_message_sent", { p_doc: docId, p_ok: true });
+  } catch (e) {
+    deps.log?.("ml_invoice_message_failed", { pack, error: e instanceof Error ? e.message : String(e) });
+    try {
+      await deps.rpc("ml_invoice_message_sent", { p_doc: docId, p_ok: false, p_error: e instanceof Error ? e.message : String(e) });
+    } catch {
+      /* el aviso es de cortesía: no se reintenta la subida por esto */
+    }
   }
 }
 

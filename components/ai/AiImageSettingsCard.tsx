@@ -99,12 +99,20 @@ export function AiImageSettingsCard() {
           ) : undefined
         }
       >
-        <SettingRow
-          label="Generar la portada automáticamente"
-          description="Al crear un servicio se genera su portada con el estilo elegido. En cualquier producto (alimentos, ropa, lo que vendas) usás Generar y Regenerar en Fotos."
-        >
-          <Switch checked={s.auto_cover} disabled={!editable} onCheckedChange={(v) => setS({ ...s, auto_cover: v })} label="Generar automáticamente" />
-        </SettingRow>
+        {/* Fila de interruptor: texto a la izquierda y el switch centrado a la derecha. */}
+        <div className="flex items-center justify-between gap-4 px-5 py-4">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-foreground">Generar la portada automáticamente</div>
+            <p className="mt-1 text-xs text-muted-foreground">Al crear un servicio, con el estilo elegido.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">En productos usás Generar y Regenerar en Fotos.</p>
+          </div>
+          <Switch
+            checked={s.auto_cover}
+            disabled={!editable}
+            onCheckedChange={(v) => setS({ ...s, auto_cover: v })}
+            label="Generar automáticamente"
+          />
+        </div>
         <SettingRow label="Estilo" description="Se usa en todas las portadas nuevas. En cada producto o servicio se puede elegir otro." stacked>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup" aria-label="Estilo">
             {COVER_STYLES.map((st) => (

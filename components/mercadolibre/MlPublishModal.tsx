@@ -479,7 +479,7 @@ export function MlPublishModal({
               )}
               {pv.pictures.length === 0 && (
                 <Callout tone="warning" title="Sin fotos">
-                  Cargá al menos una foto en la pestaña Fotos del producto.
+                  Cargá al menos una foto en la pestaña Imágenes del producto.
                 </Callout>
               )}
             </>

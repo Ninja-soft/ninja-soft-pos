@@ -42,7 +42,7 @@ export function AiCoverPanel({ productId, canManage }: { productId: string; canM
       <div className="flex items-start gap-3 rounded-lg bg-fg-4 p-3.5 text-sm">
         <Sparkles size={18} className="mt-0.5 shrink-0 text-ninja-flameSoft" aria-hidden />
         <p className="text-muted-foreground">
-          Con el complemento <b className="text-foreground">Asistente IA</b> podés generar portadas para tus servicios en el estilo que
+          Con el complemento <b className="text-foreground">Asistente IA</b> podés generar imágenes para tus productos y servicios en el estilo que
           elijas. Se activa desde el Panel del dueño, en Complementos.
         </p>
       </div>

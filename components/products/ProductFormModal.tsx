@@ -82,8 +82,10 @@ import { useCatalogMode, useServiceClarifications } from "@/modules/services/hoo
 import { ClarificationsModal } from "@/components/services/ClarificationsModal";
 import { ServiceTypesModal } from "@/components/services/ServiceTypesModal";
 import { AiCoverPanel } from "@/components/ai/AiCoverPanel";
+import { ProductImageChoice, type ImageMode } from "@/components/products/ProductImageChoice";
 import { useServiceTypes } from "@/modules/services/types";
 import { aiCoverError, useAiCoverMutations, useAiCoversEnabled, useAiImageSettings } from "@/modules/ai/covers";
+import { coverStyleInfo } from "@/supabase/functions/_shared/aiCoverPrompt";
 
 interface Props {
   open: boolean;
@@ -116,7 +118,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Info }[] = [
   { key: "stock", label: "Stock", icon: Warehouse },
   { key: "codigos", label: "Códigos", icon: BarcodeIcon },
   { key: "atributos", label: "Atributos", icon: Tag },
-  { key: "fotos", label: "Fotos", icon: Camera },
+  { key: "fotos", label: "Imágenes", icon: Camera },
   { key: "medidas", label: "Medidas", icon: Boxes },
   { key: "mas", label: "Más", icon: Settings2 },
   // F18 · H100 (ADR-056): sólo con el producto guardado.
@@ -246,6 +248,28 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const aiEnabled = useAiCoversEnabled() === true && Boolean(myTenant?.canManage);
   const { data: aiSettings } = useAiImageSettings(open && aiEnabled);
   const aiMut = useAiCoverMutations();
+  // Imagen al crear (General): IA, subir foto o sin imagen. Arranca en IA si
+  // el negocio prendió la portada automática; el dueño lo cambia por ítem.
+  const [imageMode, setImageMode] = useState<ImageMode>("upload");
+  const [imageModeTouched, setImageModeTouched] = useState(false);
+  useEffect(() => {
+    if (!open || product || imageModeTouched) return;
+    setImageMode(aiEnabled && aiSettings?.auto_cover ? "ai" : "upload");
+  }, [open, product, aiEnabled, aiSettings?.auto_cover, imageModeTouched]);
+
+  function generateAiCover(productId: string) {
+    toast({ title: "Generando la imagen con IA", description: "Aparece en Imágenes en unos segundos.", variant: "info" });
+    aiMut.generate.mutate(
+      { productId, apply: true },
+      {
+        onSuccess: (r) => {
+          if (!r.ok) toast({ title: "No se generó la imagen", description: aiCoverError(r.error), variant: "error" });
+          else qc.invalidateQueries({ queryKey: ["products"] });
+        },
+        onError: (e) => toast({ title: "No se generó la imagen", description: aiCoverError(e instanceof Error ? e.message : null), variant: "error" }),
+      },
+    );
+  }
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
   );
@@ -302,6 +326,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     if (!open) return;
     setCreated(null);
     setTab("general");
+    setImageModeTouched(false);
     setMarginDraft(null);
     setAddingBrand(false);
     setAttributes(normalizeAttributes(product?.attributes));
@@ -442,22 +467,14 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       const nuevo = await create.mutateAsync(input);
       await saveExtras(nuevo.id);
       setCreated(nuevo);
-      // ADR-122: portada automática con IA al crear un servicio (si el
-      // negocio la prendió). No bloquea el alta: corre de fondo.
-      if (isService && aiEnabled && aiSettings?.auto_cover) {
-        toast({ title: "Generando la portada con IA", description: "Aparece en Fotos en unos segundos.", variant: "info" });
-        aiMut.generate.mutate(
-          { productId: nuevo.id, apply: true },
-          {
-            onSuccess: (r) => {
-              if (!r.ok) toast({ title: "No se generó la portada", description: aiCoverError(r.error), variant: "error" });
-            },
-          },
-        );
-      }
+      // ADR-122: imagen elegida en General. Con IA se genera de fondo (no
+      // bloquea el alta) para cualquier producto o servicio; "Subir foto"
+      // lleva a Imágenes.
+      if (aiEnabled && imageMode === "ai") generateAiCover(nuevo.id);
+      else if (aiEnabled && imageMode === "upload") setTab("fotos");
       toast({
         title: `${Noun} creado`,
-        description: isService ? undefined : "Ahora podés subir fotos o cargar componentes.",
+        description: isService ? undefined : "Ahora podés sumar imágenes o cargar componentes.",
         variant: "success",
       });
     } catch (e) {
@@ -652,6 +669,24 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 <span className="mt-1 block text-xs text-destructive">{errors.description.message}</span>
               )}
             </label>
+          </Group>
+
+          <Group title="Imagen" description={active ? undefined : "Elegí cómo querés la imagen de este ítem."}>
+            <ProductImageChoice
+              mode={imageMode}
+              onMode={(m) => {
+                setImageMode(m);
+                setImageModeTouched(true);
+              }}
+              aiEnabled={aiEnabled}
+              styleName={aiSettings?.style ? coverStyleInfo(aiSettings.style).name : null}
+              saved={Boolean(active)}
+              imageUrl={active?.image_url ?? null}
+              noun={noun}
+              generating={aiMut.generate.isPending}
+              onGenerate={() => active && generateAiCover(active.id)}
+              onGoImages={() => setTab("fotos")}
+            />
           </Group>
 
           <Group title="Árbol de jerarquía" description="Rubro, categoría y subcategoría. Elegí existentes o creá nuevas acá mismo.">
@@ -1061,7 +1096,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             </div>
           ) : (
             <Group>
-              <SaveFirst>Creá el producto y después subí las fotos acá mismo (se guardan como WebP).</SaveFirst>
+              <SaveFirst>Guardá y después subí las fotos o generalas con IA acá mismo (se guardan como WebP). En General elegís si al guardar se genera con IA.</SaveFirst>
               <Input
                 variant="filled"
                 label="O pegá la URL de una imagen"

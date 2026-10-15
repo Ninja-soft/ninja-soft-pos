@@ -60,9 +60,12 @@ async function makeUser(email: string, role: string): Promise<User> {
 
 // Venta del cajero en su turno, con la fecha que se le pida (hora de Argentina).
 async function saleAt(u: User, at: Date | null): Promise<string> {
+  // Precio vigente: otros casos lo cambian (el servidor rechaza precios distintos).
+  const { data: pr } = await ctx.admin.from("products").select("price").eq("id", ctx.product).single();
+  const price = Number((pr as { price: number } | null)?.price ?? 100);
   const s = await rpc(u.client, "create_sale", {
-    p_items: [{ product_id: ctx.product, quantity: 1, unit_price: 100, discount: 0 }],
-    p_payments: [{ method: "cash", amount: 100 }],
+    p_items: [{ product_id: ctx.product, quantity: 1, unit_price: price, discount: 0 }],
+    p_payments: [{ method: "cash", amount: price }],
   });
   if (s.error) throw new Error(s.error.message);
   const id = (s.data as { sale_id: string }).sale_id;

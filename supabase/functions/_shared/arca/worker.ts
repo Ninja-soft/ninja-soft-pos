@@ -55,6 +55,8 @@ export interface SnapshotDoc {
   imp_total: number | string | null;
   doc_tipo: number | null;
   doc_nro: string | null;
+  /** ADR-141: concepto elegido para el comprobante (null = según la venta). */
+  concepto?: number | null;
   status: string;
   attempts: number;
   emission_type?: "CAE" | "CAEA";
@@ -136,7 +138,10 @@ export function planDocument(s: Snapshot): { ok: true; plan: Plan } | { ok: fals
   return {
     ok: true,
     plan: {
-      concepto: conceptoFor(s.has_goods || !s.has_services, s.has_services),
+      concepto:
+        doc.concepto === 1 || doc.concepto === 2 || doc.concepto === 3
+          ? doc.concepto
+          : conceptoFor(s.has_goods || !s.has_services, s.has_services),
       docTipo,
       docNro,
       condIva: Number(r.arca_condition_id ?? 5) || 5,

@@ -33,7 +33,7 @@ const TARGET: Record<SetupStep["key"], GestorSection> = {
   account: "config",
   stock: "config",
   prices: "config",
-  invoice: "config",
+  invoice: "billing",
   topics: "config",
 };
 

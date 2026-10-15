@@ -58,7 +58,7 @@ export interface MlAccount {
   price_rounding: number;
   price_sync: boolean;
   stock_sync: boolean;
-  invoice_mode: "on_paid" | "on_shipped" | "manual" | "ml_billing" | "none";
+  invoice_mode: "on_paid" | "on_shipped" | "on_delivered" | "manual" | "ml_billing" | "none";
   upload_invoice: boolean;
   default_listing_type: string;
   label_format: "pdf" | "zpl2";

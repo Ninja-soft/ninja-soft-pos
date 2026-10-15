@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Columns3, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Zap } from "lucide-react";
+import { Columns3, FileText, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Zap } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonVariants } from "@/components/ui/Button";
@@ -32,10 +32,12 @@ import { MlMetricsTab } from "@/components/mercadolibre/gestor/MlMetricsTab";
 import { MlPostsaleTab } from "@/components/mercadolibre/gestor/MlPostsaleTab";
 import { MlBoardsTab } from "@/components/mercadolibre/gestor/MlBoardsTab";
 import { MlGestorConfig } from "@/components/mercadolibre/gestor/MlGestorConfig";
+import { MlBillingTab } from "@/components/mercadolibre/billing/MlBillingTab";
 
 const ICONS: Partial<Record<GestorSection, typeof Tag>> = {
   items: Tag,
   orders: Receipt,
+  billing: FileText,
   questions: MessageCircleQuestion,
   shipments: Truck,
   postsale: LifeBuoy,
@@ -184,7 +186,8 @@ function MercadoLibreGestor() {
             {account && tab === "items" && (
               <MlItemsTab accountId={account.id} onQuickPublish={ready ? () => setQuick(true) : undefined} onConfigurePrices={() => setTab("config")} />
             )}
-            {account && tab === "orders" && <MlOrdersTab accountId={account.id} />}
+            {account && tab === "orders" && <MlOrdersTab accountId={account.id} onBilling={() => setTab("billing")} />}
+            {account && tab === "billing" && <MlBillingTab key={account.id} account={account} canManage={canManage} />}
             {account && tab === "questions" && <MlQuestionsTab accountId={account.id} />}
             {account && tab === "shipments" && <MlShipmentsTab key={account.id} account={account} />}
             {account && sectionInfo(tab).feature === "mercadolibre_gestor" && gestor === false && (

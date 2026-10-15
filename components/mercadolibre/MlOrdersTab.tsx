@@ -36,7 +36,7 @@ function groupByPack(orders: MlOrder[]): MlOrder[][] {
   return [...map.values()];
 }
 
-export function MlOrdersTab({ accountId }: { accountId: string }) {
+export function MlOrdersTab({ accountId, onBilling }: { accountId: string; onBilling?: () => void }) {
   const { toast } = useToast();
   const { data: orders = [], isLoading } = useMlOrders(accountId);
   const { invoice, retryUpload } = useMlMutations();
@@ -47,7 +47,7 @@ export function MlOrdersTab({ accountId }: { accountId: string }) {
     return groups.filter((g) => {
       if (!filter) return true;
       if (filter === "review") return g.some((o) => o.needs_review || o.fraud_risk);
-      if (filter === "invoice") return g.some((o) => ["pending", "error"].includes(o.invoice_status));
+      if (filter === "invoice") return g.some((o) => ["pending", "error", "hold", "review"].includes(o.invoice_status));
       return g.some((o) => o.status === filter);
     });
   }, [orders, filter]);
@@ -56,6 +56,7 @@ export function MlOrdersTab({ accountId }: { accountId: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
       <select className={`${selectCls} sm:w-72`} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filtrar ventas">
         <option value="">Todas las ventas</option>
         <option value="paid">Pagadas</option>
@@ -64,6 +65,12 @@ export function MlOrdersTab({ accountId }: { accountId: string }) {
         <option value="review">Para revisar</option>
         <option value="invoice">Para facturar</option>
       </select>
+      {onBilling && (
+        <Button variant="secondary" size="sm" onClick={onBilling}>
+          <FileText size={15} /> Facturación
+        </Button>
+      )}
+      </div>
 
       {packs.length === 0 ? (
         <EmptyState
@@ -122,6 +129,11 @@ export function MlOrdersTab({ accountId }: { accountId: string }) {
                     <Link href="/ventas" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline">
                       <Receipt size={12} /> Venta {saleOrder.sales?.number ? `#${saleOrder.sales.number}` : "en el POS"}
                     </Link>
+                  )}
+                  {saleOrder && !fraud && (inv === "hold" || inv === "review") && onBilling && (
+                    <Button variant="secondary" size="sm" onClick={onBilling}>
+                      <FileText size={15} /> Ver en Facturación
+                    </Button>
                   )}
                   {saleOrder && !fraud && ["pending", "none", "error"].includes(inv) && (
                     <Button

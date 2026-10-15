@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import type { Route } from "next";
 import { ExternalLink, Link2, Lock, Plug, RefreshCw, ShoppingBag, Unplug } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonVariants } from "@/components/ui/Button";
@@ -70,8 +71,6 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
       price_list_id: account.price_list_id ?? "",
       price_markup_pct: String(account.price_markup_pct ?? 0),
       price_rounding: String(account.price_rounding ?? 0),
-      invoice_mode: account.invoice_mode === "ml_billing" ? "none" : account.invoice_mode,
-      upload_invoice: account.upload_invoice,
       default_listing_type: account.default_listing_type,
       label_format: account.label_format,
     }),
@@ -107,8 +106,6 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
       price_list_id: f.price_list_id || null,
       price_markup_pct: markup,
       price_rounding: rounding,
-      invoice_mode: f.invoice_mode,
-      upload_invoice: f.upload_invoice,
       default_listing_type: f.default_listing_type,
       label_format: f.label_format,
     };
@@ -242,23 +239,14 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
           )}
         </div>
       </SettingRow>
-      <SettingRow label="Facturación" description="Factura con ARCA (letra según el comprador: CUIT A, DNI B si sos Responsable Inscripto; C si sos monotributista).">
-        <select
-          className={`${selectCls} sm:w-80`}
-          value={f.invoice_mode}
-          disabled={disabled}
-          aria-label="Cuándo facturar"
-          onChange={(e) => setF({ ...f, invoice_mode: e.target.value as typeof f.invoice_mode })}
-        >
-          {(["on_paid", "on_shipped", "manual", "none"] as const).map((k) => (
-            <option key={k} value={k}>
-              {INVOICE_MODE_LABELS[k]}
-            </option>
-          ))}
-        </select>
-      </SettingRow>
-      <SettingRow label="Subir la factura a la venta" description="Cuando ARCA la aprueba, el PDF se sube solo a la venta en Mercado Libre (el comprador la recibe por mail).">
-        <Switch checked={f.upload_invoice} disabled={disabled} label="Subir la factura" onCheckedChange={(v) => setF({ ...f, upload_invoice: v })} />
+      {/* ADR-141: la facturación (cuándo, subir la factura y las reglas) se configura en Mercado Libre › Facturación. */}
+      <SettingRow
+        label="Facturación"
+        description={`${INVOICE_MODE_LABELS[account.invoice_mode] ?? "No facturar"}${account.upload_invoice ? ", con la factura subida a la venta" : ""}. Cuándo facturar, qué factura sale y las percepciones se configuran en Facturación.`}
+      >
+        <Link href={"/mercadolibre?tab=billing" as Route} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+          Configurar facturación
+        </Link>
       </SettingRow>
       <SettingRow label="Tipo de publicación por defecto">
         <select

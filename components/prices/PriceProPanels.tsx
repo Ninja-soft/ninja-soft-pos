@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Download, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, Download, Eye, RotateCcw, Trash2, X } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { PreviewTable } from "@/components/prices/BulkUpdateWizard";
 import { Button } from "@/components/ui/Button";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/Switch";
@@ -20,6 +22,7 @@ import {
   type ProList,
 } from "@/modules/prices/proApi";
 import {
+  useBatchLines,
   useFxRates,
   useIndexValues,
   usePaymentTerms,
@@ -43,9 +46,30 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
   const { data: batches } = usePriceBatches();
   const m = usePriceProMutations();
   const [undo, setUndo] = useState<BulkBatch | null>(null);
+  const [detail, setDetail] = useState<BulkBatch | null>(null);
+  const lines = useBatchLines(detail?.id ?? null);
   const names = new Map(lists.map((l) => [l.id, l.name]));
 
   function describe(b: BulkBatch): string {
+    if (b.engine === 2) {
+      const how =
+        b.mode === "fx"
+          ? `dólar ${b.fx_rate != null ? formatCurrency(Number(b.fx_rate)) : ""}`
+          : b.mode === "markup"
+            ? `${b.options?.markup_mode === "margin" ? "margen" : "markup"} ${Number(b.value)}%`
+            : b.mode === "cost"
+              ? "desde costo"
+              : b.mode === "pct"
+                ? `${Number(b.value) > 0 ? "+" : ""}${Number(b.value)}%`
+                : `${Number(b.value) > 0 ? "+" : ""}${formatCurrency(Number(b.value))}`;
+      const where = [
+        b.options?.targets?.base !== false ? "precio de venta" : null,
+        ...(b.list_ids ?? []).map((id) => `lista ${names.get(id) ?? ""}`),
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return `${how} en ${where || "costos"} · ${b.line_count} cambios`;
+    }
     const how =
       b.mode === "index"
         ? `índice ${b.index_info?.kind === "fx" ? `dólar ${b.index_info.source}` : (b.index_info?.key ?? "")} (${Number(b.value)}%)`
@@ -67,6 +91,7 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Badge tone={STATUS[b.status].tone}>{STATUS[b.status].label}</Badge>
+              {b.origin === "auto" && <Badge tone="info">Automático</Badge>}
               <span className="truncate">{describe(b)}</span>
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
@@ -102,6 +127,11 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
                 </Button>
               </>
             )}
+            {b.engine === 2 && (
+              <Button size="sm" variant="ghost" onClick={() => setDetail(b)}>
+                <Eye size={14} /> Ver
+              </Button>
+            )}
             {(b.status === "applied" || b.status === "scheduled") && (
               <Button size="sm" variant="secondary" onClick={() => setUndo(b)}>
                 <RotateCcw size={14} /> Deshacer
@@ -114,7 +144,7 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
         open={undo !== null}
         onOpenChange={(o) => !o && setUndo(null)}
         title="Deshacer el cambio"
-        description="Vuelven al precio anterior los productos que nadie cambió después. Lo programado se cancela."
+        description="Vuelven al precio (y al costo en dólares) anterior los productos que nadie cambió después. Lo programado se cancela."
         confirmLabel="Deshacer"
         loading={m.bulkRevert.isPending}
         onConfirm={() =>
@@ -122,7 +152,7 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
           m.bulkRevert.mutate(undo.id, {
             onSuccess: (r) => {
               toast({
-                title: `Deshecho: ${r.reverted} precios`,
+                title: `Deshecho: ${r.reverted} precios${r.costs ? ` y ${r.costs} costos` : ""}`,
                 description: r.skipped > 0 ? `${r.skipped} no se tocaron porque cambiaron después.` : undefined,
                 variant: "success",
               });
@@ -132,6 +162,14 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
           })
         }
       />
+      <Modal open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} title="Detalle del cambio" className="sm:max-w-3xl">
+        {detail && <p className="mb-3 text-sm text-muted-foreground">{describe(detail)}</p>}
+        {lines.isLoading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Cargando</p>
+        ) : (
+          <PreviewTable rows={lines.data ?? []} listName={names} />
+        )}
+      </Modal>
     </div>
   );
 }

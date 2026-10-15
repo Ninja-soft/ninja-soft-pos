@@ -374,6 +374,49 @@ export function itemIdentifiers(item: Pick<MlItem, "title" | "attributes" | "var
   }));
 }
 
+/** Datos de la publicación para "Vincular con un producto" (ADR-141). */
+export interface LinkContext {
+  pictures: string[];
+  brand: string | null;
+  model: string | null;
+  gtins: string[];
+  skus: string[];
+  variations: Array<{ id: string; label: string; sku: string | null; gtin: string | null; picture: string | null }>;
+}
+
+/** El GTIN de ML puede venir con varios códigos separados por coma. */
+export function splitGtins(raw: string | null | undefined): string[] {
+  return (raw ?? "")
+    .split(/[,;\s]+/)
+    .map((s) => s.replace(/\D/g, ""))
+    .filter((s) => s.length >= 8 && s.length <= 14);
+}
+
+/** Fotos, marca, GTIN y SKU de una publicación y sus variaciones. PURO. */
+export function linkContext(item: Pick<MlItem, "title" | "attributes" | "variations" | "pictures" | "secure_thumbnail" | "thumbnail">): LinkContext {
+  const pics = (item.pictures ?? []).map((p) => p.secure_url || p.url || "").filter(Boolean);
+  const picById = new Map((item.pictures ?? []).map((p) => [p.id, p.secure_url || p.url || ""]));
+  const thumb = item.secure_thumbnail || item.thumbnail || null;
+  const ids = itemIdentifiers(item);
+  const variations = (item.variations ?? []).map((v, i) => ({
+    id: String(v.id),
+    label: (v.attribute_combinations ?? []).map((c) => c.value_name).filter(Boolean).join(" / ") || ids[i]?.label || String(v.id),
+    sku: ids[i]?.sku ?? null,
+    gtin: splitGtins(ids[i]?.gtin)[0] ?? null,
+    picture: (v.picture_ids ?? []).map((id) => picById.get(id)).find(Boolean) ?? null,
+  }));
+  const gtins = [...new Set(ids.flatMap((x) => splitGtins(x.gtin)))];
+  const skus = [...new Set(ids.map((x) => x.sku).filter((s): s is string => Boolean(s)))];
+  return {
+    pictures: (pics.length > 0 ? pics : thumb ? [thumb] : []).slice(0, 6),
+    brand: attr(item.attributes, "BRAND"),
+    model: attr(item.attributes, "MODEL"),
+    gtins,
+    skus,
+    variations,
+  };
+}
+
 export interface PosCandidate {
   product_id: string;
   variant_id: string | null;

@@ -131,7 +131,10 @@ export function PosShell(p: PosShellProps) {
         <main
           className={cn(
             "slim-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-hidden md:pb-2",
-            tabs ? "pb-4" : "pb-24",
+            // Sin pestañas, la barra fija del carrito (62px + su aire inferior,
+            // que crece con el safe area) tapa el final: el último contenido
+            // queda siempre visible arriba de la barra.
+            tabs ? "pb-4" : "pb-[calc(6rem+env(safe-area-inset-bottom))]",
             tabs && mobileTab === "cart" && "max-md:hidden",
           )}
         >

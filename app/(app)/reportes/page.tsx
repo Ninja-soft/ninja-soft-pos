@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
@@ -842,7 +843,7 @@ export default function ReportesPage() {
         </Display>
         {branch.isMulti && (
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <Segmented
+            <Segmented scrollOnMobile
               aria-label="Alcance del reporte"
               value={view}
               onChange={changeView}
@@ -850,7 +851,7 @@ export default function ReportesPage() {
               size="sm"
             />
             {view === "branch" && (
-              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Sucursal">
+              <div className={cn(headerActionsRow, "gap-1.5")} role="radiogroup" aria-label="Sucursal">
                 {branch.allowed.map((b) => {
                   const on = b.id === storeId;
                   return (

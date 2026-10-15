@@ -544,7 +544,7 @@ function BranchDetailModal({
     >
       <div className="space-y-5">
         <div className="slim-scrollbar -mx-1 overflow-x-auto px-1">
-          <Segmented
+          <Segmented scrollOnMobile
             size="sm"
             value={tab}
             onChange={onTab}

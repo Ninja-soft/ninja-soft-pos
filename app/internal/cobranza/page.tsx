@@ -74,7 +74,7 @@ export default function InternalCobranzaPage() {
           aria-label="Vista de cobranzas"
           value={vista}
           onChange={setVista}
-          className="flex-nowrap"
+          className="max-w-none flex-nowrap"
           options={[
             { value: "resumen", label: "Resumen", icon: <LayoutGrid size={15} /> },
             {

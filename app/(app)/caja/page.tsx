@@ -33,7 +33,8 @@ import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { format } from "date-fns";
-import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
+import { PageHeader, SectionHeader, headerActionsRow } from "@/components/ui/PageHeader";
+import { cn } from "@/lib/utils/cn";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Callout } from "@/components/ui/Callout";
 import { useBranchScope } from "@/modules/branches/hooks";
@@ -193,7 +194,7 @@ export default function CajaPage() {
                 punto de venta{isManager ? "; si quedó abierta por error, cerrala con un cierre forzado." : "."}
               </Callout>
             )}
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className={cn(headerActionsRow, "mt-6 gap-3 sm:mt-6")}>
               {!foreign && (
               <>
               <Button onClick={() => setModalType("income")}>
@@ -255,9 +256,9 @@ export default function CajaPage() {
                   {(movements ?? []).map((m) => (
                     <li
                       key={m.id}
-                      className="flex items-center justify-between px-4 py-3 text-sm"
+                      className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
                     >
-                      <div>
+                      <div className="min-w-0 flex-1 break-words">
                         <span className="font-medium">
                           {m.type === "income"
                             ? "Ingreso"
@@ -286,14 +287,15 @@ export default function CajaPage() {
                         </div>
                       </div>
                       <span
-                        className={
+                        className={cn(
+                          "shrink-0 whitespace-nowrap",
                           m.type === "expense" ||
                           m.type === "sale_void" ||
                           m.type === "account_payment_void" ||
                           m.type === "deposit_out"
                             ? "text-danger"
-                            : "text-success"
-                        }
+                            : "text-success",
+                        )}
                       >
                         {formatCurrency(m.amount)}
                       </span>

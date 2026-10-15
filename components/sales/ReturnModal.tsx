@@ -446,7 +446,7 @@ export function ReturnModal({
           </div>
 
           {/* Pie: total + navegación */}
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <div>
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 A devolver{totalUnits > 0 ? ` · ${formatQty(totalUnits)} u.` : ""}

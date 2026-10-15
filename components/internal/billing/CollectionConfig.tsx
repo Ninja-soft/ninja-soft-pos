@@ -342,7 +342,7 @@ export function CollectionSettingsCard({ view, canEdit }: { view: CollectionView
           <div>
             <span className="mb-2 block text-sm font-medium text-muted-foreground">Cada cuánto</span>
             <div className="slim-scrollbar -mx-1 overflow-x-auto px-1">
-              <Segmented<StatementFrequency> value={freq} onChange={(v) => canEdit && setFreq(v)} options={FREQ_OPTIONS} aria-label="Frecuencia del aviso" className="flex-nowrap" />
+              <Segmented<StatementFrequency> value={freq} onChange={(v) => canEdit && setFreq(v)} options={FREQ_OPTIONS} aria-label="Frecuencia del aviso" className="max-w-none flex-nowrap" />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">

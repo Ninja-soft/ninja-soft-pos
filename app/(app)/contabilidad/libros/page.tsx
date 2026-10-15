@@ -204,12 +204,12 @@ function DiaryEntry({ e }: { e: JournalEntry }) {
         <tbody className="divide-y divide-border">
           {e.lines.map((l) => (
             <tr key={l.line_no}>
-              <td className={cn("px-4 py-1.5", l.credit > 0 && "pl-12")}>
+              <td className={cn("px-4 py-1.5", l.credit > 0 && "pl-8 sm:pl-12")}>
                 <span className="tabular-nums text-muted-foreground">{l.account_code}</span> {l.account_name}
                 {l.cost_center_code && <span className="ml-2 text-xs text-muted-foreground">{l.cost_center_code}</span>}
               </td>
-              <td className="w-36 px-4 py-1.5 text-right tabular-nums">{money(l.debit)}</td>
-              <td className="w-36 px-4 py-1.5 text-right tabular-nums">{money(l.credit)}</td>
+              <td className="w-28 px-3 py-1.5 text-right tabular-nums sm:w-36 sm:px-4">{money(l.debit)}</td>
+              <td className="w-28 px-3 py-1.5 text-right tabular-nums sm:w-36 sm:px-4">{money(l.credit)}</td>
             </tr>
           ))}
         </tbody>
@@ -451,7 +451,7 @@ function Resultados({ range, storeId }: { range: Range; storeId: string | null }
               <td className="px-4 py-2">
                 <span className="tabular-nums text-muted-foreground">{l.code}</span> {l.name}
               </td>
-              <td className="w-44 px-4 py-2 text-right tabular-nums">{formatCurrency(sign * l.amount)}</td>
+              <td className="w-32 px-3 py-2 text-right tabular-nums sm:w-44 sm:px-4">{formatCurrency(sign * l.amount)}</td>
             </tr>
           ))}
         </tbody>

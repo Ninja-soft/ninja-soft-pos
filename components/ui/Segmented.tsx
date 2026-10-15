@@ -22,6 +22,11 @@ interface SegmentedProps<T extends string> {
   fill?: boolean;
   /** En mobile muestra sólo íconos (la etiqueta queda para lectores). */
   iconOnlyOnMobile?: boolean;
+  /**
+   * En mobile (< sm) los segmentos van en una sola fila con scroll lateral
+   * en lugar de pasar a otra línea. Desde sm, igual que siempre.
+   */
+  scrollOnMobile?: boolean;
   className?: string;
 }
 
@@ -42,6 +47,7 @@ export function Segmented<T extends string>({
   size = "md",
   fill = false,
   iconOnlyOnMobile = false,
+  scrollOnMobile = false,
   className,
 }: SegmentedProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,7 +99,7 @@ export function Segmented<T extends string>({
     }
   }
 
-  return (
+  const group = (
     <div
       ref={containerRef}
       role="radiogroup"
@@ -101,6 +107,7 @@ export function Segmented<T extends string>({
       className={cn(
         "relative max-w-full gap-1 rounded-xl bg-[var(--seg-track)] p-1",
         fill ? "grid auto-cols-fr grid-flow-col" : "inline-flex flex-wrap",
+        scrollOnMobile && !fill && "max-sm:max-w-none max-sm:flex-nowrap",
         className,
       )}
     >
@@ -151,6 +158,13 @@ export function Segmented<T extends string>({
           </button>
         );
       })}
+    </div>
+  );
+  if (!scrollOnMobile || fill) return group;
+  // 4px de aire alrededor para que el anillo de foco no se corte al scrollear.
+  return (
+    <div className="-m-1 max-w-[calc(100%+0.5rem)] overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:m-0 sm:max-w-full sm:overflow-visible sm:p-0">
+      {group}
     </div>
   );
 }

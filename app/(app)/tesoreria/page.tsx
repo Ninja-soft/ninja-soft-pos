@@ -121,7 +121,7 @@ export default function TesoreriaPage() {
     <PageContainer>
       {header}
       <div className="mt-4">
-        <Segmented<Tab>
+        <Segmented<Tab> scrollOnMobile
           aria-label="Vista"
           value={tab}
           onChange={setTab}

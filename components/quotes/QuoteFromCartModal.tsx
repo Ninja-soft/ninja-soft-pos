@@ -181,7 +181,7 @@ export function QuoteFromCartModal({
       title="Guardar como presupuesto"
       description="No se cobra ni se mueve stock. Después lo convertís en venta con un click."
       footer={
-        <div className="flex w-full items-center justify-between gap-2">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <span className="font-price text-lg font-bold tabular-nums">{formatCurrency(totals.total)}</span>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>

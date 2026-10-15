@@ -6,6 +6,7 @@ import { ArrowLeft, Download, Lock, Pencil, Store, Wallet } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
@@ -207,7 +208,7 @@ export function Customer360({ customerId }: { customerId: string | null }) {
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={headerActionsRow}>
           {branchCtx.isMulti && (
             <label className="relative">
               <span className="sr-only">Sucursal</span>

@@ -225,7 +225,7 @@ export function LandedCostModal({
           <span className="text-sm">
             Puesto en depósito: <b className="tabular-nums">{formatCurrency(result.totals.landed)}</b>
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={exportSheet} disabled={result.lines.length === 0}>
               <Download size={15} /> XLSX
             </Button>
@@ -367,7 +367,7 @@ export function LandedCostModal({
             <p className="text-xs text-muted-foreground">Sin gastos cargados.</p>
           )}
           {sheet.expenses.map((e, idx) => (
-            <div key={`${idx}-${sheet.expenses.length}`} className="grid grid-cols-[1fr_8rem_9rem_auto] gap-2">
+            <div key={`${idx}-${sheet.expenses.length}`} className="grid grid-cols-[1fr_1fr_auto] gap-2 max-sm:[&>*:first-child]:col-span-3 sm:grid-cols-[1fr_8rem_9rem_auto]">
               <input
                 aria-label="Concepto"
                 className={cn(inputCls, "h-9")}

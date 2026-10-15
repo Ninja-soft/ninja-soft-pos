@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useBrands, useCreateBrand, useBrandMutations } from "@/modules/products/hooks";
 import type { Brand } from "@/modules/products/api";
 import { errorDescription } from "@/lib/permissions/errors";
+import { findBrandByName, normalizeBrandName } from "@/lib/products/brandName";
 
 interface Props {
   open: boolean;
@@ -27,9 +28,14 @@ export function BrandsModal({ open, onOpenChange }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
 
   async function handleCreate() {
-    if (!newName.trim()) return;
+    const name = normalizeBrandName(newName);
+    if (!name) return;
+    if (findBrandByName(brands, name)) {
+      toast({ title: "Esa marca ya existe", description: name, variant: "error" });
+      return;
+    }
     try {
-      await create.mutateAsync(newName.trim());
+      await create.mutateAsync(name);
       setNewName("");
       toast({ title: "Marca creada", variant: "success" });
     } catch (e) {
@@ -48,9 +54,15 @@ export function BrandsModal({ open, onOpenChange }: Props) {
   }
 
   async function handleUpdate() {
-    if (!editId || !editName.trim()) return;
+    const name = normalizeBrandName(editName);
+    if (!editId || !name) return;
+    const dup = findBrandByName(brands, name);
+    if (dup && dup.id !== editId) {
+      toast({ title: "Esa marca ya existe", description: name, variant: "error" });
+      return;
+    }
     try {
-      await update.mutateAsync({ id: editId, name: editName.trim() });
+      await update.mutateAsync({ id: editId, name });
       cancelEdit();
       toast({ title: "Marca actualizada", variant: "success" });
     } catch (e) {
@@ -82,11 +94,11 @@ export function BrandsModal({ open, onOpenChange }: Props) {
           {/* Nueva marca */}
           <div className="flex gap-2">
             <Input
-              placeholder="Nueva marca…"
+              placeholder="NUEVA MARCA…"
               value={newName}
-              onChange={(e) => setNewName(e.target.value)}
+              onChange={(e) => setNewName(e.target.value.toLocaleUpperCase("es-AR"))}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="flex-1"
+              className="flex-1 uppercase"
             />
             <Button
               onClick={handleCreate}
@@ -112,12 +124,12 @@ export function BrandsModal({ open, onOpenChange }: Props) {
                     <input
                       autoFocus
                       value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
+                      onChange={(e) => setEditName(e.target.value.toLocaleUpperCase("es-AR"))}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleUpdate();
                         if (e.key === "Escape") cancelEdit();
                       }}
-                      className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                      className="h-8 flex-1 rounded-md border uppercase border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
                     />
                     <button
                       onClick={handleUpdate}

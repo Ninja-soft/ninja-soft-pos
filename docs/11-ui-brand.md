@@ -194,6 +194,7 @@ Sin sombras paralelas, glow ni degradados decorativos (dirección 2026-10). La e
 - **No animar:** color de texto, ancho, alto (excepto en colapsables).
 - **Sí animar:** opacidad, transform, background-color.
 - **Respetar** `prefers-reduced-motion`.
+- **Arrastrar y soltar:** el lugar donde cae lo arrastrado se marca con `.nav-drop-placeholder` (borde punteado animado en `--muted-foreground` sobre `--muted`, sin degradados ni sombras); lo arrastrado sigue al puntero con `scale(1.03)` y los vecinos se corren con `transform` (ADR-134).
 
 ## 12. Tono de voz en UI
 

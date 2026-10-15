@@ -12,11 +12,15 @@
 //              cuenta (orders/search) -> al inbox (idempotente).
 //   tokens     renueva los tokens que vencen pronto (lock por cuenta) y toca
 //              las cuentas sin uso.
+//   reputation (gestor, ADR-132) foto diaria de la reputación de las cuentas
+//              con `mercadolibre_gestor` que todavía no la tienen hoy.
+// `reconcile` también trae los reclamos abiertos y los cerrados recientes de
+// las cuentas con el gestor.
 // Lógica pura y testeada en ../_shared/mercadolibre/*.
 // =============================================================================
 import { MlApiError } from "../_shared/mercadolibre/client.ts";
 import { getAccessToken } from "../_shared/mercadolibre/oauth.ts";
-import { isMvpTopic, parseNotification, syntheticOrderNotification } from "../_shared/mercadolibre/notifications.ts";
+import { isHandledTopic, parseNotification, syntheticOrderNotification } from "../_shared/mercadolibre/notifications.ts";
 import {
   jobFamily,
   processJob,
@@ -25,6 +29,7 @@ import {
   type NotificationRow,
 } from "../_shared/mercadolibre/worker.ts";
 import type { MlMissedFeeds, MlOrderSearch } from "../_shared/mercadolibre/types.ts";
+import { reconcileClaims, takeReputation } from "../_shared/mercadolibre/gestorWorker.ts";
 import {
   accountClient,
   adminClient,
@@ -79,6 +84,8 @@ Deno.serve(async (req: Request) => {
       out.result = await reconcile(admin, deps, cfg.config.clientId, t0);
     } else if (body.mode === "tokens") {
       out.result = await tokens(admin, cfg.config, deps, t0);
+    } else if (body.mode === "reputation") {
+      out.result = await reputation(admin, deps, t0);
     } else {
       // 1) Inbox.
       let notes = 0;
@@ -149,7 +156,7 @@ async function reconcile(admin: Admin, deps: Deps, appId: string, t0: number) {
           p: {
             dedupe_key: p.n.dedupeKey, notification_id: p.n.notificationId, topic: p.n.topic, resource: p.n.resource,
             user_id: p.n.userId, attempts: p.n.attempts, sent: p.n.sent, actions: p.n.actions,
-            source: "missed_feeds", handled: isMvpTopic(p.n.topic),
+            source: "missed_feeds", handled: isHandledTopic(p.n.topic),
           },
         });
         missed++;
@@ -180,8 +187,38 @@ async function reconcile(admin: Admin, deps: Deps, appId: string, t0: number) {
       await deps.rpc("ml_account_polled", { p_account: a.account_id, p_at: null, p_error: msg.slice(0, 400) });
     }
   }
+  // Gestor (ADR-132): reclamos de las cuentas con la feature.
+  let claims = 0;
+  const gestor = ((await deps.rpc("ml_gestor_accounts_due", { p_kind: "claims" })) ?? []) as Array<{ account_id: string }>;
+  for (const a of gestor) {
+    if (Date.now() - t0 > BUDGET_MS) break;
+    try {
+      const r = await reconcileClaims(deps, a.account_id, { budgetMs: Math.max(5_000, BUDGET_MS - (Date.now() - t0)) });
+      claims += r.refreshed;
+    } catch (e) {
+      console.error(JSON.stringify({ fn: "ml_worker", step: "claims", account: a.account_id, error: String(e instanceof Error ? e.message : e) }));
+    }
+  }
   void admin;
-  return { missed, polled };
+  return { missed, polled, claims };
+}
+
+async function reputation(admin: Admin, deps: Deps, t0: number) {
+  const due = ((await deps.rpc("ml_gestor_accounts_due", { p_kind: "reputation" })) ?? []) as Array<{ account_id: string; ml_user_id: number }>;
+  let ok = 0;
+  let failed = 0;
+  for (const a of due) {
+    if (Date.now() - t0 > BUDGET_MS) break;
+    try {
+      const { data: set } = await admin.from("ml_gestor_settings").select("thresholds").eq("account_id", a.account_id).maybeSingle();
+      await takeReputation(deps, a.account_id, a.ml_user_id, (set?.thresholds ?? null) as Record<string, number> | null);
+      ok++;
+    } catch (e) {
+      failed++;
+      console.error(JSON.stringify({ fn: "ml_worker", step: "reputation", account: a.account_id, error: String(e instanceof Error ? e.message : e) }));
+    }
+  }
+  return { ok, failed };
 }
 
 async function tokens(admin: Admin, cfg: { clientId: string; clientSecret: string; redirectUri: string }, deps: Deps, t0: number) {

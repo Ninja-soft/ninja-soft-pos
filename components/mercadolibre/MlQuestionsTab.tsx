@@ -10,6 +10,7 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { ANSWER_STATE_LABELS, QUESTION_STATUS_LABELS, mlErrorMessage } from "@/lib/mercadolibre/labels";
 import { useMlMutations, useMlQuestions, type MlQuestion } from "@/modules/mercadolibre/hooks";
+import { MlTemplatePicker } from "./gestor/MlTemplatePicker";
 
 function when(iso: string | null): string {
   if (!iso) return "";
@@ -47,6 +48,7 @@ function QuestionRow({ q }: { q: MlQuestion }) {
       {q.answer_state === "error" && q.last_error && <p className="text-xs text-danger">{q.last_error}</p>}
       {open && (
         <div className="space-y-2">
+          <MlTemplatePicker scope="question" onPick={setText} />
           <textarea
             className="min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ninja-flameSoft"
             placeholder="Escribí la respuesta (sin datos de contacto: Mercado Libre los modera)"

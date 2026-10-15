@@ -32,6 +32,9 @@ export const RESOURCE_PATTERNS: Record<string, RegExp> = {
   fbm_stock_operations: /^\/stock\/fulfillment\/operations\/\d{1,22}$/,
   "flex-handshakes": /^\/flex\/sites\/[A-Z]{3}\/shipments\/\d{5,22}\/assignment\/v\d$/,
   post_purchase: /^\/post-purchase\/v\d\/claims\/\d{3,22}/,
+  // Gestor (ADR-132): reclamos y sus acciones.
+  claims: /^\/post-purchase\/v\d\/claims\/\d{3,22}/,
+  claims_actions: /^\/post-purchase\/v\d\/claims\/\d{3,22}/,
   invoices: /^\/users\/\d{3,22}\/invoices\/[A-Za-z0-9-]{1,64}$/,
   public_offers: /^\/seller-promotions\/offers\/[A-Za-z0-9-]{1,64}$/,
   public_candidates: /^\/seller-promotions\/candidates\/[A-Za-z0-9-]{1,64}$/,
@@ -44,6 +47,13 @@ export const MVP_TOPICS = ["orders_v2", "orders", "items", "items_prices", "ques
 export type MvpTopic = (typeof MVP_TOPICS)[number];
 
 export const isMvpTopic = (t: string): t is MvpTopic => (MVP_TOPICS as readonly string[]).includes(t);
+
+/** Tópicos del gestor (ADR-132): reclamos. Se procesan si el negocio tiene la feature. */
+export const GESTOR_TOPICS = ["claims", "claims_actions", "post_purchase"] as const;
+export const isGestorTopic = (t: string) => (GESTOR_TOPICS as readonly string[]).includes(t);
+
+/** ¿El worker procesa este tópico? (el resto se guarda como `ignored`). */
+export const isHandledTopic = (t: string) => isMvpTopic(t) || isGestorTopic(t);
 
 export interface ParsedNotification {
   dedupeKey: string;
@@ -113,6 +123,8 @@ export function parseNotification(raw: unknown, appId: string | null): ParseResu
 
 /** Id del recurso (lo que va en el GET). */
 export function resourceId(resource: string): string {
+  const claim = /^\/post-purchase\/v\d\/claims\/(\d{3,22})/.exec(resource);
+  if (claim) return claim[1]!;
   const parts = resource.split("/").filter(Boolean);
   if (parts[0] === "items" || parts[0] === "orders" || parts[0] === "questions" || parts[0] === "shipments") return parts[1] ?? "";
   return parts[parts.length - 1] ?? "";

@@ -139,3 +139,29 @@ export async function loadPosLayoutPref(): Promise<unknown> {
 export async function savePosLayoutPref(layout: Record<string, unknown> | null): Promise<void> {
   await patchRemoteSettings({ pos_layout: layout });
 }
+
+// --- Menú lateral personalizado (ADR-134): orden y ocultos por usuario y por
+// negocio, en settings.nav_menu = { [tenantId]: layout }. Sin validar acá: lo
+// sanea lib/nav/menuLayout.ts (sanitizeLayout + mergeLayout).
+export async function loadNavMenuPref(tenantKey: string): Promise<unknown> {
+  try {
+    const s = await readRemoteSettings();
+    const all = (s.nav_menu ?? null) as Record<string, unknown> | null;
+    return all && typeof all === "object" ? (all[tenantKey] ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** null borra la personalización de ese negocio (vuelve al menú por defecto). */
+export async function saveNavMenuPref(tenantKey: string, layout: unknown): Promise<void> {
+  try {
+    const s = await readRemoteSettings();
+    const all = { ...((s.nav_menu ?? {}) as Record<string, unknown>) };
+    if (layout === null) delete all[tenantKey];
+    else all[tenantKey] = layout;
+    await patchRemoteSettings({ nav_menu: all });
+  } catch {
+    // sin sesión / sin red: queda la caché local
+  }
+}

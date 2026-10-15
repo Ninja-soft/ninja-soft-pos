@@ -11,7 +11,8 @@
 // devuelve a ML una unidad que ML ya vendió y todavía no entró al POS.
 // =============================================================================
 import { MlApiError, familyOf, jobBackoffMs, type MlClient } from "./client.ts";
-import { isMvpTopic, resourceId } from "./notifications.ts";
+import { isGestorTopic, isHandledTopic, resourceId } from "./notifications.ts";
+import { refreshClaim } from "./gestorWorker.ts";
 import {
   buildPackPayload,
   normalizeBilling,
@@ -191,9 +192,14 @@ export async function refreshItem(deps: WorkerDeps, accountId: string, itemId: s
 
 /** Procesa una notificación del inbox (GET autenticado del recurso). */
 export async function processNotification(deps: WorkerDeps, n: NotificationRow): Promise<Outcome> {
-  if (!isMvpTopic(n.topic)) return { status: "ignored", note: "topic_not_in_mvp" };
+  if (!isHandledTopic(n.topic)) return { status: "ignored", note: "topic_not_in_mvp" };
   const id = resourceId(n.resource);
   try {
+    // Gestor (ADR-132): reclamos. Sin la feature, ml_claim_upsert lo ignora.
+    if (isGestorTopic(n.topic)) {
+      const r = await refreshClaim(deps, n.account_id, id);
+      return r.status === "done" ? { status: "done" } : { status: "ignored", note: r.note };
+    }
     switch (n.topic) {
       case "orders_v2":
       case "orders": {
@@ -381,6 +387,10 @@ export async function processJob(deps: JobDeps, job: JobRow): Promise<Outcome> {
         return await runAnswer(deps, job);
       case "invoice_upload":
         return await runInvoiceUpload(deps, job, deps.postForm);
+      case "claim_refresh": {
+        const r = await refreshClaim(deps, job.account_id, String(job.ref ?? ""));
+        return r.status === "done" ? { status: "done" } : { status: "ignored", note: r.note };
+      }
       case "order_refresh": {
         const r = await ingestOrder(deps, job.account_id, String(job.ref ?? ""));
         return { status: "done", note: String(r.decision ?? "") };

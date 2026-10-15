@@ -1021,6 +1021,9 @@ export function QrCheckoutModal({
               <p className={cn("text-center text-sm text-muted-foreground md:text-left", shareOpen && "md:hidden")}>
                 {isMpOrder
                   ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
+                  : provider === "ualabis"
+                    ? // El QR de Ualá Bis es el link de pago: no lo leen las billeteras (no es interoperable).
+                      "Que lo escanee con la cámara del celular (no con una billetera virtual): abre la página de pago de Ualá Bis para pagar con tarjeta. También podés compartirle el link. La pantalla se actualiza sola al acreditarse."
                   : channel === "link"
                     ? `Compartí el link para que el cliente pague con ${providerName}, o que escanee el QR. La pantalla se actualiza sola al acreditarse.`
                     : `El cliente escanea el QR para pagar con ${providerName}. La pantalla se actualiza sola al acreditarse.`}

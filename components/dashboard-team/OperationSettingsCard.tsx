@@ -597,18 +597,19 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
-              <Banknote size={16} className="text-ninja-flameSoft" /> Permitir venta libre (monto manual)
+              <Banknote size={16} className="text-ninja-flameSoft" /> Monto libre en el POS
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Muestra en el POS el botón “Venta libre” para cobrar un monto manual
+              Muestra en el POS el botón “Monto libre” para cobrar un monto manual
               con un concepto, sin producto del catálogo (no descuenta stock). Sólo
-              lo ven el dueño y el encargado.
+              lo ven el dueño y el encargado. Apagado, el botón desaparece y el
+              servidor rechaza ventas de monto libre.
             </p>
           </div>
           <Switch
             checked={allowFreeSale}
             onCheckedChange={setAllowFreeSale}
-            label="Permitir venta libre (monto manual) en el POS"
+            label="Monto libre en el POS"
           />
         </CardContent>
         {allowFreeSale && (

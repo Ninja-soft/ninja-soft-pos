@@ -99,29 +99,37 @@ export function toCents(amount: number): number {
   return Math.round(Number(amount) * 100);
 }
 
-export type AmountCheck = { ok: true; cents: string } | { ok: false; error: "invalid_amount" | "ualabis_min_amount" | "ualabis_max_amount" };
+export type AmountCheck = { ok: true; value: string } | { ok: false; error: "invalid_amount" | "ualabis_min_amount" | "ualabis_max_amount" };
 
-/** Monto de la orden como string de centavos enteros ("1021" = $10,21). */
+/**
+ * Monto de la orden EN PESOS como string ("100" = $100, "10.5" = $10,50).
+ * Verificado con un cobro real (15/10/2026): mandar centavos ("10000" para
+ * $100) le cobró $10.000 al cliente. Ualá espera pesos.
+ */
+export function pesosString(amount: number): string {
+  const cents = toCents(amount);
+  return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
+}
+
 export function orderAmount(amount: number): AmountCheck {
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalid_amount" };
   const cents = toCents(amount);
   if (cents < UALABIS_MIN_CENTS) return { ok: false, error: "ualabis_min_amount" };
   if (cents > UALABIS_MAX_CENTS) return { ok: false, error: "ualabis_max_amount" };
-  return { ok: true, cents: String(cents) };
+  return { ok: true, value: pesosString(amount) };
 }
 
 /**
- * ¿El monto que informa Ualá es el del intent? La doc no aclara la unidad de
- * la respuesta: vale si coincide como centavos o como pesos.
+ * ¿El monto que informa Ualá es el del intent? Ualá trabaja en PESOS: sólo
+ * vale si coincide en pesos (antes también aceptaba "centavos", lo que dejaba
+ * confirmar una orden de $10.000 como si fuera una venta de $100).
  */
 export function amountMatches(reported: unknown, expected: number): boolean | null {
   let n: number | null = null;
   if (typeof reported === "number" && Number.isFinite(reported)) n = reported;
   else if (typeof reported === "string" && /^\d+(\.\d{1,2})?$/.test(reported.trim())) n = Number(reported.trim());
   if (n === null) return null;
-  const cents = toCents(expected);
-  if (Number.isInteger(n) && n === cents) return true; // centavos
-  return toCents(n) === cents; // pesos
+  return toCents(n) === toCents(expected);
 }
 
 // ── Orden ────────────────────────────────────────────────────────────────────
@@ -140,7 +148,7 @@ export function buildOrderBody(i: OrderInput): Record<string, string> {
   if (!a.ok) throw new Error(a.error);
   const description = (i.description ?? "").replace(/\s+/g, " ").trim().slice(0, 120) || "Venta";
   return {
-    amount: a.cents,
+    amount: a.value,
     description,
     callback_success: i.callbackSuccess,
     callback_fail: i.callbackFail,
@@ -396,7 +404,7 @@ export function ualabisClient(p: { creds: UalaCreds; env: UalaEnv; fetchImpl?: F
       if (!a.ok) return { httpStatus: 400, body: { code: a.error } };
       const r = await authed(`${base}/orders/${uuid}/refund`, {
         method: "POST",
-        body: JSON.stringify({ amount: a.cents, notification_url: notificationUrl }),
+        body: JSON.stringify({ amount: a.value, notification_url: notificationUrl }),
       });
       return r.ok ? { httpStatus: 200, body: r.value } : { httpStatus: r.httpStatus, body: { code: r.detail } };
     },

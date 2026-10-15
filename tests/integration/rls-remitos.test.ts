@@ -126,7 +126,7 @@ describe.skipIf(!enabled)("ADR-136 · remitos con COT (RLS + create_sale real)",
     ctx.remito = crypto.randomUUID();
     const r = await rpc(ctx.cashier, "remito_issue", {
       p_id: ctx.remito,
-      p_data: { sale_id: ctx.sale, kind: "envio", delivery_address: "Calle 9 123", packages: 2, carrier_cuit: "30-50000000-1" },
+      p_data: { sale_id: ctx.sale, kind: "envio", receiver_name: "Juan Pérez", delivery_address: "Calle 9 123", packages: 2, carrier_cuit: "30-50000000-1" },
     });
     expect(r.error).toBeNull();
     expect(r.data).toMatchObject({ pto_vta: 1, number: 1 });
@@ -152,7 +152,7 @@ describe.skipIf(!enabled)("ADR-136 · remitos con COT (RLS + create_sale real)",
   it("anular es de la dueña con motivo; el siguiente remito sigue la numeración", async () => {
     expect((await rpc(ctx.cashier, "remito_void", { p_id: ctx.remito, p_reason: "error de carga" })).error?.message).toMatch(/void_requires_manager/);
     expect((await rpc(ctx.owner, "remito_void", { p_id: ctx.remito, p_reason: "error de carga" })).error).toBeNull();
-    const r2 = await rpc(ctx.owner, "remito_issue", { p_id: crypto.randomUUID(), p_data: { sale_id: ctx.sale } });
+    const r2 = await rpc(ctx.owner, "remito_issue", { p_id: crypto.randomUUID(), p_data: { sale_id: ctx.sale, receiver_name: "Juan Pérez" } });
     expect(r2.data).toMatchObject({ pto_vta: 1, number: 2 });
   });
 

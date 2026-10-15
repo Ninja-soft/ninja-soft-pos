@@ -127,7 +127,7 @@ describe.skipIf(!enabled)("ADR-136 · venta de otra sucursal y entregas partidas
         p_variant_id: null,
         p_qty: qty,
         p_mode: "set",
-        p_reason: "Inventario inicial",
+        p_reason: "adjustment",
         p_notes: null,
       });
       if (adj.error) throw new Error(adj.error.message);

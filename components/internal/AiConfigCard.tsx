@@ -39,6 +39,8 @@ type Status = {
   active: string | null;
   // Tope mensual de tokens por negocio (número como string). null → default 500k.
   monthly_quota: string | null;
+  // Imágenes con IA por día por negocio (ADR-122). null → 20.
+  image_daily_limit: string | null;
 };
 
 // Cuota mensual de tokens por defecto (espejo del DEFAULT_MONTHLY_TOKEN_CAP de
@@ -101,6 +103,7 @@ export function AiConfigCard({ bare = false }: { bare?: boolean } = {}) {
   const [trialDays, setTrialDays] = useState("");
   // Cuota mensual de tokens por negocio. Vacío → la IA usa el default (500k).
   const [monthlyQuota, setMonthlyQuota] = useState("");
+  const [imageDailyLimit, setImageDailyLimit] = useState("");
   // Toggle "Asistente IA activo". Default activo (null en config → true).
   const [active, setActive] = useState(true);
   // El usuario tocó el modelo manualmente → no lo pisamos al cambiar proveedor.
@@ -134,6 +137,7 @@ export function AiConfigCard({ bare = false }: { bare?: boolean } = {}) {
     setPriceArs(status.addon_price_ars ?? "");
     setTrialDays(status.addon_trial_days ?? "");
     setMonthlyQuota(status.monthly_quota ?? "");
+    setImageDailyLimit(status.image_daily_limit ?? "");
     // null/ausente → activo por defecto; solo "false" explícito lo apaga.
     setActive(status.active !== "false");
     if (status.model) setModelTouched(true);
@@ -218,6 +222,7 @@ export function AiConfigCard({ bare = false }: { bare?: boolean } = {}) {
       // Cuota mensual: si lo dejan vacío, la IA cae al default (500k). Solo se
       // persiste si hay un valor (el merge del backend ignora los vacíos).
       if (monthlyQuota.trim()) secrets.monthly_quota = monthlyQuota.trim();
+      if (/^\d{1,5}$/.test(imageDailyLimit.trim())) secrets.image_daily_limit = imageDailyLimit.trim();
       const { data, error } = await supabase.functions.invoke("set_platform_secret", {
         body: { key: "ai_config", secrets },
       });
@@ -494,6 +499,25 @@ export function AiConfigCard({ bare = false }: { bare?: boolean } = {}) {
               asistente. Al superarlo, la IA deja de responder hasta el mes
               siguiente. Si lo dejás vacío, se usa {DEFAULT_MONTHLY_QUOTA} por
               defecto.
+            </p>
+          </div>
+
+          {/* Tope diario de imágenes con IA (portadas de productos y servicios). */}
+          <div className="border-t border-border pt-4">
+            <Input
+              label="Imágenes con IA por día por negocio"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={99999}
+              step={1}
+              value={imageDailyLimit}
+              onChange={(e) => setImageDailyLimit(e.target.value)}
+              placeholder="20"
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Cuántas imágenes puede generar cada negocio por día (se reinicia a la medianoche de Argentina). Cada
+              Generar o Regenerar cuenta una. Con 0 no se generan. Vacío: 20.
             </p>
           </div>
 

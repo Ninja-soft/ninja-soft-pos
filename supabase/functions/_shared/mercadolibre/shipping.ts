@@ -12,7 +12,7 @@
 //       GET /users/{id}/shipping_modes?category_id { [{ mode }, ...] }
 //   • chooseShippingPlan: elige el mejor modo válido. me2 sólo si la cuenta
 //     aceptó Mercado Envíos (users/me), vendedor y categoría lo admiten y
-//     comparten una logística (ADR-136); si no, `not_specified` (a convenir) o `custom`
+//     comparten una logística (ADR-144); si no, `not_specified` (a convenir) o `custom`
 //     (costos propios). me1 nunca (el POS no lo maneja y casi ningún vendedor
 //     lo tiene). Envío gratis sólo con me2.
 //   • resolveShipping: ajusta lo que pidió el usuario a lo que se puede.

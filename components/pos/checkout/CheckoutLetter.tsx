@@ -118,28 +118,49 @@ export function CheckoutLetter({
   }
 
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-fg-4 px-3 py-2 text-[13px]">
-      <span className="flex min-w-0 items-center gap-2">
-        <FileText size={15} className="shrink-0 text-muted-foreground" aria-hidden />
-        <span className="font-medium">Factura {letter}</span>
-        {forced ? <Badge tone="warning">Elegida a mano</Badge> : <span className="text-muted-foreground">sugerida</span>}
-        {verified && c?.fiscal_verification === "padron" && <Badge tone="success">Cliente verificado en ARCA</Badge>}
-      </span>
-      <span className="flex items-center gap-1">
-        {forced && (
-          <Button type="button" variant="ghost" size="sm" loading={busy} onClick={() => void choose(suggested, null)}>
-            <Undo2 size={14} aria-hidden /> Volver a {suggested}
-          </Button>
+    <div className="mt-3 rounded-lg bg-fg-4 px-3 py-2 text-[13px]">
+      {/* Fila 1: la letra (nunca se parte) y sus marcas, que bajan de línea si
+          no entran; las acciones quedan chicas a la derecha de la misma fila. */}
+      <div className="flex items-start gap-2">
+        <FileText size={15} className="mt-[3px] shrink-0 text-muted-foreground" aria-hidden />
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="whitespace-nowrap font-medium">Factura {letter}</span>
+          {forced ? (
+            <Badge tone="warning">Elegida a mano</Badge>
+          ) : (
+            <span className="whitespace-nowrap text-muted-foreground">sugerida</span>
+          )}
+          {verified && c?.fiscal_verification === "padron" && <Badge tone="success">Cliente verificado en ARCA</Badge>}
+        </div>
+        {(forced || !offline) && (
+          <div className="-my-0.5 -mr-1 flex shrink-0 items-center gap-0.5">
+            {forced && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 whitespace-nowrap px-2 text-xs"
+                loading={busy}
+                onClick={() => void choose(suggested, null)}
+              >
+                <Undo2 size={13} aria-hidden /> Volver a {suggested}
+              </Button>
+            )}
+            {!offline && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 whitespace-nowrap px-2 text-xs"
+                onClick={() => setPickerOpen(true)}
+              >
+                Cambiar tipo
+              </Button>
+            )}
+          </div>
         )}
-        {!offline && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => setPickerOpen(true)}>
-            Cambiar tipo
-          </Button>
-        )}
-      </span>
-      {suggestedProblem && (
-        <p className="w-full text-xs text-warning">{suggestedProblem.reason}</p>
-      )}
+      </div>
+      {suggestedProblem && <p className="mt-1.5 text-xs text-warning">{suggestedProblem.reason}</p>}
 
       <Modal open={pickerOpen} onOpenChange={setPickerOpen} title="Tipo de comprobante">
         <div className="space-y-3">

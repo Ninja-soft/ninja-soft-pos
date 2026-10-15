@@ -5172,7 +5172,7 @@ El dueño pidió sumar Ualá Bis y hacer todas las integraciones posibles. Relev
 
 ---
 
-## ADR-136: Publicar en Mercado Libre "antibalas": los avisos de /items/validate no frenan, el envío sale del estado real de la cuenta y la configuración va por secciones
+## ADR-144: Publicar en Mercado Libre "antibalas": los avisos de /items/validate no frenan, el envío sale del estado real de la cuenta y la configuración va por secciones
 
 **Fecha:** 2026-10-15 · **Estado:** aceptada (sin migración; Edge `ml_api` modificada, sin desplegar) · **Base:** ADR-104 (Mercado Libre MVP), ADR-132 (gestor y publicación rápida). **Numeración:** si otra rama abierta tomó la 136, renumerar al mergear.
 

@@ -259,6 +259,17 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
       - [ ] Central de promociones: invitaciones con deadline, simulador de margen (costo POS + comisión + envío - bonificación ML), adhesión masiva, campaña propia, relámpago con stock, alertas por margen negativo.
       - [ ] Métricas: visitas, conversión, reputación, calidad por ítem (`performance`); Product Ads en lectura (ACOS, ROAS).
       - [ ] Sugerencias de precio, Facturador de ML como alternativa (`invoice_mode = ml_billing`) y asistente IA para títulos y atributos.
+  - [~] **H141 · Gestor de Mercado Libre: publicación rápida, precios por tipo, métricas, posventa y embudos.** *(agregado 2026-10-15, [ADR-132](./17-decision-log.md), diseño [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md), ideas y criterios tomados de ANDESMAR)*
+    - **Parte A: publicaciones y configuración** *(rama `feat/ml-gestor`, migración `20261127100000_ml_gestor_publicaciones` sin aplicar, Edge `ml_api` sin desplegar)*:
+      - [x] Pantalla con secciones (scroll lateral en mobile), explicación de cada sección, estados vacíos con acciones y checklist de puesta en marcha.
+      - [x] Publicación rápida en lote: búsqueda y escáner, categoría sugerida por título y GTIN (catálogo de ML), precompletado desde la ficha y la memoria por categoría, grilla con sólo los obligatorios que faltan, validación y publicación con resultado por fila.
+      - [x] Mismo producto en varios tipos (Clásica, Premium) con reglas de precio por tipo (recargo o lista, redondeo, mínimo) y override por producto, calculadas en el servidor.
+      - [x] Stock publicable con % de reserva y tope; visitas de 30 días; orden por visitas, ventas y calidad.
+      - [ ] *Criterio:* un producto típico con GTIN publicado en menos de un minuto (con los 40 de prueba: 30 sin completar nada; falta habilitar Mercado Envíos en la cuenta de prueba para publicar de verdad).
+    - **Parte B: métricas, posventa y embudos** *(rama `feat/ml-gestor-posventa`, apilada; feature `mercadolibre_gestor`)*:
+      - [ ] Reputación como en ANDESMAR (nivel, MercadoLíder, márgenes con umbral, evolución diaria, casos que la afectan) con foto diaria.
+      - [ ] Reclamos, mediaciones y devoluciones con vencimiento, responder con adjuntos, pedir la mediación, aceptar devolución y reintegro parcial con confirmación fuerte; mensajes postventa.
+      - [ ] Embudos de ventas y posventa con etapas configurables y asignación; plantillas de respuesta; umbrales y avisos.
   - [ ] Tienda Nube.
   - [~] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07; base hecha 2026-06-08)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan). — *Addon completo: config por proveedor, contexto amplio, cuota, burbuja con compra y explicador sin addon. Falta el tool-use que aplica cambios al ticket (hoy guía/consulta).*
     - [x] **Burbuja de chat** en el shell (visible solo con el addon activo) con **Gemini o Claude** vía Edge Function `ai_assistant` (la key vive en `platform_secrets` por proveedor, nunca en el cliente); burbuja con spinner/gif/ícono de proveedor y **botón de compra** cuando no está el addon. — *PRs #208, #231, #238.*

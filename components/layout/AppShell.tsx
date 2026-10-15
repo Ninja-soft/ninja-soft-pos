@@ -1,5 +1,6 @@
 "use client";
 
+import { PinQuickAccess } from "@/components/security/PinQuickAccess";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -631,6 +632,7 @@ function UserMenu({
           </DropdownItem>
         </DropdownContent>
       </Dropdown>
+      <PinQuickAccess />
       {isInternal && (
         <Link
           href="/internal/tenants"

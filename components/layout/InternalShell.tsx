@@ -52,6 +52,7 @@ const ProfileEditModal = dynamic(
   () => import("@/components/account/ProfileEditModal").then((m) => m.ProfileEditModal),
   { ssr: false },
 );
+import { PinQuickAccess } from "@/components/security/PinQuickAccess";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import {
   Dropdown,
@@ -181,38 +182,27 @@ export function InternalShell({
         })}
       </div>
 
-      <div className="mt-3 shrink-0 space-y-3 border-t border-border pt-3">
-        <Link
-          href="/dashboard"
-          onClick={() => setDrawer(false)}
-          className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
-        >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-ninja-flameSoft">
-            <Store size={16} />
-          </span>
-          <span className="text-sm font-medium text-foreground">Volver al POS</span>
-        </Link>
+      {/* Pie compacto (igual que el del POS, ADR-134): una fila con avatar,
+          nombre y nivel; Mis PINes y Volver al POS como íconos al lado. */}
+      <div className="mt-3 flex shrink-0 items-center gap-1 border-t border-border pt-3">
         <Dropdown>
           <DropdownTrigger asChild>
-            <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
-              <Avatar name={name} avatar={me?.avatar_url} size={32} loading={meLoading} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-foreground">
+            <button
+              title={email}
+              className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Avatar name={name} avatar={me?.avatar_url} size={26} loading={meLoading} />
+              <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                <span className="truncate text-sm font-medium text-foreground">
                   {name === email ? name : capitalizeName(name)}
                 </span>
-                {name !== email && (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {email}
-                  </span>
-                )}
-                <span className="mt-0.5 block truncate text-[11px] font-medium text-ninja-flameSoft">
+                <span className="shrink-0 text-[11px] font-medium text-ninja-flameSoft">
                   {level ? LEVEL_LABELS[level] ?? level : "Staff"}
                 </span>
               </span>
-              <ChevronDown size={15} className="shrink-0 text-muted-foreground" />
             </button>
           </DropdownTrigger>
-          <DropdownContent align="start" className="w-[232px]">
+          <DropdownContent align="start" side="top" className="w-[232px]">
             <DropdownLabel>{email}</DropdownLabel>
             <DropdownItem
               onSelect={(e) => {
@@ -235,6 +225,16 @@ export function InternalShell({
             </DropdownItem>
           </DropdownContent>
         </Dropdown>
+        <PinQuickAccess />
+        <Link
+          href="/dashboard"
+          onClick={() => setDrawer(false)}
+          title="Volver al POS"
+          aria-label="Volver al POS"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-ninja-flameSoft transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Store size={17} aria-hidden />
+        </Link>
       </div>
     </nav>
   );

@@ -68,7 +68,12 @@ const INDUSTRY_WORDS: Record<string, string> = {
 };
 
 function apiKeyOf(cfg: Record<string, unknown>): string {
-  const fromCfg = String(cfg.gemini_api_key ?? "").trim() || String(cfg.api_key ?? "").trim();
+  // Una clave claramente inválida (muy corta) no tapa a la otra guardada.
+  const ok = (v: unknown) => {
+    const s = String(v ?? "").trim();
+    return s.length >= 20 ? s : "";
+  };
+  const fromCfg = ok(cfg.gemini_api_key) || ok(cfg.api_key);
   return fromCfg || (Deno.env.get("GEMINI_API_KEY") ?? "").trim();
 }
 

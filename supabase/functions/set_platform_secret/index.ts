@@ -280,6 +280,38 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Asistente IA: la clave se prueba contra el proveedor ANTES de guardarla.
+  // (15/10: se guardó una clave inválida y dejaron de andar las imágenes.)
+  if (key === "ai_config") {
+    const invalid: Record<string, string> = {};
+    for (const k of ["gemini_api_key", "api_key", "claude_api_key"] as const) {
+      const v = patch[k];
+      if (!v) continue;
+      if (v.length < 20) {
+        invalid[k] = "La clave es demasiado corta: copiala completa desde el proveedor.";
+        continue;
+      }
+      try {
+        const res =
+          k === "claude_api_key"
+            ? await fetch("https://api.anthropic.com/v1/models?limit=1", {
+                headers: { "x-api-key": v, "anthropic-version": "2023-06-01" },
+              })
+            : await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", {
+                headers: { "x-goog-api-key": v },
+              });
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          invalid[k] = "El proveedor rechazó la clave. Revisala y volvé a pegarla.";
+        }
+      } catch {
+        // Sin red hacia el proveedor: no se bloquea el guardado.
+      }
+    }
+    if (Object.keys(invalid).length > 0) {
+      return json({ error: "invalid_format", fields: invalid }, 400);
+    }
+  }
+
   const { data: cur } = await admin
     .from("platform_secrets")
     .select("secrets")

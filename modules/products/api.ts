@@ -9,6 +9,7 @@ import {
   type ProductPackageRow,
 } from "@/lib/products/packages";
 import { sanitizeIlike } from "@/lib/utils/search";
+import { normalizeBrandName } from "@/lib/products/brandName";
 import type {
   CategoryInput,
   ProductOutput,
@@ -1044,23 +1045,46 @@ export const brandsApi = {
       .is("deleted_at", null)
       .order("name");
     if (error) throw error;
-    return (data ?? []) as Brand[];
+    // Se muestran siempre en mayúsculas (también las que aún no pasaron por
+    // el backfill de la migración 20261206100000).
+    return ((data ?? []) as Brand[])
+      .map((b) => ({ ...b, name: normalizeBrandName(b.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
   },
 
+  // Las marcas van siempre en mayúsculas (el trigger de brands lo garantiza;
+  // acá se normaliza igual para comparar). Si ya existe con otra grafía
+  // ("Epson" vs "EPSON"), se devuelve la existente en vez de chocar con el
+  // índice único.
   create: async (name: string): Promise<Brand> => {
     const supabase = createClient();
+    const clean = normalizeBrandName(name);
     const { data, error } = await supabase
       .from("brands")
-      .insert({ name })
+      .insert({ name: clean })
       .select("*")
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        const { data: existing } = await supabase
+          .from("brands")
+          .select("*")
+          .eq("name", clean)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (existing) return existing as Brand;
+      }
+      throw error;
+    }
     return data as Brand;
   },
 
   update: async (id: string, name: string): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.from("brands").update({ name }).eq("id", id);
+    const { error } = await supabase
+      .from("brands")
+      .update({ name: normalizeBrandName(name) })
+      .eq("id", id);
     if (error) throw error;
   },
 

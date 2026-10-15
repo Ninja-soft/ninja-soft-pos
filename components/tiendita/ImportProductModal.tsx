@@ -26,6 +26,7 @@ import { useCategories } from "@/modules/products/hooks";
 import { useImportCatalogProduct } from "@/modules/tiendita/hooks";
 import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
 import { isValidGtin, measureLines } from "@/lib/catalog/importInfo";
+import { normalizeBrandName } from "@/lib/products/brandName";
 import type { CatalogSearchResult } from "@/modules/tiendita/storefront";
 
 const ADD_ERRORS: Record<string, string> = {
@@ -95,7 +96,7 @@ function initialDraft(p: CatalogSearchResult, cats: CategoryLike[]): Draft {
   return {
     name: p.titulo,
     description: p.descripcion ?? "",
-    brand: p.marca ?? "",
+    brand: normalizeBrandName(p.marca),
     model: "",
     barcode: p.ean ?? "",
     // Sin EAN (ADR-118): el código de la tienda queda como SKU de referencia.
@@ -183,7 +184,7 @@ export function ImportProductModal({
         overrides: {
           name: draft.name.trim(),
           description: draft.description.trim() || null,
-          brand: draft.brand.trim() || null,
+          brand: normalizeBrandName(draft.brand) || null,
           model: draft.model.trim() || null,
           barcode: draft.barcode.trim() || null,
           sku: draft.sku.trim() || null,
@@ -424,7 +425,8 @@ export function ImportProductModal({
                 variant="filled"
                 label="Marca"
                 value={draft.brand}
-                onChange={(e) => set("brand", e.target.value)}
+                className="uppercase"
+                onChange={(e) => set("brand", e.target.value.toLocaleUpperCase("es-AR"))}
               />
               <Input
                 variant="filled"

@@ -61,6 +61,7 @@ import { ProductCostsPanel } from "@/components/purchases/ProductCostsPanel";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
+import { findBrandByName, normalizeBrandName } from "@/lib/products/brandName";
 import { diffPackages, type ProductPackage } from "@/lib/products/packages";
 import {
   normalizeNodes,
@@ -502,9 +503,18 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   }
 
   async function addBrand() {
-    if (newBrand.trim().length < 1) return;
+    const name = normalizeBrandName(newBrand);
+    if (!name) return;
+    // Si ya existe (sin distinguir mayúsculas), se elige la existente.
+    const existing = findBrandByName(brands, name);
+    if (existing) {
+      setValue("brand_id", existing.id);
+      setNewBrand("");
+      setAddingBrand(false);
+      return;
+    }
     try {
-      const b = await createBrand.mutateAsync(newBrand.trim());
+      const b = await createBrand.mutateAsync(name);
       setValue("brand_id", b.id);
       setNewBrand("");
       setAddingBrand(false);
@@ -643,10 +653,10 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 <Input
                   variant="filled"
                   value={newBrand}
-                  onChange={(e) => setNewBrand(e.target.value)}
-                  placeholder="Nombre de la marca"
+                  onChange={(e) => setNewBrand(e.target.value.toLocaleUpperCase("es-AR"))}
+                  placeholder="NOMBRE DE LA MARCA"
                   autoFocus
-                  className="h-10"
+                  className="h-10 uppercase"
                 />
                 <Button type="button" size="sm" className="h-10" onClick={addBrand} loading={createBrand.isPending}>
                   Crear

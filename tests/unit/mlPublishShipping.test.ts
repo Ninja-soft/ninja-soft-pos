@@ -146,7 +146,8 @@ describe("atributos condicionales", () => {
       errors: ["delete.item.attribute.business_conditional: Attribute [GRADING] to be deleted"],
       warnings: ["item.attributes.missing_conditional_required: [VALUE_ADDED_TAX]"],
     });
-    expect(validationCauses({ cause: [{ code: "a.b", message: "m", type: "warning" }] }).errors).toEqual(["a.b: m"]);
+    // Sólo avisos: /items/validate da 400 igual, pero no frena (ver mlPublicarAntibalas.test.ts).
+    expect(validationCauses({ cause: [{ code: "a.b", message: "m", type: "warning" }] })).toEqual({ errors: [], warnings: ["a.b: m"] });
     expect(validationCauses(null, ["fallback"]).errors).toEqual(["fallback"]);
   });
 });
@@ -265,7 +266,7 @@ describe("errores de ML en español", () => {
     expect(mlCauseInfo("shipping.lost_me1_by_user: User has not mode me1").action).toMatch(/a convenir/);
   });
   it.each([
-    ["item.attributes.missing_required: [BRAND]", /Falta un dato obligatorio/],
+    ["item.attributes.missing_required: [BRAND]", /Falta "BRAND", obligatorio/],
     ["item.attribute.invalid: [COLOR] value", /no es válido/],
     ["item.price.invalid: price 0", /precio no es válido/],
     ["item.price.minimum: min 1000", /mínimo/],

@@ -53,7 +53,23 @@ function when(iso: string | null): string {
   return new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function AccountConfig({ account, canManage }: { account: MlAccount; canManage: boolean }) {
+/** Grupos de ajustes de la cuenta: se muestran y se guardan por separado. */
+export type AccountConfigSection = "stock" | "price" | "listing" | "billing" | "labels";
+const ALL_SECTIONS: AccountConfigSection[] = ["stock", "price", "listing", "billing", "labels"];
+
+export function AccountConfig({
+  account,
+  canManage,
+  sections = ALL_SECTIONS,
+  saveLabel = "Guardar configuración",
+}: {
+  account: MlAccount;
+  canManage: boolean;
+  /** Qué grupos mostrar; se guardan sólo esos campos (el resto no se toca). */
+  sections?: AccountConfigSection[];
+  saveLabel?: string;
+}) {
+  const has = (k: AccountConfigSection) => sections.includes(k);
   const { toast } = useToast();
   const { saveSettings } = useMlMutations();
   const { data: stores = [] } = useStores();
@@ -86,31 +102,28 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
   const maxQty = f.max_qty.trim() === "" ? null : Number(f.max_qty);
   const markup = Number(f.price_markup_pct);
   const rounding = Number(f.price_rounding);
-  const valid =
+  const stockOk =
     Number.isFinite(reserve) && reserve >= 0 &&
     Number.isFinite(reservePct) && reservePct >= 0 && reservePct <= 95 &&
-    (maxQty === null || (Number.isInteger(maxQty) && maxQty >= 0)) &&
-    Number.isFinite(markup) && markup >= -90 && markup <= 500 &&
-    Number.isFinite(rounding) && rounding >= 0;
+    (maxQty === null || (Number.isInteger(maxQty) && maxQty >= 0));
+  const priceOk = Number.isFinite(markup) && markup >= -90 && markup <= 500 && Number.isFinite(rounding) && rounding >= 0;
+  const valid = (!has("stock") || stockOk) && (!has("price") || priceOk);
+  const dirty = JSON.stringify(f) !== JSON.stringify(initial);
   const disabled = !canManage || saveSettings.isPending;
 
   const save = () => {
     if (!valid) return;
+    // Sólo los campos de los grupos visibles: el servidor deja el resto como está.
     const p: MlSettingsInput = {
-      store_id: f.store_id || null,
-      warehouse_id: f.warehouse_id || null,
-      reserve_qty: reserve,
-      reserve_pct: reservePct,
-      max_qty: maxQty,
-      stock_sync: f.stock_sync,
-      price_sync: f.price_sync,
-      price_list_id: f.price_list_id || null,
-      price_markup_pct: markup,
-      price_rounding: rounding,
-      invoice_mode: f.invoice_mode,
-      upload_invoice: f.upload_invoice,
-      default_listing_type: f.default_listing_type,
-      label_format: f.label_format,
+      ...(has("stock")
+        ? { store_id: f.store_id || null, warehouse_id: f.warehouse_id || null, reserve_qty: reserve, reserve_pct: reservePct, max_qty: maxQty, stock_sync: f.stock_sync }
+        : {}),
+      ...(has("price")
+        ? { price_sync: f.price_sync, price_list_id: f.price_list_id || null, price_markup_pct: markup, price_rounding: rounding }
+        : {}),
+      ...(has("billing") ? { invoice_mode: f.invoice_mode, upload_invoice: f.upload_invoice } : {}),
+      ...(has("listing") ? { default_listing_type: f.default_listing_type } : {}),
+      ...(has("labels") ? { label_format: f.label_format } : {}),
     };
     saveSettings.mutate(
       { accountId: account.id, p },
@@ -123,6 +136,8 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
 
   return (
     <div className="space-y-0 divide-y divide-border">
+      {has("stock") && (
+      <>
       <SettingRow label="Stock publicado desde" description="Sucursal (y depósito, opcional) cuyo stock se publica. Las ventas de esta cuenta descuentan de acá.">
         <div className="grid w-full gap-2 sm:w-80">
           <select
@@ -199,6 +214,10 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
       <SettingRow label="Sincronizar stock" description="Cada venta, compra o ajuste del POS actualiza la cantidad publicada.">
         <Switch checked={f.stock_sync} disabled={disabled} label="Sincronizar stock" onCheckedChange={(v) => setF({ ...f, stock_sync: v })} />
       </SettingRow>
+      </>
+      )}
+      {has("price") && (
+      <>
       <SettingRow label="Sincronizar precio" description="El precio publicado sale del POS. Si la publicación usa la automatización de precios de Mercado Libre, no se pisa.">
         <Switch checked={f.price_sync} disabled={disabled} label="Sincronizar precio" onCheckedChange={(v) => setF({ ...f, price_sync: v })} />
       </SettingRow>
@@ -242,6 +261,10 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
           )}
         </div>
       </SettingRow>
+      </>
+      )}
+      {has("billing") && (
+      <>
       <SettingRow label="Facturación" description="Factura con ARCA (letra según el comprador: CUIT A, DNI B si sos Responsable Inscripto; C si sos monotributista).">
         <select
           className={`${selectCls} sm:w-80`}
@@ -260,7 +283,10 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
       <SettingRow label="Subir la factura a la venta" description="Cuando ARCA la aprueba, el PDF se sube solo a la venta en Mercado Libre (el comprador la recibe por mail).">
         <Switch checked={f.upload_invoice} disabled={disabled} label="Subir la factura" onCheckedChange={(v) => setF({ ...f, upload_invoice: v })} />
       </SettingRow>
-      <SettingRow label="Tipo de publicación por defecto">
+      </>
+      )}
+      {has("listing") && (
+      <SettingRow label="Tipo de publicación por defecto" description="El que se usa cuando un producto no tiene reglas de precio por tipo.">
         <select
           className={`${selectCls} sm:w-80`}
           value={f.default_listing_type}
@@ -275,7 +301,9 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
           ))}
         </select>
       </SettingRow>
-      <SettingRow label="Etiquetas de envío">
+      )}
+      {has("labels") && (
+      <SettingRow label="Etiquetas de envío" description="Formato de las etiquetas de Mercado Envíos que imprimís desde Envíos.">
         <select
           className={`${selectCls} sm:w-80`}
           value={f.label_format}
@@ -290,10 +318,13 @@ export function AccountConfig({ account, canManage }: { account: MlAccount; canM
           ))}
         </select>
       </SettingRow>
+      )}
       {canManage && (
-        <div className="flex justify-end px-5 py-4">
-          <Button onClick={save} disabled={!valid || disabled} loading={saveSettings.isPending}>
-            Guardar configuración
+        <div className="flex flex-wrap items-center justify-end gap-3 px-5 py-4">
+          {!valid && <span className="text-xs text-danger">Revisá los valores marcados: hay números fuera de rango.</span>}
+          {valid && dirty && <span className="text-xs text-muted-foreground">Hay cambios sin guardar.</span>}
+          <Button onClick={save} disabled={!valid || !dirty || disabled} loading={saveSettings.isPending}>
+            {saveLabel}
           </Button>
         </div>
       )}

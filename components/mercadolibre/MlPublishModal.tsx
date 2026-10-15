@@ -15,9 +15,16 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { selectCls } from "@/components/stock/transfers/shared";
-import { LISTING_TYPE_LABELS, mlCauseInfo, mlErrorMessage } from "@/lib/mercadolibre/labels";
+import { LISTING_TYPE_LABELS, mlErrorMessage, visibleWarnings } from "@/lib/mercadolibre/labels";
+import { MlCauseList, MlMeActivationHint } from "@/components/mercadolibre/MlPublishFeedback";
 import { fieldsForCondition, filterCategorySuggestions } from "@/supabase/functions/_shared/mercadolibre/items";
-import { SHIPPING_MODE_LABELS, SHIPPING_REASONS } from "@/supabase/functions/_shared/mercadolibre/shipping";
+import {
+  ME_SETTINGS_PATH,
+  ME_SETTINGS_URL,
+  SHIPPING_MODE_LABELS,
+  SHIPPING_REASONS,
+  needsMeActivation,
+} from "@/supabase/functions/_shared/mercadolibre/shipping";
 import {
   mlPublishApi,
   useMlChannelPreview,
@@ -48,34 +55,6 @@ const EMPTY_GTIN_FALLBACK = [
 ];
 
 type CostRow = { description: string; cost: string };
-
-/** Errores de ML en español con la acción; el código crudo, en un desplegable. */
-function MlErrorList({ errors }: { errors: string[] }) {
-  const infos = errors.map(mlCauseInfo);
-  const raw = infos.filter((i) => i.code);
-  return (
-    <div className="space-y-2">
-      <ul className="list-disc space-y-1.5 pl-4">
-        {infos.map((i, k) => (
-          <li key={k}>
-            {i.message}
-            {i.action && <span className="block text-xs text-muted-foreground">{i.action}</span>}
-          </li>
-        ))}
-      </ul>
-      {raw.length > 0 && (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Ver detalle técnico</summary>
-          <ul className="mt-1 space-y-1 font-mono break-all">
-            {raw.map((i, k) => (
-              <li key={k}>{i.raw}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  );
-}
 
 type AttrValues = Record<string, { value_id?: string | null; value_name?: string | null }>;
 
@@ -145,6 +124,9 @@ export function MlPublishModal({
   const [localPickUp, setLocalPickUp] = useState(false);
   const [costs, setCosts] = useState<CostRow[]>([{ description: "Envío a todo el país", cost: "" }]);
   const [notices, setNotices] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [attrNames, setAttrNames] = useState<Record<string, string>>({});
+  const [meActivation, setMeActivation] = useState<{ url: string; path: string } | null>(null);
   const [suggestions, setSuggestions] = useState<MlDomainSuggestion[]>([]);
   const [categoryId, setCategoryId] = useState("");
   const [cat, setCat] = useState<MlCategoryInfo | null>(null);
@@ -177,6 +159,8 @@ export function MlPublishModal({
       setAttrs({});
       setErrors([]);
       setNotices([]);
+      setWarnings([]);
+      setMeActivation(null);
       setShipPlan(null);
       setValidated(false);
       setPublished(null);
@@ -231,6 +215,10 @@ export function MlPublishModal({
 
   const applyResult = (r: MlPublishResult) => {
     setNotices(r.notices ?? []);
+    setWarnings(visibleWarnings(r.warnings, r.applied_shipping?.mode));
+    setAttrNames(r.attribute_names ?? {});
+    setMeActivation(r.me_activation ?? null);
+    if (r.applied_title && r.applied_title !== title) setTitle(r.applied_title);
     if (r.removed_attributes?.length) {
       const drop = new Set(r.removed_attributes);
       setAttrs((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !drop.has(id))));
@@ -598,6 +586,9 @@ export function MlPublishModal({
                       Envío: {shipLoading ? "consultando tu cuenta y la categoría" : SHIPPING_MODE_LABELS[shipMode]}
                     </p>
                     {!shipLoading && shipPlan && <p className="text-xs text-muted-foreground">{shipPlan.reason}</p>}
+                    {!shipLoading && shipPlan && needsMeActivation(shipPlan) && !meActivation && (
+                      <MlMeActivationHint url={ME_SETTINGS_URL} path={ME_SETTINGS_PATH} compact />
+                    )}
                   </div>
                 </div>
                 {!shipLoading && shipPlan && !shipPlan.allowed.includes("me2") && shipPlan.allowed.length > 1 && (
@@ -762,11 +753,19 @@ export function MlPublishModal({
             </Callout>
           )}
 
-          {errors.length > 0 && (
-            <Callout tone="danger" title="Mercado Libre pide corregir">
-              <MlErrorList errors={errors} />
+          {warnings.length > 0 && errors.length === 0 && (
+            <Callout tone="neutral" icon={Info} title="Mercado Libre avisa">
+              <MlCauseList items={warnings} names={attrNames} tone="info" />
             </Callout>
           )}
+
+          {errors.length > 0 && (
+            <Callout tone="danger" title="Mercado Libre pide corregir">
+              <MlCauseList items={errors} names={attrNames} />
+            </Callout>
+          )}
+
+          {meActivation && <MlMeActivationHint url={meActivation.url} path={meActivation.path} />}
         </div>
       )}
     </Modal>

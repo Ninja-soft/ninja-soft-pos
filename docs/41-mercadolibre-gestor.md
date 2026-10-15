@@ -184,6 +184,8 @@ Scopes de la cuenta conectada hoy (15/10/2026): `offline_access read write` más
 
 `claims`, `claims_actions` y `post_purchase` van al mismo patrón `^/post-purchase/v\d/claims/\d+` y disparan la relectura del reclamo. Hasta que se tilden, la reconciliación cada 10 minutos (`ml-reconcile`) busca los reclamos abiertos y los cerrados recientes, así que nada se pierde.
 
+**Validar y publicar (ADR-136).** `POST /items/validate` responde 400 aunque sólo haya causas `type: warning`: los avisos no frenan (salvo `moderations.*`). El envío se decide con `GET /users/me` (`status.mercadoenvios`), `GET /users/{id}/shipping_preferences` (modos y logísticas de me2 con su `status`) y `GET /categories/{id}/shipping_preferences` (logísticas de me2 que admite la categoría); `GET /users/{id}/available_listing_types?category_id=` dice qué tipos puede usar la cuenta. Todo vive en `_shared/mercadolibre/publish.ts`, la única función que usan el modal y la publicación rápida.
+
 ---
 
 ## 6. Feature de plan, permisos y auditoría

@@ -1504,8 +1504,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           <label htmlFor="checkout-opref" className={LABEL}>
             Número de operación
           </label>
+          {/* Al elegir un medio que pide número (Ualá Bis QR/POS/Tap, Directo...),
+              el foco va directo al campo; la key lo remonta al cambiar de medio. */}
           <input
+            key={active.id}
             id="checkout-opref"
+            autoFocus
             value={opRef}
             maxLength={64}
             autoComplete="off"

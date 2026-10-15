@@ -4646,3 +4646,47 @@ El dueño pidió "sumá a internal la configuración de la app de Mercado Libre 
 - Riesgo: una clave mal cargada en el panel (pero con formato válido) pisa a la del env que funcionaba. Mitigación: "Probar conexión" y "Borrar lo cargado acá" (vuelve al env).
 - `ml_webhook` puede tardar hasta 60 s en ver un App ID nuevo.
 - Tests: `tests/unit/mlAppConfig.test.ts` (prioridad de orígenes, validación, loader, sondeo, estado) y `tests/components/MlAppPanel.test.tsx`.
+## ADR-127: Snapshots diarios de MRR reconstruidos desde la auditoría, cálculo de KPIs puro en TypeScript sobre los insumos de una sola RPC y métricas de cobranza sólo para el rol de cobranza (F20-2)
+
+> Nota: se escribió como ADR-126 (así figura en el comentario de la migración `20261122100000`, ya aplicada) y se renumeró a ADR-127 al mergear, porque ADR-126 quedó para la app de Mercado Libre.
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (en producción desde el 14/10; migración `20261122100000_cobranza_mrr_snapshots` aplicada) · **Hito:** H128 (F20-2) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.5, §13.2, §15 y §22 #7 · **Base:** ADR-110, ADR-115 (ledger, exclusiones y rol de cobranza), ADR-120, ADR-052 (`internal_scope`), ADR-035 (ECharts). **Numeración:** 122 a 125 están en `main`; otras ramas abiertas pueden tomar números cercanos.
+
+### Contexto
+
+El dashboard interno calculaba el MRR con los precios y el estado de hoy y reconstruía el inicio del período con la auditoría (F20-0a). No había forma honesta de separar nuevo, expansión, contracción, churn y reactivación, ni de medir retención (NRR, GRR), y el cobrado salía de `billing_records` en bruto, sin comisiones ni reversas. Con el ledger de F20-1 ya existen pagos, comisiones, reversas, cargos e imputaciones para medir la cobranza (aging, DSO, efectividad).
+
+### Decisión
+
+1. **Foto diaria por negocio y agregada.** `platform_mrr_snapshots` (una fila por negocio y día: plan, ciclo, estado, modalidad, motivo de exclusión, MRR normalizado a mes, `is_paying`, `exempt`) y `platform_mrr_daily` (MRR de las cuentas pagas, cantidad, MRR en mora, trials y excluidas). Cuenta paga: `active` o `past_due`, sin exclusión y MRR > 0 (§15.2).
+2. **El estado de un día sale de la auditoría.** `platform_mrr_state(día)`: el estado al cierre del día (hora Argentina) es el `before_data` del primer `UPDATE` de la suscripción posterior a ese cierre, o la fila actual si no hubo cambios. El cron de las 00:10 y el backfill usan la misma función, y el backfill es exacto en plan, ciclo, estado y lifetime. Aproximaciones del backfill: la marca de prueba, el dueño staff y la modalidad exenta son los de hoy; los addons, los vigentes según su alta y su ventana paga actual.
+3. **Mismo MRR que el cobro.** `platform_mrr_cents(negocio, plan, ciclo, día)` replica `platform_billing_breakdown` (anual = yearly o mensual × 12, addons comprados, porcentajes y después fijos, × 12 en el anual) con el plan y el ciclo de ese día, dividido por los meses del ciclo. Probado igual al desglose en PGlite.
+4. **Cron que se recupera solo.** `platform_mrr_snapshot_run()` (pg_cron `platform-mrr-snapshot`, 03:10 UTC) completa desde el último día guardado hasta ayer, hasta 400 días, con upsert por (negocio, día) y advisory lock. Al aplicar la migración hace el backfill desde el alta de la primera suscripción.
+5. **La base junta, TypeScript calcula.** `internal_billing_kpis(meses)` devuelve los insumos: los cierres de mes (y la foto en vivo de hoy) sólo de los negocios que fueron cuenta paga en la ventana, el primer día pago de cada uno, cobrado bruto, comisiones y reversas por mes, efectividad por mes de vencimiento, el debe abierto y lo cargado en 90 días. Las definiciones viven una sola vez en `lib/billing/kpis.ts` (puras, con tests) y las usa la pantalla.
+6. **Definiciones.**
+   - Movimiento entre dos cierres: nuevo (nunca había pagado), reactivación (pagó antes), expansión y contracción (paga en los dos cierres), churn (pagaba y al cierre no: cancelada, suspendida o excluida). El puente siempre cuadra: inicio + neto = cierre.
+   - Churn de clientes (logo): sólo canceladas o suspendidas hace más de 30 días sin pagar (§15.2). Una suspendida reciente resta MRR pero todavía no es churn de clientes; si vuelve a pagar entra como reactivación.
+   - NRR y GRR sobre la cohorte paga al inicio de la ventana: la reactivación no suma porque no es de esa cohorte (la spec la incluía en el NRR; se corrige acá).
+   - Cobrado: pagos aprobados alguna vez, por fecha de pago, menos reintegros y contracargos del mes; neto, además sin comisiones.
+   - Aging del debe abierto vencido por días de mora: 1 a 30, 31 a 60, 61 a 90 y más de 90.
+   - DSO: deuda abierta total / lo cargado al debe en 90 días (cargos, punitorios y ajustes menos anulaciones) × 90. Mientras no haya facturas (F20-4), "facturado" es lo cargado en la cuenta corriente.
+   - Efectividad: imputado con pagos hasta el cierre del mes a lo que vencía en el mes, sobre lo que vencía menos lo anulado o bonificado. Un pago adelantado cuenta (se cobró a tiempo). En el mes en curso, sólo lo ya vencido.
+   - Todo sin los negocios excluidos hoy (prueba, dueño staff, lifetime, exentos, §22 #7).
+7. **Permisos.** La RPC exige el rol de cobranza (`platform_staff_billing_role()` en Cobranzas, admin o super_admin, que ya exige `internal_scope()`). Las dos tablas tienen RLS sin políticas ni grants: ni el staff las lee directo. El cron y las funciones internas no tienen `execute` para `authenticated`. Los guardarraíles (`rls_internal_scope_leaks`, `rls_bare_current_tenant_policies`, `rls_policies_without_initplan`) no cambian: no hay políticas nuevas.
+8. **UI.** Cobranzas › **Métricas**: tarjetas de MRR (en vivo contra el cierre del mes anterior), ARR, ARPA, MRR en mora, NRR y GRR; gráfico de movimiento de MRR con barras apiladas planas y la línea del MRR al cierre en su propio eje (ECharts, ADR-035, sin degradados ni sombras) y su tabla; tarjetas de cobrado bruto y neto, deuda vencida, DSO y efectividad; barra de aging y tabla de cobranza por mes. Selector de 6, 12 o 24 meses en una fila con scroll lateral. Sin datos: `<NoData/>` (la tarjeta suma la prop `noData`). En Inicio, "Cobrado en el período" lee `platform_payments` y resta reversas (con `billing_records` como respaldo si falta la migración de F20-1).
+9. **No es una feature de plan** (ADR-110): operación de la plataforma.
+
+### Alternativas descartadas
+
+- **Calcular el movimiento en SQL:** duplicaba las definiciones entre la base y la pantalla y era difícil de probar con casos chicos. Una sola implementación pura y testeada; la base sólo junta datos.
+- **Mandar todas las fotos diarias al navegador:** cientos de negocios por 400 días. Se mandan sólo los cierres de mes de los negocios que alguna vez pagaron en la ventana.
+- **Backfill con el estado de hoy:** inventaba MRR para meses en que el negocio estaba en prueba o cancelado. La auditoría de `subscriptions` guarda la fila completa y alcanza para reconstruir.
+- **Política SELECT para todo el staff (como dice §6.6):** las métricas de plata son del rol de cobranza; un soporte sin el permiso no las necesita.
+- **Un solo eje Y:** la spec pide barras y línea juntas, y con un solo eje las barras de movimiento quedan aplastadas contra el MRR total. Los dos ejes van rotulados y la tabla debajo da los valores exactos.
+
+### Consecuencias
+
+- Migración `20261122100000_cobranza_mrr_snapshots` (sin aplicar; requiere `20261113100000` y `20261113100100` de ADR-115; usa el índice parcial de auditoría de `20261111300000`). En PGlite el backfill de 200 días con 11 negocios tarda 1,2 s.
+- Pendiente: `tenants.status` como espejo de `subscriptions.status` (§5.1, quedó de F20-1 para F20-2 y sigue afuera de este PR); facturado y DSO sobre facturas (F20-4); MRR en riesgo con promesas y débitos rechazados desde los snapshots (F20-9); pasar el MRR de Inicio a los snapshots.
+- Riesgo: si la auditoría de `subscriptions` tiene huecos (UPDATE con el trigger desactivado), el backfill de esos días toma el estado siguiente conocido. Desde el primer cron, la foto es la del día.
+- Tests: PGlite (66 chequeos: reconstrucción por día, MRR igual al desglose, exclusiones, cron idempotente y que completa huecos, permisos, puente que cuadra, cobrado, aging, efectividad y DSO, con la función pura sobre la salida real), `tests/unit/billingKpis.test.ts` y `tests/integration/rls-cobranza-kpis.test.ts`.

@@ -31,7 +31,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
-| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
+| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-2, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120, ADR-126; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
@@ -1429,10 +1429,13 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] `tenants.status` pasa a ser un espejo de `subscriptions.status`: queda para F20-2 (spec §5.1).
   - [x] Estado de cuenta en el panel interno (pestaña Cuenta corriente y vista Cobranzas) y en el del cliente (Mi suscripción > Estado de cuenta).
   - [x] *Criterio:* 5 entregas del mismo webhook dejan un solo pago y un solo cargo; RLS probada (`rls_internal_scope_leaks()` = 0, ningún dueño ve el ledger de otro negocio). Probado en PGlite y en `tests/integration/rls-cobranza-ledger.test.ts`.
-- [ ] **H128 · F20-2: snapshots de MRR y KPIs de cobranza.**
-  - [ ] `platform_mrr_snapshots` diario.
-  - [ ] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación) y NRR.
-  - [ ] Cobrado bruto y neto, deuda vencida con aging, efectividad y DSO.
+- [x] **H128 · F20-2: snapshots de MRR y KPIs de cobranza.** En producción desde el 14/10 ([ADR-127](./17-decision-log.md)): migración `20261122100000_cobranza_mrr_snapshots` aplicada (backfill de 137 días).
+  - [x] `platform_mrr_snapshots` diario (por negocio) y `platform_mrr_daily` (agregado), cron `platform-mrr-snapshot` 00:10 ART que completa los días que falten y backfill de hasta 400 días desde la auditoría de `subscriptions`.
+  - [x] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación), NRR, GRR y churn de clientes: cálculo puro en `lib/billing/kpis.ts`.
+  - [x] Cobrado bruto y neto, deuda vencida con aging, efectividad y DSO, en Cobranzas › **Métricas** (gráfico de movimiento con ECharts y tablas por mes). Sólo Cobranzas, admin y super_admin (`internal_billing_kpis`).
+  - [x] *Criterio:* probado en PGlite (66 chequeos: reconstrucción del estado por día, MRR igual a `platform_billing_breakdown`, exclusiones, cron idempotente y que se recupera, permisos, puente de MRR que cuadra, cobrado, aging, efectividad y DSO), `tests/unit/billingKpis.test.ts` y `tests/integration/rls-cobranza-kpis.test.ts`.
+  - [ ] `tenants.status` como espejo de `subscriptions.status` (spec §5.1): sigue pendiente, fuera de este PR.
+  - [ ] Facturado y DSO sobre facturas reales: llegan con F20-4 (hoy el DSO usa lo cargado en la cuenta corriente).
 - [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.** En producción desde el 14/10 (ADR-117, migración `20261113300000` aplicada, Edge `platform_billing` desplegada, #411/#412).
   - [x] `tenant_billing_profiles` con historia.
   - [x] Consulta de `ws_sr_constancia_inscripcion` con cache y rate limit (activa cuando exista el certificado de la plataforma).

@@ -20,6 +20,7 @@ import {
   Landmark,
   ListOrdered,
   Plus,
+  Radar,
   ReceiptText,
   Settings2,
   Undo2,
@@ -45,6 +46,8 @@ import {
 import { BonusModal, ChargeModal, RegisterPaymentModal, TermsModal } from "@/components/internal/billing/LedgerModals";
 import { TenantCollectionPanel } from "@/components/internal/billing/TenantCollectionPanel";
 import { TenantMoraPanel } from "@/components/internal/billing/TenantMoraPanel";
+import { PlanChangeCard } from "@/components/internal/billing/PlanChangeCard";
+import { Tenant360Timeline } from "@/components/internal/billing/Tenant360Timeline";
 import {
   BILLING_MODE_LABELS,
   BILLING_ROLE_LABELS,
@@ -62,7 +65,7 @@ import {
   type TimelineEvent,
 } from "@/modules/billing/ledger";
 
-type View = "movimientos" | "vencimientos" | "pagos" | "imputaciones" | "historia";
+type View = "movimientos" | "vencimientos" | "pagos" | "imputaciones" | "historia" | "c360";
 
 const VIEWS: { value: View; label: string; icon: React.ReactNode }[] = [
   { value: "movimientos", label: "Movimientos", icon: <ListOrdered size={15} /> },
@@ -70,6 +73,7 @@ const VIEWS: { value: View; label: string; icon: React.ReactNode }[] = [
   { value: "pagos", label: "Pagos", icon: <Wallet size={15} /> },
   { value: "imputaciones", label: "Imputaciones", icon: <ArrowLeftRight size={15} /> },
   { value: "historia", label: "Historia", icon: <History size={15} /> },
+  { value: "c360", label: "Cobranza 360", icon: <Radar size={15} /> },
 ];
 
 const ACTION_LABELS: Record<string, string> = {
@@ -272,6 +276,8 @@ export function TenantLedgerTab({ tenantId, tenantName }: { tenantId: string; te
 
       <TenantMoraPanel tenantId={tenantId} access={access} balanceCents={s.balance_cents} />
 
+      <PlanChangeCard tenantId={tenantId} canChange={Boolean(access?.can_set_terms)} />
+
       <div className="space-y-3">
         <Segmented<View> value={view} onChange={setView} options={VIEWS} iconOnlyOnMobile aria-label="Vista de la cuenta corriente" />
 
@@ -342,6 +348,8 @@ export function TenantLedgerTab({ tenantId, tenantName }: { tenantId: string; te
               ))}
             </ul>
           ))}
+
+        {view === "c360" && <Tenant360Timeline tenantId={tenantId} />}
 
         {view === "historia" &&
           ((s.timeline ?? []).length === 0 ? (

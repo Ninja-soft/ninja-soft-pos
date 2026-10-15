@@ -61,6 +61,20 @@ Los **topes** (`platform_billing_caps`, por nivel: `cobranzas`, `admin`, `super_
 | Política, escalera y promesas propias de un negocio; pausar punitorios | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Configuración: políticas, planes, escaleras, feriados, interruptores | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 
+**Permisos finos, conciliación, prorrateo y cobranza 360 (F20-10 y F20-11 · ADR-131):** el permiso Cobranzas se divide en tres que se suman al nivel: **Cobranzas** (`cobranzas`: ver y gestionar, el de siempre), **Cobranzas: sólo ver** (`cobranzas_ver`) y **Cobranzas: asignar cobradores** (`cobranzas_asignar`). El servidor lo valida con `platform_billing_can('view' | 'manage' | 'assign')`.
+
+| Acción | support | sólo ver | asignar | Cobranzas | admin | super_admin |
+|---|---|---|---|---|---|---|
+| Ver la cartera, el timeline 360, la conciliación y exportar XLSX | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Simular un cambio de plan, ciclo o addon | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Asignar o quitar el cobrador de un negocio | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Notas de gestión; resolver diferencias de conciliación (imputar, dejar a cuenta, reintegro, contracargo, aceptar, ignorar); correr la conciliación | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Anular una nota | ❌ | ❌ | ❌ | La propia | ✅ | ✅ |
+| Confirmar un cambio de plan o ciclo (downgrade inmediato: bonificación con el tope del nivel) y cancelar uno programado | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Configurar la conciliación (ventana y tolerancia) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+Cobrador asignable: staff `admin`, `super_admin` o con el permiso Cobranzas.
+
 ### 3.1c Participación del staff (implementado, F21 · ADR-121)
 
 | Acción | support | admin | Cobranzas | super_admin | La propia persona |

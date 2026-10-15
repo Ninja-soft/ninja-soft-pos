@@ -78,10 +78,13 @@ function apiKeyOf(cfg: Record<string, unknown>): string {
 }
 
 async function toJpeg(bytes: Uint8Array): Promise<Uint8Array> {
+  // Calidad: se conserva el tamaño que entrega el modelo (1024 px) y se
+  // codifica en alta calidad; achicar a 900 con el resize de imagescript y
+  // JPEG 85 dejaba las portadas borrosas.
   const img = await Image.decode(bytes);
-  const { width, height } = fitWidth(img.width, img.height);
+  const { width, height } = fitWidth(img.width, img.height, 1600);
   if (width !== img.width) img.resize(width, height);
-  return await img.encodeJPEG(85);
+  return await img.encodeJPEG(94);
 }
 
 Deno.serve(async (req: Request) => {

@@ -153,12 +153,13 @@ export function CheckoutLetter({
 
       <Modal open={pickerOpen} onOpenChange={setPickerOpen} title="Tipo de comprobante">
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Te mostramos sólo los tipos que ARCA acepta para tu negocio y este cliente. La que corresponde es la{" "}
-            <span className="font-medium text-foreground">Factura {suggested}</span>.
-            {alternatives === 0 ? " Para esta venta no hay otra opción válida." : ""}
+          <p className="text-center text-sm text-muted-foreground">
+            Sólo los tipos que ARCA acepta para tu negocio y este cliente.
+            <br />
+            Corresponde la <span className="font-semibold text-foreground">Factura {suggested}</span>
+            {alternatives === 0 ? "; para esta venta no hay otra opción válida." : "."}
           </p>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {options.map((o) => (
               <li key={o.letter}>
                 <button
@@ -166,16 +167,23 @@ export function CheckoutLetter({
                   disabled={!o.allowed || busy}
                   onClick={() => (o.letter === suggested ? void choose(o.letter, null) : setConfirm(o.letter))}
                   className={cn(
-                    "flex min-h-11 w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors",
-                    o.allowed ? "hover:bg-fg-6" : "cursor-not-allowed opacity-60",
+                    "flex w-full items-center gap-3.5 rounded-lg border border-border px-3.5 py-3 text-left transition-colors",
+                    o.allowed ? "hover:bg-fg-6" : "cursor-not-allowed opacity-55",
                     o.letter === letter && "choice-on",
                   )}
                 >
-                  <span className="min-w-0">
-                    <span className="block font-semibold">Factura {o.letter}</span>
-                    {o.reason && <span className="block text-xs text-muted-foreground">{o.reason}</span>}
+                  {/* Letra grande en su caja, como en el comprobante. */}
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border text-xl font-black">
+                    {o.letter}
                   </span>
-                  {o.suggested && <Badge tone="info">Corresponde</Badge>}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold">Factura {o.letter}</span>
+                      {o.suggested && <Badge tone="info">Corresponde</Badge>}
+                      {o.letter === letter && !o.suggested && <Badge tone="warning">Elegida a mano</Badge>}
+                    </span>
+                    {o.reason && <span className="mt-0.5 block text-xs text-muted-foreground">{o.reason}</span>}
+                  </span>
                 </button>
               </li>
             ))}

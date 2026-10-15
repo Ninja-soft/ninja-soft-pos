@@ -30,11 +30,13 @@ import {
 } from "@/supabase/functions/_shared/aiCoverPrompt";
 
 // Muestra fija para la vista previa del prompt.
+// Es el mismo ejemplo con el que se generaron las muestras de cada estilo
+// (public/ia/estilos), así la vista previa y las imágenes coinciden.
 const SAMPLE = {
-  name: "Análisis microbiológico de agua",
-  type: "Análisis",
-  description: "Recuento de aerobios mesófilos, coliformes totales y fecales, con informe firmado",
-  business: "professional services firm",
+  name: "Dulce de leche artesanal",
+  type: "Producto",
+  description: "Diseño de producto alimenticio: frasco de vidrio de dulce de leche artesanal con cuchara e ingredientes alrededor",
+  business: "fábrica de alimentos",
 };
 
 // Paleta sugerida para el acento; "Otro" abre el selector nativo.
@@ -87,7 +89,7 @@ export function AiImageSettingsCard() {
         description={
           status && status.configured
             ? `Hoy generaste ${status.used} de ${status.limit} imágenes.`
-            : "Imágenes de portada para tus servicios, en un estilo parejo para todo el catálogo."
+            : "Imágenes de portada para tus productos y servicios, en un estilo parejo para todo el catálogo."
         }
         actions={
           editable ? (
@@ -99,11 +101,11 @@ export function AiImageSettingsCard() {
       >
         <SettingRow
           label="Generar la portada automáticamente"
-          description="Al crear un servicio se genera su portada con el estilo elegido. Apagado, tenés los botones Generar y Regenerar en Fotos."
+          description="Al crear un servicio se genera su portada con el estilo elegido. En cualquier producto (alimentos, ropa, lo que vendas) usás Generar y Regenerar en Fotos."
         >
           <Switch checked={s.auto_cover} disabled={!editable} onCheckedChange={(v) => setS({ ...s, auto_cover: v })} label="Generar automáticamente" />
         </SettingRow>
-        <SettingRow label="Estilo" description="Se usa en todas las portadas nuevas. En cada servicio se puede elegir otro." stacked>
+        <SettingRow label="Estilo" description="Se usa en todas las portadas nuevas. En cada producto o servicio se puede elegir otro." stacked>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup" aria-label="Estilo">
             {COVER_STYLES.map((st) => (
               <button
@@ -130,6 +132,9 @@ export function AiImageSettingsCard() {
               </button>
             ))}
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Ejemplos generados con IA a partir de un mismo producto: &quot;{SAMPLE.name}&quot; ({SAMPLE.business}). Tus portadas usan el nombre y la descripción de cada producto.
+          </p>
         </SettingRow>
         <SettingRow label="Color de acento" description="Opcional. En Automático el modelo elige la paleta según el estilo." stacked>
           <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Color de acento">
@@ -210,7 +215,7 @@ export function AiImageSettingsCard() {
             )}
           </div>
         </SettingRow>
-        <SettingRow label="Vista previa del prompt final" description={`Ejemplo con el servicio "${SAMPLE.name}".`} stacked>
+        <SettingRow label="Vista previa del prompt final" description={`Ejemplo con el producto "${SAMPLE.name}".`} stacked>
           <p className="rounded-lg bg-fg-4 p-3 font-mono text-[12px] leading-relaxed text-muted-foreground">{preview}</p>
         </SettingRow>
       </SettingsCard>

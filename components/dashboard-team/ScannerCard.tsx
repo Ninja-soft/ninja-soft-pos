@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { useScanner, type ScanInfo } from "@/modules/pos/useScanner";
 import { NoData } from "@/components/ui/NoData";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 type ScannerSettings = {
   scanner_prefix: string;
@@ -44,11 +45,14 @@ export function ScannerCard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id, role")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       if (!mem) return null;

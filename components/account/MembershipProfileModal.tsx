@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileModalBody } from "@/components/account/ProfileModalBody";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dueño",
@@ -46,11 +47,14 @@ export function MembershipProfileModal({
         ((user.app_metadata as { current_tenant_id?: string } | null)
           ?.current_tenant_id) ?? null,
       );
-      const { data } = await supabase
-        .from("tenant_users")
-        .select("display_name, avatar, role, tenants(name)")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("display_name, avatar, role, tenants(name)")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       setName(data?.display_name ?? "");

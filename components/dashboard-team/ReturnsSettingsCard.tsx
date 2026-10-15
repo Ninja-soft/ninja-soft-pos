@@ -15,6 +15,7 @@ import {
 } from "@/modules/sales/hooks";
 import type { ReturnPolicy } from "@/modules/sales/api";
 import { ChoiceDot } from "@/components/ui/ChoiceCard";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 const POLICIES: { value: ReturnPolicy; label: string; hint: string; tag?: string }[] = [
   {
@@ -50,11 +51,14 @@ export function ReturnsSettingsCard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id, role")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       if (!mem) return null;

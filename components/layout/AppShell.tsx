@@ -72,6 +72,7 @@ import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { BusinessBadge } from "@/components/layout/BusinessBadge";
 import { Avatar } from "@/components/ui/Avatar";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 import {
   Dropdown,
   DropdownContent,
@@ -566,11 +567,14 @@ function UserMenu({
       const supabase = createClient();
       const user = await getCurrentUser();
       if (!user) return null;
-      const { data } = await supabase
-        .from("tenant_users")
-        .select("display_name, avatar")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("display_name, avatar")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       return {

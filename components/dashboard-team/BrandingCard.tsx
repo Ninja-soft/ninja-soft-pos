@@ -18,6 +18,7 @@ import { BrandingPadron, type BrandingPadronValues } from "@/components/dashboar
 import { EMITTER_CONDITIONS, FISCAL_CONDITION_LABEL, JURISDICTIONS, isValidCuit } from "@/lib/tax/catalog";
 import { useSaveTaxSettings, useTaxSettings } from "@/modules/tax/hooks";
 import type { TaxSettings } from "@/modules/tax/api";
+import { onlyActiveTenant } from "@/lib/tenant/scope";
 
 const BUCKET = "tenant-assets";
 const selectCls =
@@ -108,11 +109,14 @@ export function BrandingCard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
+      const { data: mem } = await onlyActiveTenant(
+        supabase
+          .from("tenant_users")
+          .select("tenant_id, role")
+          .eq("user_id", user.id)
+          .eq("status", "active"),
+        user,
+      )
         .limit(1)
         .maybeSingle();
       if (!mem) return null;

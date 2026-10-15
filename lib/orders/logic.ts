@@ -66,6 +66,12 @@ export interface OrderConfig {
     retiro: { enabled: boolean; cross_branch: boolean; pickup_code: boolean };
     envio: { enabled: boolean; cross_branch: boolean };
   };
+  /**
+   * Pedidos desde el catálogo público (ADR-130). Espejo de
+   * _catalog_order_config (SQL): apagado por defecto; sucursal donde se
+   * reserva y se cobra (null = la principal) y si se ofrece pagar con link.
+   */
+  catalog: { enabled: boolean; store_id: string | null; pay_link: boolean };
 }
 
 export const ORDER_MINUTES_MIN = 5;
@@ -80,7 +86,10 @@ export const DEFAULT_ORDER_CONFIG: OrderConfig = {
     retiro: { enabled: true, cross_branch: false, pickup_code: true },
     envio: { enabled: true, cross_branch: false },
   },
+  catalog: { enabled: false, store_id: null, pay_link: false },
 };
+
+const UUID_LOWER_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function obj(x: unknown): Record<string, unknown> {
   return x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {};
@@ -103,6 +112,7 @@ export function orderConfig(raw: unknown): OrderConfig {
   const inm = obj(dt.inmediato);
   const ret = obj(dt.retiro);
   const env = obj(dt.envio);
+  const cat = obj(r.catalog);
   return {
     reservation_minutes: Math.min(Math.max(n, ORDER_MINUTES_MIN), ORDER_MINUTES_MAX),
     expiry_action: r.expiry_action === "cancel" ? "cancel" : "release",
@@ -115,6 +125,11 @@ export function orderConfig(raw: unknown): OrderConfig {
         pickup_code: bool(ret, "pickup_code", true),
       },
       envio: { enabled: bool(env, "enabled", true), cross_branch: bool(env, "cross_branch", false) },
+    },
+    catalog: {
+      enabled: bool(cat, "enabled", false),
+      store_id: typeof cat.store_id === "string" && UUID_LOWER_RE.test(cat.store_id) ? cat.store_id : null,
+      pay_link: bool(cat, "pay_link", false),
     },
   };
 }

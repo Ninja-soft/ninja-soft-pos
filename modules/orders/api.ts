@@ -52,6 +52,10 @@ export interface SaleOrder {
   cashier_user_id: string | null;
   cancel_reason: string | null;
   created_at: string;
+  /** ADR-130: origen (sin la migración no viene: se toma 'pos'). */
+  source?: "pos" | "catalogo_publico";
+  customer_email?: string | null;
+  payment_preference?: "al_retirar" | "link" | null;
   /** Sólo en la respuesta de sale_order_take. */
   reservation_active?: boolean;
   has_pickup_code?: boolean;
@@ -62,6 +66,10 @@ const ORDER_COLS =
   "pickup_name, ship_address, notes, seller_user_id, seller_professional_id, seller_name, cart, checkout, total, " +
   "item_count, reservation_id, reserved_until, reservation_released_at, taken_by, taken_at, sale_id, paid_at, " +
   "cashier_user_id, cancel_reason, created_at";
+// ADR-130: columnas del pedido del catálogo. Sin la migración aplicada la
+// lectura reintenta sin ellas (ver selectOrders).
+const ORDER_COLS_CATALOG = `${ORDER_COLS}, source, customer_email, payment_preference`;
+const MISSING_CATALOG_COLS = /source|customer_email|payment_preference/;
 
 export interface DispatchItem {
   product_name: string;
@@ -139,25 +147,26 @@ export interface DeliverResult {
 
 export const ordersApi = {
   list: async (opts: { storeId: string | null; open: boolean }): Promise<SaleOrder[]> => {
-    let q = createClient()
-      .from("sale_orders" as never)
-      .select(ORDER_COLS)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: opts.open })
-      .limit(opts.open ? 200 : 100);
-    if (opts.storeId) q = q.eq("store_id", opts.storeId);
-    q = opts.open ? q.in("status", ["abierto", "tomado"]) : q.in("status", ["cobrado", "anulado", "vencido"]);
-    const { data, error } = await q;
+    const run = (cols: string) => {
+      let q = createClient()
+        .from("sale_orders" as never)
+        .select(cols)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: opts.open })
+        .limit(opts.open ? 200 : 100);
+      if (opts.storeId) q = q.eq("store_id", opts.storeId);
+      return opts.open ? q.in("status", ["abierto", "tomado"]) : q.in("status", ["cobrado", "anulado", "vencido"]);
+    };
+    let { data, error } = await run(ORDER_COLS_CATALOG);
+    if (error && MISSING_CATALOG_COLS.test(error.message)) ({ data, error } = await run(ORDER_COLS));
     if (error) throw error;
     return (data ?? []) as unknown as SaleOrder[];
   },
 
   get: async (id: string): Promise<SaleOrder | null> => {
-    const { data, error } = await createClient()
-      .from("sale_orders" as never)
-      .select(ORDER_COLS)
-      .eq("id", id)
-      .maybeSingle();
+    const run = (cols: string) => createClient().from("sale_orders" as never).select(cols).eq("id", id).maybeSingle();
+    let { data, error } = await run(ORDER_COLS_CATALOG);
+    if (error && MISSING_CATALOG_COLS.test(error.message)) ({ data, error } = await run(ORDER_COLS));
     if (error) throw error;
     return (data as unknown as SaleOrder) ?? null;
   },

@@ -447,6 +447,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, no se publica el catálogo web del negocio.",
     minPlan: "Pro",
   },
+  catalogo_pedidos: {
+    desc: "Pedidos desde el catálogo web: el cliente arma el carrito con variantes y stock disponible, elige retiro en sucursal o envío a domicilio, deja sus datos y confirma. El pedido entra al POS y a Pedidos con el stock reservado, te llega un aviso, la caja lo cobra y expedición lo entrega; el cliente lo sigue con un link y puede escribirte por WhatsApp.",
+    impact: "Desactivado, el catálogo queda como vitrina: el cliente ve productos y precios pero no puede pedir (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["catalogo_publico", "pedidos_despacho"],
+  },
   importacion_excel: {
     desc: "Importación desde Excel: carga y actualización masiva de productos, clientes, stock por sucursal, listas de precios, sucursales, garantías y motivos de devolución con plantilla, revisión previa (qué se crea, qué se actualiza y qué filas tienen errores), confirmación y auditoría. Lo que cada importación escribe sigue pidiendo su propia función del plan.",
     impact: "Sin esto la carga de productos, clientes, stock y precios es sólo manual, uno por uno.",

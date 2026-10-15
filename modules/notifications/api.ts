@@ -23,7 +23,9 @@ export type NotificationType =
   // Cobros en espera (ADR-048) y contracargos / devoluciones de MP (ADR-064):
   // los emite el sistema, no el composer interno.
   | "cobros"
-  | "disputas";
+  | "disputas"
+  // Pedidos desde el catálogo público (ADR-130).
+  | "pedidos";
 
 /** Notificación con el estado de lectura propio del usuario resuelto. */
 export type Notification = NotificationRow & {

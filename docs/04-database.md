@@ -893,6 +893,16 @@ Migraciones `20261123100000_features_pedidos_despacho` y `20261123100100_pedidos
 - [x] `stock_reservations`: canal `pedido`, `pickup_verified_via = 'pedido'` y `sale_order_id` (único). Trigger `stock_reservations_sale_order_sync` (AFTER UPDATE OF status): reserva entregada por create_sale → pedido cobrado y entrega abierta; cancelada o vencida → reserva liberada.
 - [x] RLS de lectura `tenant_id = (select current_tenant_id()) or (select internal_scope())` + RESTRICTIVE por sucursal (pedido o entrega). Sin escritura por REST y sin `pickup_code_hash` en los grants por columna. RPC: `sale_order_create`, `sale_order_take`, `sale_order_leave`, `sale_order_cancel`, `sale_order_complete`, `dispatch_create_for_sale`, `dispatch_advance`, `dispatch_deliver`, `dispatch_ship`, `dispatch_cancel`, `stock_reserved_by_store`; job `sale_orders_expire_due` (pg_cron `sale-orders-expire`, cada minuto, sólo service_role). `public_catalog` suma `available` por producto.
 
+## 8.19 Extensión H10: carrito y pedido del catálogo público (ADR-130)
+
+Migraciones `20261125100000_features_catalogo_pedidos` y `20261125100100_catalogo_pedidos`. Sin modelo nuevo de pedido: el del catálogo es un `sale_orders` de H32.
+
+- [x] `sale_orders` suma `source` (`pos` | `catalogo_publico`), `customer_email`, `payment_preference` (`al_retirar` | `link`) y `public_token_hash` (sha256 del token de seguimiento, único parcial; no se concede por columna ni sale en `_sale_order_json`).
+- [x] `pos_settings.order_config.catalog` (`enabled`, `store_id`, `pay_link`), leído por `_catalog_order_config` (espejo en `orderConfig().catalog`).
+- [x] `catalog_order_attempts(tenant_id, ip_hash, created_at)`: rate limit (5 pedidos por IP y negocio cada 10 minutos, 60 por negocio por hora). RLS activa sin policies ni grants; la IP se guarda con hash y se purga a las 24 h.
+- [x] `notifications.type` suma `pedidos`.
+- [x] RPC anon SECURITY DEFINER: `public_catalog` (suma `ordering`, variantes con precio y disponible de la sucursal del catálogo), `public_catalog_order_create` (honeypot, rate limit, plan, precios de la lista `catalogo`, disponible, tipo de entrega con `_order_delivery_check`, reserva canal `pedido`, aviso y email encolado) y `public_catalog_order_status` (por token, sin ids). Helpers cerrados a anon y authenticated.
+
 ## 9. Migraciones iniciales sugeridas
 
 Orden recomendado de migraciones para el Hito 0:

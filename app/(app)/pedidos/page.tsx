@@ -25,6 +25,7 @@ import {
   type OrderStatus,
 } from "@/lib/orders/logic";
 import { readPausedCart } from "@/modules/paused-sales/logic";
+import { whatsappUrl } from "@/lib/quotes/logic";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useBranchContext } from "@/modules/branches/hooks";
@@ -44,7 +45,9 @@ const STATUS_TONE: Record<OrderStatus, BadgeTone> = {
 
 // Pedidos de salón (F11 · H32, ADR-129): lo que armaron los vendedores y
 // espera caja, con la reserva de stock y su vencimiento; la caja los cobra
-// desde el POS. Historial con cobrados, anulados y vencidos.
+// desde el POS. Historial con cobrados, anulados y vencidos. Los pedidos que
+// hizo el cliente en el catálogo público (ADR-130) llevan la marca, su email y
+// el WhatsApp para escribirle.
 export default function PedidosPage() {
   const enabled = useFeature("pedidos_despacho");
   const { toast } = useToast();
@@ -191,6 +194,7 @@ export default function PedidosPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {o.source === "catalogo_publico" && <Badge tone="info">Catálogo web</Badge>}
                       <Badge tone="neutral">{DELIVERY_TYPE_LABEL[o.delivery_type]}</Badge>
                       <Badge tone={STATUS_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</Badge>
                     </div>
@@ -217,7 +221,27 @@ export default function PedidosPage() {
                       </span>
                     )}
                     {o.ship_address && <span>· {o.ship_address}</span>}
-                    {o.customer_phone && <span>· {o.customer_phone}</span>}
+                    {o.customer_phone && (
+                      <span>
+                        ·{" "}
+                        {o.source === "catalogo_publico" ? (
+                          <a
+                            href={whatsappUrl(o.customer_phone, `Hola ${o.customer_name ?? ""}, te escribimos por tu pedido N° ${o.number}.`)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline underline-offset-2 hover:text-foreground"
+                          >
+                            {o.customer_phone}
+                          </a>
+                        ) : (
+                          o.customer_phone
+                        )}
+                      </span>
+                    )}
+                    {o.customer_email && <span>· {o.customer_email}</span>}
+                    {o.payment_preference === "link" && open && (
+                      <span className="font-medium text-foreground">· Quiere pagar con link: mandáselo desde Cobrar</span>
+                    )}
                     {o.cancel_reason && <span>· Motivo: {o.cancel_reason}</span>}
                     {o.notes && <span>· {o.notes}</span>}
                   </div>

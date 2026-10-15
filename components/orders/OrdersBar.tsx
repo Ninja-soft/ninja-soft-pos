@@ -10,7 +10,8 @@ import type { SaleOrder } from "@/modules/orders/api";
 // Pedidos de salón esperando caja (F11 · H32, ADR-129): un chip por pedido con
 // número, cliente, monto y cuánto le queda a la reserva; tocarlo lo levanta
 // para cobrarlo. Mismo lenguaje que la barra de ventas pausadas (ADR-106):
-// scroll lateral dentro de la barra, sin sombras ni bordes de color.
+// scroll lateral dentro de la barra, sin sombras ni bordes de color. Los que
+// hizo el cliente en el catálogo público llevan la marca "Web" (ADR-130).
 
 export function OrdersBar({
   list,
@@ -50,6 +51,11 @@ export function OrdersBar({
               >
                 <span className="flex items-center gap-1.5 text-[13px] font-semibold leading-tight">
                   <span className="tabular-nums">N° {o.number}</span>
+                  {o.source === "catalogo_publico" && (
+                    <span className="rounded-md bg-fg-10 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Web
+                    </span>
+                  )}
                   <span className="truncate font-medium text-muted-foreground">
                     {o.customer_name || o.pickup_name || o.seller_name || DELIVERY_TYPE_LABEL[o.delivery_type]}
                   </span>

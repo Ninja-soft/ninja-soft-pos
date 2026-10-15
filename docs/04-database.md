@@ -902,7 +902,7 @@ Migraciones `20261125100000_features_catalogo_pedidos` y `20261125100100_catalog
 - [x] `catalog_order_attempts(tenant_id, ip_hash, created_at)`: rate limit (5 pedidos por IP y negocio cada 10 minutos, 60 por negocio por hora). RLS activa sin policies ni grants; la IP se guarda con hash y se purga a las 24 h.
 - [x] `notifications.type` suma `pedidos`.
 - [x] RPC anon SECURITY DEFINER: `public_catalog` (suma `ordering`, variantes con precio y disponible de la sucursal del catálogo), `public_catalog_order_create` (honeypot, rate limit, plan, precios de la lista `catalogo`, disponible, tipo de entrega con `_order_delivery_check`, reserva canal `pedido`, aviso y email encolado) y `public_catalog_order_status` (por token, sin ids). Helpers cerrados a anon y authenticated.
-## 8.19 Extensión F20-10 y F20-11: prorrateo, conciliación con Mercado Pago y cobranza 360 (H136, ADR-131)
+## 8.20 Extensión F20-10 y F20-11: prorrateo, conciliación con Mercado Pago y cobranza 360 (H136, ADR-131)
 
 Migración `20261126100000_cobranza_360` (sin aplicar; requiere las de ADR-115, ADR-120 y ADR-128). Todo es de plataforma: SELECT sólo staff con `(select internal_scope())`, sin `is_internal()`, sin escritura directa; todo por RPC SECURITY DEFINER con motivo y auditoría.
 

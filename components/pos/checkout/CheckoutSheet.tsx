@@ -1515,8 +1515,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             className={cn(INPUT, "mt-1.5 h-11 w-full px-3 text-sm font-medium")}
           />
           <p className="mt-1.5 text-xs text-muted-foreground">
-            Cobrá {money(settle.amount)} en el portal de {active.brandLabel} y cargá el número que te da al
-            aprobarse.
+            {active.referenceHelp
+              ? active.referenceHelp.replace("{monto}", money(settle.amount))
+              : `Cobrá ${money(settle.amount)} en el portal de ${active.brandLabel} y cargá el número que te da al aprobarse.`}
           </p>
         </div>
       )}

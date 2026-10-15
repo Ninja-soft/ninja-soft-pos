@@ -45,7 +45,9 @@ export interface SalePaymentInput {
     | "store_credit"
     | "account"
     // Directo (ADR-034): tender manual; reference = Nº de operación de Directo.
-    | "directo";
+    | "directo"
+    // Ualá Bis (ADR-143): QR, POS o Tap; reference = Nº de operación.
+    | "ualabis";
   amount: number;
   reference?: string;
   // Voucher de tarjeta (lote/cupón/autorización). Opcional; sólo débito/crédito.
@@ -1285,6 +1287,80 @@ export const posApi = {
     await supabase.functions.invoke("directo", {
       body: { action: "cancel", intent_id: id },
     });
+  },
+
+  // ── Ualá Bis (ADR-143): link de pago + QR de la API Cobros Online v2 ───────
+  // create devuelve el checkout_link como init_point. La confirmación llega
+  // por el webhook (ualabis_webhook); status re-consulta la orden en Ualá
+  // (respaldo). Desde $25 (error ualabis_min_amount).
+  createUalaBisLink: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("ualabis", {
+      body: { action: "create", amount, title, ...posStoreBody() },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  ualabisIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("ualabis", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // Baja local best-effort (si el cliente ya pagó, gana el pago).
+  cancelUalaBisIntent: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("ualabis", {
+      body: { action: "cancel", intent_id: id },
+    });
+  },
+
+  // Devolución total de un cobro aprobado sin venta vigente (dueño o
+  // encargado). El estado final llega por el webhook de la devolución.
+  refundUalaBisIntent: async (
+    id: string,
+  ): Promise<{ refund_id?: string; status?: string; error?: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("ualabis", {
+      body: { action: "refund", intent_id: id },
+    });
+    if (error) {
+      // non-2xx: el código real viene en el cuerpo (error.context).
+      const ctx = (error as { context?: Response }).context;
+      const body = ctx ? ((await ctx.json().catch(() => null)) as { error?: string } | null) : null;
+      return { error: body?.error ?? "refund_failed" };
+    }
+    return data as { refund_id?: string; status?: string; error?: string };
+  },
+
+  // Devoluciones de Ualá Bis de un conjunto de cobros (RLS por negocio).
+  listUalaBisRefunds: async (
+    intentIds: string[],
+  ): Promise<{ intent_id: string; status: string; created_at: string }[]> => {
+    if (intentIds.length === 0) return [];
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("ualabis_refunds" as never)
+      .select("intent_id, status, created_at")
+      .in("intent_id", intentIds)
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return (data ?? []) as unknown as { intent_id: string; status: string; created_at: string }[];
   },
 
   // ── Nave (H21c): QR interoperable + link (Edge nave) ───────────────────────

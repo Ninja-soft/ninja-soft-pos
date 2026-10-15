@@ -85,6 +85,7 @@ const PAYMENT_METHODS: QualifierOption[] = [
   { value: "account", label: "Cuenta corriente" },
   { value: "store_credit", label: "Saldo a favor" },
   { value: "directo", label: "Directo" },
+  { value: "ualabis", label: "Ualá Bis" },
   { value: "other", label: "Otro medio" },
   { value: "*:payway", label: "Cualquier medio por Payway" },
   { value: "*:fiserv", label: "Cualquier medio por Fiserv / Clover" },

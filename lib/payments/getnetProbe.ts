@@ -58,7 +58,8 @@ export function probeAttemptLine(a: GetnetProbeAttempt): string {
 /** Ambiente al que habría que cambiar si las credenciales son del otro. */
 export function probeMismatchEnv(r: GetnetProbeResult): "prod" | "test" | null {
   if (r.ok || !r.mismatch) return null;
-  return r.mismatch === "geopagos" || r.mismatch === "global_prod" ? "prod" : "test";
+  // Ualá Bis (ADR-143) informa el ambiente directo: "prod" o "test".
+  return r.mismatch === "geopagos" || r.mismatch === "global_prod" || r.mismatch === "prod" ? "prod" : "test";
 }
 
 /** Secretos extra a guardar con la conexión cuando la prueba salió bien. */

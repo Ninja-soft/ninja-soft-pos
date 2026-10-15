@@ -303,6 +303,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de comercio en Directo. Para el cobro integrado, las credenciales de la API de Directo (API Key, usuario y contraseña del comercio y URL de la API); sin ellas se cobra en su portal y se registra el número de operación.",
   },
+  ualabis: {
+    desc: "Cobros con Ualá Bis. Con la API conectada, el POS arma un link de pago (también como QR): el cliente paga con tarjeta de crédito, débito o prepaga en el checkout de Ualá Bis y la venta se cierra sola al acreditarse; los cobros aprobados sin venta se pueden devolver desde la conciliación. Tu QR de Ualá, el POS Mini o Pro y Tap en tu celu no tienen API: se cobran en la app y el POS registra el número de operación.",
+    impact: "Desactivado, Ualá Bis no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de Ualá Bis. Para el link de pago integrado, las credenciales de Cobros online (usuario, Client ID y Client Secret de Ualá Bis, Cobros online, API); sin ellas se cobra en la app y se registra el número de operación.",
+  },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
     impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",

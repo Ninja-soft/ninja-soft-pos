@@ -66,7 +66,7 @@ const STATUS_OPTIONS: SelectOption<StatusFilter>[] = [
 ];
 
 // Medios que registra el POS (payments.method).
-const METHODS = ["cash", "debit", "credit", "transfer", "qr", "account", "store_credit", "directo", "other"] as const;
+const METHODS = ["cash", "debit", "credit", "transfer", "qr", "account", "store_credit", "directo", "ualabis", "other"] as const;
 
 export default function VentasPage() {
   const { toast } = useToast();

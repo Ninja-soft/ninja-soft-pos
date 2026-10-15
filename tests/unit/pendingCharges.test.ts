@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -86,8 +86,15 @@ describe("vencimiento por proveedor", () => {
   });
 
   it("los topes coinciden con pending_charge_max_ttl() de la migración", () => {
-    const sql = read("supabase/migrations/20261014100000_cobros_en_espera.sql");
-    const fn = sql.slice(sql.indexOf("create or replace function pending_charge_max_ttl"));
+    // La definición vigente es la de la última migración que la redefine.
+    const marker = "create or replace function pending_charge_max_ttl";
+    const file = readdirSync(resolve(ROOT, "supabase/migrations"))
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .filter((f) => read(`supabase/migrations/${f}`).includes(marker))
+      .pop()!;
+    const sql = read(`supabase/migrations/${file}`);
+    const fn = sql.slice(sql.indexOf(marker));
     for (const [k, v] of Object.entries(PROVIDER_MAX_TTL_MINUTES)) {
       expect(fn, k).toMatch(new RegExp(`when '${k}'\\s+then ${v}\\b`));
     }

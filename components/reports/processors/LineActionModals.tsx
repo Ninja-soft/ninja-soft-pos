@@ -29,6 +29,7 @@ const METHOD: Record<string, string> = {
   credit: "Crédito",
   transfer: "Transferencia",
   directo: "Directo",
+  ualabis: "Ualá Bis",
   other: "Otro",
 };
 

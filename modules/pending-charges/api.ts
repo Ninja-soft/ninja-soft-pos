@@ -260,6 +260,8 @@ export async function createProviderCharge(
       return posApi.createGoCuotasLink(amount, title);
     case "directo":
       return posApi.createDirectoLink(amount, title);
+    case "ualabis":
+      return posApi.createUalaBisLink(amount, title);
     default:
       void channel;
       throw new Error("provider_not_supported");
@@ -290,6 +292,8 @@ export async function syncProviderStatus(
         return posApi.gocuotasIntentStatus(intentId);
       case "directo":
         return posApi.directoIntentStatus(intentId);
+      case "ualabis":
+        return posApi.ualabisIntentStatus(intentId);
       case "mobbex":
         return posApi.mpIntentStatus(intentId);
       default:
@@ -311,6 +315,7 @@ export async function cancelAtProvider(provider: string, channel: "qr" | "link",
     else if (provider === "nave") await posApi.cancelNaveIntent(intentId);
     else if (provider === "gocuotas") await posApi.cancelGoCuotasIntent(intentId);
     else if (provider === "directo") await posApi.cancelDirectoIntent(intentId);
+    else if (provider === "ualabis") await posApi.cancelUalaBisIntent(intentId);
   } catch {
     /* el intent ya quedó cancelado localmente: un pago tardío queda para revisión */
   }

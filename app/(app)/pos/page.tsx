@@ -915,8 +915,6 @@ function PosPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fLinesKey]);
 
-  // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
-  const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
   // ADR-096: la garantía extendida se enlaza a una de estas líneas (con serie primero).
   const warrantyTargets = useMemo(
     () =>

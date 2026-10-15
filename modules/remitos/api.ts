@@ -7,7 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { remitoConfig, type Remito, type RemitoConfig } from "@/lib/remitos/logic";
+import { remitoConfig, type Remito, type RemitoConfig, type RemitoPreview } from "@/lib/remitos/logic";
 
 const COLS =
   "id, store_id, pto_vta, number, kind, status, dispatch_id, sale_id, issued_at, issuer, receiver_name, receiver_doc, " +
@@ -84,6 +84,16 @@ export const remitosApi = {
       p_id: id,
       p_data: data,
     }),
+  /** ADR-149 (A9 y A13): renglones, valor y si pide COT, antes de emitir. */
+  preview: async (data: Record<string, unknown>): Promise<RemitoPreview> => {
+    const r = await rpc<RemitoPreview>("remito_preview", { p_data: data });
+    return {
+      ...r,
+      declared_value: Number(r.declared_value),
+      already: Number(r.already ?? 0),
+      items: (r.items ?? []).map((i) => ({ ...i, qty: Number(i.qty), unit_price: i.unit_price == null ? null : Number(i.unit_price) })),
+    };
+  },
   update: (id: string, data: Record<string, unknown>) => rpc<void>("remito_update", { p_id: id, p_data: data }),
   void: (id: string, reason: string) => rpc<void>("remito_void", { p_id: id, p_reason: reason }),
 
@@ -121,11 +131,21 @@ export function useRemito(id: string | null) {
   return useQuery({ queryKey: ["remito", id], queryFn: () => remitosApi.get(id!), enabled: Boolean(id) });
 }
 
-export function useRemitoForDispatch(dispatchId: string | null) {
+/** Vista previa del remito (sin escribir). Sin la migración de ADR-149, null. */
+export function useRemitoPreview(data: Record<string, unknown> | null) {
   return useQuery({
-    queryKey: ["remito-dispatch", dispatchId],
-    queryFn: () => remitosApi.forDispatch(dispatchId!),
-    enabled: Boolean(dispatchId),
+    queryKey: ["remito-preview", data],
+    enabled: Boolean(data),
+    staleTime: 10_000,
+    retry: false,
+    queryFn: async () => {
+      try {
+        return await remitosApi.preview(data!);
+      } catch (e) {
+        if (/remito_preview|does not exist|schema cache/i.test(String((e as { message?: string })?.message ?? e))) return null;
+        throw e;
+      }
+    },
   });
 }
 
@@ -136,7 +156,7 @@ export function useRemitoConfig(enabled = true) {
 export function useRemitoMutations() {
   const qc = useQueryClient();
   const inv = () => {
-    for (const k of ["remitos", "remito", "remito-dispatch"]) void qc.invalidateQueries({ queryKey: [k] });
+    for (const k of ["remitos", "remito", "remito-preview"]) void qc.invalidateQueries({ queryKey: [k] });
   };
   return {
     issue: useMutation({ mutationFn: (v: { id: string; data: Record<string, unknown> }) => remitosApi.issue(v.id, v.data), onSuccess: inv }),

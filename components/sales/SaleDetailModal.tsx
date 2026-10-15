@@ -18,6 +18,7 @@ import { CardBrandLogo } from "@/components/ui/ThemedLogo";
 import { ProductThumb } from "@/components/products/ProductThumb";
 import { PaymentLogo } from "@/components/sales/SalePaymentLogo";
 import { FiscalStatus } from "@/components/arca/FiscalStatus";
+import { SaleDeliveries } from "@/components/sales/SaleDeliveries";
 import { useSaleDetail } from "@/modules/sales/hooks";
 import { useSaleDetailExtras, useSalesExtras } from "@/modules/sales/listExtras";
 import { useSalePaymentIntents } from "@/modules/sales/providerData";
@@ -297,6 +298,9 @@ export function SaleDetailModal(props: Props) {
               })}
             </ul>
           </section>
+
+          {/* ADR-149 (R18): cómo se entrega, con el estado y el remito de cada entrega. */}
+          <SaleDeliveries saleId={sale.id} mode={sale.fulfillment_mode} enabled={open} />
 
           {/* Totales e impuestos */}
           <section aria-labelledby="sd-totals" className="grid gap-4 sm:grid-cols-2">

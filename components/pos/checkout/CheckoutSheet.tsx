@@ -139,6 +139,12 @@ export interface CheckoutSheetProps {
   /** Total del carrito SIN redondear (subtotal - descuentos - promo - cupón). */
   base: number;
   rounding: number;
+  /**
+   * Costo de envío de un pedido de delivery (H49). create_sale lo suma como
+   * renglón después del redondeo. Nunca convive con `shippingFee`: el reparto
+   * de entregas no corre en un pedido de delivery. En pantalla los dos son el
+   * mismo renglón "Envío" (ADR-149, A15).
+   */
   deliveryFee?: number;
   cartPromo?: Promo | null;
   promoForMethod?: (method: string) => Promo | null;
@@ -1149,8 +1155,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     perc > 0;
   const breakdown = hasBreakdown ? (
     <dl className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
-      {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
-      {shippingFee > 0 && <Row label="Envío a domicilio" value={`+${money(shippingFee)}`} />}
+      {deliveryFee + shippingFee > 0 && <Row label="Envío" value={`+${money(deliveryFee + shippingFee)}`} />}
       {warranty > 0 && <Row label={`Garantía ${wpick?.option.label ?? ""}`} value={`+${money(warranty)}`} />}
       {totals.surcharges > 0 && <Row label="Recargos" value={`+${money(totals.surcharges)}`} />}
       {promoExtra > 0 && (

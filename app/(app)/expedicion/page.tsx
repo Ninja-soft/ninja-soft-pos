@@ -3,9 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowRight, FileText, Lock, PackageCheck, Plus, Send } from "lucide-react";
+import { ArrowRight, FileText, Lock, PackageCheck, Plus, Send, Truck } from "lucide-react";
 import { RemitoIssueModal, type RemitoSource } from "@/components/remitos/RemitoIssueModal";
 import { RemitoDetailModal } from "@/components/remitos/RemitoDetailModal";
+import { LogisticsNav } from "@/components/logistics/LogisticsNav";
+import { ShipmentFormModal } from "@/components/shipping/ShipmentFormModal";
+import { Switch } from "@/components/ui/Switch";
+import { shippingApi } from "@/modules/shipping/api";
+import { shippingErrorMessage } from "@/lib/shipping/form";
+import { statusLabel as shipmentStatusLabel } from "@/lib/shipping/status";
+import type { DispatchShipmentSource } from "@/lib/shipping/fromDispatch";
 import { remitosApi } from "@/modules/remitos/api";
 import { remitoErrorMessage } from "@/lib/remitos/logic";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
@@ -23,23 +30,25 @@ import {
   DELIVERY_TYPE_LABEL,
   DISPATCH_ACTION_LABEL,
   DISPATCH_STATUS_LABEL,
+  EXPEDITION_TABS,
   crossBranchAllowed,
-  dispatchIsForStore,
   enabledDeliveryTypes,
+  expeditionCounts,
+  expeditionList,
   orderErrorMessage,
   pickupFailureText,
   primaryDispatchAction,
+  type DeliveryFilter,
   type DeliveryType,
   type DispatchStatus,
+  type ExpeditionTab,
 } from "@/lib/orders/logic";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { useStores } from "@/modules/stock/hooks";
-import { useDispatches, useOrderConfig, useOrderMutations, type Dispatch } from "@/modules/orders/hooks";
+import { useDispatches, useOrderConfig, useOrderMutations, useSalePending, type Dispatch } from "@/modules/orders/hooks";
 import { fmtDateTime, selectCls } from "@/components/stock/transfers/shared";
-
-type Tab = "todo" | "ready" | "transit" | "done";
 
 const STATUS_TONE: Record<DispatchStatus, BadgeTone> = {
   pendiente: "info",
@@ -51,16 +60,17 @@ const STATUS_TONE: Record<DispatchStatus, BadgeTone> = {
   cancelado: "neutral",
 };
 
-const TAB_STATUS: Record<Exclude<Tab, "done">, DispatchStatus[]> = {
-  todo: ["pendiente", "armando"],
-  ready: ["listo"],
-  transit: ["en_transito"],
-};
+const MODE_OPTIONS: { value: DeliveryFilter; label: string }[] = [
+  { value: "todos", label: "Todo" },
+  { value: "retiro", label: "Retiro" },
+  { value: "envio", label: "Envío" },
+];
 
-// Expedición (F11 · H32, ADR-129): ventas pagadas con entrega pendiente.
-// Mobile-first: una tarjeta por entrega con lo que hay que armar, a quién y
-// dónde, y un botón grande con el paso siguiente (armar, listo, enviar a la
-// sucursal, recibir, entregar o despachar). Cada paso queda con quién y cuándo.
+// Expedición (F11 · H32, ADR-129; ordenada en ADR-149 · L0): ventas pagadas
+// con entrega pendiente. Pestañas por estado (Pendientes, Armando, Listos, En
+// camino, Entregados), filtro por sucursal y por modo. Mobile-first: una
+// tarjeta por entrega con lo que hay que armar, a quién y dónde, y un botón
+// grande con el paso siguiente. Cada paso queda con quién y cuándo.
 export default function ExpedicionPage() {
   const enabled = useFeature("pedidos_despacho");
   const { toast } = useToast();
@@ -70,13 +80,33 @@ export default function ExpedicionPage() {
   const ctx = useBranchContext();
   const { data: stores = [] } = useStores();
   const [storeId, setStoreId] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("todo");
+  const [tab, setTab] = useState<ExpeditionTab>("pendientes");
+  const [mode, setMode] = useState<DeliveryFilter>("todos");
+  const [showImmediate, setShowImmediate] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [delivering, setDelivering] = useState<Dispatch | null>(null);
   const [shipping, setShipping] = useState<Dispatch | null>(null);
   const [cancelling, setCancelling] = useState<Dispatch | null>(null);
   const [adding, setAdding] = useState(false);
   const m = useOrderMutations();
+  // ADR-149 (A11): crear el envío con logística desde la entrega, precargado.
+  const enviosOn = useFeature("envios") === true;
+  const [shipSource, setShipSource] = useState<DispatchShipmentSource | null>(null);
+  const [shipBusy, setShipBusy] = useState<string | null>(null);
+  // Sólo envíos a domicilio que todavía no salieron y no tienen uno vivo.
+  const canCreateShipment = (d: Dispatch) =>
+    enviosOn && canOperate && d.delivery_type === "envio" && !d.shipment_id && ["pendiente", "armando", "listo"].includes(d.status);
+
+  async function openShipment(d: Dispatch) {
+    setShipBusy(d.id);
+    try {
+      setShipSource(await shippingApi.dispatchSource(d.id));
+    } catch (e) {
+      toast({ title: "No se pudo preparar el envío", description: shippingErrorMessage(e), variant: "error" });
+    } finally {
+      setShipBusy(null);
+    }
+  }
   // ADR-136: remito de cada entrega.
   const remitosOn = useFeature("entregas_remitos") === true;
   const [remitoIssue, setRemitoIssue] = useState<RemitoSource | null>(null);
@@ -108,23 +138,14 @@ export default function ExpedicionPage() {
     if (storeId === null && ctx.ready) setStoreId(ctx.posStoreId ?? ctx.filterStoreId ?? "");
   }, [ctx.ready, ctx.posStoreId, ctx.filterStoreId, storeId]);
 
-  const open = tab !== "done";
+  const open = tab !== "entregados";
   const { data: all = [], isLoading } = useDispatches(storeId || null, open, enabled === true);
   const list = useMemo(
-    () =>
-      all.filter((d) => (tab === "done" ? true : TAB_STATUS[tab].includes(d.status) && dispatchIsForStore(d, storeId || null))),
-    [all, tab, storeId],
+    () => expeditionList(all, { tab, storeId: storeId || null, mode, showImmediate }),
+    [all, tab, storeId, mode, showImmediate],
   );
-  const counts = useMemo(() => {
-    const c = { todo: 0, ready: 0, transit: 0 };
-    for (const d of all) {
-      if (!dispatchIsForStore(d, storeId || null)) continue;
-      if (TAB_STATUS.todo.includes(d.status)) c.todo++;
-      else if (d.status === "listo") c.ready++;
-      else if (d.status === "en_transito") c.transit++;
-    }
-    return c;
-  }, [all, storeId]);
+  // Los números de las pestañas abiertas (Entregados no lleva número).
+  const counts = useMemo(() => expeditionCounts(open ? all : [], storeId || null, mode), [all, open, storeId, mode]);
   const storeName = (id: string | null) => stores.find((s) => s.id === id)?.name ?? "Sucursal";
 
   async function advance(d: Dispatch, to: "armando" | "listo" | "en_transito" | "pendiente") {
@@ -151,12 +172,12 @@ export default function ExpedicionPage() {
       eyebrow="Operación"
       title="Expedición"
       icon={PackageCheck}
-      description="Ventas cobradas que esperan armado y entrega: retiro en el mostrador, en otra sucursal o envío a domicilio."
+      description="Ventas cobradas que esperan armado y entrega: retiro en la sucursal o envío a domicilio."
       actions={
         enabled && canOperate ? (
           <>
             <Button onClick={() => setAdding(true)}>
-              <Plus size={16} /> Agregar una venta
+              <Plus size={16} /> Agregar una entrega
             </Button>
             <Link href={"/pedidos" as Route} className={buttonVariants({ variant: "secondary" })}>
               Pedidos de salón
@@ -171,6 +192,7 @@ export default function ExpedicionPage() {
     return (
       <PageContainer>
         {header}
+        <LogisticsNav className="mt-4" />
         <div className="mt-8 rounded-lg bg-muted/40 p-8 text-center">
           <Lock className="mx-auto text-ninja-flameSoft" size={28} />
           <p className="mt-3 font-semibold">La expedición no está incluida en tu plan</p>
@@ -189,8 +211,9 @@ export default function ExpedicionPage() {
   return (
     <PageContainer>
       {header}
+      <LogisticsNav className="mt-4" />
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center">
         {stores.length > 1 && (
           <select
             aria-label="Sucursal"
@@ -208,20 +231,25 @@ export default function ExpedicionPage() {
             ))}
           </select>
         )}
-        <Segmented<Tab>
+        <Segmented<ExpeditionTab>
           scrollOnMobile
           aria-label="Estado"
           value={tab}
           onChange={setTab}
           size="sm"
-          options={[
-            { value: "todo", label: `Para armar${counts.todo ? ` (${counts.todo})` : ""}` },
-            { value: "ready", label: `Listos${counts.ready ? ` (${counts.ready})` : ""}` },
-            { value: "transit", label: `En camino${counts.transit ? ` (${counts.transit})` : ""}` },
-            { value: "done", label: "Entregados" },
-          ]}
+          options={EXPEDITION_TABS.map((t) => ({
+            value: t.value,
+            label: t.value !== "entregados" && counts[t.value] ? `${t.label} (${counts[t.value]})` : t.label,
+          }))}
         />
+        <Segmented<DeliveryFilter> aria-label="Modo de entrega" value={mode} onChange={setMode} size="sm" options={MODE_OPTIONS} />
       </div>
+      {tab === "entregados" && (
+        <div className="mt-3 flex items-center gap-3 text-sm text-muted-foreground">
+          <Switch label="Mostrar lo que se llevó en el momento" checked={showImmediate} onCheckedChange={setShowImmediate} />
+          <span>Mostrar lo que se llevó en el momento</span>
+        </div>
+      )}
 
       <section className="mt-6">
         {isLoading ? (
@@ -229,8 +257,8 @@ export default function ExpedicionPage() {
         ) : list.length === 0 ? (
           <EmptyState
             icon={PackageCheck}
-            title={tab === "done" ? "Todavía no hay entregas cerradas" : "No hay nada pendiente acá"}
-            description="Cuando la caja cobra un pedido de salón, la entrega aparece en Para armar. También podés sumar una venta ya cobrada."
+            title={tab === "entregados" ? "Todavía no hay entregas cerradas" : "No hay nada acá"}
+            description="Cuando la caja cobra con retiro o envío, la entrega aparece en Pendientes. También podés sumar una entrega a una venta ya cobrada."
           />
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
@@ -288,20 +316,29 @@ export default function ExpedicionPage() {
                     ))}
                     {items.length > 6 && <li className="text-xs text-muted-foreground">+{items.length - 6} renglones más</li>}
                   </ul>
-                  {(d.ship_address || d.notes || d.tracking || d.delivered_to || d.cancel_reason) && (
+                  {(d.ship_address || d.notes || d.tracking || d.delivered_to || d.cancel_reason || d.shipment_status) && (
                     <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                       {d.ship_address && <p>Domicilio: {d.ship_address}</p>}
                       {d.notes && <p>Nota: {d.notes}</p>}
+                      {d.shipment_status && <p>Envío con logística: {shipmentStatusLabel(d.shipment_status).toLowerCase()}</p>}
+                      {d.shipped_at && d.status === "despachado" && <p>Despachado {fmtDateTime(d.shipped_at)}</p>}
                       {d.tracking && <p>Seguimiento: {d.tracking}</p>}
                       {d.delivered_to && <p>Entregado a {d.delivered_to}{d.delivered_at ? ` · ${fmtDateTime(d.delivered_at)}` : ""}</p>}
                       {d.cancel_reason && <p>Motivo: {d.cancel_reason}</p>}
                     </div>
                   )}
-                  {remitosOn && canOperate && d.status !== "cancelado" && (
-                    <div className={cn("pt-3", !action && "mt-auto")}>
-                      <Button size="sm" variant="ghost" onClick={() => void openRemito(d)} loading={remitoBusy === d.id}>
-                        <FileText size={15} /> Remito
-                      </Button>
+                  {canOperate && d.status !== "cancelado" && (remitosOn || canCreateShipment(d)) && (
+                    <div className={cn("flex flex-wrap gap-1 pt-3", !action && "mt-auto")}>
+                      {remitosOn && (
+                        <Button size="sm" variant="ghost" onClick={() => void openRemito(d)} loading={remitoBusy === d.id}>
+                          <FileText size={15} /> Remito
+                        </Button>
+                      )}
+                      {canCreateShipment(d) && (
+                        <Button size="sm" variant="ghost" onClick={() => void openShipment(d)} loading={shipBusy === d.id}>
+                          <Truck size={15} /> Crear envío con logística
+                        </Button>
+                      )}
                     </div>
                   )}
                   {action && canOperate && (
@@ -315,7 +352,7 @@ export default function ExpedicionPage() {
                           Ya está listo
                         </Button>
                       )}
-                      {canManage && (
+                      {canManage && d.status !== "despachado" && (
                         <Button variant="ghost" className="w-full text-danger sm:w-auto" onClick={() => setCancelling(d)}>
                           Cancelar
                         </Button>
@@ -330,7 +367,35 @@ export default function ExpedicionPage() {
       </section>
 
       <DeliverModal dispatch={delivering} onClose={() => setDelivering(null)} canOverride={canManage} />
-      <ShipModal dispatch={shipping} onClose={() => setShipping(null)} />
+      <ShipModal
+        dispatch={shipping}
+        onClose={() => setShipping(null)}
+        onCreateShipment={
+          shipping && canCreateShipment(shipping)
+            ? () => {
+                const d = shipping;
+                setShipping(null);
+                void openShipment(d);
+              }
+            : null
+        }
+      />
+      {enviosOn && (
+        <ShipmentFormModal
+          open={Boolean(shipSource)}
+          onOpenChange={(o) => !o && setShipSource(null)}
+          stores={ctx.allowed}
+          defaultStoreId={shipSource?.storeId ?? null}
+          fromDispatch={shipSource}
+          onCreated={(s) =>
+            toast({
+              title: "Envío creado y enganchado a la entrega",
+              description: s.tracking_number ? `Seguimiento ${s.tracking_number}` : "Cuando esté la etiqueta, marcá la entrega como despachada.",
+              variant: "success",
+            })
+          }
+        />
+      )}
       <CancelDispatchModal dispatch={cancelling} onClose={() => setCancelling(null)} />
       <AddSaleModal open={adding} onOpenChange={setAdding} stores={stores} defaultStoreId={storeId || null} />
       <RemitoIssueModal
@@ -391,7 +456,13 @@ function DeliverModal({ dispatch, onClose, canOverride }: { dispatch: Dispatch |
       open
       onOpenChange={(o) => !o && onClose()}
       title={`Entregar N° ${dispatch.number}`}
-      description={needsCode ? "Pedile al cliente el código de 6 dígitos que le dieron al comprar." : "Confirmá a quién se lo entregás."}
+      description={
+        needsCode
+          ? "Pedile al cliente el código de 6 dígitos que le dieron al comprar."
+          : dispatch.status === "despachado"
+            ? "Confirmá que el envío llegó a destino."
+            : "Confirmá a quién se lo entregás."
+      }
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -430,7 +501,15 @@ function DeliverModal({ dispatch, onClose, canOverride }: { dispatch: Dispatch |
   );
 }
 
-function ShipModal({ dispatch, onClose }: { dispatch: Dispatch | null; onClose: () => void }) {
+function ShipModal({
+  dispatch,
+  onClose,
+  onCreateShipment,
+}: {
+  dispatch: Dispatch | null;
+  onClose: () => void;
+  onCreateShipment: (() => void) | null;
+}) {
   const { toast } = useToast();
   const m = useOrderMutations();
   const [tracking, setTracking] = useState("");
@@ -439,7 +518,8 @@ function ShipModal({ dispatch, onClose }: { dispatch: Dispatch | null; onClose: 
   async function submit() {
     if (!dispatch) return;
     try {
-      await m.ship.mutateAsync({ id: dispatch.id, tracking: tracking.trim() || null });
+      // A5: con el envío de esta entrega (si tiene); el servidor no adivina.
+      await m.ship.mutateAsync({ id: dispatch.id, tracking: tracking.trim() || null, shipmentId: dispatch.shipment_id });
       toast({ title: `Entrega N° ${dispatch.number} despachada`, variant: "success" });
       onClose();
     } catch (e) {
@@ -451,12 +531,18 @@ function ShipModal({ dispatch, onClose }: { dispatch: Dispatch | null; onClose: 
       open
       onOpenChange={(o) => !o && onClose()}
       title={`Despachar N° ${dispatch.number}`}
-      description="Si la venta tiene un envío creado en Envíos, se engancha solo con su número de seguimiento."
+      description={
+        dispatch.shipment_id
+          ? "Sale con el envío con logística de esta entrega: se cierra sola cuando la logística lo entrega."
+          : "Sin logística (cadete propio): queda En camino hasta que la marques entregada."
+      }
       footer={
         <>
-          <Link href={"/envios" as Route} className={buttonVariants({ variant: "secondary" })}>
-            Crear el envío
-          </Link>
+          {onCreateShipment && (
+            <Button variant="secondary" onClick={onCreateShipment}>
+              <Truck size={16} /> Crear envío con logística
+            </Button>
+          )}
           <Button onClick={submit} loading={m.ship.isPending}>
             Marcar despachado
           </Button>
@@ -543,8 +629,22 @@ function AddSaleModal({
   }, [open]);
   const cross = crossBranchAllowed(config, type) && stores.length > 1;
   const n = Number(saleNumber);
+  // ADR-149 (A1): lo que falta entregar de la venta, con una pausa al tipear.
+  const [lookup, setLookup] = useState<number | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setLookup(Number.isInteger(n) && n > 0 ? n : null), 400);
+    return () => clearTimeout(t);
+  }, [n]);
+  const pending = useSalePending(open ? lookup : null);
+  const pendingItems = (pending.data?.items ?? []).filter((i) => Number(i.pending) > 0);
+  const nothingLeft = Boolean(pending.data && pending.data.items.length > 0 && pendingItems.length === 0);
   const ready =
-    Number.isInteger(n) && n > 0 && (type !== "retiro" || name.trim().length >= 2) && (type !== "envio" || address.trim().length >= 5);
+    Number.isInteger(n) &&
+    n > 0 &&
+    !nothingLeft &&
+    pending.data?.status !== "voided" &&
+    (type !== "retiro" || name.trim().length >= 2) &&
+    (type !== "envio" || address.trim().length >= 5);
 
   async function submit() {
     try {
@@ -557,7 +657,7 @@ function AddSaleModal({
       });
       if (r.pickup_code) setCode({ number: r.number, code: r.pickup_code });
       else {
-        toast({ title: `Venta #${n} en expedición (N° ${r.number})`, variant: "success" });
+        toast({ title: `Entrega N° ${r.number} agregada a la venta #${n}`, variant: "success" });
         onOpenChange(false);
       }
     } catch (e) {
@@ -583,8 +683,8 @@ function AddSaleModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Agregar una venta a expedición"
-      description="Para una venta ya cobrada que el cliente retira después o que se envía."
+      title="Agregar una entrega"
+      description="Para una venta ya cobrada: suma una entrega con lo que todavía falta entregar, aunque ya se haya llevado una parte."
       footer={
         <>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
@@ -598,6 +698,33 @@ function AddSaleModal({
     >
       <div className="space-y-4">
         <Input label="Número de venta" value={saleNumber} onChange={(e) => setSaleNumber(e.target.value.replace(/\D/g, ""))} inputMode="numeric" />
+        {lookup && (
+          <div className="rounded-lg bg-muted/50 p-3 text-sm" aria-live="polite">
+            {pending.isLoading ? (
+              <p className="text-muted-foreground">Buscando la venta…</p>
+            ) : pending.error ? (
+              <p className="text-warning">{orderErrorMessage(pending.error)}</p>
+            ) : pending.data?.status === "voided" ? (
+              <p className="text-warning">Esa venta está anulada.</p>
+            ) : nothingLeft ? (
+              <p className="text-muted-foreground">De esa venta ya no queda nada por entregar.</p>
+            ) : pendingItems.length > 0 ? (
+              <>
+                <p className="mb-1 font-medium">Falta entregar</p>
+                <ul className="space-y-0.5">
+                  {pendingItems.map((i) => (
+                    <li key={`${i.product_id}:${i.variant_id ?? ""}`} className="flex justify-between gap-3">
+                      <span className="truncate">{i.name}</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatQty(Number(i.pending))} de {formatQty(Number(i.sold))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
+        )}
         {types.length > 1 && (
           <Segmented<DeliveryType>
             scrollOnMobile

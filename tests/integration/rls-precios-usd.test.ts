@@ -109,9 +109,11 @@ describe.skipIf(!enabled)("ADR-140 costos en dólares y actualización por dóla
     if (fxErr) throw fxErr;
     ctx.fxIds.push(...((fx ?? []) as { id: string }[]).map((x) => x.id));
 
-    const { data: l, error: lErr } = await ctx.owner.client
+    // La lista se crea con service_role (como en el gestor ML): el alta por
+    // UI ya la cubre su propio test; acá importa el asistente.
+    const { data: l, error: lErr } = await admin
       .from("price_lists")
-      .insert({ name: "Mayorista", channel: "mayorista", adjustment_pct: -10 } as never)
+      .insert({ tenant_id: ctx.tenant, name: "Mayorista", channel: "mayorista", adjustment_pct: -10 } as never)
       .select("id")
       .single();
     if (lErr || !l) throw lErr ?? new Error("price_list");

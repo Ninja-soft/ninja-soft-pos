@@ -14,10 +14,16 @@
 //     capacidades de "owner" son del dueño y no se conceden a nadie más.
 //   · enforced: "server" = la base la hace cumplir con has_capability();
 //     "ui" = organiza la pantalla (los datos del negocio los lee cualquier
-//     miembro por su sucursal, ADR-045); "pending" = la usa una función que
-//     todavía no está (aprobación de ajustes de Inventario).
+//     miembro por su sucursal, ADR-045).
+//   · grantFeature: feature del plan con la que el dueño puede dar o quitar
+//     esta capacidad a una persona (permiso puntual) aunque el plan no tenga
+//     roles_permisos. Son las "otorgables" de Inventario (ADR-137): sin
+//     ella, los permisos puntuales piden roles_permisos.
+//   · optIn: no entra con los niveles del modo simple ni en la plantilla de
+//     Encargado; se suma aparte (aprobar ajustes y configurar la aprobación).
 //   · El dueño tiene todo, siempre. Los roles de sistema reproducen 1 a 1 lo
 //     que hoy hace cumplir la base por rol (docs/06-permissions-roles.md §4.7).
+//     Inventario (ADR-137) usa este mismo catálogo: no hay otro.
 //
 // Funciones puras (sin React ni Supabase) para testearlas.
 // =============================================================================
@@ -25,7 +31,7 @@
 export type BaseRole = "owner" | "manager" | "cashier" | "viewer";
 export type CapabilityLevel = "view" | "operate" | "admin";
 export type CapabilityRisk = "low" | "medium" | "high" | "critical";
-export type Enforcement = "server" | "ui" | "pending";
+export type Enforcement = "server" | "ui";
 
 export type ModuleKey =
   | "ventas"
@@ -50,6 +56,8 @@ export interface CapabilityDef {
   dependsOn: string[];
   minBase: BaseRole;
   enforced: Enforcement;
+  grantFeature: string | null;
+  optIn: boolean;
 }
 
 export interface ModuleDef {
@@ -83,7 +91,25 @@ const cap = (
   dependsOn: string[] = [],
   minBase: BaseRole = "cashier",
   enforced: Enforcement = "server",
-): CapabilityDef => ({ key, module, label, description, level, risk, dependsOn, minBase, enforced });
+  extra: { grantFeature?: string; optIn?: boolean } = {},
+): CapabilityDef => ({
+  key,
+  module,
+  label,
+  description,
+  level,
+  risk,
+  dependsOn,
+  minBase,
+  enforced,
+  grantFeature: extra.grantFeature ?? null,
+  optIn: extra.optIn ?? false,
+});
+
+// Inventario (ADR-137): otorgables por persona en todo plan con ajustes_stock
+// (BASE); aprobar y configurar la aprobación, con aprobacion_ajustes.
+const INV = { grantFeature: "ajustes_stock" };
+const INV_APPROVAL = { grantFeature: "aprobacion_ajustes", optIn: true };
 
 // El orden de este arreglo es el orden en pantalla (sort de la tabla).
 export const CAPABILITIES: readonly CapabilityDef[] = [
@@ -104,10 +130,14 @@ export const CAPABILITIES: readonly CapabilityDef[] = [
   cap("products.price", "productos", "Cambiar precios y costos", "Cambiar el precio de venta y el costo de un producto.", "admin", "high", ["products.edit"]),
   cap("prices.manage", "productos", "Listas de precios y cambios masivos", "Listas de precios, escalas, condiciones de pago y aumentos masivos.", "admin", "high", ["products.price"]),
   // Stock
-  cap("stock.view", "stock", "Ver stock", "Ver existencias por sucursal y depósito.", "view", "low", [], "viewer", "ui"),
-  cap("stock.adjust", "stock", "Ajustar stock a mano", "Cargar ajustes, mermas, producción y correcciones de stock.", "admin", "high", ["stock.view"]),
-  cap("stock.count", "stock", "Contar stock", "Hacer conteos cíclicos y recuentos de stock.", "operate", "medium", ["stock.view"]),
-  cap("stock.adjust.approve", "stock", "Aprobar ajustes de stock", "Aprobar ajustes y diferencias de conteo que cargó otra persona.", "admin", "critical", ["stock.adjust"], "cashier", "pending"),
+  cap("stock.view", "stock", "Ver stock e inventario", "Stock por sucursal y depósito, movimientos e historial de ajustes.", "view", "low", [], "viewer", "server"),
+  cap("stock.valuation", "stock", "Ver costos y valuación del stock", "Costo de cada producto, valor del stock y valor de cada ajuste.", "admin", "medium", ["stock.view"], "viewer", "server", INV),
+  cap("stock.export", "stock", "Exportar planillas de stock", "Descargar el stock en Excel y la planilla para contar.", "operate", "low", ["stock.view"], "viewer", "ui", INV),
+  cap("stock.adjust", "stock", "Ajustar stock a mano", "Sumar, restar o fijar stock con motivo, mermas y producción. Desde el umbral, queda pendiente de aprobación.", "admin", "high", ["stock.view"], "cashier", "server", INV),
+  cap("stock.count", "stock", "Contar stock", "Conteos cíclicos y ajustes con motivo Conteo (inventario físico), aunque no pueda hacer otros ajustes.", "operate", "medium", ["stock.view"], "cashier", "server", INV),
+  cap("stock.import", "stock", "Importar ajustes y conteos desde Excel", "Carga rápida desde la planilla. Además pide la importación desde Excel en el plan.", "admin", "high", ["stock.view"], "manager", "server", INV),
+  cap("stock.adjust.approve", "stock", "Aprobar ajustes de stock", "Aprobar o rechazar los ajustes pendientes que cargó otra persona (auditor de inventario).", "admin", "critical", ["stock.view"], "cashier", "server", INV_APPROVAL),
+  cap("stock.settings", "stock", "Configurar la aprobación de ajustes", "Prender la aprobación, el umbral, la foto obligatoria y quién aprueba.", "admin", "high", ["stock.view"], "cashier", "server", INV_APPROVAL),
   // Clientes
   cap("customers.view", "clientes", "Ver clientes", "Ver la lista y la ficha de los clientes.", "view", "low", [], "viewer", "ui"),
   cap("customers.create", "clientes", "Dar de alta clientes", "Crear clientes nuevos desde Clientes o desde el POS.", "operate", "low", ["customers.view"]),
@@ -193,7 +223,9 @@ export type RoleIcon = (typeof ROLE_ICONS)[number];
 const ALL_KEYS = CAPABILITIES.map((c) => c.key);
 const VIEW_KEYS = CAPABILITIES.filter((c) => c.level === "view" && c.minBase === "viewer").map((c) => c.key);
 
-const MANAGER_CAPS = CAPABILITIES.filter((c) => c.minBase !== "owner" && c.key !== "config.edit").map((c) => c.key);
+// Encargado: todo lo que no es del dueño, salvo la configuración del POS y lo
+// que se suma aparte (aprobar ajustes y configurar la aprobación).
+const MANAGER_CAPS = CAPABILITIES.filter((c) => c.minBase !== "owner" && c.key !== "config.edit" && !c.optIn).map((c) => c.key);
 const CASHIER_CAPS = [
   "sales.view", "sales.create", "sales.void", "sales.return",
   "cash.view", "cash.open", "cash.close", "cash.movements",
@@ -201,9 +233,9 @@ const CASHIER_CAPS = [
   "customers.view", "customers.create", "customers.edit",
   "reports.view", "team.view",
 ];
-const VIEWER_CAPS = ["sales.view", "cash.view", "products.view", "stock.view", "customers.view", "reports.view", "team.view"];
+const VIEWER_CAPS = ["sales.view", "cash.view", "products.view", "stock.view", "stock.valuation", "stock.export", "customers.view", "reports.view", "team.view"];
 const SELLER_CAPS = ["sales.view", "products.view", "stock.view", "customers.view", "customers.create", "customers.edit", "team.view"];
-const AUDITOR_CAPS = [...VIEW_KEYS, "reports.costs", "audit.view"];
+const AUDITOR_CAPS = [...VIEW_KEYS, "stock.valuation", "stock.export", "reports.costs", "audit.view"];
 
 export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
   { key: "owner", id: "00000000-0000-4000-8000-0000000000a1", name: "Dueño", description: "Todo el negocio, siempre. No se edita.", base: "owner", color: "flame", icon: "crown", capabilities: ALL_KEYS },
@@ -243,6 +275,21 @@ export interface ResolveInput {
   overrides?: readonly Override[];
   /** Plan con roles_permisos. Sin la feature: rol personalizado cae a su nivel base y no hay overrides. */
   featureOn?: boolean;
+  /**
+   * Features del plan prendidas (las grantFeature del catálogo). Sin
+   * roles_permisos, un permiso puntual cuenta si su capacidad tiene
+   * grantFeature y el plan la tiene (otorgables de Inventario, ADR-137).
+   */
+  features?: Iterable<string>;
+}
+
+/** ¿Cuenta un permiso puntual de esta capacidad con este plan? (espejo de capabilities_for). */
+export function overrideAllowed(capability: string, featureOn: boolean, features?: Iterable<string>): boolean {
+  if (featureOn) return true;
+  const gf = CAPABILITY_BY_KEY.get(capability)?.grantFeature;
+  if (!gf || !features) return false;
+  for (const f of features) if (f === gf) return true;
+  return false;
 }
 
 export interface EffectiveCapability {
@@ -278,15 +325,17 @@ export function resolveCapabilities(input: ResolveInput): ResolveResult {
     source.set(k, "role");
   }
   const revoked = new Set<string>();
-  if (featureOn) {
-    for (const o of input.overrides ?? []) {
-      if (!CAPABILITY_BY_KEY.has(o.capability)) continue;
-      if (o.effect === "grant") {
-        granted.add(o.capability);
-        source.set(o.capability, "override");
-      } else {
-        revoked.add(o.capability);
-      }
+  const features = input.features ? [...input.features] : undefined;
+  // Permisos puntuales: con roles_permisos, todos; sin ella, sólo los de
+  // capacidades con grantFeature prendida en el plan.
+  for (const o of input.overrides ?? []) {
+    if (!CAPABILITY_BY_KEY.has(o.capability)) continue;
+    if (!overrideAllowed(o.capability, featureOn, features)) continue;
+    if (o.effect === "grant") {
+      granted.add(o.capability);
+      source.set(o.capability, "override");
+    } else {
+      revoked.add(o.capability);
     }
   }
   for (const k of revoked) granted.delete(k);
@@ -301,7 +350,7 @@ export function resolveCapabilities(input: ResolveInput): ResolveResult {
       if (revoked.has(k)) blocked = "revoked";
       else if (!granted.has(k)) {
         const overridden = (input.overrides ?? []).some((o) => o.capability === k && o.effect === "grant");
-        blocked = overridden && !featureOn ? "feature_off" : "not_granted";
+        blocked = overridden && !overrideAllowed(k, featureOn, features) ? "feature_off" : "not_granted";
       } else if (!baseAllows(input.base, c.minBase)) blocked = "base_too_low";
       else {
         blocked = "missing_dependency";
@@ -388,7 +437,7 @@ export function moduleLevel(caps: readonly string[], module: ModuleKey, base: Ba
         LEVEL_ORDER.indexOf(c.level) <= LEVEL_ORDER.indexOf(l) &&
         baseAllows(base, c.minBase) &&
         c.minBase !== "owner" &&
-        c.enforced !== "pending",
+        !c.optIn,
     );
     const atLevel = need.filter((c) => c.level === l);
     if (atLevel.length === 0) continue;
@@ -414,7 +463,9 @@ export function setModuleLevel(caps: readonly string[], module: ModuleKey, level
   for (const c of capabilitiesOfModule(module)) {
     if (c.minBase === "owner") continue;
     const within = level !== "none" && LEVEL_ORDER.indexOf(c.level) <= LEVEL_ORDER.indexOf(level);
-    if (within && baseAllows(base, c.minBase) && c.enforced !== "pending") set.add(c.key);
+    // Lo que se suma aparte no lo prende el nivel; sólo se apaga al bajar.
+    if (c.optIn && within) continue;
+    if (within && baseAllows(base, c.minBase)) set.add(c.key);
     else if (set.delete(c.key)) removed.push(c.key);
   }
   // Lo que dependía de lo apagado (también de otros módulos) se apaga; lo
@@ -463,4 +514,43 @@ export function searchCapabilities(term: string, list: readonly CapabilityDef[] 
   if (!t) return [...list];
   const modLabel = new Map(MODULES.map((m) => [m.key, m.label]));
   return list.filter((c) => norm(`${c.label} ${c.description} ${c.key} ${modLabel.get(c.module) ?? ""}`).includes(t));
+}
+
+// -----------------------------------------------------------------------------
+// Pantallas que preguntan por una capacidad (Inventario, ADR-137)
+// -----------------------------------------------------------------------------
+
+/**
+ * ¿Puede? Con las capacidades efectivas cargadas (my_capabilities), lo que
+ * diga el servidor; mientras cargan, las del rol de sistema de su nivel. Sin
+ * rol (cargando o sin membresía), no. La base revalida cada acción.
+ */
+export function capabilityAllowed(
+  base: BaseRole | null,
+  effective: readonly string[] | null | undefined,
+  cap: string,
+): boolean {
+  if (base === null) return false;
+  if (base === "owner") return true;
+  if (effective) return effective.includes(cap);
+  return systemRoleForBase(base).capabilities.includes(cap);
+}
+
+/**
+ * Motivo por el que el dueño no le puede dar esta capacidad a alguien de ese
+ * nivel como permiso puntual, o null si puede (espejo de
+ * permission_override_set y de min_base en capabilities_for).
+ */
+export function grantBlockedReason(base: BaseRole | null, cap: string): string | null {
+  const def = CAPABILITY_BY_KEY.get(cap);
+  if (!def) return "Permiso desconocido.";
+  if (base === null) return "No es miembro activo del negocio.";
+  if (base === "owner") return "El dueño ya tiene todos los permisos.";
+  if (def.minBase === "owner") return "Sólo el dueño.";
+  if (!baseAllows(base, def.minBase)) {
+    return base === "viewer"
+      ? "Solo lectura no puede modificar datos. Cambiale el rol a cajero o encargado."
+      : `Pide nivel base ${BASE_LABEL[def.minBase]}.`;
+  }
+  return null;
 }

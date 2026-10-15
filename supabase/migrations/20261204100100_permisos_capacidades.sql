@@ -31,7 +31,14 @@
 --        · pos_settings (configuración) y audit_logs (ver la auditoría).
 --
 -- Nunca "OR is_internal()" (ADR-052). Sin la feature roles_permisos los roles
--- personalizados caen a su nivel base y los permisos puntuales no cuentan.
+-- personalizados caen a su nivel base y los permisos puntuales no cuentan,
+-- salvo los de capacidades con grant_feature prendida en el plan.
+--
+-- Modelo ÚNICO (unificación con ADR-137): las capacidades de Inventario
+-- (stock.view, .valuation, .export, .adjust, .count, .import, .adjust.approve,
+-- .settings) viven en este catálogo con sus defaults por rol de sistema; sus
+-- RPC (20261204100300_ajustes_stock_aprobacion) preguntan has_capability /
+-- member_has_capability de acá. No hay otra tabla de capacidades.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -48,7 +55,11 @@ create table if not exists permission_capabilities (
   -- Clausura transitiva de depends_on (la calcula el código al generar el seed).
   requires_all text[] not null default '{}',
   min_base     text not null default 'cashier' check (min_base in ('viewer', 'cashier', 'manager', 'owner')),
-  enforced     text not null default 'server' check (enforced in ('server', 'ui', 'pending')),
+  enforced     text not null default 'server' check (enforced in ('server', 'ui')),
+  -- Feature del plan con la que el dueño puede dar o quitar esta capacidad a
+  -- una persona (permiso puntual) aunque el plan no tenga roles_permisos: las
+  -- "otorgables" de Inventario (ADR-137). null = sólo con roles_permisos.
+  grant_feature text,
   sort         int not null default 0,
   updated_at   timestamptz not null default now()
 );
@@ -154,45 +165,50 @@ revoke insert, update, delete on permission_user_overrides from anon, authentica
 
 -- Seed generado desde lib/permissions/capabilities.ts (no editar a mano).
 -- @@SEED-INICIO@@
-insert into permission_capabilities (key, module, label, description, level, risk, depends_on, requires_all, min_base, enforced, sort) values
-  ('sales.view', 'ventas', 'Ver ventas', 'Ver el listado y el detalle de las ventas de sus sucursales.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 10),
-  ('sales.create', 'ventas', 'Vender y cobrar', 'Cobrar ventas en el POS dentro de su turno de caja.', 'operate', 'medium', array['sales.view', 'products.view']::text[], array['products.view', 'sales.view']::text[], 'cashier', 'server', 20),
-  ('sales.void', 'ventas', 'Anular ventas del día', 'Anular una venta de hoy: vuelve el stock y sale la plata de la caja.', 'operate', 'high', array['sales.view']::text[], array['sales.view']::text[], 'cashier', 'server', 30),
-  ('sales.void.past_days', 'ventas', 'Anular ventas de días anteriores', 'Anular ventas de otros días (hora de Argentina). Toca cierres ya hechos.', 'admin', 'critical', array['sales.void']::text[], array['sales.view', 'sales.void']::text[], 'cashier', 'server', 40),
-  ('sales.return', 'ventas', 'Devoluciones y cambios', 'Registrar devoluciones, cambios y reintegros de una venta.', 'operate', 'high', array['sales.view']::text[], array['sales.view']::text[], 'cashier', 'server', 50),
-  ('cash.view', 'caja', 'Ver cajas y turnos', 'Ver las cajas, los turnos y los cierres de sus sucursales.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 60),
-  ('cash.open', 'caja', 'Abrir turno de caja', 'Abrir su propio turno en una caja de su sucursal.', 'operate', 'medium', array['cash.view']::text[], array['cash.view']::text[], 'cashier', 'server', 70),
-  ('cash.close', 'caja', 'Cerrar turno de caja', 'Cerrar su turno con el arqueo y el cierre Z.', 'operate', 'medium', array['cash.open']::text[], array['cash.open', 'cash.view']::text[], 'cashier', 'server', 80),
-  ('cash.movements', 'caja', 'Ingresos y retiros de caja', 'Cargar ingresos y retiros de plata en su turno.', 'operate', 'high', array['cash.open']::text[], array['cash.open', 'cash.view']::text[], 'cashier', 'server', 90),
-  ('products.view', 'productos', 'Ver productos y precios', 'Ver el catálogo, las variantes y los precios.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 100),
-  ('products.edit', 'productos', 'Crear y editar productos', 'Alta, edición y baja de productos, variantes, categorías y marcas.', 'admin', 'medium', array['products.view']::text[], array['products.view']::text[], 'cashier', 'server', 110),
-  ('products.price', 'productos', 'Cambiar precios y costos', 'Cambiar el precio de venta y el costo de un producto.', 'admin', 'high', array['products.edit']::text[], array['products.edit', 'products.view']::text[], 'cashier', 'server', 120),
-  ('prices.manage', 'productos', 'Listas de precios y cambios masivos', 'Listas de precios, escalas, condiciones de pago y aumentos masivos.', 'admin', 'high', array['products.price']::text[], array['products.edit', 'products.price', 'products.view']::text[], 'cashier', 'server', 130),
-  ('stock.view', 'stock', 'Ver stock', 'Ver existencias por sucursal y depósito.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 140),
-  ('stock.adjust', 'stock', 'Ajustar stock a mano', 'Cargar ajustes, mermas, producción y correcciones de stock.', 'admin', 'high', array['stock.view']::text[], array['stock.view']::text[], 'cashier', 'server', 150),
-  ('stock.count', 'stock', 'Contar stock', 'Hacer conteos cíclicos y recuentos de stock.', 'operate', 'medium', array['stock.view']::text[], array['stock.view']::text[], 'cashier', 'server', 160),
-  ('stock.adjust.approve', 'stock', 'Aprobar ajustes de stock', 'Aprobar ajustes y diferencias de conteo que cargó otra persona.', 'admin', 'critical', array['stock.adjust']::text[], array['stock.adjust', 'stock.view']::text[], 'cashier', 'pending', 170),
-  ('customers.view', 'clientes', 'Ver clientes', 'Ver la lista y la ficha de los clientes.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 180),
-  ('customers.create', 'clientes', 'Dar de alta clientes', 'Crear clientes nuevos desde Clientes o desde el POS.', 'operate', 'low', array['customers.view']::text[], array['customers.view']::text[], 'cashier', 'server', 190),
-  ('customers.edit', 'clientes', 'Editar clientes', 'Cambiar datos de contacto y fiscales de un cliente.', 'operate', 'low', array['customers.view']::text[], array['customers.view']::text[], 'cashier', 'server', 200),
-  ('customers.delete', 'clientes', 'Dar de baja clientes', 'Dar de baja un cliente (queda en la historia).', 'admin', 'medium', array['customers.edit']::text[], array['customers.edit', 'customers.view']::text[], 'cashier', 'server', 210),
-  ('purchases.manage', 'compras', 'Compras y proveedores', 'Cargar compras, proveedores, recepciones y costos de compra.', 'admin', 'high', array['products.view']::text[], array['products.view']::text[], 'manager', 'server', 220),
-  ('treasury.manage', 'finanzas', 'Tesorería', 'Cuentas, cheques, pagos y cobranzas de tesorería.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', 230),
-  ('taxes.manage', 'finanzas', 'Impuestos', 'Regímenes, alícuotas, percepciones y retenciones del negocio.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', 240),
-  ('accounting.manage', 'finanzas', 'Contabilidad', 'Plan de cuentas, asientos y períodos contables.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', 250),
-  ('reports.view', 'reportes', 'Ver reportes', 'Ver los reportes de ventas, caja y stock de sus sucursales.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 260),
-  ('reports.costs', 'reportes', 'Ver costos y márgenes', 'Ver márgenes, costo de lo vendido y alertas de margen.', 'admin', 'medium', array['reports.view']::text[], array['reports.view']::text[], 'viewer', 'server', 270),
-  ('audit.view', 'reportes', 'Ver la auditoría', 'Ver quién hizo qué en el negocio (no sólo lo propio).', 'admin', 'medium', '{}'::text[], '{}'::text[], 'viewer', 'server', 280),
-  ('config.edit', 'configuracion', 'Editar la configuración del POS', 'Topes de descuento, venta sin stock, tickets y reglas del POS.', 'admin', 'critical', '{}'::text[], '{}'::text[], 'manager', 'server', 290),
-  ('config.security', 'configuracion', 'Seguridad y PIN de supervisor', 'Quién autoriza con PIN y qué acciones lo piden.', 'admin', 'critical', '{}'::text[], '{}'::text[], 'owner', 'server', 300),
-  ('billing.manage', 'configuracion', 'Plan y suscripción', 'Cambiar el plan, pagar y ceder la titularidad.', 'admin', 'critical', '{}'::text[], '{}'::text[], 'owner', 'server', 310),
-  ('team.view', 'equipo', 'Ver el equipo', 'Ver quién trabaja en el negocio y en qué sucursal.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', 320),
-  ('team.manage', 'equipo', 'Invitar y gestionar personal', 'Invitar, editar, suspender y asignar roles (nunca más permisos que los propios).', 'admin', 'critical', array['team.view']::text[], array['team.view']::text[], 'manager', 'server', 330),
-  ('team.roles', 'equipo', 'Crear y editar roles', 'Crear roles, cambiar sus permisos y dar permisos puntuales.', 'admin', 'critical', array['team.manage']::text[], array['team.manage', 'team.view']::text[], 'owner', 'server', 340),
-  ('integrations.manage', 'integraciones', 'Conectar logísticas y medios de pago', 'Credenciales de logísticas y comisiones de los medios de pago.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', 350)
+insert into permission_capabilities (key, module, label, description, level, risk, depends_on, requires_all, min_base, enforced, grant_feature, sort) values
+  ('sales.view', 'ventas', 'Ver ventas', 'Ver el listado y el detalle de las ventas de sus sucursales.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', null, 10),
+  ('sales.create', 'ventas', 'Vender y cobrar', 'Cobrar ventas en el POS dentro de su turno de caja.', 'operate', 'medium', array['sales.view', 'products.view']::text[], array['products.view', 'sales.view']::text[], 'cashier', 'server', null, 20),
+  ('sales.void', 'ventas', 'Anular ventas del día', 'Anular una venta de hoy: vuelve el stock y sale la plata de la caja.', 'operate', 'high', array['sales.view']::text[], array['sales.view']::text[], 'cashier', 'server', null, 30),
+  ('sales.void.past_days', 'ventas', 'Anular ventas de días anteriores', 'Anular ventas de otros días (hora de Argentina). Toca cierres ya hechos.', 'admin', 'critical', array['sales.void']::text[], array['sales.view', 'sales.void']::text[], 'cashier', 'server', null, 40),
+  ('sales.return', 'ventas', 'Devoluciones y cambios', 'Registrar devoluciones, cambios y reintegros de una venta.', 'operate', 'high', array['sales.view']::text[], array['sales.view']::text[], 'cashier', 'server', null, 50),
+  ('cash.view', 'caja', 'Ver cajas y turnos', 'Ver las cajas, los turnos y los cierres de sus sucursales.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', null, 60),
+  ('cash.open', 'caja', 'Abrir turno de caja', 'Abrir su propio turno en una caja de su sucursal.', 'operate', 'medium', array['cash.view']::text[], array['cash.view']::text[], 'cashier', 'server', null, 70),
+  ('cash.close', 'caja', 'Cerrar turno de caja', 'Cerrar su turno con el arqueo y el cierre Z.', 'operate', 'medium', array['cash.open']::text[], array['cash.open', 'cash.view']::text[], 'cashier', 'server', null, 80),
+  ('cash.movements', 'caja', 'Ingresos y retiros de caja', 'Cargar ingresos y retiros de plata en su turno.', 'operate', 'high', array['cash.open']::text[], array['cash.open', 'cash.view']::text[], 'cashier', 'server', null, 90),
+  ('products.view', 'productos', 'Ver productos y precios', 'Ver el catálogo, las variantes y los precios.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', null, 100),
+  ('products.edit', 'productos', 'Crear y editar productos', 'Alta, edición y baja de productos, variantes, categorías y marcas.', 'admin', 'medium', array['products.view']::text[], array['products.view']::text[], 'cashier', 'server', null, 110),
+  ('products.price', 'productos', 'Cambiar precios y costos', 'Cambiar el precio de venta y el costo de un producto.', 'admin', 'high', array['products.edit']::text[], array['products.edit', 'products.view']::text[], 'cashier', 'server', null, 120),
+  ('prices.manage', 'productos', 'Listas de precios y cambios masivos', 'Listas de precios, escalas, condiciones de pago y aumentos masivos.', 'admin', 'high', array['products.price']::text[], array['products.edit', 'products.price', 'products.view']::text[], 'cashier', 'server', null, 130),
+  ('stock.view', 'stock', 'Ver stock e inventario', 'Stock por sucursal y depósito, movimientos e historial de ajustes.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'server', null, 140),
+  ('stock.valuation', 'stock', 'Ver costos y valuación del stock', 'Costo de cada producto, valor del stock y valor de cada ajuste.', 'admin', 'medium', array['stock.view']::text[], array['stock.view']::text[], 'viewer', 'server', 'ajustes_stock', 150),
+  ('stock.export', 'stock', 'Exportar planillas de stock', 'Descargar el stock en Excel y la planilla para contar.', 'operate', 'low', array['stock.view']::text[], array['stock.view']::text[], 'viewer', 'ui', 'ajustes_stock', 160),
+  ('stock.adjust', 'stock', 'Ajustar stock a mano', 'Sumar, restar o fijar stock con motivo, mermas y producción. Desde el umbral, queda pendiente de aprobación.', 'admin', 'high', array['stock.view']::text[], array['stock.view']::text[], 'cashier', 'server', 'ajustes_stock', 170),
+  ('stock.count', 'stock', 'Contar stock', 'Conteos cíclicos y ajustes con motivo Conteo (inventario físico), aunque no pueda hacer otros ajustes.', 'operate', 'medium', array['stock.view']::text[], array['stock.view']::text[], 'cashier', 'server', 'ajustes_stock', 180),
+  ('stock.import', 'stock', 'Importar ajustes y conteos desde Excel', 'Carga rápida desde la planilla. Además pide la importación desde Excel en el plan.', 'admin', 'high', array['stock.view']::text[], array['stock.view']::text[], 'manager', 'server', 'ajustes_stock', 190),
+  ('stock.adjust.approve', 'stock', 'Aprobar ajustes de stock', 'Aprobar o rechazar los ajustes pendientes que cargó otra persona (auditor de inventario).', 'admin', 'critical', array['stock.view']::text[], array['stock.view']::text[], 'cashier', 'server', 'aprobacion_ajustes', 200),
+  ('stock.settings', 'stock', 'Configurar la aprobación de ajustes', 'Prender la aprobación, el umbral, la foto obligatoria y quién aprueba.', 'admin', 'high', array['stock.view']::text[], array['stock.view']::text[], 'cashier', 'server', 'aprobacion_ajustes', 210),
+  ('customers.view', 'clientes', 'Ver clientes', 'Ver la lista y la ficha de los clientes.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', null, 220),
+  ('customers.create', 'clientes', 'Dar de alta clientes', 'Crear clientes nuevos desde Clientes o desde el POS.', 'operate', 'low', array['customers.view']::text[], array['customers.view']::text[], 'cashier', 'server', null, 230),
+  ('customers.edit', 'clientes', 'Editar clientes', 'Cambiar datos de contacto y fiscales de un cliente.', 'operate', 'low', array['customers.view']::text[], array['customers.view']::text[], 'cashier', 'server', null, 240),
+  ('customers.delete', 'clientes', 'Dar de baja clientes', 'Dar de baja un cliente (queda en la historia).', 'admin', 'medium', array['customers.edit']::text[], array['customers.edit', 'customers.view']::text[], 'cashier', 'server', null, 250),
+  ('purchases.manage', 'compras', 'Compras y proveedores', 'Cargar compras, proveedores, recepciones y costos de compra.', 'admin', 'high', array['products.view']::text[], array['products.view']::text[], 'manager', 'server', null, 260),
+  ('treasury.manage', 'finanzas', 'Tesorería', 'Cuentas, cheques, pagos y cobranzas de tesorería.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', null, 270),
+  ('taxes.manage', 'finanzas', 'Impuestos', 'Regímenes, alícuotas, percepciones y retenciones del negocio.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', null, 280),
+  ('accounting.manage', 'finanzas', 'Contabilidad', 'Plan de cuentas, asientos y períodos contables.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', null, 290),
+  ('reports.view', 'reportes', 'Ver reportes', 'Ver los reportes de ventas, caja y stock de sus sucursales.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', null, 300),
+  ('reports.costs', 'reportes', 'Ver costos y márgenes', 'Ver márgenes, costo de lo vendido y alertas de margen.', 'admin', 'medium', array['reports.view']::text[], array['reports.view']::text[], 'viewer', 'server', null, 310),
+  ('audit.view', 'reportes', 'Ver la auditoría', 'Ver quién hizo qué en el negocio (no sólo lo propio).', 'admin', 'medium', '{}'::text[], '{}'::text[], 'viewer', 'server', null, 320),
+  ('config.edit', 'configuracion', 'Editar la configuración del POS', 'Topes de descuento, venta sin stock, tickets y reglas del POS.', 'admin', 'critical', '{}'::text[], '{}'::text[], 'manager', 'server', null, 330),
+  ('config.security', 'configuracion', 'Seguridad y PIN de supervisor', 'Quién autoriza con PIN y qué acciones lo piden.', 'admin', 'critical', '{}'::text[], '{}'::text[], 'owner', 'server', null, 340),
+  ('billing.manage', 'configuracion', 'Plan y suscripción', 'Cambiar el plan, pagar y ceder la titularidad.', 'admin', 'critical', '{}'::text[], '{}'::text[], 'owner', 'server', null, 350),
+  ('team.view', 'equipo', 'Ver el equipo', 'Ver quién trabaja en el negocio y en qué sucursal.', 'view', 'low', '{}'::text[], '{}'::text[], 'viewer', 'ui', null, 360),
+  ('team.manage', 'equipo', 'Invitar y gestionar personal', 'Invitar, editar, suspender y asignar roles (nunca más permisos que los propios).', 'admin', 'critical', array['team.view']::text[], array['team.view']::text[], 'manager', 'server', null, 370),
+  ('team.roles', 'equipo', 'Crear y editar roles', 'Crear roles, cambiar sus permisos y dar permisos puntuales.', 'admin', 'critical', array['team.manage']::text[], array['team.manage', 'team.view']::text[], 'owner', 'server', null, 380),
+  ('integrations.manage', 'integraciones', 'Conectar logísticas y medios de pago', 'Credenciales de logísticas y comisiones de los medios de pago.', 'admin', 'high', '{}'::text[], '{}'::text[], 'manager', 'server', null, 390)
 on conflict (key) do update set module = excluded.module, label = excluded.label, description = excluded.description,
   level = excluded.level, risk = excluded.risk, depends_on = excluded.depends_on, requires_all = excluded.requires_all,
-  min_base = excluded.min_base, enforced = excluded.enforced, sort = excluded.sort, updated_at = now();
+  min_base = excluded.min_base, enforced = excluded.enforced, grant_feature = excluded.grant_feature, sort = excluded.sort,
+  updated_at = now();
 
 insert into permission_roles (id, tenant_id, key, name, description, color, icon, base_role, sort) values
   ('00000000-0000-4000-8000-0000000000a1', null, 'owner', 'Dueño', 'Todo el negocio, siempre. No se edita.', 'flame', 'crown', 'owner', 10),
@@ -220,9 +236,13 @@ insert into permission_role_capabilities (role_id, capability, tenant_id) values
   ('00000000-0000-4000-8000-0000000000a1', 'products.price', null),
   ('00000000-0000-4000-8000-0000000000a1', 'prices.manage', null),
   ('00000000-0000-4000-8000-0000000000a1', 'stock.view', null),
+  ('00000000-0000-4000-8000-0000000000a1', 'stock.valuation', null),
+  ('00000000-0000-4000-8000-0000000000a1', 'stock.export', null),
   ('00000000-0000-4000-8000-0000000000a1', 'stock.adjust', null),
   ('00000000-0000-4000-8000-0000000000a1', 'stock.count', null),
+  ('00000000-0000-4000-8000-0000000000a1', 'stock.import', null),
   ('00000000-0000-4000-8000-0000000000a1', 'stock.adjust.approve', null),
+  ('00000000-0000-4000-8000-0000000000a1', 'stock.settings', null),
   ('00000000-0000-4000-8000-0000000000a1', 'customers.view', null),
   ('00000000-0000-4000-8000-0000000000a1', 'customers.create', null),
   ('00000000-0000-4000-8000-0000000000a1', 'customers.edit', null),
@@ -255,9 +275,11 @@ insert into permission_role_capabilities (role_id, capability, tenant_id) values
   ('00000000-0000-4000-8000-0000000000a2', 'products.price', null),
   ('00000000-0000-4000-8000-0000000000a2', 'prices.manage', null),
   ('00000000-0000-4000-8000-0000000000a2', 'stock.view', null),
+  ('00000000-0000-4000-8000-0000000000a2', 'stock.valuation', null),
+  ('00000000-0000-4000-8000-0000000000a2', 'stock.export', null),
   ('00000000-0000-4000-8000-0000000000a2', 'stock.adjust', null),
   ('00000000-0000-4000-8000-0000000000a2', 'stock.count', null),
-  ('00000000-0000-4000-8000-0000000000a2', 'stock.adjust.approve', null),
+  ('00000000-0000-4000-8000-0000000000a2', 'stock.import', null),
   ('00000000-0000-4000-8000-0000000000a2', 'customers.view', null),
   ('00000000-0000-4000-8000-0000000000a2', 'customers.create', null),
   ('00000000-0000-4000-8000-0000000000a2', 'customers.edit', null),
@@ -291,6 +313,8 @@ insert into permission_role_capabilities (role_id, capability, tenant_id) values
   ('00000000-0000-4000-8000-0000000000a4', 'cash.view', null),
   ('00000000-0000-4000-8000-0000000000a4', 'products.view', null),
   ('00000000-0000-4000-8000-0000000000a4', 'stock.view', null),
+  ('00000000-0000-4000-8000-0000000000a4', 'stock.valuation', null),
+  ('00000000-0000-4000-8000-0000000000a4', 'stock.export', null),
   ('00000000-0000-4000-8000-0000000000a4', 'customers.view', null),
   ('00000000-0000-4000-8000-0000000000a4', 'reports.view', null),
   ('00000000-0000-4000-8000-0000000000a4', 'team.view', null),
@@ -308,6 +332,8 @@ insert into permission_role_capabilities (role_id, capability, tenant_id) values
   ('00000000-0000-4000-8000-0000000000a6', 'customers.view', null),
   ('00000000-0000-4000-8000-0000000000a6', 'reports.view', null),
   ('00000000-0000-4000-8000-0000000000a6', 'team.view', null),
+  ('00000000-0000-4000-8000-0000000000a6', 'stock.valuation', null),
+  ('00000000-0000-4000-8000-0000000000a6', 'stock.export', null),
   ('00000000-0000-4000-8000-0000000000a6', 'reports.costs', null),
   ('00000000-0000-4000-8000-0000000000a6', 'audit.view', null);
 -- @@SEED-FIN@@
@@ -402,7 +428,9 @@ $$;
 --      rol de sistema de su nivel. Dueño = todo.
 --   2. Rol personalizado (o borrado) sin la feature roles_permisos: el de
 --      sistema de su nivel base.
---   3. Con la feature, permisos puntuales: conceder suma, quitar resta.
+--   3. Permisos puntuales: conceder suma, quitar resta. Con la feature
+--      roles_permisos, todos; sin ella, sólo los de capacidades con
+--      grant_feature prendida en el plan (otorgables de Inventario, ADR-137).
 --   4. Cuenta sólo lo que permite el nivel base (min_base; lo de dueño, nunca)
 --      y lo que tiene todas sus dependencias.
 create or replace function capabilities_for(p_tenant uuid, p_user uuid, p_store uuid default null)
@@ -423,6 +451,8 @@ declare
   v_caps    text[];
   v_rank    int;
   v_allowed text[];
+  v_grant   text[];
+  v_revoke  text[];
 begin
   if p_tenant is null or p_user is null then return '{}'; end if;
   select tu.role, tu.role_id into v_base, v_role_id
@@ -473,16 +503,20 @@ begin
     if v_feature is null then
       v_feature := coalesce(tenant_has_feature_for(p_tenant, 'roles_permisos'), false);
     end if;
-    if v_feature then
+    -- Permisos puntuales que cuentan con este plan.
+    select coalesce(array_agg(o.capability) filter (where o.effect = 'grant'), '{}'),
+           coalesce(array_agg(o.capability) filter (where o.effect = 'revoke'), '{}')
+      into v_grant, v_revoke
+      from permission_user_overrides o
+      join permission_capabilities c on c.key = o.capability
+     where o.tenant_id = p_tenant and o.user_id = p_user
+       and (v_feature
+            or (c.grant_feature is not null
+                and coalesce(tenant_has_feature_for(p_tenant, c.grant_feature), false)));
+    if cardinality(v_grant) > 0 or cardinality(v_revoke) > 0 then
       select coalesce(array_agg(distinct x), '{}') into v_caps
-        from (
-          select unnest(v_caps) as x
-          union
-          select o.capability from permission_user_overrides o
-           where o.tenant_id = p_tenant and o.user_id = p_user and o.effect = 'grant'
-        ) s
-       where x not in (select o.capability from permission_user_overrides o
-                        where o.tenant_id = p_tenant and o.user_id = p_user and o.effect = 'revoke');
+        from (select unnest(v_caps) as x union select unnest(v_grant)) s
+       where not (x = any (v_revoke));
     end if;
   end if;
 

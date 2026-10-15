@@ -10,15 +10,16 @@ const arr = (a: readonly string[]) => (a.length ? `array[${a.map(q).join(", ")}]
 
 export function buildSeedSql(): string {
   let out =
-    "insert into permission_capabilities (key, module, label, description, level, risk, depends_on, requires_all, min_base, enforced, sort) values\n";
+    "insert into permission_capabilities (key, module, label, description, level, risk, depends_on, requires_all, min_base, enforced, grant_feature, sort) values\n";
   out += CAPABILITIES.map(
     (c, i) =>
-      `  (${q(c.key)}, ${q(c.module)}, ${q(c.label)}, ${q(c.description)}, ${q(c.level)}, ${q(c.risk)}, ${arr(c.dependsOn)}, ${arr(requiresAll(c.key))}, ${q(c.minBase)}, ${q(c.enforced)}, ${(i + 1) * 10})`,
+      `  (${q(c.key)}, ${q(c.module)}, ${q(c.label)}, ${q(c.description)}, ${q(c.level)}, ${q(c.risk)}, ${arr(c.dependsOn)}, ${arr(requiresAll(c.key))}, ${q(c.minBase)}, ${q(c.enforced)}, ${c.grantFeature ? q(c.grantFeature) : "null"}, ${(i + 1) * 10})`,
   ).join(",\n");
   out +=
     "\non conflict (key) do update set module = excluded.module, label = excluded.label, description = excluded.description,\n" +
     "  level = excluded.level, risk = excluded.risk, depends_on = excluded.depends_on, requires_all = excluded.requires_all,\n" +
-    "  min_base = excluded.min_base, enforced = excluded.enforced, sort = excluded.sort, updated_at = now();\n\n";
+    "  min_base = excluded.min_base, enforced = excluded.enforced, grant_feature = excluded.grant_feature, sort = excluded.sort,\n" +
+    "  updated_at = now();\n\n";
   out += "insert into permission_roles (id, tenant_id, key, name, description, color, icon, base_role, sort) values\n";
   out += SYSTEM_ROLES.map(
     (r, i) =>

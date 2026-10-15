@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { EYEBROW, FLAT_PANEL } from "@/components/security/styles";
 import { MODULE_ICON, RiskBadge, RoleChip } from "@/components/permissions/permUi";
-import { BASE_LABEL, CAPABILITIES, CAPABILITY_BY_KEY, MODULES } from "@/lib/permissions/capabilities";
+import { BASE_LABEL, CAPABILITIES, CAPABILITY_BY_KEY, MODULES, overrideAllowed } from "@/lib/permissions/capabilities";
 import {
   BLOCK_LABEL,
   SOURCE_LABEL,
@@ -174,13 +174,21 @@ export function EffectiveModal({ person, data, onClose }: { person: PermPerson |
     const store = where === STORE_DEFAULT ? null : person.stores.find((s) => s.store_id === where && s.base);
     const roleId = store ? (store.role_id ?? person.role_id) : person.role_id;
     const base = store?.base ?? person.base;
-    const res = explainPerson({ base, role_id: roleId, overrides: person.overrides }, data.roles, data.feature);
+    const res = explainPerson(
+      { base, role_id: roleId, overrides: person.overrides },
+      data.roles,
+      data.feature,
+      data.grant_features ?? [],
+    );
     return { res, role: data.roles.find((r) => r.id === roleId) as PermRole | undefined, base };
-  }, [person, where, data.roles, data.feature]);
+  }, [person, where, data.roles, data.feature, data.grant_features]);
 
   if (!person || !ctx) return <Modal open={false} onOpenChange={() => undefined} />;
   const p = person;
-  const canOverride = data.is_owner && data.feature && p.base !== "owner";
+  // Con roles_permisos, cualquier permiso; sin ella, los otorgables de
+  // Inventario si el plan tiene su feature (grantFeature).
+  const canOverride = (cap: string) =>
+    data.is_owner && p.base !== "owner" && overrideAllowed(cap, data.feature, data.grant_features ?? []);
   const serverMismatch =
     where === STORE_DEFAULT &&
     [...ctx.res.effective].sort().join(",") !== [...p.effective].sort().join(",");
@@ -295,7 +303,7 @@ export function EffectiveModal({ person, data, onClose }: { person: PermPerson |
                           </p>
                         </div>
                       </div>
-                      {canOverride && c.minBase !== "owner" && (
+                      {canOverride(c.key) && c.minBase !== "owner" && (
                         <Segmented
                           size="sm"
                           value={choice}

@@ -20,15 +20,7 @@ import {
   needsApproval,
   type ApprovalPolicy,
 } from "@/lib/stock/adjustments";
-import {
-  AUDITOR_PRESET,
-  CAPABILITIES,
-  CAPABILITY_KEYS,
-  ROLE_CAPABILITIES,
-  effectiveCapabilities,
-  grantBlockedReason,
-  hasCapability,
-} from "@/lib/permissions/capabilities";
+import { CAPABILITY_BY_KEY } from "@/lib/permissions/capabilities";
 import {
   countSheetRows,
   fmtDateTimeAR,
@@ -51,7 +43,7 @@ import { importDefinition } from "@/modules/imports/registry";
 import { FEATURE_INFO } from "@/lib/saas/featureInfo";
 
 const MIG_DIR = join(process.cwd(), "supabase", "migrations");
-const MAIN = readFileSync(join(MIG_DIR, "20261203100100_ajustes_stock_aprobacion.sql"), "utf8");
+const MAIN = readFileSync(join(MIG_DIR, "20261204100300_ajustes_stock_aprobacion.sql"), "utf8");
 const FEAT = readFileSync(join(MIG_DIR, "20261203100000_features_ajustes_stock.sql"), "utf8");
 const CODE = MAIN.split(/\r?\n/).filter((l) => !l.trim().startsWith("--")).join("\n");
 
@@ -150,37 +142,18 @@ describe("diferencia, valor y formulario", () => {
   });
 });
 
-describe("capacidades por miembro (espejo de capability_role_default)", () => {
-  it("el catálogo TS es el del SQL", () => {
-    const arr = /array\[([^\]]*)\]::text\[\]/.exec(CODE)?.[1] ?? "";
-    const sql = [...arr.matchAll(/'([a-z_.]+)'/g)].map((m) => m[1]);
-    expect(sql).toEqual([...CAPABILITY_KEYS]);
-    expect(CAPABILITIES.map((c) => c.key)).toEqual([...CAPABILITY_KEYS]);
-  });
-
-  it("lo que trae cada rol coincide con el SQL", () => {
-    const fn = CODE.slice(CODE.indexOf("create or replace function capability_role_default("));
-    for (const role of ["manager", "cashier", "viewer"] as const) {
-      const line = new RegExp(`when p_role = '${role}' then p_cap in \\(([^)]*)\\)`, "s").exec(fn)?.[1] ?? "";
-      const sql = [...line.matchAll(/'([a-z_.]+)'/g)].map((m) => m[1]).sort();
-      expect(sql, role).toEqual([...ROLE_CAPABILITIES[role]].sort());
+describe("capacidades de Inventario en el modelo único (ADR-137 + ADR-138)", () => {
+  it("la migración de Inventario no trae un modelo de capacidades propio", () => {
+    expect(CODE).not.toContain("create table if not exists member_capabilities");
+    for (const fn of ["capability_catalog", "capability_role_default", "member_capability_set", "stock_capability_members", "my_capabilities", "member_has_capability"]) {
+      expect(CODE, fn).not.toContain(`create or replace function ${fn}(`);
     }
-    expect(ROLE_CAPABILITIES.owner).toEqual(CAPABILITY_KEYS);
+    expect(CODE).toContain("member_has_capability(p_tenant, 'stock.adjust.approve')");
   });
 
-  it("efectivas = rol + otorgadas; sin rol, nada", () => {
-    expect(effectiveCapabilities("cashier", ["stock.adjust.approve"])).toEqual(["stock.view", "stock.adjust.approve"]);
-    expect(hasCapability("manager", [], "stock.adjust.approve")).toBe(false);
-    expect(hasCapability("owner", [], "stock.settings")).toBe(true);
-    expect(effectiveCapabilities(null, ["stock.adjust"])).toEqual([]);
-  });
-
-  it("solo lectura no puede ser auditor ni ajustar; el dueño ya tiene todo", () => {
-    expect(grantBlockedReason("viewer", "stock.adjust.approve")).toMatch(/Solo lectura/);
-    expect(grantBlockedReason("viewer", "stock.export")).toBeNull();
-    expect(grantBlockedReason("owner", "stock.adjust")).toMatch(/todos los permisos/);
-    expect(grantBlockedReason("cashier", "stock.adjust.approve")).toBeNull();
-    expect(AUDITOR_PRESET).toContain("stock.adjust.approve");
+  it("todas las capacidades que pide el SQL de Inventario están en el catálogo", () => {
+    const used = new Set([...CODE.matchAll(/'(stock\.[a-z_.]+)'/g)].map((m) => m[1]));
+    for (const k of used) expect(CAPABILITY_BY_KEY.has(k ?? ""), k).toBe(true);
   });
 });
 
@@ -369,7 +342,7 @@ describe("contratos de la migración (ADR-137)", () => {
   });
 
   it("sin escritura por REST y RPC con grants acotados", () => {
-    for (const t of ["member_capabilities", "stock_adjustment_policy", "stock_adjustments"]) {
+    for (const t of ["stock_adjustment_policy", "stock_adjustments"]) {
       expect(CODE).toMatch(new RegExp(`revoke insert, update, delete on ${t} from anon, authenticated`));
     }
     for (const fn of ["_stock_adjust_apply", "_stock_adjustment_request", "_import_stock_adjustments_run", "_stock_can_approve"]) {
@@ -385,8 +358,6 @@ describe("contratos de la migración (ADR-137)", () => {
       "stock_adjustment_rejected",
       "stock_adjustment_cancelled",
       "stock_adjustment_policy_updated",
-      "capability_granted",
-      "capability_revoked",
     ]) {
       expect(CODE, action).toContain(`'${action}'`);
     }
@@ -424,19 +395,17 @@ const pendingRows = [
   },
 ];
 
+// Referencia estable (como react-query): ApprovalSettings copia la política a su borrador en un efecto.
+const POLICY = { approval_enabled: true, approver: "auditor", threshold_units: 10, threshold_value: null, require_photo: false, feature: true };
 vi.mock("@/modules/stock/adjustments", () => ({
-  useAdjustmentPolicy: () => ({
-    data: { approval_enabled: true, approver: "auditor", threshold_units: 10, threshold_value: null, require_photo: false, feature: true },
-  }),
+  useAdjustmentPolicy: () => ({ data: POLICY }),
   useStockAdjustments: () => ({ data: pendingRows, isLoading: false }),
   useAdjustmentMutations: () => ({
     decide: { mutateAsync: decide, isPending: false, variables: undefined },
     decideMany: { mutateAsync: vi.fn(), isPending: false },
     cancel: { mutateAsync: vi.fn() },
     savePolicy: { mutateAsync: vi.fn(), isPending: false },
-    setCapability: { mutateAsync: vi.fn(), isPending: false },
   }),
-  useCapabilityMembers: () => ({ data: [] }),
   useAdjustmentPhotoUrl: () => ({ data: null, isLoading: false }),
 }));
 vi.mock("@/modules/stock/hooks", () => ({ useCurrentUserId: () => ({ data: ME }) }));
@@ -477,5 +446,54 @@ describe("pestaña Ajustes", () => {
     expect(screen.getByText("Galletitas")).toBeTruthy();
     expect(screen.getByText("Excel")).toBeTruthy();
     expect(screen.getAllByText(/Pidió Ana/).length).toBeGreaterThan(0);
+  });
+});
+
+// ── Auditores en la configuración de la aprobación (modelo único) ───────────
+const setOverride = vi.fn().mockResolvedValue(undefined);
+const OVERVIEW = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/modules/permissions/hooks", () => ({
+  usePermissionMutations: () => ({ setOverride: { mutateAsync: setOverride, isPending: false, variables: undefined } }),
+  usePermissionOverview: () => ({ data: OVERVIEW.current }),
+}));
+OVERVIEW.current = {
+  feature: false,
+  grant_features: ["ajustes_stock", "aprobacion_ajustes"],
+  is_owner: true,
+  can_manage: true,
+  me: "owner",
+  my_capabilities: [],
+  stores: [],
+  multi_sucursal: false,
+  roles: [
+    { id: "r-cashier", name: "Cajero", base: "cashier", system: true, capabilities: ["stock.view"] },
+    { id: "r-viewer", name: "Solo lectura", base: "viewer", system: true, capabilities: ["stock.view"] },
+    { id: "r-aud", name: "Encargado auditor", base: "manager", system: false, capabilities: ["stock.view", "stock.adjust.approve"] },
+  ],
+  people: [
+    { user_id: "u-c", name: "Caja", email: null, avatar: null, status: "active", base: "cashier", role_id: "r-cashier", overrides: [], stores: [], effective: ["stock.view"] },
+    { user_id: "u-v", name: "Mira", email: null, avatar: null, status: "active", base: "viewer", role_id: "r-viewer", overrides: [], stores: [], effective: ["stock.view"] },
+    { user_id: "u-m", name: "Ana", email: null, avatar: null, status: "active", base: "manager", role_id: "r-aud", overrides: [], stores: [], effective: ["stock.view", "stock.adjust.approve"] },
+  ],
+};
+
+import { ApprovalSettings } from "@/components/stock/inventory/ApprovalSettings";
+
+describe("auditores = stock.adjust.approve del modelo único", () => {
+  it("marcar da el permiso puntual; desmarcar a quien lo trae por rol lo quita", async () => {
+    render(
+      <ToastProvider>
+        <ApprovalSettings />
+      </ToastProvider>,
+    );
+    expect(screen.getByText(/Solo lectura no puede modificar datos/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Auditor: Caja" }));
+    await waitFor(() =>
+      expect(setOverride).toHaveBeenCalledWith({ userId: "u-c", capability: "stock.adjust.approve", effect: "grant", reason: null }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Auditor: Ana" }));
+    await waitFor(() =>
+      expect(setOverride).toHaveBeenCalledWith({ userId: "u-m", capability: "stock.adjust.approve", effect: "revoke", reason: null }),
+    );
   });
 });

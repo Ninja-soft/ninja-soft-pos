@@ -445,9 +445,9 @@ export function RoleEditorModal({
                                   <Lock size={11} aria-hidden /> Pide nivel base {BASE_LABEL[c.minBase]}
                                 </span>
                               )}
-                              {c.enforced === "pending" && (
+                              {c.optIn && (
                                 <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                                  <Info size={11} aria-hidden /> Se usa cuando Inventario pida aprobar ajustes
+                                  <Info size={11} aria-hidden /> Se suma aparte: no entra con los niveles del modo simple
                                 </span>
                               )}
                             </span>

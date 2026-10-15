@@ -114,14 +114,6 @@ export interface Valuation {
   by_category: ValuationCategory[];
 }
 
-export interface CapabilityMember {
-  user_id: string;
-  name: string | null;
-  email: string | null;
-  role: string;
-  capabilities: string[];
-}
-
 async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await createClient().rpc(fn as never, args as never);
   if (error) throw error;
@@ -247,16 +239,6 @@ export const inventoryApi = {
 
   savePolicy: (p: Omit<ApprovalPolicy, "feature">) => rpc<ApprovalPolicy>("stock_adjustment_policy_save", { p }),
 
-  members: () => rpc<CapabilityMember[]>("stock_capability_members"),
-
-  setCapability: (v: { userId: string; capability: string; granted: boolean; reason?: string | null }) =>
-    rpc<void>("member_capability_set", {
-      p_user: v.userId,
-      p_capability: v.capability,
-      p_granted: v.granted,
-      p_reason: v.reason ?? null,
-    }),
-
   /** Sube la foto de respaldo a la carpeta del negocio y devuelve el path. */
   uploadPhoto: async (file: File): Promise<string> => {
     const tenantId = await getCurrentTenantId();
@@ -333,10 +315,6 @@ export function useAdjustmentPolicy() {
   });
 }
 
-export function useCapabilityMembers(enabled: boolean) {
-  return useQuery({ queryKey: ["capability-members"], queryFn: inventoryApi.members, enabled });
-}
-
 export function useAdjustmentPhotoUrl(path: string | null) {
   return useQuery({
     queryKey: ["adjustment-photo", path],
@@ -361,13 +339,6 @@ export function useAdjustmentMutations() {
     savePolicy: useMutation({
       mutationFn: inventoryApi.savePolicy,
       onSuccess: () => void qc.invalidateQueries({ queryKey: ["stock-adjustment-policy"] }),
-    }),
-    setCapability: useMutation({
-      mutationFn: inventoryApi.setCapability,
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: ["capability-members"] });
-        void qc.invalidateQueries({ queryKey: ["my-capabilities"] });
-      },
     }),
   };
 }

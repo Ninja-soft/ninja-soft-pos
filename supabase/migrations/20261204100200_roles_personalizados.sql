@@ -17,7 +17,11 @@
 --     solo lectura, roles de esos niveles y nunca con capacidades que él no
 --     tenga (sin escalada). Roles de sistema en todo plan; propios con la
 --     feature. Rol por sucursal con multi_sucursal y una asignación vigente.
---   · permission_override_set: sólo el dueño, con la feature.
+--   · permission_override_set: sólo el dueño, con la feature; sin ella, sólo
+--     capacidades con grant_feature prendida en el plan (otorgables de
+--     Inventario: el auditor de ajustes es stock.adjust.approve dado acá,
+--     ADR-137). Conceder algo que el nivel base no permite se rechaza
+--     (capability_needs_higher_base: solo lectura nunca escribe, ADR-071).
 --
 -- Auditoría: permission_role_created / _updated / _deleted,
 -- permission_role_assigned, permission_branch_role_set,
@@ -255,6 +259,11 @@ begin
 
   return jsonb_build_object(
     'feature', coalesce(tenant_has_feature_for(v_tenant, 'roles_permisos'), false),
+    -- Features que habilitan permisos puntuales sin roles_permisos.
+    'grant_features', coalesce((select jsonb_agg(f order by f) from (
+        select distinct c.grant_feature as f from permission_capabilities c
+         where c.grant_feature is not null
+           and coalesce(tenant_has_feature_for(v_tenant, c.grant_feature), false)) g), '[]'),
     'multi_sucursal', coalesce(tenant_has_feature_for(v_tenant, 'multi_sucursal'), false),
     'is_owner', v_me = 'owner',
     'can_manage', v_manage,
@@ -519,9 +528,18 @@ declare
   v_before text;
   v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
 begin
-  perform _perm_assert_feature(v_tenant);
   select * into v_cap from permission_capabilities where key = p_capability;
   if v_cap.key is null then raise exception 'invalid_capability: %', p_capability using errcode = '22023'; end if;
+  -- Con roles_permisos, cualquiera; sin ella, sólo las otorgables cuya
+  -- feature tiene el plan (mismo criterio que capabilities_for).
+  if not (coalesce(tenant_has_feature_for(v_tenant, 'roles_permisos'), false)
+          or (v_cap.grant_feature is not null
+              and coalesce(tenant_has_feature_for(v_tenant, v_cap.grant_feature), false))) then
+    if v_cap.grant_feature is not null then
+      raise exception 'feature_not_in_plan: %', v_cap.grant_feature;
+    end if;
+    raise exception 'feature_not_in_plan: roles_permisos';
+  end if;
   if v_cap.min_base = 'owner' then raise exception 'owner_only_capability' using errcode = '42501'; end if;
   if p_effect is not null and p_effect not in ('grant', 'revoke') then raise exception 'invalid_effect'; end if;
   if v_reason is not null and char_length(v_reason) > 300 then raise exception 'invalid_reason'; end if;
@@ -529,6 +547,13 @@ begin
    where tenant_id = v_tenant and user_id = p_user and status in ('active', 'invited');
   if v_target is null then raise exception 'member_not_found'; end if;
   if v_target = 'owner' then raise exception 'cannot_change_owner' using errcode = '42501'; end if;
+  -- Conceder lo que su nivel no permite no contaría: se rechaza (solo
+  -- lectura nunca escribe, ADR-071).
+  if p_effect = 'grant'
+     and (case v_cap.min_base when 'manager' then 2 when 'cashier' then 1 else 0 end)
+         > (case v_target when 'manager' then 2 when 'cashier' then 1 else 0 end) then
+    raise exception 'capability_needs_higher_base: %', v_target using errcode = '42501';
+  end if;
 
   select effect into v_before from permission_user_overrides
    where tenant_id = v_tenant and user_id = p_user and capability = p_capability;

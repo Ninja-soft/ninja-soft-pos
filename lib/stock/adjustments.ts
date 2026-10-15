@@ -215,8 +215,10 @@ const ERRORS: Array<[RegExp, string]> = [
   [/invalid_qty/, "Revisá la cantidad."],
   [/invalid_reason/, "Elegí un motivo de la lista."],
   [/invalid_threshold/, "Los umbrales tienen que ser mayores a cero."],
-  [/capability_needs_write_role/, "Solo lectura no puede aprobar ni ajustar. Cambiale el rol a cajero o encargado."],
-  [/capability_owner_has_all/, "El dueño ya tiene todos los permisos."],
+  [/capability_needs_higher_base: viewer/, "Solo lectura no puede aprobar ni ajustar. Cambiale el rol a cajero o encargado."],
+  [/capability_needs_higher_base/, "Ese permiso pide un nivel más alto. Cambiale el rol primero."],
+  [/cannot_change_owner/, "El dueño ya tiene todos los permisos."],
+  [/feature_not_in_plan: roles_permisos/, "Ese permiso puntual viene con los roles a medida del plan Business."],
   [/forbidden/, "No tenés permiso para esta acción."],
 ];
 

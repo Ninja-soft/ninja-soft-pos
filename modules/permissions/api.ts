@@ -71,6 +71,11 @@ export interface PermStore {
 
 export interface PermOverview {
   feature: boolean;
+  /**
+   * Features del plan que habilitan permisos puntuales sin roles_permisos
+   * (grantFeature del catálogo: las otorgables de Inventario, ADR-137).
+   */
+  grant_features: string[];
   multi_sucursal: boolean;
   is_owner: boolean;
   can_manage: boolean;

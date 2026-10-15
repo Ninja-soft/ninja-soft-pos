@@ -1,21 +1,23 @@
 -- =============================================================================
--- 20261203100100_ajustes_stock_aprobacion  (ADR-137 · F14 · H64, H34)
+-- 20261204100300_ajustes_stock_aprobacion  (ADR-137 · F14 · H64, H34)
 --
 -- Inventario PRO que se entiende: ajustes de stock con motivo, foto y
 -- aprobación opcional (dueño o auditor) desde un umbral; planilla de stock,
 -- movimientos y valuación por sucursal; importación de ajustes y conteos con
 -- el motor único de ADR-078.
 --
---   A) Capacidades por miembro (catálogo en lib/permissions/capabilities.ts):
---      member_capabilities (permisos que se SUMAN al rol), capability_catalog,
---      capability_role_default (lo que trae cada rol), member_has_capability
---      (rol + otorgadas), my_capabilities, member_capability_set (sólo el
---      dueño, auditado) y stock_capability_members. Es el punto de enganche
---      del editor de roles y permisos: el editor escribe otorgamientos y el
---      servidor sigue preguntando a member_has_capability.
---      El "auditor" es un miembro con stock.adjust.approve. Tiene que ser
---      dueño, encargado o cajero: "solo lectura" no escribe nunca (ADR-071,
---      role_write_guard), así que no puede aplicar un ajuste aprobado.
+--   A) Permisos: el modelo ÚNICO de capacidades de ADR-138
+--      (20261204100100_permisos_capacidades y 20261204100200). Las
+--      capacidades stock.view, .valuation, .export, .adjust, .count, .import,
+--      .adjust.approve y .settings están en permission_capabilities con sus
+--      defaults por rol de sistema; acá sólo se preguntan con
+--      member_has_capability(tenant, cap) (rol + permisos puntuales, caché por
+--      transacción). No hay tabla ni RPC de capacidades propias de Inventario.
+--      El "auditor" es quien tiene stock.adjust.approve efectiva: por un rol
+--      (p. ej. uno a medida) o por un permiso puntual del dueño
+--      (permission_override_set; sin roles_permisos alcanza con
+--      aprobacion_ajustes en el plan, grant_feature). Tiene que ser de nivel
+--      cajero o encargado: solo lectura no escribe nunca (ADR-071).
 --   B) stock_adjustment_policy: aprobación prendida o no, quién aprueba
 --      (sólo el dueño, o el dueño y los auditores), umbral en unidades y en
 --      pesos al costo, y foto obligatoria para lo que va a aprobación.
@@ -33,11 +35,16 @@
 --      igual que adjust_store_stock (consolidado, product_stock por el
 --      trigger, movimiento con referencia al ajuste y motivo de merma) y, en
 --      un depósito interno, también warehouse_stock (ADR-085).
+--      stock_adjustment_decide exige stock.adjust.approve.
 --   F) Lecturas para la pantalla y el Excel: inventory_stock_sheet,
 --      inventory_movements, inventory_valuation. El costo sólo vuelve con
 --      stock.valuation.
 --   G) Importación: import_stock_adjustments en el motor único
 --      (_import_exec recreada con la entidad nueva en la lista).
+--
+-- Va DESPUÉS de 20261204100100 (usa member_has_capability y
+-- user_has_capability). No recrea adjust_store_stock ni _cycle_assert: siguen
+-- con has_capability('stock.adjust') / ('stock.count') de 20261204100100.
 --
 -- Gating: ajustes_stock (BASE) en el pedido, aprobacion_ajustes (OPTIONAL
 -- Pro+) para que un ajuste quede pendiente y para que un auditor apruebe,
@@ -45,196 +52,6 @@
 -- audit_logs. Sin "or is_internal()": el staff interno lee por
 -- (select internal_scope()).
 -- =============================================================================
-
--- -----------------------------------------------------------------------------
--- A) Capacidades por miembro.
--- -----------------------------------------------------------------------------
-create table if not exists member_capabilities (
-  id          uuid primary key default gen_random_uuid(),
-  tenant_id   uuid not null references tenants(id) on delete cascade,
-  user_id     uuid not null references users(id) on delete cascade,
-  -- Formato recurso.accion[.sub]: el catálogo vigente lo valida la RPC
-  -- (capability_catalog) para que el editor de permisos sume claves sin
-  -- tocar este check.
-  capability  text not null check (capability ~ '^[a-z_]+(\.[a-z_]+){1,3}$'),
-  granted_by  uuid references users(id) on delete set null,
-  created_at  timestamptz not null default now(),
-  unique (tenant_id, user_id, capability)
-);
-create index if not exists member_capabilities_user_idx on member_capabilities (user_id);
-create index if not exists member_capabilities_granted_by_idx
-  on member_capabilities (granted_by) where granted_by is not null;
-create index if not exists member_capabilities_tenant_cap_idx on member_capabilities (tenant_id, capability);
-
-alter table member_capabilities enable row level security;
-drop policy if exists member_capabilities_select on member_capabilities;
-create policy member_capabilities_select on member_capabilities
-  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
-revoke insert, update, delete on member_capabilities from anon, authenticated;
-
--- Catálogo vigente (espejo de CAPABILITY_KEYS en lib/permissions/capabilities.ts).
-create or replace function capability_catalog()
-returns text[]
-language sql
-immutable
-set search_path = public, pg_temp
-as $$
-  select array['stock.view', 'stock.valuation', 'stock.export', 'stock.adjust',
-               'stock.count', 'stock.import', 'stock.adjust.approve', 'stock.settings']::text[];
-$$;
-grant execute on function capability_catalog() to authenticated;
-
--- Lo que trae cada rol sin otorgar nada (espejo de ROLE_CAPABILITIES).
-create or replace function capability_role_default(p_role text, p_cap text)
-returns boolean
-language sql
-immutable
-set search_path = public, pg_temp
-as $$
-  select case
-    when p_role = 'owner' then p_cap = any (capability_catalog())
-    when p_role = 'manager' then p_cap in ('stock.view', 'stock.valuation', 'stock.export', 'stock.adjust',
-                                           'stock.count', 'stock.import')
-    when p_role = 'cashier' then p_cap in ('stock.view')
-    when p_role = 'viewer' then p_cap in ('stock.view', 'stock.valuation', 'stock.export')
-    else false
-  end;
-$$;
-grant execute on function capability_role_default(text, text) to authenticated;
-
--- Rol del usuario en el negocio + capacidades otorgadas (membresía activa).
-create or replace function member_has_capability(p_tenant uuid, p_cap text)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $$
-  select coalesce((
-    select capability_role_default(tu.role, p_cap)
-           or exists (select 1 from member_capabilities mc
-                       where mc.tenant_id = p_tenant and mc.user_id = tu.user_id
-                         and mc.capability = p_cap)
-      from tenant_users tu
-     where tu.tenant_id = p_tenant and tu.user_id = auth.uid() and tu.status = 'active'
-     limit 1), false);
-$$;
-revoke all on function member_has_capability(uuid, text) from public, anon;
-grant execute on function member_has_capability(uuid, text) to authenticated;
-
--- Capacidades efectivas del usuario en el negocio activo (para la UI).
-create or replace function my_capabilities()
-returns text[]
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $$
-  select coalesce(array_agg(c order by c), '{}'::text[])
-    from unnest(capability_catalog()) c
-   where member_has_capability(current_tenant_id(), c);
-$$;
-revoke all on function my_capabilities() from public, anon;
-grant execute on function my_capabilities() to authenticated;
-
--- Otorgar o quitar una capacidad a un miembro. Sólo el dueño; auditado.
-create or replace function member_capability_set(
-  p_user uuid, p_capability text, p_granted boolean, p_reason text default null
-)
-returns void
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  v_tenant uuid := current_tenant_id();
-  v_role   text;
-  v_had    boolean;
-begin
-  if v_tenant is null or coalesce(member_role_in(v_tenant), '') <> 'owner' then
-    raise exception 'forbidden' using errcode = '42501';
-  end if;
-  if p_capability is null or not (p_capability = any (capability_catalog())) then
-    raise exception 'capability_unknown';
-  end if;
-  select tu.role into v_role from tenant_users tu
-   where tu.tenant_id = v_tenant and tu.user_id = p_user and tu.status = 'active';
-  if v_role is null then
-    raise exception 'member_not_found';
-  end if;
-  if v_role = 'owner' then
-    raise exception 'capability_owner_has_all';
-  end if;
-  -- Solo lectura no escribe nunca (ADR-071): no puede ajustar, contar,
-  -- importar, aprobar ni configurar.
-  if v_role = 'viewer' and coalesce(p_granted, false)
-     and p_capability not in ('stock.view', 'stock.valuation', 'stock.export') then
-    raise exception 'capability_needs_write_role';
-  end if;
-
-  select exists (select 1 from member_capabilities
-                  where tenant_id = v_tenant and user_id = p_user and capability = p_capability)
-    into v_had;
-
-  if coalesce(p_granted, false) then
-    insert into member_capabilities (tenant_id, user_id, capability, granted_by)
-    values (v_tenant, p_user, p_capability, auth.uid())
-    on conflict (tenant_id, user_id, capability) do nothing;
-  else
-    delete from member_capabilities
-     where tenant_id = v_tenant and user_id = p_user and capability = p_capability;
-  end if;
-
-  if v_had is distinct from coalesce(p_granted, false) then
-    insert into audit_logs (tenant_id, actor_user_id, entity_type, entity_id, action, before_data, after_data, reason)
-    values (v_tenant, auth.uid(), 'member_capabilities', p_user,
-            case when coalesce(p_granted, false) then 'capability_granted' else 'capability_revoked' end,
-            jsonb_build_object('capability', p_capability, 'granted', v_had),
-            jsonb_build_object('capability', p_capability, 'granted', coalesce(p_granted, false), 'role', v_role),
-            nullif(btrim(coalesce(p_reason, '')), ''));
-  end if;
-end;
-$$;
-revoke all on function member_capability_set(uuid, text, boolean, text) from public, anon;
-grant execute on function member_capability_set(uuid, text, boolean, text) to authenticated;
-
--- Miembros activos con sus capacidades otorgadas (pantalla de auditores).
-create or replace function stock_capability_members()
-returns table (
-  user_id      uuid,
-  name         text,
-  email        text,
-  role         text,
-  capabilities text[]
-)
-language plpgsql
-stable
-security definer
-set search_path = public, pg_temp
-as $$
-#variable_conflict use_column
-declare
-  v_tenant uuid := current_tenant_id();
-begin
-  if v_tenant is null or not member_has_capability(v_tenant, 'stock.settings') then
-    raise exception 'forbidden' using errcode = '42501';
-  end if;
-  return query
-  select tu.user_id,
-         coalesce(nullif(btrim(tu.display_name), ''), nullif(btrim(u.full_name), ''), u.email)::text,
-         u.email::text,
-         tu.role::text,
-         coalesce((select array_agg(mc.capability order by mc.capability) from member_capabilities mc
-                    where mc.tenant_id = v_tenant and mc.user_id = tu.user_id), '{}'::text[])
-    from tenant_users tu
-    left join users u on u.id = tu.user_id
-   where tu.tenant_id = v_tenant and tu.status = 'active'
-   order by case tu.role when 'owner' then 0 when 'manager' then 1 when 'cashier' then 2 else 3 end,
-            2;
-end;
-$$;
-revoke all on function stock_capability_members() from public, anon;
-grant execute on function stock_capability_members() to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- B) Política de aprobación.
@@ -422,8 +239,8 @@ create policy stock_adjustments_branch_scope on stock_adjustments
   using ((select internal_scope()) or store_id = any ((select user_allowed_store_ids())::uuid[]));
 revoke insert, update, delete on stock_adjustments from anon, authenticated;
 
--- Permisos por rol (ADR-071): solo lectura nunca escribe; la política y las
--- capacidades, además, nunca desde el navegador de un cajero.
+-- Permisos por rol (ADR-071): solo lectura nunca escribe; la política,
+-- además, nunca desde el navegador de un cajero.
 do $$
 declare
   t text;
@@ -434,7 +251,7 @@ begin
       'create trigger role_write_guard before insert or update or delete on public.%I '
       'for each row execute function trg_role_write_guard(%L)', t, 'operate');
   end loop;
-  foreach t in array array['stock_adjustment_policy', 'member_capabilities'] loop
+  foreach t in array array['stock_adjustment_policy'] loop
     execute format('drop trigger if exists role_write_guard on public.%I', t);
     execute format(
       'create trigger role_write_guard before insert or update or delete on public.%I '
@@ -573,8 +390,10 @@ $$;
 revoke all on function _stock_adjust_apply(uuid, uuid, uuid, uuid, uuid, numeric, text, text, uuid)
   from public, anon, authenticated;
 
--- Quién puede aprobar según la política: el dueño siempre; con "auditor",
--- también quien tenga stock.adjust.approve (y la feature en el plan).
+-- Quién puede aprobar: siempre con stock.adjust.approve efectiva (modelo
+-- único, ADR-138; el dueño la tiene siempre). El dueño aprueba en cualquier
+-- caso; el resto, sólo con la política en "auditor" y aprobacion_ajustes en
+-- el plan.
 create or replace function _stock_can_approve(p_tenant uuid, p_approver text)
 returns boolean
 language sql
@@ -582,10 +401,10 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select coalesce(member_role_in(p_tenant), '') = 'owner'
-      or (coalesce(p_approver, 'owner') = 'auditor'
-          and tenant_has_feature_for(p_tenant, 'aprobacion_ajustes')
-          and member_has_capability(p_tenant, 'stock.adjust.approve'));
+  select member_has_capability(p_tenant, 'stock.adjust.approve')
+     and (coalesce(member_role_in(p_tenant), '') = 'owner'
+          or (coalesce(p_approver, 'owner') = 'auditor'
+              and coalesce(tenant_has_feature_for(p_tenant, 'aprobacion_ajustes'), false)));
 $$;
 revoke all on function _stock_can_approve(uuid, text) from public, anon, authenticated;
 
@@ -606,11 +425,12 @@ begin
   values (p_tenant, 'owner', null, 'comercial', 'warning', left(p_title, 200), left(p_body, 600),
           'Revisar', '/inventario?tab=ajustes', now() + interval '30 days');
   if coalesce(v_appr, 'owner') = 'auditor' then
+    -- Auditores: quien tenga stock.adjust.approve efectiva (rol o permiso
+    -- puntual), sin el dueño (ya avisado por rol).
     for u in
-      select mc.user_id from member_capabilities mc
-        join tenant_users tu on tu.tenant_id = mc.tenant_id and tu.user_id = mc.user_id
-       where mc.tenant_id = p_tenant and mc.capability = 'stock.adjust.approve'
-         and tu.status = 'active' and tu.role <> 'owner'
+      select tu.user_id from tenant_users tu
+       where tu.tenant_id = p_tenant and tu.status = 'active' and tu.role <> 'owner'
+         and user_has_capability(p_tenant, tu.user_id, 'stock.adjust.approve')
     loop
       insert into notifications (target_tenant_id, target_role, target_user_id, type, severity,
                                  title, body, action_label, action_url, expires_at)

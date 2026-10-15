@@ -25,7 +25,7 @@ import { MovementsTab } from "@/components/stock/inventory/MovementsTab";
 import { ValuationTab } from "@/components/stock/inventory/ValuationTab";
 import { InventoryExcelActions } from "@/components/stock/inventory/InventoryExcelActions";
 import { StorePicker } from "@/components/stock/inventory/shared";
-import { useCapabilities } from "@/lib/permissions/useCapabilities";
+import { useRolePermissions } from "@/lib/permissions/useRole";
 import type { AdjustReason } from "@/lib/stock/adjustments";
 import type { StockSheetRow } from "@/lib/stock/inventorySheet";
 import { stockAdjustmentImportDefinition } from "@/modules/imports/stockAdjustments";
@@ -82,7 +82,7 @@ function isTab(v: string | null): v is Tab {
 // para descargar y cargar rápido.
 export default function InventarioPage() {
   const { data: me } = useMyTenant();
-  const { role, can } = useCapabilities();
+  const { role, allows: can } = useRolePermissions();
   const serials = useFeature("garantias_serie");
   const depositos = useFeature("depositos");
   const { data: allStores = [] } = useStores();

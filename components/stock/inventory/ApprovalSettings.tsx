@@ -1,10 +1,13 @@
 "use client";
 
-// Configuración de la aprobación de ajustes (ADR-137). Sólo el dueño
-// (stock.settings). Prender la aprobación, quién aprueba (sólo el dueño, o el
-// dueño y los auditores), el umbral en unidades o en pesos al costo, la foto
-// obligatoria y quiénes son auditores (capacidad stock.adjust.approve). No es
-// el editor de roles: sólo otorga o quita este permiso.
+// Configuración de la aprobación de ajustes (ADR-137). Quien tenga
+// stock.settings (el dueño siempre). Prender la aprobación, quién aprueba
+// (sólo el dueño, o el dueño y los auditores), el umbral en unidades o en
+// pesos al costo, la foto obligatoria y quiénes son auditores: las personas
+// con stock.adjust.approve efectiva (por su rol, p. ej. uno a medida, o por
+// un permiso puntual). Marcar o desmarcar acá es un permiso puntual del
+// modelo único de permisos (ADR-138, permission_override_set, sólo el
+// dueño); el detalle completo está en Equipo › Roles y permisos.
 
 import { useEffect, useState } from "react";
 import { Lock, UserCheck } from "lucide-react";
@@ -18,14 +21,11 @@ import { useToast } from "@/components/ui/Toast";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { grantBlockedReason } from "@/lib/permissions/capabilities";
 import { adjustmentErrorMessage, type ApprovalPolicy, type Approver } from "@/lib/stock/adjustments";
-import { useAdjustmentMutations, useAdjustmentPolicy, useCapabilityMembers } from "@/modules/stock/adjustments";
+import { usePermissionMutations, usePermissionOverview } from "@/modules/permissions/hooks";
+import type { PermPerson } from "@/modules/permissions/api";
+import { useAdjustmentMutations, useAdjustmentPolicy } from "@/modules/stock/adjustments";
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: "Dueño",
-  manager: "Encargado",
-  cashier: "Cajero",
-  viewer: "Solo lectura",
-};
+const APPROVE = "stock.adjust.approve";
 
 const numOrNull = (s: string): number | null => {
   const t = s.trim().replace(",", ".");
@@ -42,7 +42,8 @@ export function ApprovalSettings() {
   const [units, setUnits] = useState("");
   const [value, setValue] = useState("");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const { data: members = [] } = useCapabilityMembers(Boolean(policy?.feature));
+  const perms = usePermissionMutations();
+  const { data: overview } = usePermissionOverview(Boolean(policy?.feature));
 
   useEffect(() => {
     if (!policy) return;
@@ -97,9 +98,15 @@ export function ApprovalSettings() {
     }
   }
 
-  async function toggleAuditor(userId: string, granted: boolean) {
+  const roleCaps = (p: PermPerson) => overview?.roles.find((r) => r.id === p.role_id)?.capabilities ?? [];
+
+  // Marcar: permiso puntual "Dar". Desmarcar: vuelve a lo del rol y, si el
+  // rol igual lo trae, "Quitar".
+  async function toggleAuditor(p: PermPerson, granted: boolean) {
+    const fromRole = roleCaps(p).includes(APPROVE);
+    const effect = granted ? (fromRole ? null : "grant") : fromRole ? "revoke" : null;
     try {
-      await m.setCapability.mutateAsync({ userId, capability: "stock.adjust.approve", granted });
+      await perms.setOverride.mutateAsync({ userId: p.user_id, capability: APPROVE, effect, reason: null });
       toast({ title: granted ? "Ahora es auditor" : "Dejó de ser auditor", variant: "success" });
     } catch (e) {
       toast({ title: "No se pudo cambiar", description: adjustmentErrorMessage(e), variant: "error" });
@@ -107,7 +114,9 @@ export function ApprovalSettings() {
   }
 
   const set = (p: Partial<ApprovalPolicy>) => setDraft((d) => (d ? { ...d, ...p } : d));
-  const candidates = members.filter((mm) => mm.role !== "owner");
+  const isOwner = Boolean(overview?.is_owner);
+  const candidates = (overview?.people ?? []).filter((mm) => mm.base !== "owner" && mm.status === "active");
+  const roleName = (p: PermPerson) => overview?.roles.find((r) => r.id === p.role_id)?.name ?? p.base;
 
   return (
     <div className="space-y-5 pt-2">
@@ -183,30 +192,33 @@ export function ApprovalSettings() {
             <UserCheck size={16} aria-hidden /> Auditores
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Pueden aprobar o rechazar los ajustes de otros (nunca los propios). Tienen que ser cajeros o encargados: el
-            usuario de solo lectura no puede modificar stock.
+            Pueden aprobar o rechazar los ajustes de otros (nunca los propios). Tienen que ser de nivel cajero o
+            encargado: el usuario de solo lectura no puede modificar stock. Es el permiso &quot;Aprobar ajustes de
+            stock&quot; de Equipo › Roles y permisos.
           </p>
-          {candidates.length === 0 ? (
+          {!isOwner ? (
+            <p className="mt-3 text-sm text-muted-foreground">Los auditores los elige el dueño.</p>
+          ) : candidates.length === 0 ? (
             <p className="mt-3 text-sm text-muted-foreground">Todavía no hay otras personas en el equipo.</p>
           ) : (
             <ul className="mt-2 divide-y divide-border">
               {candidates.map((mm) => {
-                const on = mm.capabilities.includes("stock.adjust.approve");
-                const blocked = grantBlockedReason(mm.role, "stock.adjust.approve");
+                const on = mm.effective.includes(APPROVE);
+                const blocked = grantBlockedReason(mm.base, APPROVE);
                 return (
                   <li key={mm.user_id} className="flex items-center gap-3 py-2">
                     <Checkbox
                       checked={on}
                       disabled={Boolean(blocked) && !on}
-                      busy={m.setCapability.isPending && m.setCapability.variables?.userId === mm.user_id}
-                      onCheckedChange={(v) => toggleAuditor(mm.user_id, v)}
+                      busy={perms.setOverride.isPending && perms.setOverride.variables?.userId === mm.user_id}
+                      onCheckedChange={(v) => toggleAuditor(mm, v)}
                       aria-label={`Auditor: ${mm.name ?? mm.email ?? ""}`}
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{mm.name ?? mm.email}</span>
                       {blocked && !on && <span className="block text-xs text-muted-foreground">{blocked}</span>}
                     </span>
-                    <Badge tone="neutral">{ROLE_LABEL[mm.role] ?? mm.role}</Badge>
+                    <Badge tone="neutral">{roleName(mm)}</Badge>
                   </li>
                 );
               })}

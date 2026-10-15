@@ -65,7 +65,12 @@ export interface PersonLike {
 }
 
 /** Lo que puede hacer una persona y de dónde sale cada cosa (mismo cálculo que la base). */
-export function explainPerson(person: PersonLike, roles: readonly RoleLike[], featureOn: boolean) {
+export function explainPerson(
+  person: PersonLike,
+  roles: readonly RoleLike[],
+  featureOn: boolean,
+  grantFeatures: readonly string[] = [],
+) {
   const role = roles.find((r) => r.id === person.role_id) ?? null;
   return resolveCapabilities({
     base: person.base,
@@ -73,6 +78,7 @@ export function explainPerson(person: PersonLike, roles: readonly RoleLike[], fe
     customRole: role ? !role.system : false,
     overrides: person.overrides,
     featureOn,
+    features: grantFeatures,
   });
 }
 
@@ -132,6 +138,8 @@ const CODES: [RegExp, string][] = [
   [/cannot_change_self/, "No podés cambiar tu propio rol."],
   [/cannot_duplicate_owner/, "El rol Dueño no se duplica."],
   [/owner_only_capability/, "Ese permiso es sólo del dueño."],
+  [/capability_needs_higher_base: viewer/, "Solo lectura no puede modificar datos. Cambiale el rol a cajero o encargado."],
+  [/capability_needs_higher_base/, "Ese permiso pide un nivel base más alto. Cambiale el rol primero."],
   [/no_assignment/, "Primero asignale esa sucursal en Sucursales y traslados."],
   [/invalid_reassign/, "Elegí a qué rol pasan las personas."],
   [/role_not_found/, "Ese rol ya no existe. Recargá la página."],

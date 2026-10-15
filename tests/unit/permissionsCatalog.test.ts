@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import {
   CAPABILITIES,
   CAPABILITY_BY_KEY,
+  capabilityAllowed,
   compareRoles,
   dependents,
   MODULES,
   moduleIsPartial,
   moduleLevel,
+  grantBlockedReason,
   normalizeCapabilities,
+  overrideAllowed,
   requiresAll,
   resolveCapabilities,
   searchCapabilities,
@@ -48,9 +51,28 @@ describe("catálogo de capacidades (ADR-138)", () => {
     }
   });
 
-  it("incluye las capacidades de stock que usa Inventario con el mismo nombre", () => {
-    for (const k of ["stock.adjust", "stock.adjust.approve", "stock.count"]) expect(CAPABILITY_BY_KEY.has(k)).toBe(true);
-    expect(requiresAll("stock.adjust.approve")).toEqual(["stock.adjust", "stock.view"]);
+  it("Inventario usa este mismo catálogo (modelo único, ADR-137 + ADR-138)", () => {
+    const stock = CAPABILITIES.filter((c) => c.module === "stock").map((c) => c.key);
+    expect(stock).toEqual([
+      "stock.view", "stock.valuation", "stock.export", "stock.adjust",
+      "stock.count", "stock.import", "stock.adjust.approve", "stock.settings",
+    ]);
+    // El auditor aprueba sin poder ajustar él mismo.
+    expect(requiresAll("stock.adjust.approve")).toEqual(["stock.view"]);
+    expect(CAPABILITY_BY_KEY.get("stock.import")!.minBase).toBe("manager");
+    expect(CAPABILITY_BY_KEY.get("stock.adjust.approve")!.grantFeature).toBe("aprobacion_ajustes");
+    expect(CAPABILITY_BY_KEY.get("stock.adjust")!.grantFeature).toBe("ajustes_stock");
+    expect(CAPABILITIES.filter((c) => c.module !== "stock" && c.grantFeature)).toEqual([]);
+  });
+
+  it("defaults de stock por rol (tabla de ADR-137)", () => {
+    const st = (k: string) => caps(k).filter((c) => c.startsWith("stock."));
+    expect(st("owner")).toHaveLength(8);
+    expect(st("manager")).toEqual(["stock.view", "stock.valuation", "stock.export", "stock.adjust", "stock.count", "stock.import"]);
+    expect(st("cashier")).toEqual(["stock.view"]);
+    expect(st("viewer")).toEqual(["stock.view", "stock.valuation", "stock.export"]);
+    expect(st("auditor")).toEqual(expect.arrayContaining(["stock.view", "stock.valuation", "stock.export"]));
+    expect(st("auditor")).not.toContain("stock.adjust.approve");
   });
 
   it("dependencias transitivas y dependientes", () => {
@@ -129,6 +151,36 @@ describe("capacidades efectivas", () => {
     expect(r.detail.get("customers.delete")!.blocked).toBe("feature_off");
   });
 
+  it("sin roles_permisos cuentan los permisos puntuales otorgables si el plan tiene su feature", () => {
+    const overrides = [
+      { capability: "stock.adjust.approve", effect: "grant" as const },
+      { capability: "reports.costs", effect: "grant" as const },
+    ];
+    const pro = resolveCapabilities({ base: "cashier", roleCapabilities: caps("cashier"), featureOn: false, overrides, features: ["ajustes_stock", "aprobacion_ajustes"] });
+    expect(pro.effective.has("stock.adjust.approve")).toBe(true);
+    expect(pro.detail.get("stock.adjust.approve")!.source).toBe("override");
+    expect(pro.effective.has("reports.costs")).toBe(false);
+    expect(pro.detail.get("reports.costs")!.blocked).toBe("feature_off");
+    const start = resolveCapabilities({ base: "cashier", roleCapabilities: caps("cashier"), featureOn: false, overrides, features: ["ajustes_stock"] });
+    expect(start.effective.has("stock.adjust.approve")).toBe(false);
+    expect(overrideAllowed("stock.adjust", false, ["ajustes_stock"])).toBe(true);
+    expect(overrideAllowed("sales.void", false, ["ajustes_stock"])).toBe(false);
+    expect(overrideAllowed("sales.void", true)).toBe(true);
+  });
+
+  it("capabilityAllowed y grantBlockedReason (pantallas de Inventario)", () => {
+    expect(capabilityAllowed("owner", [], "stock.settings")).toBe(true);
+    expect(capabilityAllowed("cashier", null, "stock.view")).toBe(true);
+    expect(capabilityAllowed("cashier", null, "stock.adjust")).toBe(false);
+    expect(capabilityAllowed("cashier", ["stock.view", "stock.adjust.approve"], "stock.adjust.approve")).toBe(true);
+    expect(capabilityAllowed(null, null, "stock.view")).toBe(false);
+    expect(grantBlockedReason("viewer", "stock.adjust.approve")).toMatch(/Solo lectura/);
+    expect(grantBlockedReason("viewer", "stock.export")).toBeNull();
+    expect(grantBlockedReason("owner", "stock.adjust")).toMatch(/todos los permisos/);
+    expect(grantBlockedReason("cashier", "stock.adjust.approve")).toBeNull();
+    expect(grantBlockedReason("cashier", "stock.import")).toMatch(/Encargado/);
+  });
+
   it("permisos puntuales: quitar arrastra lo que depende; conceder sin dependencias no alcanza", () => {
     const r = resolveCapabilities({
       base: "manager",
@@ -195,6 +247,10 @@ describe("edición", () => {
     expect(moduleIsPartial(list, "ventas", base)).toBe(true);
     expect(moduleLevel(caps("manager"), "stock", "manager")).toBe("admin");
     expect(setModuleLevel([], "stock", "admin", "manager")).not.toContain("stock.adjust.approve");
+    // Lo que se suma aparte no lo apaga subir de nivel, sí bajar.
+    const withApprove = ["stock.view", "stock.adjust.approve"];
+    expect(setModuleLevel(withApprove, "stock", "admin", "manager")).toContain("stock.adjust.approve");
+    expect(setModuleLevel(withApprove, "stock", "none", "manager")).not.toContain("stock.adjust.approve");
   });
 
   it("plantillas: el modo simple reproduce Cajero y Encargado", () => {

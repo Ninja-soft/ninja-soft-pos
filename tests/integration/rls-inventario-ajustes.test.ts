@@ -1,7 +1,8 @@
 // @vitest-environment node
 // =============================================================================
-// Inventario: ajustes de stock con aprobación y capacidades (ADR-137,
-// migraciones 20261203100000 y 20261203100100). RLS, capacidad, plan,
+// Inventario: ajustes de stock con aprobación y capacidades (ADR-137 sobre
+// el modelo único de permisos de ADR-138; migraciones 20261203100000,
+// 20261204100000..100200 y 20261204100300). RLS, capacidad, plan,
 // maker-checker, importación y auditoría.
 //
 // Corre contra un Supabase LOCAL con las migraciones aplicadas (mismas
@@ -16,7 +17,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { argentinaDay } from "@/lib/permissions/roles";
 import { fmtDateTimeAR } from "@/lib/stock/inventorySheet";
-import { ROLE_CAPABILITIES } from "@/lib/permissions/capabilities";
+import { SYSTEM_ROLE_BY_KEY } from "@/lib/permissions/capabilities";
 
 const URL_ = process.env.SUPABASE_TEST_URL;
 const ANON = process.env.SUPABASE_TEST_ANON_KEY;
@@ -142,15 +143,15 @@ describe.skipIf(!enabled)("Inventario · ajustes con aprobación y capacidades (
     }
   }, 120_000);
 
-  it("capacidades efectivas por rol = espejo TS", async () => {
+  it("capacidades efectivas por rol = espejo TS (catálogo único)", async () => {
     for (const [u, role] of [
       [ctx.manager, "manager"],
       [ctx.cashier, "cashier"],
       [ctx.viewer, "viewer"],
     ] as const) {
-      const { data, error } = await rpc<string[]>(u.client, "my_capabilities");
+      const { data, error } = await rpc<{ capabilities: string[] }>(u.client, "my_capabilities");
       expect(error, role).toBeNull();
-      expect([...(data ?? [])].sort(), role).toEqual([...ROLE_CAPABILITIES[role]].sort());
+      expect([...(data?.capabilities ?? [])].sort(), role).toEqual([...SYSTEM_ROLE_BY_KEY.get(role)!.capabilities].sort());
     }
   });
 
@@ -177,8 +178,8 @@ describe.skipIf(!enabled)("Inventario · ajustes con aprobación y capacidades (
       .insert({ tenant_id: ctx.tenant, approval_enabled: false } as never);
     expect(p.error).not.toBeNull();
     const m = await ctx.owner.client
-      .from("member_capabilities" as never)
-      .insert({ tenant_id: ctx.tenant, user_id: ctx.cashier.id, capability: "stock.adjust" } as never);
+      .from("permission_user_overrides" as never)
+      .insert({ tenant_id: ctx.tenant, user_id: ctx.cashier.id, capability: "stock.adjust", effect: "grant" } as never);
     expect(m.error).not.toBeNull();
   });
 
@@ -211,17 +212,18 @@ describe.skipIf(!enabled)("Inventario · ajustes con aprobación y capacidades (
 
     // Encargado sin el permiso no aprueba; solo lectura no puede ser auditor.
     expect((await rpc(ctx.manager.client, "stock_adjustment_decide", { p_id: big.data.id, p_approve: true })).error?.message).toMatch(/forbidden_approver/);
+    // El auditor es un permiso puntual del modelo único (permission_override_set).
     expect(
-      (await rpc(ctx.owner.client, "member_capability_set", { p_user: ctx.viewer.id, p_capability: "stock.adjust.approve", p_granted: true })).error?.message,
-    ).toMatch(/capability_needs_write_role/);
+      (await rpc(ctx.owner.client, "permission_override_set", { p_user: ctx.viewer.id, p_capability: "stock.adjust.approve", p_effect: "grant" })).error?.message,
+    ).toMatch(/capability_needs_higher_base/);
     expect(
-      (await rpc(ctx.manager.client, "member_capability_set", { p_user: ctx.cashier.id, p_capability: "stock.adjust.approve", p_granted: true })).error?.message,
+      (await rpc(ctx.manager.client, "permission_override_set", { p_user: ctx.cashier.id, p_capability: "stock.adjust.approve", p_effect: "grant" })).error?.message,
     ).toMatch(/forbidden/);
-    const grant = await rpc(ctx.owner.client, "member_capability_set", {
-      p_user: ctx.cashier.id, p_capability: "stock.adjust.approve", p_granted: true, p_reason: "auditor",
+    const grant = await rpc(ctx.owner.client, "permission_override_set", {
+      p_user: ctx.cashier.id, p_capability: "stock.adjust.approve", p_effect: "grant", p_reason: "auditor",
     });
     expect(grant.error).toBeNull();
-    expect(await auditActions(ctx.cashier.id)).toContain("capability_granted");
+    expect(await auditActions(ctx.cashier.id)).toContain("permission_override_set");
 
     const rej = await rpc(ctx.cashier.client, "stock_adjustment_decide", { p_id: big.data.id, p_approve: false });
     expect(rej.error?.message).toMatch(/decision_notes_required/);
@@ -231,7 +233,7 @@ describe.skipIf(!enabled)("Inventario · ajustes con aprobación y capacidades (
     expect(await auditActions(big.data.id!)).toEqual(expect.arrayContaining(["stock_adjustment_requested", "stock_adjustment_approved"]));
 
     // El dueño otorga stock.adjust al cajero-auditor: lo que pide no lo aprueba él.
-    await rpc(ctx.owner.client, "member_capability_set", { p_user: ctx.cashier.id, p_capability: "stock.adjust", p_granted: true });
+    await rpc(ctx.owner.client, "permission_override_set", { p_user: ctx.cashier.id, p_capability: "stock.adjust", p_effect: "grant" });
     const own = await request(ctx.cashier, { mode: "remove", qty: 11, reason: "vencimiento" });
     expect(own.data.status).toBe("pending");
     const self = await rpc(ctx.cashier.client, "stock_adjustment_decide", { p_id: own.data.id, p_approve: true });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ListChecks, Plus, X } from "lucide-react";
+import { ListChecks, Package, Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { NoData } from "@/components/ui/NoData";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -278,7 +278,7 @@ export function ProductsPanel(p: ProductsPanelProps) {
         </div>
         <div className="slim-scrollbar max-h-[460px] overflow-auto">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="sticky top-0 z-[1] bg-card text-left text-xs uppercase tracking-[0.12em] text-muted-foreground">
+            <thead className="sticky top-0 z-10 bg-card text-left [&_th]:bg-card text-xs uppercase tracking-[0.12em] text-muted-foreground">
               <tr>
                 <th className="w-10 px-3 py-2" />
                 <th className="px-2 py-2">Producto</th>
@@ -320,10 +320,23 @@ export function ProductsPanel(p: ProductsPanelProps) {
                     <td className="px-3 py-1.5">
                       <Checkbox checked={on} onCheckedChange={() => p.onToggleRow(key)} aria-label={`Etiquetar ${r.name}`} />
                     </td>
-                    <td className="max-w-[170px] px-2 py-1.5 sm:max-w-[240px]">
+                    <td className="max-w-[220px] px-2 py-1.5 sm:max-w-[300px]">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {/* Miniatura del producto (o un ícono si no tiene foto). */}
+                        <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-md bg-white">
+                          {r.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={r.image_url} alt="" loading="lazy" className="h-full w-full object-contain" />
+                          ) : (
+                            <Package size={16} className="text-neutral-400" aria-hidden />
+                          )}
+                        </span>
+                        <div className="min-w-0">
                       <div className="truncate font-medium">{r.name}</div>
                       <div className="truncate text-xs text-muted-foreground">
                         {[r.variant_label, r.brand, r.plu ? `PLU ${r.plu}` : null, r.barcode || r.sku].filter(Boolean).join(" · ") || "Sin código"}
+                      </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">

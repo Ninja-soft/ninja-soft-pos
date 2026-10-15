@@ -339,6 +339,17 @@ export function activePointsOfSale(items: ParamItem[]): { nro: number; emisionTi
     .filter((p) => Number.isFinite(p.nro) && p.nro > 0);
 }
 
+/** Puntos de venta que usan sucursales y cajas (sin repetir, ordenados). ADR-153. */
+export function usedPointsOfSale(stores: (number | null | undefined)[], registers: (number | null | undefined)[] = []): number[] {
+  return [...new Set([...stores, ...registers].filter((x): x is number => typeof x === "number" && x > 0))].sort((a, b) => a - b);
+}
+
+/** Los usados que ARCA no lista como Web Services (los de CAEA no cuentan). ADR-153. */
+export function missingPointsOfSale(used: number[], listed: { nro: number; emisionTipo: string }[]): number[] {
+  const ws = new Set(listed.filter((x) => !/caea/i.test(x.emisionTipo)).map((x) => x.nro));
+  return used.filter((n) => !ws.has(n));
+}
+
 // ---------------------------------------------------------------------------
 // CAEA
 // ---------------------------------------------------------------------------

@@ -17,7 +17,8 @@ import {
   letterGuideSummary,
   type ConditionCheck,
 } from "@/lib/billing/letter";
-import { ARCA_LINKS, formatFiscalDate, type ArcaEnv, type WizardStepKey } from "@/lib/arca/labels";
+import { ARCA_LINKS, connectionFor, envConnected, formatFiscalDate, type ArcaEnv, type WizardStepKey } from "@/lib/arca/labels";
+import { humanError } from "@/supabase/functions/_shared/arca/errors";
 import type { ArcaConfig } from "@/modules/arca/api";
 import type { PadronPersona } from "@/modules/fiscalProfile/api";
 import { usePadronLookup } from "@/modules/fiscalProfile/hooks";
@@ -319,9 +320,13 @@ export function ArcaRequirements({
   const cert = config.certificates.find((c) => c.environment === env && c.status === "active");
   const certState: ReqState = deleg || cert ? "ok" : "pending";
 
-  // 4. Autorización del servicio (última prueba de conexión del ambiente actual)
-  const tested = s?.last_connection_env === env && s?.last_connection_at != null;
-  const authState: ReqState = tested && s?.last_connection_ok ? "ok" : "pending";
+  // 4. Autorización del servicio: última prueba guardada DE ESTE ambiente
+  // (ADR-153: la prueba de producción ya no pisa la de homologación).
+  const conn = connectionFor(s, env);
+  const connected = envConnected(config, env);
+  const tested = conn != null;
+  const authState: ReqState = connected ? "ok" : "pending";
+  const connHelp = conn && !conn.ok ? humanError(conn.code, conn.message) : null;
 
   const adoptArca = async (arca: string) => {
     try {
@@ -440,11 +445,13 @@ export function ArcaRequirements({
           title="Autorizado para Factura Electrónica"
           state={authState}
           status={
-            tested
-              ? s?.last_connection_ok
-                ? `Conexión ${envName} probada el ${formatFiscalDate(s?.last_connection_at)}.`
-                : `La última prueba ${envName} falló: ${s?.last_connection_message ?? "revisá la autorización"}.`
-              : "Todavía no probaste la conexión."
+            connected
+              ? conn?.at
+                ? `Conexión ${envName} probada el ${formatFiscalDate(conn.at)}.`
+                : `ARCA ya aprobó facturas ${envName}.`
+              : tested
+                ? `La última prueba ${envName} falló: ${connHelp?.title ?? "revisá la autorización"}.`
+                : "Todavía no probaste la conexión."
           }
           how={
             <>

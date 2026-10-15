@@ -36,11 +36,12 @@ import { buildTra, classifyWsaaFault, ticketUsable } from "../_shared/arca/wsaa.
 import { buildCsr, checkCertificate, generateKeyPem, sanitizeAlias } from "../_shared/arca/pki.ts";
 import { signCms } from "../_shared/arca/pki.ts";
 import { decryptSecret, encryptSecret, keyAad } from "../_shared/arca/crypto.ts";
-import { activePointsOfSale, PARAM_OPS, type ParamTable, type WsfeAuth } from "../_shared/arca/wsfe.ts";
+import { activePointsOfSale, missingPointsOfSale, PARAM_OPS, usedPointsOfSale, type ParamTable, type WsfeAuth } from "../_shared/arca/wsfe.ts";
 import { classifyWsfeErrors, humanError, joinMsgs } from "../_shared/arca/errors.ts";
 import { cuitIsValid } from "../_shared/arca/padron.ts";
 import { processDocument, type AuthOutcome, type Snapshot, type WorkerDeps } from "../_shared/arca/worker.ts";
 import { runCaeaTasks, type CaeaTasks } from "../_shared/arca/caeaTasks.ts";
+import { isTransientWsaaCode, withRetry } from "../_shared/arca/retry.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -134,6 +135,11 @@ async function loadCreds(admin: SupabaseClient, tenantId: string, env: ArcaEnv, 
   if (c.not_after && new Date(c.not_after).getTime() < Date.now()) {
     return { ok: false, code: "cms.cert.expired", message: "El certificado está vencido" };
   }
+  // ADR-153: un certificado de otra CUIT falla en ARCA con un error confuso
+  // (600/601); se avisa antes y con la acción concreta.
+  if (c.cuit && emitterCuit && c.cuit !== emitterCuit) {
+    return { ok: false, code: "cuit_distinta", message: `El certificado es de la CUIT ${c.cuit} y el negocio tiene cargada la ${emitterCuit}` };
+  }
   try {
     const keyPem = await decryptSecret(c.key_enc, mk, keyAad(tenantId, env));
     const cuit = emitterCuit ?? c.cuit;
@@ -170,7 +176,14 @@ async function saveTicket(admin: SupabaseClient, tenantId: string, env: ArcaEnv,
   }
 }
 
-async function authFor(admin: SupabaseClient, tenantId: string, env: ArcaEnv, mode: string, emitterCuit: string | null): Promise<AuthOutcome> {
+async function authFor(
+  admin: SupabaseClient,
+  tenantId: string,
+  env: ArcaEnv,
+  mode: string,
+  emitterCuit: string | null,
+  opts: { retry?: boolean } = {},
+): Promise<AuthOutcome> {
   const cr = await loadCreds(admin, tenantId, env, mode, emitterCuit);
   if (!cr.ok) return { ok: false, kind: "action", code: cr.code, message: cr.message };
   const creds = cr.creds;
@@ -185,7 +198,18 @@ async function authFor(admin: SupabaseClient, tenantId: string, env: ArcaEnv, mo
     return { ok: false, kind: "action", code: "certificado_ilegible", message: "No se pudo firmar con el certificado" };
   }
   const eps = endpointsFor(env, envVars());
-  const r = await loginCms(fetcher, eps.wsaa, cms);
+  // ADR-153: desde la pantalla, lo pasajero (red, reloj de WSAA) se reintenta
+  // con backoff corto. La cola no: tiene su backoff largo y la contingencia.
+  // Cada reintento firma un TRA nuevo (uniqueId y horario actuales).
+  let first = true;
+  const login = async () => {
+    const signed = first ? cms : signCms(buildTra("wsfe"), creds.certPem, creds.keyPem);
+    first = false;
+    return await loginCms(fetcher, eps.wsaa, signed);
+  };
+  const r = opts.retry
+    ? (await withRetry(login, (x) => x.transport || !x.result || (!x.result.ok && isTransientWsaaCode(x.result.code)))).result
+    : await login();
   if (r.transport || !r.result) {
     return { ok: false, kind: "transient", code: "sin_respuesta", message: `El servicio de acceso de ARCA no respondió (${r.error ?? "sin datos"})` };
   }
@@ -338,23 +362,26 @@ async function testConnection(admin: SupabaseClient, tenantId: string, env: Arca
   let pos: { nro: number; emisionTipo: string }[] = [];
   let cuit: string | null = null;
 
+  let posOk = false;
+  const transientCall = (x: { transport: boolean; parsed: unknown }) => x.transport || !x.parsed;
+
   const cr = await loadCreds(admin, tenantId, env, s.auth_mode, emitter.cuit);
   if (!cr.ok) {
     fail("certificado", cr.code, cr.message);
   } else {
     steps.push({ key: "certificado", ok: true, message: "Certificado listo" });
     cuit = cr.creds.cuit;
-    const a = await authFor(admin, tenantId, env, s.auth_mode, emitter.cuit);
+    const a = await authFor(admin, tenantId, env, s.auth_mode, emitter.cuit, { retry: true });
     if (!a.ok) {
       fail("wsaa", a.code, a.message);
     } else {
-      steps.push({ key: "wsaa", ok: true, message: "ARCA aceptó el certificado" });
+      steps.push({ key: "wsaa", ok: true, message: "ARCA aceptó el certificado (el permiso dura 12 horas y se renueva solo)" });
       const ws = createWsfeClient({ fetch: fetcher, endpoints: endpointsFor(env, envVars()) });
-      const d = await ws.dummy();
+      const d = (await withRetry(() => ws.dummy(), (x) => transientCall(x) || !x.parsed?.ok)).result;
       if (d.transport || !d.parsed?.ok) fail("dummy", "sin_respuesta", d.parsed ? `AppServer ${d.parsed.app} · DbServer ${d.parsed.db} · AuthServer ${d.parsed.auth}` : "ARCA no respondió");
       else steps.push({ key: "dummy", ok: true, message: "Servicio de facturación en línea" });
 
-      const p = await ws.param(a.auth, "ptos_venta");
+      const p = (await withRetry(() => ws.param(a.auth, "ptos_venta"), transientCall)).result;
       if (p.transport || !p.parsed) {
         fail("ptos_venta", "sin_respuesta", "ARCA no respondió la consulta de puntos de venta");
       } else {
@@ -363,26 +390,53 @@ async function testConnection(admin: SupabaseClient, tenantId: string, env: Arca
           fail("ptos_venta", errs[0]?.code ?? "", joinMsgs(errs));
         } else {
           pos = activePointsOfSale(p.parsed.items);
+          posOk = true;
           steps.push({ key: "ptos_venta", ok: true, message: pos.length ? `Puntos de venta: ${pos.map((x) => x.nro).join(", ")}` : "ARCA no informó puntos de venta para esta CUIT" });
         }
       }
 
+      // Puntos de venta de las sucursales y cajas (los que se van a usar).
       const { data: st } = await admin
         .from("stores")
-        .select("afip_pos_number")
+        .select("id, afip_pos_number")
         .eq("tenant_id", tenantId)
-        .is("deleted_at", null)
-        .not("afip_pos_number", "is", null)
-        .limit(1);
-      const pv = ((st ?? []) as { afip_pos_number: number }[])[0]?.afip_pos_number ?? pos[0]?.nro ?? 1;
+        .is("deleted_at", null);
+      const storeRows = (st ?? []) as { id: string; afip_pos_number: number | null }[];
+      let regPos: number[] = [];
+      if (storeRows.length) {
+        const { data: rg } = await admin
+          .from("cash_registers")
+          .select("afip_pos_number")
+          .in("store_id", storeRows.map((x) => x.id))
+          .is("deleted_at", null)
+          .not("afip_pos_number", "is", null);
+        regPos = ((rg ?? []) as { afip_pos_number: number }[]).map((x) => x.afip_pos_number);
+      }
+      const used = usedPointsOfSale(storeRows.map((x) => x.afip_pos_number), regPos);
+      // En producción cada punto de venta usado tiene que existir como Web
+      // Services (homologación acepta cualquiera y casi nunca lista ninguno).
+      if (env === "produccion" && posOk) {
+        const missing = missingPointsOfSale(used, pos);
+        if (used.length === 0) fail("pv_sucursales", "sin_punto_de_venta", "Ninguna sucursal tiene punto de venta");
+        else if (missing.length) fail("pv_sucursales", "pv_no_habilitado", `ARCA no tiene como Web Services: ${missing.join(", ")}`);
+        else steps.push({ key: "pv_sucursales", ok: true, message: `Puntos de venta de tus sucursales confirmados: ${used.join(", ")}` });
+      }
+
+      const pv = used[0] ?? pos[0]?.nro ?? 1;
       const tipo = !emitter.iva_condition || emitter.iva_condition === "responsable_inscripto" ? 6 : 11;
-      const u = await ws.ultimo(a.auth, pv, tipo);
+      const u = (
+        await withRetry(
+          () => ws.ultimo(a.auth, pv, tipo),
+          (x) => transientCall(x) || (x.parsed != null && classifyWsfeErrors(x.parsed.errors) === "transient"),
+        )
+      ).result;
       if (u.transport || !u.parsed) fail("ultimo", "sin_respuesta", "ARCA no respondió el último comprobante");
       else if (u.parsed.errors.length) fail("ultimo", u.parsed.errors[0]?.code ?? "", joinMsgs(u.parsed.errors));
       else steps.push({ key: "ultimo", ok: true, message: `Último comprobante autorizado en el punto de venta ${pv}: ${u.parsed.nro ?? 0}` });
     }
   }
   const ok = steps.every((x) => x.ok);
+  const firstFail = steps.find((x) => !x.ok);
   await admin.rpc("arca_record_connection", {
     p_tenant: tenantId,
     p_env: env,
@@ -390,11 +444,15 @@ async function testConnection(admin: SupabaseClient, tenantId: string, env: Arca
       ok,
       full_test: ok,
       action: "test_conexion",
-      message: ok ? "Conexión correcta" : steps.find((x) => !x.ok)?.message ?? "Error",
-      error_code: steps.find((x) => !x.ok)?.code ?? null,
+      message: ok ? "Conexión correcta" : firstFail?.message ?? "Error",
+      error_code: firstFail?.code ?? null,
       duration_ms: Date.now() - t0,
       user_id: userId,
-      ...(ok ? { pos: pos.filter((x) => !/caea/i.test(x.emisionTipo)).map((x) => x.nro) } : {}),
+      cuit,
+      // Estado por paso para la guía (códigos y textos, nada sensible).
+      steps: steps.map((x) => ({ key: x.key, ok: x.ok, code: x.code ?? null, message: x.message.slice(0, 300) })),
+      // Los puntos de venta listados valen aunque falle un paso posterior.
+      ...(posOk ? { pos_ok: true, pos: pos.filter((x) => !/caea/i.test(x.emisionTipo)).map((x) => x.nro) } : {}),
     },
   });
   return { ok, cuit, steps, pos };
@@ -735,7 +793,7 @@ Deno.serve(async (req: Request) => {
   if (action === "param" || action === "ultimo_autorizado") {
     const s = await loadSettings(admin, tenantId);
     const emitter = await emitterOf(admin, tenantId);
-    const a = await authFor(admin, tenantId, env, s?.auth_mode ?? "propio", emitter.cuit);
+    const a = await authFor(admin, tenantId, env, s?.auth_mode ?? "propio", emitter.cuit, { retry: true });
     if (!a.ok) return json({ ok: false, error: a.code, message: a.message, ...humanError(a.code, a.message) });
     const ws = createWsfeClient({ fetch: fetcher, endpoints: endpointsFor(env, envVars()) });
     if (action === "ultimo_autorizado") {
@@ -752,7 +810,7 @@ Deno.serve(async (req: Request) => {
     }
     const table = String(body.table ?? "") as ParamTable;
     if (!(table in PARAM_OPS)) return json({ error: "invalid_table" }, 400);
-    const p = await ws.param(a.auth as WsfeAuth, table, typeof body.clase === "string" ? body.clase : undefined);
+    const p = (await withRetry(() => ws.param(a.auth as WsfeAuth, table, typeof body.clase === "string" ? body.clase : undefined), (x) => x.transport || !x.parsed)).result;
     if (p.transport || !p.parsed) return json({ ok: false, error: "sin_respuesta", ...humanError("sin_respuesta") });
     const errs = p.parsed.errors.filter((e) => e.code !== "602");
     if (errs.length) return json({ ok: false, error: errs[0]?.code, message: joinMsgs(errs) });

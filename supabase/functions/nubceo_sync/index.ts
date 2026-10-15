@@ -37,6 +37,7 @@ import {
   classifySnapshot,
   createNubceoApi,
   exhausted,
+  ledgerNextCursor,
   ledgerQuery,
   listCompanies,
   nextAttemptAt,
@@ -456,6 +457,8 @@ async function importLedger(
   let entries = 0;
   let message = "";
   let ok = true;
+  let complete = false;
+  let lastUpdatedAt: string | null = null;
   for (let page = 1; page <= LEDGER_MAX_PAGES; page++) {
     const r = await api.ledgerHeaders(ledgerQuery({ page, pageSize: LEDGER_PAGE_SIZE, updatedSince: from }));
     if (r.status !== 200) {
@@ -478,13 +481,28 @@ async function importLedger(
       headers += Number((data as { headers?: number })?.headers) || 0;
       entries += Number((data as { entries?: number })?.entries) || 0;
     }
+    lastUpdatedAt = pageData.lastUpdatedAt ?? lastUpdatedAt;
     const total = pageData.total;
-    if (pageData.headers.length < LEDGER_PAGE_SIZE || (total > 0 && page * LEDGER_PAGE_SIZE >= total)) break;
+    if (pageData.rows < LEDGER_PAGE_SIZE || (total > 0 && page * LEDGER_PAGE_SIZE >= total)) {
+      complete = true;
+      break;
+    }
   }
-  if (ok) message = `${headers} asientos importados`;
+  if (ok) {
+    message = complete
+      ? `${headers} asientos importados`
+      : `${headers} asientos importados; quedan más, siguen en la próxima importación`;
+  }
+  const cursor = ledgerNextCursor({
+    ok,
+    complete,
+    startedAt,
+    previous: s?.ledger_last_import_at ?? null,
+    lastUpdatedAt,
+  });
   await admin
     .from("nubceo_settings")
-    .update({ ledger_last_import_at: ok ? startedAt : s?.ledger_last_import_at ?? null, ledger_last_message: message })
+    .update({ ledger_last_import_at: cursor, ledger_last_message: message })
     .eq("tenant_id", tenantId);
   return { ok, headers, entries, message };
 }

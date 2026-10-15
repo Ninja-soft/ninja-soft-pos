@@ -9,6 +9,7 @@ import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 import { effectivePlans } from "@/lib/payments/planScope";
 import { getnetSlotsOf } from "@/lib/payments/getnetSlots";
 import { parseOfflinePolicy, type OfflinePolicy } from "@/lib/pos/offline/policy";
+import type { PlanPayload } from "@/lib/stock/fulfillment";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -117,6 +118,16 @@ export interface CreateSaleResult {
   reserve_taken?: { product_id: string; taken: number; from: { name: string; qty: number }[] }[];
   /** ADR-088: seña del turno aplicada. */
   deposit_applied?: number;
+  /** ADR-136: entregas abiertas por la venta con plan (código de retiro una sola vez). */
+  deliveries?: {
+    id: string;
+    number: number;
+    part: number;
+    mode: "ahora" | "retiro" | "envio";
+    origin_store_id: string;
+    fulfillment_store_id: string;
+    pickup_code: string | null;
+  }[];
 }
 
 // Descriptor de un extra del cobro. Viaja en `p_extras` y create_sale lo
@@ -1599,6 +1610,11 @@ export const posApi = {
     // pago. create_sale los guarda si la venta tiene servicios y la factura de
     // ARCA los manda (concepto 2 o 3). Sin él, la fecha de la venta.
     service?: SaleServiceInput | null,
+    // ADR-136: reparto de entregas (otra sucursal, depósito, retiro o envío).
+    // Con plan, la venta va por pos_sale_create_fulfilled, que mueve el stock
+    // de los orígenes, llama a create_sale con estos mismos argumentos y abre
+    // las entregas en la misma transacción. Sin plan, create_sale como siempre.
+    fulfillment?: PlanPayload | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
@@ -1612,7 +1628,7 @@ export const posApi = {
       0,
     );
     const run = async (): Promise<CreateSaleResult> => {
-    const { data, error } = await supabase.rpc("create_sale", {
+    const args = {
       p_items: items as unknown as Json,
       p_payments: toSalePayments(payments) as unknown as Json,
       p_discount_total: discountTotal,
@@ -1639,7 +1655,10 @@ export const posApi = {
       // sucursal de ese turno (no en la sucursal principal).
       ...(getActiveShiftId() ? { p_cash_shift_id: getActiveShiftId() } : {}),
       ...(service ? { p_service: service } : {}),
-    } as never);
+    };
+    const { data, error } = fulfillment
+      ? await supabase.rpc("pos_sale_create_fulfilled" as never, { p_sale: args, p_plan: fulfillment } as never)
+      : await supabase.rpc("create_sale", args as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;
     };

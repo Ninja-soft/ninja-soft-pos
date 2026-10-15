@@ -18,6 +18,7 @@ import {
   type SaleExtraInput,
 } from "./api";
 import { useCurrentRegister } from "@/modules/branches/hooks";
+import type { PlanPayload } from "@/lib/stock/fulfillment";
 import { emitOnboardingEvent } from "@/modules/onboarding/guidance";
 import { resolveEffective } from "@/lib/config/inheritance";
 import { useConfigOverrides, useInheritanceFlags, usePosResolveTarget } from "@/modules/config/hooks";
@@ -274,6 +275,8 @@ export function usePosMutations() {
         couponId?: string | null;
         // ADR-116: período del servicio y vencimiento del pago.
         service?: SaleServiceInput | null;
+        // ADR-136: reparto de entregas (otra sucursal, depósito, retiro, envío).
+        fulfillment?: PlanPayload | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -286,6 +289,7 @@ export function usePosMutations() {
           vars.promo,
           vars.couponId,
           vars.service,
+          vars.fulfillment,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

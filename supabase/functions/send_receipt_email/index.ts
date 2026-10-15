@@ -401,28 +401,50 @@ Deno.serve(async (req: Request) => {
   } = await userClient.auth.getUser();
   if (error || !user) return json({ error: "unauthorized" }, 401);
 
-  let b: { sale_id?: string; to?: string; pdf?: string };
+  let b: { sale_id?: string; remito_id?: string; to?: string; pdf?: string };
   try {
     b = await req.json();
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
+  // ADR-136: el mismo envío sirve para un remito (remito_id en lugar de sale_id).
+  const remitoId = String(b.remito_id ?? "").trim();
   const saleId = String(b.sale_id ?? "").trim();
   const to = String(b.to ?? "").trim().toLowerCase();
   // PDF en base64 crudo (sin prefijo data:). El cliente lo genera con jsPDF.
   const pdfBase64 = String(b.pdf ?? "").trim();
-  if (!saleId) return json({ error: "missing_sale_id" }, 400);
+  if (!saleId && !remitoId) return json({ error: "missing_sale_id" }, 400);
   if (!EMAIL_RE.test(to)) return json({ error: "invalid_to" }, 400);
   if (!pdfBase64 || !BASE64_RE.test(pdfBase64)) return json({ error: "invalid_pdf" }, 400);
   // ~3 MB de PDF (base64 agrega ~33%).
   if (pdfBase64.length > 4_000_000) return json({ error: "pdf_too_large" }, 413);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-  const { data: sale } = await admin
-    .from("sales")
-    .select("id, tenant_id, number")
-    .eq("id", saleId)
-    .maybeSingle();
+  // Remito: miembro activo del negocio, plan con entregas_remitos y acceso a
+  // la sucursal del remito (la misma regla que su RLS).
+  type RemitoRow = { id: string; tenant_id: string; store_id: string; pto_vta: number; number: number; kind: string };
+  let remito: RemitoRow | null = null;
+  if (remitoId) {
+    const { data: rm } = await admin
+      .from("remitos")
+      .select("id, tenant_id, store_id, pto_vta, number, kind")
+      .eq("id", remitoId)
+      .maybeSingle();
+    if (!rm) return json({ error: "remito_not_found" }, 404);
+    const row = rm as RemitoRow;
+    remito = row;
+    const { data: feat } = await admin.rpc("tenant_has_feature_for", { p_tenant: row.tenant_id, p_key: "entregas_remitos" });
+    if (feat !== true) return json({ error: "feature_not_in_plan: entregas_remitos" }, 403);
+    const { data: canStore } = await userClient.rpc("user_can_access_store", { p_store_id: row.store_id });
+    if (canStore === false) return json({ error: "store_forbidden" }, 403);
+  }
+  const { data: sale } = remito
+    ? { data: { id: remito.id, tenant_id: remito.tenant_id, number: remito.number } }
+    : await admin
+        .from("sales")
+        .select("id, tenant_id, number")
+        .eq("id", saleId)
+        .maybeSingle();
   if (!sale) return json({ error: "sale_not_found" }, 404);
   const { data: member } = await admin
     .from("tenant_users")
@@ -471,9 +493,10 @@ Deno.serve(async (req: Request) => {
     .trim() || "NinjaSoft POS";
 
   // Cuerpo HTML con la marca del negocio (logo o inicial, acento, nombre).
-  const bodyTextRaw =
-    String(cfg.body_text ?? "").trim() ||
-    "¡Gracias por tu compra! Te enviamos tu comprobante.";
+  const bodyTextRaw = remito
+    ? `Te enviamos el remito ${String(remito.pto_vta).padStart(4, "0")}-${String(remito.number).padStart(8, "0")} de tu ${remito.kind === "envio" ? "envío" : "entrega"}. Va adjunto en PDF.`
+    : String(cfg.body_text ?? "").trim() ||
+      "¡Gracias por tu compra! Te enviamos tu comprobante.";
   // Diseño elegido por el tenant (fallback 'brand' para claves desconocidas).
   const bodyKey = String(cfg.body_template ?? "brand") as BodyTemplateKey;
   const html = buildReceiptEmailHtml(bodyKey, {
@@ -484,8 +507,13 @@ Deno.serve(async (req: Request) => {
   });
 
   // Asunto con sello día+hora (AR): único por envío → Gmail no agrupa el hilo.
-  const subject = `Tu comprobante de ${name} (${stampAr()})`;
-  const pdfName = `factura-${sale.number}.pdf`;
+  const remitoLabel = remito
+    ? `${String(remito.pto_vta).padStart(4, "0")}-${String(remito.number).padStart(8, "0")}`
+    : "";
+  const subject = remito
+    ? `Remito ${remitoLabel} de ${name} (${stampAr()})`
+    : `Tu comprobante de ${name} (${stampAr()})`;
+  const pdfName = remito ? `remito-${remitoLabel}.pdf` : `factura-${sale.number}.pdf`;
 
   // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
   let logId: string | null = null;
@@ -587,6 +615,23 @@ Deno.serve(async (req: Request) => {
     } catch (_) {
       /* noop */
     }
+  }
+  if (remito) {
+    // ADR-136: el remito guarda a quién se mandó (auditado como remito_emailed).
+    await admin
+      .from("remitos")
+      .update({ emailed_to: to, emailed_at: new Date().toISOString() })
+      .eq("id", remito.id);
+    await admin.from("audit_logs").insert({
+      tenant_id: remito.tenant_id,
+      actor_user_id: user.id,
+      entity_type: "remitos",
+      entity_id: remito.id,
+      action: "remito_emailed",
+      after_data: { to, number: remitoLabel },
+      store_id: remito.store_id,
+    });
+    return json({ ok: true });
   }
   await admin
     .from("sales")

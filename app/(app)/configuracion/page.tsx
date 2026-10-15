@@ -72,8 +72,8 @@ const HardwareSetup = dynamic(
   () => import("@/components/hardware/HardwareSetup").then((m) => m.HardwareSetup),
   { loading },
 );
-const WarrantyPlansManager = dynamic(
-  () => import("@/components/products/WarrantyPlansManager").then((m) => m.WarrantyPlansManager),
+const WarrantyTypesManager = dynamic(
+  () => import("@/components/warranty/WarrantyTypesManager").then((m) => m.WarrantyTypesManager),
   { loading },
 );
 const RubroCard = dynamic(
@@ -236,6 +236,10 @@ const QuoteSettingsCard = dynamic(
 // H32 (ADR-129): pedidos de salón y expedición.
 const OrderSettingsCard = dynamic(
   () => import("@/components/orders/OrderSettingsCard").then((m) => m.OrderSettingsCard),
+  { loading },
+);
+const RemitoSettingsCard = dynamic(
+  () => import("@/components/remitos/RemitoSettingsCard").then((m) => m.RemitoSettingsCard),
   { loading },
 );
 const AiImageSettingsCard = dynamic(
@@ -455,7 +459,7 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "garantias":
       return (
         <SettingsCard padded>
-          <WarrantyPlansManager />
+          <WarrantyTypesManager />
         </SettingsCard>
       );
     // Integración NubCeo (ADR-062): dueño o encargado, feature en el plan.
@@ -479,7 +483,13 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "presupuestos":
       return <QuoteSettingsCard />;
     case "pedidos":
-      return <OrderSettingsCard />;
+      return (
+        <div className="space-y-6">
+          <OrderSettingsCard />
+          {/* ADR-136: remitos y aviso de COT (con entregas_remitos). */}
+          <RemitoSettingsCard />
+        </div>
+      );
     case "imagenes-ia":
       return <AiImageSettingsCard />;
   }

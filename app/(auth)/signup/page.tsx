@@ -141,7 +141,8 @@ function FiscalAndCode({
   const ivaId = useId();
   return (
     <div className="grid items-start gap-3 sm:grid-cols-2">
-      <Disclosure title="Datos fiscales (opcional)">
+      {/* Si el CUIT tiene error, se abre solo (antes quedaba escondido y no se podía avanzar sin saber por qué). */}
+      <Disclosure key={cuitError ? "fiscal-err" : "fiscal"} defaultOpen={Boolean(cuitError)} title="Datos fiscales (opcional)">
         <div className="space-y-3 pt-1">
           <Input
             label="CUIT"

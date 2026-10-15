@@ -543,6 +543,16 @@ export interface MlSettingsInput {
   max_qty?: number | null;
 }
 
+/**
+ * Lo que se publica o importa lo escribe el worker de ML unos segundos después:
+ * refrescamos ahora y de nuevo a los 3, 10 y 25 s para que aparezca sin recargar.
+ */
+export function refreshMlSoon(qc: ReturnType<typeof useQueryClient>) {
+  const run = () => qc.invalidateQueries({ queryKey: ["ml"] });
+  run();
+  for (const ms of [3000, 10000, 25000]) setTimeout(run, ms);
+}
+
 export function useMlMutations() {
   const qc = useQueryClient();
   const inv = () => qc.invalidateQueries({ queryKey: ["ml"] });
@@ -597,11 +607,11 @@ export function useMlMutations() {
     importItems: useMutation({
       mutationFn: (accountId: string) =>
         mlEdge<{ imported: number; suggestions: MlLinkSuggestion[] }>("ml_api", { action: "import_items", account_id: accountId }),
-      onSuccess: inv,
+      onSuccess: () => refreshMlSoon(qc),
     }),
     syncAccount: useMutation({
       mutationFn: (accountId: string) => mlEdge<{ ok: boolean; orders: number }>("ml_api", { action: "sync_account", account_id: accountId }),
-      onSuccess: inv,
+      onSuccess: () => refreshMlSoon(qc),
     }),
     labels: useMutation({
       mutationFn: (v: { accountId: string; shipmentIds: string[]; format: "pdf" | "zpl2" }) =>

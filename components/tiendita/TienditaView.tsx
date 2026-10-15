@@ -422,10 +422,12 @@ function ProductTile({
   const onSale = showMarketPrice && p.precioLista != null && p.precio != null && p.precioLista > p.precio;
   return (
     <article className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
-      <div className="relative aspect-square bg-white">
+      {/* Cuadrado fijo: la imagen va absoluta para que una foto alta no estire
+          la tarjeta (en flex-col el min-height automático le gana al aspect-ratio). */}
+      <div className="relative aspect-square min-h-0 shrink-0 overflow-hidden bg-white">
         {p.fotoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.fotoUrl} alt={p.titulo} loading="lazy" className="h-full w-full object-contain p-4" />
+          <img src={p.fotoUrl} alt={p.titulo} loading="lazy" className="absolute inset-0 h-full w-full object-contain p-4" />
         ) : (
           <div className="grid h-full w-full place-items-center bg-muted text-muted-foreground">
             <Package size={28} />

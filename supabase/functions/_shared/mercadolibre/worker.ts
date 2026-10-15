@@ -100,7 +100,8 @@ export function itemPayload(item: MlItem, stockMode: StockMode | null = null): R
     catalog_listing: Boolean(item.catalog_listing),
     catalog_product_id: item.catalog_product_id ?? null,
     permalink: item.permalink ?? null,
-    thumbnail: item.secure_thumbnail ?? item.thumbnail ?? null,
+    // Siempre https: la app corre en https y el navegador bloquea http (contenido mixto).
+    thumbnail: (item.secure_thumbnail ?? item.thumbnail ?? null)?.replace(/^http:\/\//i, "https://") ?? null,
     currency: item.currency_id ?? "ARS",
     price: item.price ?? null,
     available_quantity: item.available_quantity ?? null,

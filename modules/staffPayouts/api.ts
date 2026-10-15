@@ -383,7 +383,6 @@ export function useStaffMutations() {
     setExpenseMonth: m((a: { expense: string; period: string; amount_cents: number | null; note: string | null }) =>
       rpc("internal_staff_set_expense_month", { p_expense: a.expense, p_period: a.period, p_amount_cents: a.amount_cents, p_note: a.note }),
     ),
-    setFx: m((a: { period: string; rate: number; source: string | null }) => rpc("internal_staff_set_fx", { p_period: a.period, p_rate: a.rate, p_source: a.source })),
     addAdjustment: m((a: { member: string; period: string; amount_cents: number; reason: string }) =>
       rpc("internal_staff_add_adjustment", { p_member: a.member, p_period: a.period, p_amount_cents: a.amount_cents, p_reason: a.reason }),
     ),

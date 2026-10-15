@@ -103,8 +103,8 @@ export function AiImageSettingsCard() {
         <div className="flex items-center justify-between gap-4 px-5 py-4">
           <div className="min-w-0">
             <div className="text-sm font-medium text-foreground">Generar la portada automáticamente</div>
-            <p className="mt-1 text-xs text-muted-foreground">Al crear un servicio, con el estilo elegido.</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">En productos usás Generar y Regenerar en Fotos.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Al crear un producto o servicio, con el estilo elegido.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">En cada alta lo podés cambiar por subir foto o sin imagen.</p>
           </div>
           <Switch
             checked={s.auto_cover}

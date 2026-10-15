@@ -103,7 +103,7 @@ export function PendingChargesPanel({
         <Tile label="Para revisar" value={String(summary.review)} tone={summary.review > 0 ? "danger" : undefined} />
       </div>
 
-      <Segmented<Filter>
+      <Segmented<Filter> scrollOnMobile
         aria-label="Filtrar por estado"
         value={filter}
         onChange={setFilter}

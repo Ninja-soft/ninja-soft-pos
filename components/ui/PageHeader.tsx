@@ -34,10 +34,18 @@ export function PageContainer({
 }
 PageContainer.displayName = "PageContainer";
 
+// Fila de acciones de un encabezado. En mobile va en una sola fila con scroll
+// horizontal (sin scrollbar visible, botones sin encoger y 4px de aire para que
+// el anillo de foco no se corte); desde sm vuelve al wrap de siempre. Usala en
+// cualquier encabezado propio que no pase por PageHeader / SectionHeader.
+export const headerActionsRow =
+  "-m-1 flex min-w-0 max-w-[calc(100%+0.5rem)] flex-nowrap items-center gap-2 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 sm:m-0 sm:max-w-full sm:flex-wrap sm:overflow-visible sm:p-0";
+
 // Encabezado de pantalla: eyebrow + título (con ícono y ayuda opcionales),
 // bajada y acciones. El título se ve siempre completo (nunca se trunca, si no
 // entra pasa a otra línea) y las acciones van siempre en su propia fila debajo,
-// alineadas a la izquierda y con wrap, en cualquier ancho.
+// alineadas a la izquierda: en mobile en una fila con scroll lateral, desde sm
+// con wrap.
 export function PageHeader({
   eyebrow,
   title,
@@ -88,7 +96,7 @@ export function PageHeader({
         )}
       </div>
       {actions && (
-        <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>
+        <div className={headerActionsRow}>{actions}</div>
       )}
     </header>
   );
@@ -127,7 +135,7 @@ export function SectionHeader({
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className={headerActionsRow}>{actions}</div>}
     </div>
   );
 }

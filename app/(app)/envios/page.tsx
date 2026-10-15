@@ -104,7 +104,7 @@ export default function EnviosPage() {
       description="Cotizá entre tus logísticas, imprimí la etiqueta y seguí cada envío hasta que llega."
       actions={
         enabled ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="contents">
             {canManage && (
               <Link href="/configuracion?seccion=envios">
                 <Button variant="secondary">

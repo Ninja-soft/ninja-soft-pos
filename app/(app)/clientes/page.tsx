@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, UserRound, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -121,7 +122,7 @@ export default function ClientesPage() {
               <InfoHint section="clientes" size={18} />
             </Display>
           </div>
-          <div className="flex min-w-0 flex-wrap gap-2">
+          <div className={headerActionsRow}>
             <GatedButton
               feature="export_xlsx"
               featureLabel="Exportar a Excel"

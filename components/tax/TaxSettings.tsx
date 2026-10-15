@@ -58,7 +58,7 @@ export function TaxSettings() {
   const s = q.data;
   return (
     <div className="space-y-6">
-      <Segmented value={section} onChange={setSection} options={SECTIONS} aria-label="Secciones de impuestos" size="sm" />
+      <Segmented scrollOnMobile value={section} onChange={setSection} options={SECTIONS} aria-label="Secciones de impuestos" size="sm" />
       {section === "general" && (
         <>
           <FiscalCard settings={s} />

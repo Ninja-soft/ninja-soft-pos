@@ -544,7 +544,7 @@ function AccountTab({ s }: { s: Supplier }) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 [&>*]:min-w-0">
         <Kpi label="Saldo" value={formatMoney(aging.balance)} tone={aging.balance > 0 ? "brand" : undefined} />
         <Kpi label="Vencido" value={formatMoney(aging.overdue)} tone={aging.overdue > 0 ? "danger" : undefined} />
         <Kpi label="A favor" value={formatMoney(aging.credit)} tone={aging.credit > 0 ? "success" : undefined} />

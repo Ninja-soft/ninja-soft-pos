@@ -96,7 +96,7 @@ export function MarginAlertsPanel() {
       </section>
 
       <section>
-        <Segmented<Filter>
+        <Segmented<Filter> scrollOnMobile
           aria-label="Filtro"
           size="sm"
           value={filter}

@@ -494,7 +494,7 @@ export function InvoiceFormModal({
             Percepciones y otros tributos
           </h4>
           {taxes.map((t) => (
-            <div key={t.key} className="grid grid-cols-[1fr_1fr_8rem_auto] gap-2">
+            <div key={t.key} className="grid grid-cols-2 gap-2 max-sm:[&>*:last-child]:justify-self-start sm:grid-cols-[1fr_1fr_8rem_auto]">
               <select
                 aria-label="Tributo"
                 className={cn(selectCls, "h-10 px-2")}

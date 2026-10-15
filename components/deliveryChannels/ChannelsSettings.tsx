@@ -156,7 +156,7 @@ function ConnectionPanel({ conn }: { conn: ChannelConnection }) {
         </Callout>
       )}
 
-      <Segmented
+      <Segmented scrollOnMobile
         value={tab}
         onChange={setTab}
         aria-label="Sección del canal"

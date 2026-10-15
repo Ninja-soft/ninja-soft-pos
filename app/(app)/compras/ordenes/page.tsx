@@ -196,7 +196,7 @@ export default function OrdenesCompraPage() {
       </div>
 
       <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center">
-        <Segmented<Tab>
+        <Segmented<Tab> scrollOnMobile
           aria-label="Estado"
           value={tab}
           onChange={setTab}

@@ -404,7 +404,7 @@ export function ExpensesTab({ data }: { data: StaffData }) {
             value={cat}
             onChange={setCat}
             size="sm"
-            className="flex-nowrap"
+            className="max-w-none flex-nowrap"
             aria-label="Categoría"
             options={[{ value: "todas" as const, label: "Todas" }, ...(Object.keys(CATEGORY_LABEL) as ExpenseCategory[]).map((k) => ({ value: k, label: CATEGORY_LABEL[k] }))]}
           />

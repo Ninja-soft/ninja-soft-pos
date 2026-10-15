@@ -531,7 +531,7 @@ export function PaymentOrderModal({
             </p>
           )}
           {wh.map((w) => (
-            <div key={w.key} className="grid grid-cols-[1fr_9rem_8rem_auto] gap-2">
+            <div key={w.key} className="grid grid-cols-[1fr_1fr_auto] gap-2 max-sm:[&>*:first-child]:col-span-3 sm:grid-cols-[1fr_9rem_8rem_auto]">
               <select
                 aria-label="Retención"
                 className={cn(selectCls, "h-10 px-2")}

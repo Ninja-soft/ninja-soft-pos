@@ -196,7 +196,7 @@ export default function SalonPage() {
 
       {/* Filtro por salón (control segmentado). Sólo si hay más de un salón. */}
       {(areas ?? []).length > 1 && (
-        <Segmented
+        <Segmented scrollOnMobile
           className="mb-4"
           aria-label="Filtrar por salón"
           value={areaFilter ?? ALL_AREAS}

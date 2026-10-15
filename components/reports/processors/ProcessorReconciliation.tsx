@@ -666,7 +666,7 @@ export function ProcessorReconciliation({
       {/* Excepciones y detalle */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Segmented<LineFilter>
+          <Segmented<LineFilter> scrollOnMobile
             aria-label="Filtro de cobros"
             size="sm"
             value={filter}

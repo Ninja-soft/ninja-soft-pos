@@ -292,7 +292,7 @@ export default function InternalTenantDetail({
           value={tab}
           onChange={setTab}
           options={TABS.map((t) => ({ value: t.value, label: t.label, icon: t.icon }))}
-          className="flex-nowrap"
+          className="max-w-none flex-nowrap"
         />
       </div>
 

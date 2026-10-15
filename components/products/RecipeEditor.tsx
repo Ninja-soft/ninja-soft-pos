@@ -187,7 +187,7 @@ export function RecipeEditor({
       </Button>
 
       {/* Resumen costo / margen */}
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-sm">
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-sm [overflow-wrap:anywhere] [&>*]:min-w-0">
         <div>
           <div className="text-xs text-muted-foreground">Costo del plato</div>
           <div className="font-price font-bold tabular-nums">{formatCurrency(cost)}</div>

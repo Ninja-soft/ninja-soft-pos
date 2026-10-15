@@ -91,7 +91,7 @@ export default function PublicQuotePage() {
                 {/* ADR-124: nombre de fantasía arriba; la razón social con los datos fiscales. */}
                 {tradeName && <p className="text-lg font-bold leading-tight">{tradeName}</p>}
                 <p className={tradeName ? "text-sm font-medium" : "text-base font-bold"}>{q.issuer.name}</p>
-                <p className="text-xs" style={{ color: "#6b7080" }}>
+                <p className="break-words text-xs" style={{ color: "#6b7080" }}>
                   {[q.issuer.cuit ? `CUIT ${q.issuer.cuit}` : null, q.issuer.iva_condition ? ivaConditionLabel(q.issuer.iva_condition) : null, q.issuer.address, q.issuer.phone, q.issuer.email]
                     .filter(Boolean)
                     .join(" · ")}

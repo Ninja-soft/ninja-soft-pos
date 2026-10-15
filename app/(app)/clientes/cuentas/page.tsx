@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Download, HandCoins, Mail, Percent, Search, CalendarCheck } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 import { Segmented } from "@/components/ui/Segmented";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { NoData } from "@/components/ui/NoData";
@@ -182,7 +183,7 @@ export default function CuentasPage() {
             <Display className="mt-3 break-words text-3xl md:text-4xl">Cuentas corrientes</Display>
           </div>
           {enabled !== false && (
-            <div className="flex flex-wrap gap-2">
+            <div className={headerActionsRow}>
               {me?.canManage && punitorios && (
                 <Button variant="secondary" loading={m.accrue.isPending} onClick={accrue}>
                   <Percent size={16} /> Calcular punitorios

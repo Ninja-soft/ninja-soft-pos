@@ -459,7 +459,7 @@ export function ConciliacionHub() {
             ) : null)}
 
           {tabs.length > 1 && (
-            <Segmented<View>
+            <Segmented<View> scrollOnMobile
               aria-label="Vista de la conciliación"
               className="mt-5"
               value={view}

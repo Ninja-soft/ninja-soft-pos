@@ -192,6 +192,28 @@
     caret-color: var(--foreground);
   }
 
+  /* Fecha y hora nativas: en Safari de iPhone tienen un ancho mínimo propio
+     que ignora w-full y desborda la tarjeta. Respetan el ancho del contenedor
+     y el valor queda alineado a la izquierda como el resto de los campos. */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    min-width: 0;
+    max-width: 100%;
+  }
+  input::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
+  /* Un <fieldset> toma por defecto el ancho mínimo de su contenido
+     (min-inline-size: min-content) y empuja la tarjeta fuera de la pantalla
+     en mobile. */
+  fieldset {
+    min-width: 0;
+  }
+
   /* <select> nativo. El popup de opciones en Chrome / Edge de Windows toma el
      fondo del propio select; con un fondo translúcido (bg-card en oscuro) lo
      compone sobre blanco y la lista se veía blanca con texto claro. Las

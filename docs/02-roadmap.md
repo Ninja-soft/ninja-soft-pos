@@ -1433,12 +1433,13 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] `platform_mrr_snapshots` diario.
   - [ ] Movimiento de MRR (nuevo, expansión, contracción, churn y reactivación) y NRR.
   - [ ] Cobrado bruto y neto, deuda vencida con aging, efectividad y DSO.
-- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.** Construido en `feat/cobranza-datos-fiscales` (ADR-117, migración `20261113300000` sin aplicar, Edge `platform_billing` sin desplegar).
+- [ ] **H129 · F20-3: datos fiscales del cliente y padrón de ARCA.** En producción desde el 14/10 (ADR-117, migración `20261113300000` aplicada, Edge `platform_billing` desplegada, #411/#412).
   - [x] `tenant_billing_profiles` con historia.
   - [x] Consulta de `ws_sr_constancia_inscripcion` con cache y rate limit (activa cuando exista el certificado de la plataforma).
   - [x] El panel del cliente muestra la letra que le va a corresponder (hoy "pendiente": NinjaSoft sin CUIT).
   - [x] Carga manual de respaldo y lista de perfiles sin verificar.
-  - [ ] Aplicar la migración, desplegar la Edge y probar el padrón en homologación cuando esté el certificado.
+  - [x] Aplicar la migración y desplegar la Edge.
+  - [ ] Probar el padrón en homologación cuando esté el certificado de la plataforma.
   - [ ] *Criterio:* un CUIT RI trae razón social, condición y domicilio y muestra "Vas a recibir Factura A"; sin la CUIT de NinjaSoft se puede cargar a mano y queda marcado.
 - [ ] **H130 · F20-4: factura de plataforma con CAE (emisión manual).**
   - [ ] `platform_issuer_profile` y `platform_documents`, con sus líneas y eventos.
@@ -1460,7 +1461,7 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Refacturación, también por letra equivocada.
   - [ ] Bonificaciones: sobre el próximo cargo, crédito a cuenta, meses sin cargo y condonación. Todas con topes por nivel y aprobación.
   - [ ] Baja con devolución y botón de arrepentimiento.
-- [ ] **H134 · F20-8: suscripción por cuenta corriente.** Código en `feat/cobranza-cta-cte` ([ADR-120](./17-decision-log.md)); migración `20261116100000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar.
+- [ ] **H134 · F20-8: suscripción por cuenta corriente.** En producción desde el 14/10 ([ADR-120](./17-decision-log.md), #420): migración `20261116100000_cobranza_cuenta_corriente` aplicada y Edges `mp_billing_webhook` y `mp_subscription_checkout` desplegadas (webhook en `hooks.soft.ninja`).
   - [x] Avisos de cobro periódicos (`statement_frequency`): una vez por cuota, cada N días hasta que pague o resumen mensual, días antes del vencimiento y destinatarios por negocio; cron diario `platform-payment-notices` y envío manual.
   - [x] Cuentas bancarias con CBU validado, cargadas con el editor de Transferencia (logos de bancos), y email y WhatsApp para comprobantes.
   - [x] "Ya transferí" con comprobante, más la bandeja de verificación del staff.
@@ -1478,12 +1479,12 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
 
 ### F21 · Participación del staff y gastos
 
-Objetivo: cada persona del staff tiene un porcentaje del **cobrado neto** de NinjaSoft en el mes (§22 #15), ve ese porcentaje y cuánto le liquidaría NinjaPOS el mes próximo. Los gastos (servidores, dominios, servicios, sueldos, impuestos, comisiones) se descuentan en proporción, con exenciones, asignados a una persona o con un % de gastos propio. El dueño pidió construirlo el 2026-10-14. Diseño y ejemplos en [`40-cobranza-saas.md` §20](./40-cobranza-saas.md#20-participación-del-staff-y-gastos-f21-construido); decisión ADR-121. Migración `20261116300000_staff_participacion` sin aplicar y Edge `staff_payouts` sin desplegar.
+Objetivo: cada persona del staff tiene un porcentaje del **cobrado neto** de NinjaSoft en el mes (§22 #15), ve ese porcentaje y cuánto le liquidaría NinjaPOS el mes próximo. Los gastos (servidores, dominios, servicios, sueldos, impuestos, comisiones) se descuentan en proporción, con exenciones, asignados a una persona o con un % de gastos propio. El dueño pidió construirlo el 2026-10-14. Diseño y ejemplos en [`40-cobranza-saas.md` §20](./40-cobranza-saas.md#20-participación-del-staff-y-gastos-f21-construido); decisión ADR-121. Migración `20261116300000_staff_participacion` aplicada y Edge `staff_payouts` desplegada (#421, 14/10).
 
 - [x] **H137 · Participaciones con vigencia, reglas por cliente y gastos recurrentes con exenciones.** `staff_members`, `staff_shares` (con % de gastos), `staff_client_rules` (+%, % especial, comisión de alta), `staff_expenses` con recurrencia, USD, prorrateo, monto de un mes y asignación (proporcional, eximidos, una persona, casa, a medida, por cliente).
 - [x] **H138 · Liquidación mensual inmutable y "Mi participación" con la proyección del mes próximo.** `staff_payout_runs`, `_items` (cada hecho de plata una vez) y `_lines`; cierre verificado al centavo en SQL; motor único (`_shared/staff/settlement.ts`) para borrador, cierre, proyección y simulador.
 - [x] **H139 · Pagos al staff.** Parciales, cuentas de cobro con el editor de Transferencia, operación de Mercado Pago leída de la cuenta de NinjaSoft y email de acreditación.
-- [ ] **H140 · Puesta en marcha.** Aplicar la migración, desplegar `staff_payouts`, cargar personas, gastos y cotización, y probar una operación de MP real (§20.8 #5).
+- [ ] **H140 · Puesta en marcha.** Migración aplicada y `staff_payouts` desplegada (14/10). Falta (dueño): cargar personas, gastos y cotización, y probar una operación de MP real (§20.8 #5).
 
 ---
 

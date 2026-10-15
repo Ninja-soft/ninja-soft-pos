@@ -217,7 +217,8 @@ describe.skipIf(!enabled)("F20-8 · suscripción por cuenta corriente", () => {
 
   it("Ya transferí: sólo el dueño, en su carpeta; otro negocio no lo ve", async () => {
     const args = (path: string) => ({
-      p_amount_cents: 150_000, p_paid_on: new Date().toISOString().slice(0, 10), p_bank_account: null,
+      // Fecha de hoy en Argentina (UTC-3): la RPC valida contra la fecha AR.
+      p_amount_cents: 150_000, p_paid_on: new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10), p_bank_account: null,
       p_reference: "TRF-1", p_note: null, p_proof_path: path, p_proof_sha256: null, p_proof_mime: "application/pdf",
     });
     const cashier = await rpc(ctx.cashierA, "owner_report_transfer", args(`${ctx.tenantA}/a.pdf`));

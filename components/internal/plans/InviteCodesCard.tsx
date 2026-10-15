@@ -19,22 +19,13 @@ import {
 } from "@/modules/internal/hooks";
 import type { InviteCode, InviteKind } from "@/modules/internal/api";
 import { billingErrorMessage } from "@/lib/billing/ledger";
+import { inviteCodeSummary } from "@/lib/saas/inviteCodeSummary";
+import { Switch } from "@/components/ui/Switch";
 
 // Tipo del código en la tabla: vitalicio, días de prueba o cuenta corriente
-// (F20-8 · ADR-120: plazo de pago y descuento opcional, sin checkout de MP).
+// (F20-8 · ADR-120), con descuento e IA bonificada (ADR-154).
 function kindLabel(c: InviteCode): string {
-  if (c.kind === "lifetime") return "Vitalicio";
-  if (c.kind === "trial_days") return `Prueba de ${c.trial_days ?? 0} días`;
-  const parts = [`Cuenta corriente, paga a ${c.due_days ?? 0} días`];
-  if (c.discount_percent) {
-    parts.push(
-      `${Number(c.discount_percent).toLocaleString("es-AR")} % de descuento${
-        c.discount_months ? ` por ${c.discount_months} ${c.discount_months === 1 ? "mes" : "meses"}` : ""
-      }`,
-    );
-  }
-  if (c.billing_cycle === "yearly") parts.push("anual");
-  return parts.join(" · ");
+  return inviteCodeSummary(c);
 }
 
 const selectCls =
@@ -109,6 +100,10 @@ export function InviteCodesCard() {
   const [discountMonths, setDiscountMonths] = useState("");
   const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   const [notes, setNotes] = useState("");
+  // IA bonificada (ADR-154): sin tilde no se toca el addon; meses vacío = siempre.
+  const [aiIncluded, setAiIncluded] = useState(false);
+  const [aiMonths, setAiMonths] = useState("");
+  const canDiscount = kind === "account" || kind === "trial_days";
 
   useEffect(() => {
     if (!open) return;
@@ -124,6 +119,8 @@ export function InviteCodesCard() {
     setDiscountMonths("");
     setCycle("monthly");
     setNotes("");
+    setAiIncluded(false);
+    setAiMonths("");
   }, [open, plans]);
 
   async function handleCreate() {
@@ -145,7 +142,7 @@ export function InviteCodesCard() {
       toast({ title: "El plazo de pago va de 0 a 60 días", variant: "error" });
       return;
     }
-    const discNum = kind === "account" && discount.trim() !== "" ? Number(discount.replace(",", ".")) : null;
+    const discNum = canDiscount && discount.trim() !== "" ? Number(discount.replace(",", ".")) : null;
     if (discNum !== null && (!Number.isFinite(discNum) || discNum <= 0 || discNum > 100)) {
       toast({ title: "El descuento va de 0,01 a 100 %", variant: "error" });
       return;
@@ -153,6 +150,11 @@ export function InviteCodesCard() {
     const monthsNum = discNum !== null && discountMonths.trim() !== "" ? Number(discountMonths) : null;
     if (monthsNum !== null && (!Number.isInteger(monthsNum) || monthsNum < 1 || monthsNum > 60)) {
       toast({ title: "La duración del descuento va de 1 a 60 meses", variant: "error" });
+      return;
+    }
+    const aiMonthsNum = aiIncluded && aiMonths.trim() !== "" ? Number(aiMonths) : null;
+    if (aiMonthsNum !== null && (!Number.isInteger(aiMonthsNum) || aiMonthsNum < 1 || aiMonthsNum > 60)) {
+      toast({ title: "La IA bonificada va de 1 a 60 meses (vacío = para siempre)", variant: "error" });
       return;
     }
     const maxNum = maxUses.trim() === "" ? null : Number(maxUses);
@@ -174,6 +176,8 @@ export function InviteCodesCard() {
         discount_months: monthsNum,
         billing_cycle: kind === "account" ? cycle : null,
         notes: notes.trim() || null,
+        ai_included: aiIncluded,
+        ai_months: aiMonthsNum,
       });
       toast({ title: "Código creado", variant: "success" });
       setOpen(false);
@@ -209,7 +213,7 @@ export function InviteCodesCard() {
       <SectionHeader
         title="Códigos de invitación"
         icon={Ticket}
-        description="Se canjean al registrarse: dan acceso vitalicio, más días de prueba o dejan al negocio en cuenta corriente (paga por transferencia, sin Mercado Pago)."
+        description="Se canjean al registrarse: dan acceso vitalicio, más días de prueba o dejan al negocio en cuenta corriente (paga por transferencia, sin Mercado Pago). Pueden sumar un descuento y el Asistente IA bonificado."
         actions={
           <Button size="sm" onClick={() => setOpen(true)}>
             <Plus size={15} /> Nuevo código
@@ -424,6 +428,11 @@ export function InviteCodesCard() {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {canDiscount && (
+            <div className="space-y-2">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input
                   label="Descuento % (opcional)"
@@ -443,15 +452,44 @@ export function InviteCodesCard() {
                   onChange={(e) => setDiscountMonths(e.target.value)}
                 />
               </div>
-              <Input
-                label="Nota interna (opcional)"
-                value={notes}
-                maxLength={300}
-                placeholder="Ej. Cadena Norte, acuerdo con Juan"
-                onChange={(e) => setNotes(e.target.value)}
-              />
+              {kind === "trial_days" && discount.trim() !== "" && (
+                <p className="text-xs text-muted-foreground">El descuento arranca cuando termina la prueba.</p>
+              )}
             </div>
           )}
+
+          {/* IA bonificada (ADR-154): se aplica en el servidor al canjear. */}
+          <div className="space-y-3 rounded-lg bg-muted/50 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Incluye Asistente IA bonificado</p>
+                <p className="text-xs text-muted-foreground">
+                  El negocio arranca con la IA activa y sin cargo. Al vencer, se da de baja sola y le avisamos.
+                </p>
+              </div>
+              <Switch checked={aiIncluded} onCheckedChange={setAiIncluded} label="Incluye Asistente IA bonificado" />
+            </div>
+            {aiIncluded && (
+              <Input
+                label="Bonificado durante (meses)"
+                type="number"
+                min="1"
+                max="60"
+                placeholder="Para siempre"
+                value={aiMonths}
+                onChange={(e) => setAiMonths(e.target.value)}
+                hint="Vacío = para siempre"
+              />
+            )}
+          </div>
+
+          <Input
+            label="Nota interna (opcional)"
+            value={notes}
+            maxLength={300}
+            placeholder="Ej. Cadena Norte, acuerdo con Juan"
+            onChange={(e) => setNotes(e.target.value)}
+          />
 
           <Input
             label="Cupo de usos (vacío = sin tope)"

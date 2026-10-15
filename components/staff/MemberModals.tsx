@@ -19,6 +19,7 @@ import {
   type AssignableRole,
 } from "@/components/staff/staffForms";
 import { useBranchContext } from "@/modules/branches/hooks";
+import { invalidateMyProfile } from "@/hooks/useMyMembershipProfile";
 import type { StaffPersonRow } from "@/modules/staff/api";
 
 // Código de error de una Edge Function (el cuerpo JSON de la respuesta).
@@ -50,6 +51,9 @@ function useRefreshStaff() {
   return () => {
     qc.invalidateQueries({ queryKey: ["staff"] });
     qc.invalidateQueries({ queryKey: ["tenant-members"] });
+    // Si el dueño se edita a sí mismo desde Equipo (foto, nombre), el pie del
+    // menú tiene que tomarlo al toque.
+    invalidateMyProfile(qc);
     qc.invalidateQueries({ queryKey: ["cashier-profiles"] });
     qc.invalidateQueries({ queryKey: ["branches"] });
     qc.invalidateQueries({ queryKey: ["owner-stats"] });

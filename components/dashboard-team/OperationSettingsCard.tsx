@@ -48,7 +48,7 @@ import {
 } from "@/lib/catalog/mode";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { CATALOG_MODE_KEY } from "@/modules/services/hooks";
-import { onlyActiveTenant } from "@/lib/tenant/scope";
+import { fetchMyMembership } from "@/lib/tenant/myMembership";
 
 type PluMode = "random" | "incremental";
 
@@ -125,16 +125,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await onlyActiveTenant(
-        supabase
-          .from("tenant_users")
-          .select("tenant_id, role")
-          .eq("user_id", user.id)
-          .eq("status", "active"),
-        user,
-      )
-        .limit(1)
-        .maybeSingle();
+      const mem = await fetchMyMembership<{ tenant_id: string; role: string }>(supabase, user, "tenant_id, role");
       if (!mem) return null;
       return { tenantId: mem.tenant_id, role: mem.role };
     },

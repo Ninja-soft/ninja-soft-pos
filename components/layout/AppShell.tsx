@@ -67,12 +67,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
+import { useMyMembershipProfile } from "@/hooks/useMyMembershipProfile";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { BusinessBadge } from "@/components/layout/BusinessBadge";
 import { Avatar } from "@/components/ui/Avatar";
-import { onlyActiveTenant } from "@/lib/tenant/scope";
 import {
   Dropdown,
   DropdownContent,
@@ -133,6 +133,10 @@ const TourHost = dynamic(
 );
 const NudgeHost = dynamic(
   () => import("@/components/onboarding/NudgeHost").then((m) => m.NudgeHost),
+  { ssr: false },
+);
+const OnboardingNextStepToasts = dynamic(
+  () => import("@/components/onboarding/OnboardingNextStepToasts").then((m) => m.OnboardingNextStepToasts),
   { ssr: false },
 );
 
@@ -560,32 +564,13 @@ function UserMenu({
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
 
-  // Perfil del POS = el de la membresía (lo mismo que se ve/edita en Equipo).
-  const { data: me, isLoading: meLoading } = useQuery({
-    queryKey: ["my-membership-profile"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const user = await getCurrentUser();
-      if (!user) return null;
-      const { data } = await onlyActiveTenant(
-        supabase
-          .from("tenant_users")
-          .select("display_name, avatar")
-          .eq("user_id", user.id)
-          .eq("status", "active"),
-        user,
-      )
-        .limit(1)
-        .maybeSingle();
-      return {
-        display_name: data?.display_name ?? null,
-        avatar: data?.avatar ?? null,
-      };
-    },
-  });
-  const name = me?.display_name || email;
+  // Perfil del POS = el de MI membresía en el negocio ACTIVO (lo mismo que se
+  // ve/edita en Equipo y en "Mi perfil"); nunca el de otra cuenta.
+  const { data: me, isLoading: meLoading } = useMyMembershipProfile();
+  const name = me?.displayName || email;
   // Nombre y apellido siempre capitalizados; el email se deja como está.
-  const shown = name === email ? name : capitalizeName(name);
+  const isEmail = name === email;
+  const shown = isEmail ? name : capitalizeName(name);
   const roleLabel = role ? (ROLE_LABELS[role] ?? role) : null;
 
   return (
@@ -594,16 +579,27 @@ function UserMenu({
         <DropdownTrigger asChild>
           <button
             title={email}
-            aria-label={`Cuenta: ${shown}${roleLabel ? `, ${roleLabel}` : ""}`}
+            aria-label={meLoading ? "Cargando tu cuenta" : `Cuenta: ${shown}${roleLabel ? `, ${roleLabel}` : ""}`}
+            aria-busy={meLoading || undefined}
             className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            {/* Mientras carga el perfil, sólo el spinner: nada de email partido. */}
             <Avatar name={name} avatar={me?.avatar} size={28} loading={meLoading} />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="line-clamp-2 break-words text-sm font-medium leading-tight text-foreground">{shown}</span>
-              {roleLabel && (
-                <span className="truncate text-[11px] font-medium leading-tight text-muted-foreground">{roleLabel}</span>
-              )}
-            </span>
+            {!meLoading && (
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span
+                  className={cn(
+                    "text-sm font-medium leading-tight text-foreground",
+                    isEmail ? "truncate" : "line-clamp-2 break-words",
+                  )}
+                >
+                  {shown}
+                </span>
+                {roleLabel && (
+                  <span className="truncate text-[11px] font-medium leading-tight text-muted-foreground">{roleLabel}</span>
+                )}
+              </span>
+            )}
           </button>
         </DropdownTrigger>
         <DropdownContent align="start" side="top" className="w-[240px]">
@@ -978,6 +974,9 @@ export function AppShell({
       {!onPos && <AssistantBubble />}
       {shell?.role && <TourHost role={shell.role} />}
       {shell?.role && <NudgeHost role={shell.role} />}
+      {/* Puesta en marcha (ADR-154): "listo, lo que sigue es…" al completar un
+          paso. Sólo dueño o encargado, y nunca en medio de una venta. */}
+      {canOwnerPanel && !onPos && <OnboardingNextStepToasts />}
     </div>
   );
 }

@@ -45,21 +45,31 @@ export const HUMAN_ERRORS: Record<string, { title: string; action: string }> = {
   },
   "cms.cert.expired": {
     title: "El certificado está vencido",
-    action: "Generá un pedido nuevo en el paso Certificado y cargá el certificado que te devuelva ARCA.",
+    action: "Generá un pedido nuevo en el paso Certificado, subilo a ARCA y cargá el certificado nuevo que te devuelva.",
   },
   "cms.cert.untrusted": {
     title: "ARCA no reconoce el certificado",
-    action: "Revisá que sea el certificado de este ambiente (prueba o real) y que lo haya emitido ARCA.",
+    action:
+      "Suele pasar cuando se usa el certificado de prueba para facturar en real (o al revés). El de prueba lo emite WSASS y el real, Administración de Certificados Digitales: cargá el que corresponde a este modo.",
+  },
+  "cms.cert.notFound": {
+    title: "ARCA no encuentra el certificado",
+    action: "Revisá que el certificado cargado sea el que descargaste de ARCA para este modo y volvé a probar.",
   },
   "cms.bad": { title: "La firma del pedido no es válida", action: "Volvé a cargar el certificado y probá de nuevo." },
   "cms.sign.invalid": { title: "La firma del pedido no es válida", action: "Volvé a cargar el certificado y probá de nuevo." },
   "coe.notAuthorized": {
     title: "El certificado no está autorizado para facturar",
-    action: "En ARCA, autorizá el servicio Facturación Electrónica (wsfe) para el alias del certificado (paso Autorizar).",
+    action:
+      "Falta la relación en ARCA, o se eligió otro alias u otra CUIT. En ARCA, Administrador de Relaciones de Clave Fiscal > Nueva Relación > ARCA > WebServices > Facturación Electrónica, y como Representante elegí el Computador Fiscal con el alias del certificado. Después tocá Verificar (a veces ARCA tarda unos minutos).",
   },
   "xml.generationTime.invalid": {
     title: "La hora del servidor no coincide con la de ARCA",
-    action: "Se reintenta solo en unos minutos.",
+    action: "Es un problema pasajero: NinjaSoft reintenta solo. Si sigue, probá de nuevo en unos minutos.",
+  },
+  "xml.expirationTime.expired": {
+    title: "El pedido de acceso venció antes de llegar a ARCA",
+    action: "Es un problema pasajero: NinjaSoft reintenta solo. Si sigue, probá de nuevo en unos minutos.",
   },
   // WSFE
   "600": {
@@ -74,14 +84,39 @@ export const HUMAN_ERRORS: Record<string, { title: string; action: string }> = {
     title: "ARCA no encontró datos para esa consulta",
     action: "Si es el punto de venta: dalo de alta en ARCA como Factura electrónica - Web Services.",
   },
+  "1000": {
+    title: "ARCA no autorizó la consulta para esta CUIT",
+    action: "Revisá que la relación de Facturación Electrónica sea para la CUIT del negocio y volvé a probar.",
+  },
   "10016": {
-    title: "La numeración no coincide con la de ARCA",
-    action: "NinjaSoft vuelve a consultar el último número autorizado y reintenta solo.",
+    title: "La numeración o la fecha no coinciden con lo que espera ARCA",
+    action:
+      "El número tiene que ser el siguiente al último autorizado y la fecha no puede ser anterior a la del último comprobante. NinjaSoft vuelve a consultar el último número y reintenta solo.",
+  },
+  "10015": {
+    title: "La fecha del comprobante está fuera del rango que acepta ARCA",
+    action:
+      "ARCA acepta hasta 5 días atrás o adelante para productos y 10 para servicios. NinjaSoft ajusta la fecha al reprocesar; si la venta es más vieja, emitila desde ARCA.",
+  },
+  "11002": {
+    title: "El punto de venta no está habilitado para Web Services",
+    action:
+      "En ARCA, Administración de puntos de venta y domicilios, dalo de alta con el sistema Factura Electrónica - Monotributo/Responsable Inscripto - Web Services. Uno de Comprobantes en línea no sirve.",
   },
   "500": { title: "ARCA tuvo un error interno", action: "Se reintenta solo." },
   "501": { title: "ARCA tuvo un error interno", action: "Se reintenta solo." },
   "502": { title: "ARCA tuvo un error interno", action: "Se reintenta solo." },
   // Propios
+  cuit_distinta: {
+    title: "La CUIT del certificado no es la del negocio",
+    action:
+      "El certificado tiene que ser de la misma CUIT que cargaste en Configuración > Impuestos. Corregí la CUIT o generá un certificado nuevo con la CUIT correcta.",
+  },
+  pv_no_habilitado: {
+    title: "Hay puntos de venta que ARCA no tiene como Web Services",
+    action:
+      "Dalos de alta en ARCA (Administración de puntos de venta y domicilios) con el sistema Web Services y el mismo número que usa la sucursal, o cambiá el número de la sucursal por uno que ARCA sí liste.",
+  },
   sin_respuesta: {
     title: "ARCA no respondió",
     action: "La venta quedó registrada y la factura se reintenta sola. Si tenés contingencia activa, se emite con CAEA.",
@@ -162,7 +197,9 @@ export const HUMAN_ERRORS: Record<string, { title: string; action: string }> = {
 
 export function humanError(code: string | null | undefined, fallback?: string | null): { title: string; action: string } {
   if (code) {
-    const k = Object.keys(HUMAN_ERRORS).find((x) => x.toLowerCase() === code.toLowerCase());
+    // Los faults de WSAA pueden venir con prefijo de namespace (ns1:coe.notAuthorized).
+    const c = code.trim().replace(/^[a-z0-9]+:(?=[a-z])/i, "").toLowerCase();
+    const k = Object.keys(HUMAN_ERRORS).find((x) => x.toLowerCase() === c);
     if (k) return HUMAN_ERRORS[k] as { title: string; action: string };
   }
   return { title: fallback || "ARCA devolvió un error", action: "Revisá el detalle y reprocesá." };

@@ -1,6 +1,6 @@
-# 46 · Tesorería ordenada: de la venta al asiento (F22, ADR-150)
+# 46 · Tesorería ordenada: de la venta al asiento (F23, ADR-150)
 
-> Documento vivo. Junta en un solo mapa lo que hoy está repartido entre Tesorería (ADR-059), Conciliación (ADR-044, ADR-061, ADR-064), Contabilidad (ADR-066, [`31-contabilidad.md`](./31-contabilidad.md)), Impuestos como sujeto (ADR-095) y NubCeo (ADR-062, [`30-nubceo.md`](./30-nubceo.md)). Decisión en [ADR-150](./17-decision-log.md). Fase en [`02-roadmap.md`](./02-roadmap.md) (F22).
+> Documento vivo. Junta en un solo mapa lo que hoy está repartido entre Tesorería (ADR-059), Conciliación (ADR-044, ADR-061, ADR-064), Contabilidad (ADR-066, [`31-contabilidad.md`](./31-contabilidad.md)), Impuestos como sujeto (ADR-095) y NubCeo (ADR-062, [`30-nubceo.md`](./30-nubceo.md)). Decisión en [ADR-150](./17-decision-log.md). Fase en [`02-roadmap.md`](./02-roadmap.md) (F23).
 >
 > Pedido del dueño (2026-10-15): *"Ordename toda la parte de tesorería: que quede bien explicado, intuitivo, que esté relacionado, que se manejen bien los asientos contables, como lo mando yo, como lo devuelve NubCeo. Auditá que todo funcione."*
 
@@ -74,7 +74,7 @@ Severidad: **Alta** = la plata o los asientos pueden quedar mal o contados dos v
 | T21 | Media | **Archivos de Ualá, MODO, Transferencias y Directo no concilian solos** y pueden emparejar mal cobros con tarjeta por monto y día. | `supabase/functions/settlements/index.ts` (`INTENT_PROVIDERS`). | H152. |
 | T22 | Baja | **Cierre de mes con la fecha de UTC.** `acc_period_close` compara contra `current_date`: el último día del mes, después de las 21, deja cerrar el mes en curso. Lo mismo `acc_entry_reverse`, `cheque_transition` y la anulación de la orden de pago. | Definiciones vigentes. | H150. |
 | T23 | Baja | **Saldo inicial editable con movimientos.** `opening_balance` y `currency` se pueden cambiar con movimientos cargados; `treasury_balances` ignora `opening_date`. | `20261022100300_tesoreria.sql`. | H150. |
-| T24 | Baja | **Tres fuentes de IVA de ventas.** Contabilidad usa `products.tax_rate` (`acc_vat_split`), el reporte del motor de impuestos y el Libro IVA Digital usan el comprobante, NubCeo usa `sales.tax_total`. | `31-contabilidad.md` §8 ya lo anota. | Se unifica con H103 (fuera de F22). |
+| T24 | Baja | **Tres fuentes de IVA de ventas.** Contabilidad usa `products.tax_rate` (`acc_vat_split`), el reporte del motor de impuestos y el Libro IVA Digital usan el comprobante, NubCeo usa `sales.tax_total`. | `31-contabilidad.md` §8 ya lo anota. | Se unifica con H103 (fuera de F23). |
 | T13 | Info | **Mercado Pago devolvió pagos de ventas que siguen completadas** (2 QR de $1.400 en un negocio). La conciliación lo detecta bien (Diferencia de monto + disputa). | `settlement_lines` + `payment_disputes`. | Nada en código; es un aviso operativo para ese negocio. |
 
 Lo que **está bien** y no se toca: el motor de asientos (balance en la base, triggers diferidos que nunca frenan la venta, `acc_issues` con reintento, unicidad por origen, contra-asiento al anular, mes cerrado que corre la fecha al mes abierto), la resolución de mapeos de lo específico a lo general, la cola de NubCeo (idempotencia por `venta_id`, lease, reintentos, borrado de anuladas) y el matching de liquidaciones por id, intent, lote y cupón.
@@ -253,7 +253,7 @@ Un grupo propio **Tesorería** en el menú, en este orden. Cada pantalla abre co
 
 ---
 
-## 7. Fases (F22)
+## 7. Fases (F23)
 
 Toda función nueva sigue el checklist de §6 de `CLAUDE.md`: key en `features`, marcada en `plans.limits.modules`, gating server-side con `tenant_has_feature_for`, copy en `lib/saas/featureInfo.ts` y comparación de planes derivada.
 
@@ -275,7 +275,7 @@ Toda función nueva sigue el checklist de §6 de `CLAUDE.md`: key en `features`,
 ## 8. Arreglado en esta fase
 
 - **T4:** `importLedger` (Edge `nubceo_sync`) ahora sigue desde el `updatedAt` del último asiento traído cuando corta por el tope de páginas, y decide si hay más páginas por las filas crudas que devolvió NubCeo. Lógica pura en `ledgerNextCursor` y `parseLedgerPage` (`supabase/functions/_shared/nubceo.ts`), tests en `tests/unit/nubceo.test.ts`. **Requiere desplegar la Edge** (no se desplegó).
-- **T14:** devolución reintegrada por Mercado Pago contra la cuenta del cobro de MP, no contra la Caja. Migración `20261217100000_tesoreria_fixes_auditoria.sql` (**sin aplicar**), test en `tests/unit/accounting.test.ts`. Hoy no hay negocios con Contabilidad prendida, así que no hay asientos para corregir.
+- **T14:** devolución reintegrada por Mercado Pago contra la cuenta del cobro de MP, no contra la Caja. Migración `20261217100100_tesoreria_fixes_auditoria.sql` (**sin aplicar**), test en `tests/unit/accounting.test.ts`. Hoy no hay negocios con Contabilidad prendida, así que no hay asientos para corregir.
 - **T5 (parcial):** `_treasury_move` sin fecha toma el día de Argentina (misma migración).
 - **T19 (pantalla):** totales de la pestaña Cuentas sólo en pesos y con cuentas activas; lo que está en otra moneda se muestra aparte. `lib/treasury/totals.ts`, tests en `tests/unit/treasuryTotals.test.ts`; el flujo de fondos usa la misma función.
 

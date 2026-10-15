@@ -135,7 +135,7 @@ async function loadCreds(admin: SupabaseClient, tenantId: string, env: ArcaEnv, 
   if (c.not_after && new Date(c.not_after).getTime() < Date.now()) {
     return { ok: false, code: "cms.cert.expired", message: "El certificado está vencido" };
   }
-  // ADR-149: un certificado de otra CUIT falla en ARCA con un error confuso
+  // ADR-153: un certificado de otra CUIT falla en ARCA con un error confuso
   // (600/601); se avisa antes y con la acción concreta.
   if (c.cuit && emitterCuit && c.cuit !== emitterCuit) {
     return { ok: false, code: "cuit_distinta", message: `El certificado es de la CUIT ${c.cuit} y el negocio tiene cargada la ${emitterCuit}` };
@@ -198,7 +198,7 @@ async function authFor(
     return { ok: false, kind: "action", code: "certificado_ilegible", message: "No se pudo firmar con el certificado" };
   }
   const eps = endpointsFor(env, envVars());
-  // ADR-149: desde la pantalla, lo pasajero (red, reloj de WSAA) se reintenta
+  // ADR-153: desde la pantalla, lo pasajero (red, reloj de WSAA) se reintenta
   // con backoff corto. La cola no: tiene su backoff largo y la contingencia.
   // Cada reintento firma un TRA nuevo (uniqueId y horario actuales).
   let first = true;

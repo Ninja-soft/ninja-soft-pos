@@ -44,7 +44,7 @@ import { CertificateFlow, defaultAlias } from "./CertificateFlow";
 import { TestResults, useConnectionTest } from "./TestResults";
 import { CopyValue, Dot, ExtLink, HowTo, Term, fmtDateTime } from "./shared";
 
-// Pasar a facturar en real (ADR-149): guía paso a paso con el estado real de
+// Pasar a facturar en real (ADR-153): guía paso a paso con el estado real de
 // cada paso (lo guarda el servidor: se puede salir y volver), la acción
 // exacta en ARCA y la verificación de cada cosa. El interruptor final sólo se
 // habilita con la lista completa (el servidor lo exige igual).

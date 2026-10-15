@@ -708,5 +708,5 @@ function StepContingencia({ config, canWrite }: { config: ArcaConfig; canWrite: 
 }
 
 // ---------------------------------------------------------------------------
-// 8. Producción: guía paso a paso (ProductionGuide, ADR-149).
+// 8. Producción: guía paso a paso (ProductionGuide, ADR-153).
 // ---------------------------------------------------------------------------

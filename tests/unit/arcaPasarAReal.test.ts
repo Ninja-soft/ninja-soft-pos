@@ -1,5 +1,5 @@
 // =============================================================================
-// ADR-149: pasar a facturar en real. Estado de la conexión por ambiente (la
+// ADR-153: pasar a facturar en real. Estado de la conexión por ambiente (la
 // prueba de producción ya no pisa los pasos Autorizar y Probar de
 // homologación), guía de producción con el estado real de cada paso, mapeo de
 // errores de ARCA y reintentos cortos ante errores pasajeros.

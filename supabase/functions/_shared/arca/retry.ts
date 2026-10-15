@@ -1,7 +1,7 @@
 // =============================================================================
 // Reintentos cortos con backoff para las consultas de ARCA que hace la
 // pantalla (prueba de conexión, verificación de la autorización y de los
-// puntos de venta) · ADR-149. PURO: el sleep se inyecta en los tests.
+// puntos de venta) · ADR-153. PURO: el sleep se inyecta en los tests.
 //
 // Sólo se reintenta lo transitorio (sin respuesta, timeout, 5xx, reloj de
 // WSAA). Un error del negocio (coe.notAuthorized, certificado, CUIT) vuelve

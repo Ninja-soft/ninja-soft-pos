@@ -64,7 +64,7 @@ export interface ArcaSettings {
   last_connection_env: ArcaEnv | null;
   last_connection_ok: boolean | null;
   last_connection_message: string | null;
-  /** ADR-149: última prueba completa de cada ambiente (sin la migración no viene). */
+  /** ADR-153: última prueba completa de cada ambiente (sin la migración no viene). */
   connection_by_env?: Partial<Record<ArcaEnv, Partial<ConnectionState> | null>> | null;
   prod_test_ok_at: string | null;
   prod_pos_verified: number[] | null;
@@ -295,7 +295,7 @@ export const arcaApi = {
     ) ?? [],
 
   // Un update que la RLS filtra no da error: vuelve 0 filas. Se pide la fila
-  // de vuelta para no dar por guardado algo que no se guardó (ADR-149).
+  // de vuelta para no dar por guardado algo que no se guardó (ADR-153).
   setStorePos: async (storeId: string, n: number | null) => {
     const rows = check(await loose().from<{ id: string }[]>("stores").update({ afip_pos_number: n }).eq("id", storeId).select("id"));
     if (!rows || rows.length === 0) throw new Error("not_saved");

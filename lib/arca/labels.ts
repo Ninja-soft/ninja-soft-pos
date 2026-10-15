@@ -251,7 +251,7 @@ export interface WizardConfigLike {
 }
 
 // ---------------------------------------------------------------------------
-// Conexión por ambiente (ADR-149). Cada ambiente guarda su última prueba
+// Conexión por ambiente (ADR-153). Cada ambiente guarda su última prueba
 // completa (arca_settings.connection_by_env); probar producción ya no pisa lo
 // hecho en homologación. Sin la migración se cae a last_connection_*.
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ export function wizardProgress(c: WizardConfigLike, now: Date = new Date()): num
 }
 
 // ---------------------------------------------------------------------------
-// Guía para pasar a facturar en real (ADR-149). Cada paso con su estado real,
+// Guía para pasar a facturar en real (ADR-153). Cada paso con su estado real,
 // derivado de lo que guardó el servidor (checklist, certificados y la última
 // prueba de producción), así se ve dónde quedó aunque se salga y se vuelva.
 // ---------------------------------------------------------------------------

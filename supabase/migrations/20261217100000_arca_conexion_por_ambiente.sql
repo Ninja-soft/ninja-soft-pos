@@ -1,5 +1,5 @@
 -- =============================================================================
--- ARCA: estado de la conexión guardado POR AMBIENTE (ADR-149).
+-- ARCA: estado de la conexión guardado POR AMBIENTE (ADR-153).
 --
 -- Antes había una sola "última conexión" (last_connection_*) para los dos
 -- ambientes: probar producción pisaba la prueba de homologación y los pasos

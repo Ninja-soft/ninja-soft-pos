@@ -334,7 +334,7 @@ describe("feature de plan contabilidad (CLAUDE.md §6)", () => {
 describe("auditoría de tesorería (ADR-150): arreglos chicos", () => {
   it("la devolución reintegrada por Mercado Pago no va a la Caja del POS", async () => {
     const { readFileSync } = await import("node:fs");
-    const sql = readFileSync("supabase/migrations/20261217100000_tesoreria_fixes_auditoria.sql", "utf8");
+    const sql = readFileSync("supabase/migrations/20261217100100_tesoreria_fixes_auditoria.sql", "utf8");
     const reintegro = sql.match(/case r\.refund_method([\s\S]*?)end,/)?.[1] ?? "";
     // Cada medio de reintegro que admite sale_returns tiene su rama explícita.
     const check = readFileSync("supabase/migrations/20261030100100_reintegro_mp.sql", "utf8").match(
@@ -356,7 +356,7 @@ describe("auditoría de tesorería (ADR-150): arreglos chicos", () => {
 
   it("los movimientos de tesorería sin fecha toman el día de Argentina, no el de UTC", async () => {
     const { readFileSync } = await import("node:fs");
-    const sql = readFileSync("supabase/migrations/20261217100000_tesoreria_fixes_auditoria.sql", "utf8");
+    const sql = readFileSync("supabase/migrations/20261217100100_tesoreria_fixes_auditoria.sql", "utf8");
     const fn = sql.slice(sql.indexOf("create or replace function _treasury_move"));
     expect(fn).toMatch(/coalesce\(p_date, \(now\(\) at time zone 'America\/Argentina\/Buenos_Aires'\)::date\)/);
     expect(fn).not.toMatch(/current_date/);

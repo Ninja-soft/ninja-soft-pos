@@ -321,7 +321,7 @@ export function ArcaRequirements({
   const certState: ReqState = deleg || cert ? "ok" : "pending";
 
   // 4. Autorización del servicio: última prueba guardada DE ESTE ambiente
-  // (ADR-149: la prueba de producción ya no pisa la de homologación).
+  // (ADR-153: la prueba de producción ya no pisa la de homologación).
   const conn = connectionFor(s, env);
   const connected = envConnected(config, env);
   const tested = conn != null;

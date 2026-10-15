@@ -1,4 +1,4 @@
-// ADR-149: guía para pasar a facturar en real y pasos del asistente que
+// ADR-153: guía para pasar a facturar en real y pasos del asistente que
 // guardan su estado. Caso real (datos ficticios): un negocio con el certificado de
 // producción cargado y la relación de wsfe sin hacer (coe.notAuthorized).
 import { beforeEach, describe, expect, it, vi } from "vitest";

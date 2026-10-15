@@ -5501,7 +5501,7 @@ La auditoría (doc 45 §2) encontró 28 hallazgos. Los centrales: cinco circuito
 - Pendiente de confirmar: diseño de registro vigente del TXT de ARBA campo por campo, umbral y validez del COT, `token`/`sign` de AGIP y régimen de confirmación de recepción.
 ---
 
-## ADR-149: Pasar a facturar en real con ARCA: estado de la conexión por ambiente, guía paso a paso con verificación de cada paso y errores de ARCA con la acción concreta
+## ADR-153: Pasar a facturar en real con ARCA: estado de la conexión por ambiente, guía paso a paso con verificación de cada paso y errores de ARCA con la acción concreta
 
 **Fecha:** 2026-10-15 · **Estado:** aceptada (código en `fix/arca-pasar-a-real`; migración `20261217100000_arca_conexion_por_ambiente` sin aplicar; Edge `arca_wsfe` sin desplegar) · **Base:** ADR-072 (asistente, checklist de producción), ADR-125 (guía de requisitos con estado real), ADR-133 (certificado de la plataforma)
 
@@ -5557,7 +5557,7 @@ En producción nadie usa todavía Tesorería, Contabilidad ni NubCeo (0 filas): 
 3. **Cuenta contable por cuenta de dinero.** Los mapeos `cobro:transfer` y `acreditacion:<proveedor>` resuelven primero la cuenta contable de la cuenta de Tesorería vinculada; el Mayor de cada banco y billetera coincide con su saldo. El saldo inicial genera asiento de apertura.
 4. **Fuente única de los asientos de liquidación por negocio:** NinjaPOS (por defecto; los asientos de NubCeo se ven como control) o NubCeo (se traducen con una tabla de equivalencias de cuentas, entran al Diario como `source_type = 'nubceo_ledger'` sólo si balancean, y `acc_sync_settlement_line` no genera nada). El cambio vale desde el primer día de un mes abierto.
 5. **Menú propio de Tesorería** (Posición, Movimientos, A acreditar, Conciliación, Cheques, Flujo de fondos, NubCeo), Contabilidad con Mapeos y Cierres a la vista, Impuestos como grupo propio, y en cada renglón "Ver asiento" / "Ver origen".
-6. **Fases H150 a H157** (F22) con criterio de cierre al centavo; la única feature nueva es `conciliacion_bancaria` (OPTIONAL, Business, ya prevista en H110). El resto entra en `tesoreria`, `conciliacion_procesadores`, `contabilidad` e `integracion_nubceo`.
+6. **Fases H150 a H157** (F23) con criterio de cierre al centavo; la única feature nueva es `conciliacion_bancaria` (OPTIONAL, Business, ya prevista en H110). El resto entra en `tesoreria`, `conciliacion_procesadores`, `contabilidad` e `integracion_nubceo`.
 7. **Arreglos chicos ya hechos en esta rama:** importación de asientos de NubCeo con cursor por el último `updatedAt` traído y fin de páginas por filas crudas; devolución reintegrada por MP contra `cobro:*:mercadopago`; `_treasury_move` con fecha argentina; totales de Tesorería sólo en pesos y con cuentas activas.
 
 ### Alternativas descartadas
@@ -5571,4 +5571,4 @@ En producción nadie usa todavía Tesorería, Contabilidad ni NubCeo (0 filas): 
 
 - Migraciones nuevas por fase (ver `46-tesoreria.md` §7); `create_sale` y `close_cash_shift` no se tocan (triggers diferidos, como la Contabilidad).
 - Las respuestas a las preguntas del dueño (§9: fuente de liquidaciones, plan del estudio en NubCeo, minutas de ML, depósito directo desde la caja) definen H151 y H153.
-- Deploy de esta fase: migración `20261217100000_tesoreria_fixes_auditoria.sql` y Edge `nubceo_sync`. Tests: `tests/unit/nubceo.test.ts`, `tests/unit/accounting.test.ts`, `tests/unit/treasuryTotals.test.ts`.
+- Deploy de esta fase: migración `20261217100100_tesoreria_fixes_auditoria.sql` y Edge `nubceo_sync`. Tests: `tests/unit/nubceo.test.ts`, `tests/unit/accounting.test.ts`, `tests/unit/treasuryTotals.test.ts`.

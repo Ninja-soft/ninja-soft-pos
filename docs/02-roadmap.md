@@ -34,7 +34,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-2, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120, ADR-126; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
 | **F22** | Logística y reparto propio (entrega unificada, direcciones con mapa, flota, hojas de ruta, app del repartidor, seguimiento, COT automático) | 14–20 semanas | 🔵 Propuesta (ADR-149, auditoría y plan en [`45-logistica-reparto.md`](./45-logistica-reparto.md)) |
-| **F22** | Tesorería ordenada: cuentas de dinero unificadas, liquidaciones a la billetera, extracto bancario, NubCeo dentro de la Contabilidad, gastos con categoría y menú propio | 6–9 semanas | 🟡 Plan y auditoría (ADR-150, [`46-tesoreria.md`](./46-tesoreria.md)); arreglos chicos con código, migración sin aplicar |
+| **F23** | Tesorería ordenada: cuentas de dinero unificadas, liquidaciones a la billetera, extracto bancario, NubCeo dentro de la Contabilidad, gastos con categoría y menú propio | 6–9 semanas | 🟡 Plan y auditoría (ADR-150, [`46-tesoreria.md`](./46-tesoreria.md)); arreglos chicos con código, migración sin aplicar |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1554,7 +1554,7 @@ Objetivo: que todo lo que sale hacia un cliente o una sucursal sea **una entrega
   - [ ] *Criterio:* escanear un producto ajeno da error y queda registrado; 5 ítems con 1 roto y 1 rechazado dejan stock, merma y entrega hija correctos (PGlite).
 - [ ] **H149 · L6: tiempo real y escala.** Realtime Broadcast para el mapa, delivery gastronómico y canales sobre hojas y repartidores reales, Flex en hojas propias, cobro contra entrega y rendición, reportes; VROOM/OSRM o Photon propios y app nativa sólo si se deciden.
   - [ ] *Criterio:* se define al iniciar la fase con datos del piloto.
-### F22 · Tesorería ordenada (de la venta al asiento)
+### F23 · Tesorería ordenada (de la venta al asiento)
 
 Objetivo: cada peso se sigue desde la venta hasta el banco y hasta el asiento, en una sola pantalla y sin contarlo dos veces. Une Tesorería (H111), Conciliación (H110), Contabilidad (H109), Impuestos como sujeto (H106) y NubCeo. Pedido del dueño del 2026-10-15; auditoría, modelo y fases en [`46-tesoreria.md`](./46-tesoreria.md); decisión ADR-150. Arreglos chicos de la auditoría (importación de asientos de NubCeo, devolución por MP contra la caja, fecha argentina en `_treasury_move`, totales por moneda en Tesorería) en `docs/plan-tesoreria`, migración `20261217100000` sin aplicar y Edge `nubceo_sync` sin desplegar.
 
@@ -1768,7 +1768,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F22** | 0/14 | 0 | 14 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
 | **Total** | 654/1182 | 305 | 223 | 55% | 68% |
-| **F22** | 0/15 | 0 | 15 | 0% | 0% |
+| **F23** | 0/15 | 0 | 15 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
 | **Total** | 654/1183 | 305 | 224 | 55% | 68% |
 <!-- roadmap-progress:end -->

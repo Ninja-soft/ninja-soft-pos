@@ -875,6 +875,16 @@ Migraciones `20261021100000_features_listas_precios_pro`, `20261021100100_listas
 - [x] `price_bulk_batches` + `price_bulk_lines` (sólo lectura). RPC `price_bulk_preview`, `price_bulk_create`, `price_bulk_decide`, `price_bulk_revert`, `price_schedules_apply_due`, `price_schedule_set`, `price_schedule_cancel`, `price_list_import`; escriben `audit_logs` y el historial con origen `bulk` o `import`.
 - [x] `price_label_queue(store_id, product_id, variant_id?, list_id?, old_price, new_price, source, printed_at, printed_by)`, una pendiente por sucursal y producto; triggers en `products.price`, `product_variants.price_override` y `price_list_items` (listas de mostrador o asignadas a la sucursal). `price_labels_mark_printed(ids)` con acceso a la sucursal.
 
+## 8.17 Extensión F11: pedidos de salón y expedición (H32, ADR-129)
+
+Migraciones `20261123100000_features_pedidos_despacho` y `20261123100100_pedidos_despacho`.
+
+- [x] `pos_settings.order_config` jsonb (objeto): minutos de reserva, acción al vencer (`release` | `cancel`), si el retiro inmediato pasa por expedición, tipos de entrega habilitados, cross-branch por tipo y código de retiro. Defaults y topes en `pos_order_config(tenant)` (espejo `orderConfig` en `lib/orders/logic.ts`).
+- [x] `sale_orders(number, store_id, fulfillment_store_id, delivery_type inmediato|retiro|envio, status abierto|tomado|cobrado|anulado|vencido, cliente, pickup_name, pickup_code_hash, ship_address, vendedor (seller_user_id, seller_professional_id, seller_name), cart jsonb (formato de paused_sales.cart), checkout jsonb, total, reservation_id, reserved_until, reservation_released_at, taken_by/at, sale_id, cashier_user_id, anulación, deleted_at)`. Único `(tenant_id, number)` y por `sale_id`.
+- [x] `dispatches(number, sale_id, sale_order_id, store_id, fulfillment_store_id, delivery_type, status pendiente|armando|listo|en_transito|entregado|despachado|cancelado, pickup_name, pickup_code_hash, has_pickup_code (generada), failed_attempts, ship_address, shipment_id, tracking, quién y cuándo de cada paso, delivered_to, deleted_at)`. Una entrega abierta por venta (índice parcial).
+- [x] `stock_reservations`: canal `pedido`, `pickup_verified_via = 'pedido'` y `sale_order_id` (único). Trigger `stock_reservations_sale_order_sync` (AFTER UPDATE OF status): reserva entregada por create_sale → pedido cobrado y entrega abierta; cancelada o vencida → reserva liberada.
+- [x] RLS de lectura `tenant_id = (select current_tenant_id()) or (select internal_scope())` + RESTRICTIVE por sucursal (pedido o entrega). Sin escritura por REST y sin `pickup_code_hash` en los grants por columna. RPC: `sale_order_create`, `sale_order_take`, `sale_order_leave`, `sale_order_cancel`, `sale_order_complete`, `dispatch_create_for_sale`, `dispatch_advance`, `dispatch_deliver`, `dispatch_ship`, `dispatch_cancel`, `stock_reserved_by_store`; job `sale_orders_expire_due` (pg_cron `sale-orders-expire`, cada minuto, sólo service_role). `public_catalog` suma `available` por producto.
+
 ## 9. Migraciones iniciales sugeridas
 
 Orden recomendado de migraciones para el Hito 0:

@@ -266,6 +266,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
         { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
+        // Pedidos de salón y expedición (F11 · H32, ADR-129): OPTIONAL Pro+.
+        { href: "/pedidos", label: "Pedidos de salón", icon: ClipboardList, feature: "pedidos_despacho" },
+        { href: "/expedicion", label: "Expedición", icon: PackageCheck, feature: "pedidos_despacho" },
         // Presupuestos (ADR-122): OPTIONAL Pro+, con candado si no está.
         { href: "/presupuestos", label: "Presupuestos", icon: FileSignature, feature: "presupuestos" },
         // Envíos con etiquetas de logísticas integradas (ADR-103).

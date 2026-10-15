@@ -191,7 +191,7 @@ export default function ReservasStockPage() {
                       <p className="text-xs text-muted-foreground">
                         Retira en {storeName(r.store_id)}
                         {r.origin_store_id ? ` · pedida desde ${storeName(r.origin_store_id)}` : ""} ·{" "}
-                        {RESERVATION_CHANNEL_LABEL[r.channel]} · {fmtDateTime(r.created_at)}
+                        {r.channel === "pedido" ? "Pedido de salón" : RESERVATION_CHANNEL_LABEL[r.channel]} · {fmtDateTime(r.created_at)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

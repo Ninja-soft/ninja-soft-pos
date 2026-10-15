@@ -113,6 +113,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Sin esto no se pueden emitir presupuestos: las cotizaciones se arman fuera del sistema y la venta se carga a mano.",
     minPlan: "Pro",
   },
+  pedidos_despacho: {
+    desc: "Pedidos de salón y expedición: el vendedor arma el pedido en el POS con el stock reservado por los minutos que elijas, la caja lo levanta y lo cobra (queda el vendedor para las comisiones y la cajera), y expedición lo arma y lo entrega o despacha. Retiro en el momento, retiro en sucursal con código o a nombre, envío a domicilio enganchado con Envíos y retiro en otra sucursal configurable.",
+    impact: "Desactivado, no se guardan pedidos ni hay cola de expedición: el vendedor y la caja vuelven a pasarse el carrito a mano (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["pos"],
+  },
   cuenta_corriente: {
     desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
     impact: "Desactivado, no se puede vender en cuenta corriente ni llevar el saldo deudor de los clientes.",

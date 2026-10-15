@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
@@ -8,7 +9,9 @@ import { useToast } from "@/components/ui/Toast";
 import { useProducts, useVariants } from "@/modules/products/hooks";
 import { variantLabel, variantPrice, type Product } from "@/modules/products/api";
 import { usePriceListItems, usePriceItemMutations } from "@/modules/prices/hooks";
-import { resolvePrice, type PriceItemLike } from "@/lib/prices/resolve";
+import { resolvePrice, resolveUnitPrice, type PriceItemLike } from "@/lib/prices/resolve";
+import { productCostsLike, worldWithList } from "@/lib/prices/listUsage";
+import { priceProApi } from "@/modules/prices/proApi";
 import type { PriceList, PriceListItem } from "@/modules/prices/api";
 import {
   useCatalogHintsActive,
@@ -21,7 +24,11 @@ import { formatCurrency } from "@/lib/utils/format";
 // Edición de precios puntuales de una lista. Tabla con búsqueda; cada fila
 // (producto y, si tiene variantes, cada variante) muestra el precio base y el
 // resuelto por la lista, con un input de precio puntual editable. Vacío = sin
-// precio puntual (usa ajuste/base). Se guarda en blur.
+// precio puntual (usa la regla de la lista). Se guarda en blur.
+// ADR-151: el precio de la lista sale del mismo resolver que el POS (derivadas,
+// sobre costo, en moneda, monto, redondeo, piso y listas netas); antes sólo
+// aplicaba el %. En una lista en moneda extranjera el precio puntual va en esa
+// moneda.
 export function PriceListEditorModal({
   list,
   tenantId,
@@ -77,6 +84,39 @@ export function PriceListEditorModal({
     [items],
   );
 
+  // Foto de precios del negocio (la misma del POS) para calcular la lista.
+  const snap = useQuery({
+    queryKey: ["price-pro", "snapshot", null, null],
+    queryFn: () => priceProApi.snapshot(null, null),
+    enabled: open && Boolean(list),
+    staleTime: 60_000,
+  });
+  const world = useMemo(() => {
+    if (!snap.data || !list) return null;
+    const costs = Object.fromEntries(
+      visibleProducts.map((p) => [p.id, productCostsLike(p as unknown as Record<string, unknown>)]),
+    );
+    return worldWithList(snap.data, list.id, itemsLike, costs);
+  }, [snap.data, list, itemsLike, visibleProducts]);
+  const resolveFor = useCallback(
+    (productId: string, variantId: string | null, productBase: number, base: number) => {
+      if (!world || !list) {
+        return resolvePrice(base, productId, variantId, list ? { adjustment_pct: list.adjustment_pct } : null, itemsLike);
+      }
+      return resolveUnitPrice(world, {
+        productId,
+        variantId,
+        basePrice: productBase,
+        variantPrice: variantId ? base : null,
+        listId: list.id,
+        termId: "none",
+      }).price;
+    },
+    [world, list, itemsLike],
+  );
+  const listInfo = list as (PriceList & { kind?: string | null; currency?: string | null }) | null;
+  const currency = listInfo?.kind === "currency" ? (listInfo.currency ?? "USD") : null;
+
   return (
     <Modal
       open={open}
@@ -86,8 +126,12 @@ export function PriceListEditorModal({
     >
       <div className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Dejá el precio vacío para usar el ajuste de la lista (o el precio base).
-          Cargá un valor para fijar un precio puntual a ese producto o variante.
+          Dejá el precio vacío para que la lista lo calcule con su regla. Cargá un valor para fijar un precio
+          puntual a ese producto o variante: pisa la regla.
+          {currency
+            ? ` Esta lista es en ${currency}: el precio puntual va en ${currency} y se pasa a pesos con la cotización.`
+            : ""}
+          {list && list.is_active === false ? " La lista está apagada: el POS no la usa hasta que la prendas." : ""}
         </p>
         <div className="relative">
           <Search
@@ -110,7 +154,8 @@ export function PriceListEditorModal({
               list={list}
               tenantId={tenantId}
               itemsByKey={itemsByKey}
-              itemsLike={itemsLike}
+              resolveFor={resolveFor}
+              currency={currency}
               priceRef={
                 hintsActive && p.barcode
                   ? priceRefs?.get(p.barcode.trim())
@@ -129,19 +174,23 @@ export function PriceListEditorModal({
   );
 }
 
+type ResolveFor = (productId: string, variantId: string | null, productBase: number, base: number) => number;
+
 function ProductRows({
   product,
   list,
   tenantId,
   itemsByKey,
-  itemsLike,
+  resolveFor,
+  currency,
   priceRef,
 }: {
   product: Product;
   list: PriceList | null;
   tenantId: string | null | undefined;
   itemsByKey: Map<string, PriceListItem>;
-  itemsLike: PriceItemLike[];
+  resolveFor: ResolveFor;
+  currency: string | null;
   // Referencia de precio del catálogo para el EAN del producto (si aplica). Se
   // comparte entre todas las variantes (el match es por barcode del producto).
   priceRef?: PriceReference;
@@ -161,7 +210,8 @@ function ProductRows({
           list={list}
           tenantId={tenantId}
           itemsByKey={itemsByKey}
-          itemsLike={itemsLike}
+          resolved={resolveFor(product.id, null, Number(product.price), Number(product.price))}
+          currency={currency}
           priceRef={priceRef}
         />
       ) : (
@@ -183,7 +233,8 @@ function ProductRows({
               list={list}
               tenantId={tenantId}
               itemsByKey={itemsByKey}
-              itemsLike={itemsLike}
+              resolved={resolveFor(product.id, v.id, Number(product.price), variantPrice(v, Number(product.price)))}
+              currency={currency}
               priceRef={priceRef}
               indent
             />
@@ -208,7 +259,8 @@ function PriceRow({
   list,
   tenantId,
   itemsByKey,
-  itemsLike,
+  resolved,
+  currency,
   priceRef,
   indent,
 }: {
@@ -220,7 +272,10 @@ function PriceRow({
   list: PriceList | null;
   tenantId: string | null | undefined;
   itemsByKey: Map<string, PriceListItem>;
-  itemsLike: PriceItemLike[];
+  /** Precio que cobraría el POS con esta lista (resolver del POS). */
+  resolved: number;
+  /** Moneda de la lista en moneda extranjera (el precio puntual va en esa moneda). */
+  currency: string | null;
   priceRef?: PriceReference;
   indent?: boolean;
 }) {
@@ -233,14 +288,6 @@ function PriceRow({
   useEffect(() => {
     setValue(item ? String(item.price) : "");
   }, [item]);
-
-  const resolved = resolvePrice(
-    basePrice,
-    productId,
-    variantId,
-    list ? { adjustment_pct: list.adjustment_pct } : null,
-    itemsLike,
-  );
 
   function save() {
     const trimmed = value.trim();
@@ -282,7 +329,8 @@ function PriceRow({
         </span>
         <span className="block truncate text-xs text-muted-foreground">
           {sub ? `${sub} · ` : ""}base {formatCurrency(basePrice)}
-          {!item && resolved !== basePrice ? ` · lista ${formatCurrency(resolved)}` : ""}
+          {item && currency ? ` · ${currency} ${item.price}` : ""}
+          {resolved !== basePrice || item ? ` · lista ${formatCurrency(resolved)}` : ""}
         </span>
       </span>
       <input
@@ -295,7 +343,8 @@ function PriceRow({
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
-        placeholder={formatCurrency(resolved)}
+        placeholder={currency ? currency : formatCurrency(resolved)}
+        aria-label={currency ? `Precio puntual en ${currency}` : "Precio puntual"}
         className="h-9 w-28 shrink-0 rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft"
       />
     </div>

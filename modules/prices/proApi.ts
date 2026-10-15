@@ -258,10 +258,10 @@ export interface BulkBatch {
   id: string;
   target_list_id: string | null;
   scope: BulkScope & BulkV2Scope;
-  mode: "pct" | "amount" | "index" | BulkV2Mode;
-  /** ADR-140: 2 = asistente con costos, varias listas y dólar. */
+  mode: "pct" | "amount" | "index" | "edit" | BulkV2Mode;
+  /** ADR-140: 2 = asistente con costos, varias listas y dólar. ADR-151: 3 = editor rápido. */
   engine?: number;
-  origin?: "manual" | "auto";
+  origin?: "manual" | "auto" | "editor";
   list_ids?: string[] | null;
   fx_rate?: number | null;
   fx_rate_date?: string | null;

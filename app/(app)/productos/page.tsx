@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Download,
   FolderTree,
@@ -20,6 +21,9 @@ import {
   MessageSquareText,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Segmented";
+import { FeatureGate } from "@/components/saas/FeatureGate";
+import { useMyTenant } from "@/modules/tenants/hooks";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
 import { InfoHint } from "@/components/ui/InfoHint";
@@ -84,6 +88,14 @@ import {
   useStockByStore,
 } from "@/modules/stock/hooks";
 
+// Editor rápido de precios (ADR-151): planilla pesada, sólo cuando se abre.
+const QuickPriceEditor = dynamic(
+  () => import("@/components/prices/QuickPriceEditor").then((m) => m.QuickPriceEditor),
+  { ssr: false },
+);
+
+type ProductsView = "catalogo" | "precios";
+
 export default function ProductosPage() {
   const pageSize = usePageSize();
   // Base de costo del negocio para el margen de la lista (F18 · H101, ADR-050).
@@ -115,6 +127,11 @@ export default function ProductosPage() {
   // Permisos por rol (ADR-071): el cajero no toca catálogo ni stock; solo
   // lectura no escribe nada. La base lo rechaza igual (role_write_guard).
   const perms = useRolePermissions();
+  // ADR-151: el editor de precios muestra costos: sólo dueño o encargado.
+  const { data: myTenant } = useMyTenant();
+  const canEditPrices = Boolean(myTenant?.canManage);
+  const [view, setView] = useState<ProductsView>("catalogo");
+  const showEditor = canEditPrices && view === "precios";
   const deniedCatalog = perms.denied("catalog:write");
   const deniedTaxonomy = perms.denied("catalog:taxonomy");
   const deniedImport = perms.denied("catalog:import");
@@ -353,6 +370,29 @@ export default function ProductosPage() {
           }
         />
 
+        {canEditPrices && (
+          <div className="mt-5">
+            <FeatureGate feature="editor_precios" featureLabel="Editor rápido de precios">
+              <Segmented
+                aria-label="Vista"
+                size="sm"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "catalogo", label: "Catálogo" },
+                  { value: "precios", label: "Editor de precios" },
+                ]}
+              />
+            </FeatureGate>
+          </div>
+        )}
+
+        {showEditor ? (
+          <div className="mt-5">
+            <QuickPriceEditor />
+          </div>
+        ) : (
+        <>
         <div className="mt-6 flex flex-wrap gap-2">
           <div className="relative min-w-0 basis-full sm:max-w-md sm:flex-1 sm:basis-auto">
             <Search
@@ -648,6 +688,8 @@ export default function ProductosPage() {
           onPageChange={setPage}
           loading={isPlaceholderData}
         />
+        </>
+        )}
       </div>
 
       <ProductFormModal

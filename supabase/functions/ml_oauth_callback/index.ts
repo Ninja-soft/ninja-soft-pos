@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
   const st = (rows ?? [])[0] as { tenant_id: string; user_id: string; code_verifier: string; expires_at: string } | undefined;
   if (!st || Date.parse(st.expires_at) < Date.now()) return json({ error: "invalid_state" }, 400);
 
-  const cfg = mlConfig();
+  const cfg = await mlConfig(admin);
   if (!cfg.ok) return json({ error: cfg.error, message: cfg.message }, 503);
 
   const audit = (action: string, after: Record<string, unknown>) =>

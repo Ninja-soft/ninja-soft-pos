@@ -4,23 +4,52 @@
 // Arma las dependencias reales de los módulos puros: cliente de Supabase con
 // service_role, tokens con lock en la base (ml_token_* RPC), límite de
 // llamadas por cuenta (ml_rate_take) y el cliente HTTP de ML por cuenta.
+// La config de la app sale de platform_secrets.ml_app o de los secrets de
+// Edge (ADR-126, `mlConfig(admin)`).
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
-import { readMlConfig, type MlAppConfig, type MlConfigResult } from "./config.ts";
+import {
+  ML_APP_SECRET_KEY,
+  createMlConfigLoader,
+  type MlAppConfig,
+  type MlConfigResult,
+  type MlPlatformSecrets,
+} from "./config.ts";
 import { MlApiError, createMlClient, type FetchLike, type MlClient, type MlFamily } from "./client.ts";
 import { expiresAtFrom, getAccessToken, refreshTokenCall, type TokenDeps, type TokenRow } from "./oauth.ts";
 import type { Rpc } from "./worker.ts";
 
 export const fetcher: FetchLike = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(25_000) });
 
-export function mlConfig(): MlConfigResult {
-  return readMlConfig(Deno.env.toObject());
-}
-
 export function adminClient(): SupabaseClient {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
     auth: { persistSession: false },
   });
+}
+
+/** Lee platform_secrets.ml_app con service_role (RLS deny a todos los demás). */
+export async function readMlPlatformSecrets(admin: SupabaseClient): Promise<MlPlatformSecrets> {
+  const { data, error } = await admin.from("platform_secrets").select("secrets").eq("key", ML_APP_SECRET_KEY).maybeSingle();
+  if (error) {
+    // Sin el detalle: nunca loguear nada que pueda traer el secreto.
+    console.warn(JSON.stringify({ fn: "ml_config", warn: "platform_secrets_read_failed" }));
+    throw new Error("platform_secrets_read_failed");
+  }
+  return (data?.secrets ?? null) as MlPlatformSecrets;
+}
+
+/**
+ * Loader de la config de la app (ADR-126): platform_secrets.ml_app si está
+ * completa, si no los secrets de Edge. ttlMs 0 = memo por invocación (crear
+ * uno por request); > 0 = memo por isolate (ml_webhook).
+ */
+export function mlConfigLoader(admin: SupabaseClient, ttlMs = 0): () => Promise<MlConfigResult> {
+  return createMlConfigLoader(() => readMlPlatformSecrets(admin), Deno.env.toObject(), { ttlMs });
+}
+
+/** Config efectiva para esta invocación (una lectura de la base). */
+export function mlConfig(admin: SupabaseClient): Promise<MlConfigResult> {
+  return mlConfigLoader(admin)();
 }
 
 export function rpcOf(admin: SupabaseClient): Rpc {

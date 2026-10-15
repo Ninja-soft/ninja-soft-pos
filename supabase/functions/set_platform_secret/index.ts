@@ -11,6 +11,13 @@
 // que no es numérico se rechaza. `hints` devuelve los últimos 4 caracteres de
 // los secretos (nunca el valor). action "test" prueba el Access Token contra
 // GET /users/me y devuelve la cuenta (nickname, id, país, si es de prueba).
+//
+// ADR-126: key `ml_app` (app de Mercado Libre: client_id, client_secret,
+// redirect_uri). El status suma la config efectiva (platform_secrets o
+// secrets de Edge), qué falta, las cuentas conectadas y las últimas
+// notificaciones; "test" valida App ID + secreto contra /oauth/token sin tocar
+// cuentas de clientes; "clear" borra la config guardada (vuelven a regir los
+// secrets de Edge). Todo auditado en audit_logs, nunca con valores.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
@@ -19,6 +26,8 @@ import {
   validateMpCredential,
   type MpCredentialField,
 } from "../_shared/mpCredentials.ts";
+import { validateMlAppField, type MlAppField, type MlPlatformSecrets } from "../_shared/mercadolibre/config.ts";
+import { mlAppStats, mlAppStatusExtras, testMlApp } from "./mlApp.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +79,8 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
     // ai_assistant lo lee con fallback al default (500k).
     "monthly_quota",
   ]),
+  // App de Mercado Libre (ADR-126). client_secret nunca vuelve en claro.
+  ml_app: new Set(["client_id", "client_secret", "redirect_uri"]),
 };
 // Llaves que nunca se devuelven en claro (solo se reporta si están seteadas).
 const SECRET_KEYS = new Set([
@@ -133,6 +144,10 @@ Deno.serve(async (req: Request) => {
         : (v ?? null); // públicas (client_id, public_key, redirect_uri) en claro
       if (SECRET_KEYS.has(k)) hints[k] = typeof v === "string" ? secretHint(v) : null;
     }
+    if (key === "ml_app") {
+      status.hints = hints;
+      Object.assign(status, mlAppStatusExtras(data?.secrets as MlPlatformSecrets, Deno.env.toObject()));
+    }
     if (key === "mercadopago") {
       status.hints = hints;
       // Ambiente que sugiere el prefijo del token (sin exponerlo).
@@ -144,6 +159,38 @@ Deno.serve(async (req: Request) => {
 
   // GET de estado.
   if (b.action === "status") {
+    const status = await maskedStatus();
+    if (key === "ml_app") status.stats = await mlAppStats(admin).catch(() => null);
+    return json({ ok: true, status });
+  }
+
+  // App de Mercado Libre: probar la config efectiva (la guardada o la de Edge).
+  if (key === "ml_app" && b.action === "test") {
+    const { data } = await admin.from("platform_secrets").select("secrets").eq("key", key).maybeSingle();
+    const result = await testMlApp(data?.secrets as MlPlatformSecrets, Deno.env.toObject());
+    await admin.from("audit_logs").insert({
+      tenant_id: null,
+      actor_user_id: user.id,
+      entity_type: "platform_secrets",
+      entity_id: null,
+      action: "platform_secret_tested",
+      after_data: { key, ok: result.ok === true, error: result.error ?? null, origin: result.origin ?? null },
+    });
+    return json(result);
+  }
+
+  // App de Mercado Libre: borrar lo guardado (vuelven a regir los secrets de Edge).
+  if (key === "ml_app" && b.action === "clear") {
+    const del = await admin.from("platform_secrets").delete().eq("key", key);
+    if (del.error) return json({ error: "save_failed" }, 500);
+    await admin.from("audit_logs").insert({
+      tenant_id: null,
+      actor_user_id: user.id,
+      entity_type: "platform_secrets",
+      entity_id: null,
+      action: "platform_secret_cleared",
+      after_data: { key },
+    });
     return json({ ok: true, status: await maskedStatus() });
   }
 
@@ -213,6 +260,16 @@ Deno.serve(async (req: Request) => {
     const invalid: Record<string, string> = {};
     for (const [k, v] of Object.entries(patch)) {
       const msg = validateMpCredential(k as MpCredentialField, v);
+      if (msg) invalid[k] = msg;
+    }
+    if (Object.keys(invalid).length > 0) {
+      return json({ error: "invalid_format", fields: invalid }, 400);
+    }
+  }
+  if (key === "ml_app") {
+    const invalid: Record<string, string> = {};
+    for (const [k, v] of Object.entries(patch)) {
+      const msg = validateMlAppField(k as MlAppField, v);
       if (msg) invalid[k] = msg;
     }
     if (Object.keys(invalid).length > 0) {

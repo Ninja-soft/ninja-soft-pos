@@ -14,7 +14,6 @@
 //              las cuentas sin uso.
 // Lógica pura y testeada en ../_shared/mercadolibre/*.
 // =============================================================================
-import { appIdOf } from "../_shared/mercadolibre/config.ts";
 import { MlApiError } from "../_shared/mercadolibre/client.ts";
 import { getAccessToken } from "../_shared/mercadolibre/oauth.ts";
 import { isMvpTopic, parseNotification, syntheticOrderNotification } from "../_shared/mercadolibre/notifications.ts";
@@ -50,7 +49,7 @@ Deno.serve(async (req: Request) => {
   const token = String((row?.secrets as { token?: string } | null)?.token ?? "");
   if (!cronSecret || !token || !safeEqual(cronSecret, token)) return json({ error: "forbidden" }, 403);
 
-  const cfg = mlConfig();
+  const cfg = await mlConfig(admin);
   if (!cfg.ok) return json({ error: cfg.error, message: cfg.message }, 503);
   let body: { mode?: string } = {};
   try {
@@ -144,7 +143,7 @@ async function reconcile(admin: Admin, deps: Deps, appId: string, t0: number) {
     try {
       const feeds = await deps.client(due[0]!.account_id).get<MlMissedFeeds>("/missed_feeds", { app_id: appId, limit: 100 });
       for (const m of feeds.messages ?? []) {
-        const p = parseNotification(m, appIdOf(Deno.env.toObject()));
+        const p = parseNotification(m, appId);
         if (!p.ok) continue;
         await deps.rpc("ml_notification_ingest", {
           p: {

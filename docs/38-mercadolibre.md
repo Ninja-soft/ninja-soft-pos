@@ -28,7 +28,7 @@ En [Mis aplicaciones](https://developers.mercadolibre.com.ar/es_ar/crea-una-apli
 | **URI de redirect** | `https://<dominio de la app>/api/ml/oauth/callback` (exacta, HTTPS, sin parámetros). Producción hoy: `https://<APP_URL>/api/ml/oauth/callback` |
 | **PKCE** | Activado (después es obligatorio, y el POS siempre lo manda) |
 | Scopes | `offline_access`, `read`, `write` |
-| **URL de notificaciones** | `https://hrkditzrsavehnhngakb.supabase.co/functions/v1/ml_webhook` |
+| **URL de notificaciones** | `https://hooks.soft.ninja/ml` (dominio propio, ADR-069; se copia desde el panel interno). Alternativa directa: `https://hrkditzrsavehnhngakb.supabase.co/functions/v1/ml_webhook` |
 
 **Permisos funcionales** (lectura y escritura salvo aclaración):
 
@@ -58,11 +58,23 @@ Si falta un permiso, ML responde `403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES` y el
 
 Tildar ya los de v2 y v3 no tiene costo: llegan, se guardan en el inbox como `ignored` y se borran a los 15 días.
 
-**Rotación del secret:** usar "Programar renovación" (deja hasta 7 días de convivencia) y actualizar el secret de Supabase dentro de esa ventana.
+**Rotación del secret:** usar "Programar renovación" (deja hasta 7 días de convivencia) y cargar la clave nueva en el panel interno > Mercado Libre dentro de esa ventana (o el secret de Supabase, si la app sigue configurada por Edge).
 
-### 1.3 Cargar los secrets
+### 1.3 Configurar la app (panel interno, ADR-126)
 
-En Supabase > Edge Functions > Secrets (nunca en el front ni en la base):
+Desde **panel interno > Mercado Libre** (`/internal/mercadolibre`, cualquier staff interno, igual que Pagos de plataforma):
+
+1. **App ID** y **Clave secreta** de DevCenter. La clave es write-only: se guarda por la Edge `set_platform_secret` en `platform_secrets` key `ml_app` (RLS deny a todos, sólo service_role) y nunca vuelve al navegador; se ve "Guardada, termina en xxxx".
+2. **Redirect URI**: la sugerida (`<dominio de la app>/api/ml/oauth/callback`) con botón copiar y "Usar esta Redirect URI". Tiene que ser idéntica a la de DevCenter.
+3. **URL de notificaciones** (`https://hooks.soft.ninja/ml`) y **tópicos** a tildar, con botón copiar.
+4. **Probar conexión**: valida App ID + Clave secreta contra `POST /oauth/token` sin tocar cuentas de clientes (`client_credentials`; si ML no lo acepta, un `refresh_token` inventado: `invalid_grant` = par correcto, `invalid_client` = par incorrecto). Si ML devuelve los datos de la app, avisa si la Redirect URI o la URL de notificaciones registradas en DevCenter son otras.
+5. Resumen: negocios con cuenta conectada, cuentas que piden reconectar y últimas notificaciones (24 h y errores).
+
+Cada guardado, prueba y borrado queda en `audit_logs` (`platform_secret_set`, `platform_secret_tested`, `platform_secret_cleared`) sin valores.
+
+**Prioridad de orígenes** (`resolveMlConfig`, `_shared/mercadolibre/config.ts`): si `platform_secrets.ml_app` tiene App ID y Clave secreta válidos, rige esa (la Redirect URI, si falta ahí, sale del env); si no, rigen los **secrets de Edge** como antes. Nunca se mezclan id y clave de orígenes distintos. "Borrar lo cargado acá" vuelve a los secrets de Edge. Las Edges ML leen la config con service_role una vez por invocación (`mlConfig(admin)`); `ml_webhook` la memoriza 60 s por isolate para no sumar una lectura a cada aviso (presupuesto de 500 ms).
+
+**Compatibilidad (secrets de Edge):** siguen funcionando sin cambios.
 
 ```bash
 supabase secrets set ML_CLIENT_ID=<APP_ID numérico> ML_CLIENT_SECRET=<secret>
@@ -72,12 +84,12 @@ supabase secrets set ML_REDIRECT_URI=https://<dominio>/api/ml/oauth/callback
 supabase secrets set APP_URL=https://<dominio>
 ```
 
-Mientras falten, el POS muestra **"Falta configurar la app de Mercado Libre"** al conectar y las Edge responden `ml_app_not_configured` (503). Nada falla en silencio.
+Mientras no haya ninguna config completa, el POS muestra **"Falta configurar la app de Mercado Libre"** al conectar y las Edge responden `ml_app_not_configured` (503). Nada falla en silencio.
 
 ### 1.4 Desplegar
 
 1. Migraciones en orden: `20261110400000_features_mercadolibre`, `20261110400100_mercadolibre_base`, `20261110400200_mercadolibre_rpc`, `20261110400300_mercadolibre_cron`. La última necesita `pg_cron`, `pg_net` y el secret interno `platform_secrets('internal_cron')` (el mismo que usa ARCA).
-2. Edge Functions: `ml_oauth_start`, `ml_oauth_callback` (pública), `ml_webhook` (pública), `ml_worker`, `ml_api`. Las públicas están en `supabase/config.toml` y en `PUBLIC_FUNCTIONS` de `scripts/deploy-check.mjs` (`node scripts/deploy-check.mjs` lo verifica).
+2. Edge Functions: `ml_oauth_start`, `ml_oauth_callback` (pública), `ml_webhook` (pública), `ml_worker`, `ml_api`. Para configurar la app desde el panel interno, también `set_platform_secret` (ADR-126). Las públicas están en `supabase/config.toml` y en `PUBLIC_FUNCTIONS` de `scripts/deploy-check.mjs` (`node scripts/deploy-check.mjs` lo verifica).
 3. Front (Vercel): la ruta `/api/ml/oauth/callback`.
 
 ### 1.5 Usuarios de test

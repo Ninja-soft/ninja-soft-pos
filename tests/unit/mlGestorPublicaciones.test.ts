@@ -355,7 +355,7 @@ describe("publicar en varios tipos", () => {
 
 describe("secciones y puesta en marcha", () => {
   it("cada sección tiene una explicación corta", () => {
-    expect(GESTOR_SECTIONS.map((s) => s.key)).toEqual(["items", "orders", "questions", "shipments", "postsale", "boards", "metrics", "config"]);
+    expect(GESTOR_SECTIONS.map((s) => s.key)).toEqual(["items", "orders", "questions", "shipments", "full", "postsale", "boards", "metrics", "config"]);
     for (const s of GESTOR_SECTIONS) {
       expect(s.summary.length).toBeGreaterThan(20);
       expect(s.summary).not.toMatch(/—/);

@@ -2,8 +2,7 @@
 // _shared/mercadolibre/invoicePlan.ts (ADR-141). PURO, sin imports.
 //
 // Arma la factura de una venta de Mercado Libre (un carrito o una orden) con
-// las reglas de facturación de la cuenta, tomadas de cómo factura hoy
-// ANDESMAR (docs/43-mercadolibre-facturacion.md):
+// las reglas de facturación de la cuenta (docs/43-mercadolibre-facturacion.md):
 //
 //   • Renglones a precio de la publicación (unit_price: el descuento del
 //     vendedor ya viene adentro). Cupón (la "contraparte" que paga ML o la
@@ -109,7 +108,7 @@ export interface PercRule {
   conditions: string[];
   /** Base para RI y monotributo: neto (sin IVA) o total. */
   base: "neto" | "total";
-  /** Base para exentos (ANDESMAR: bruto). */
+  /** Base para exentos (por defecto, el total). */
   base_exempt: "neto" | "total";
   /** Aplica aunque el CUIT no esté en el padrón, si el envío va a esa jurisdicción. */
   without_padron: boolean;
@@ -616,7 +615,7 @@ export function buildInvoicePlan(input: PlanInput): MlInvoicePlan {
   };
 }
 
-/** Configuración por defecto (la de ANDESMAR, con las percepciones apagadas). */
+/** Configuración por defecto (con las percepciones apagadas). */
 export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   coupon_mode: "discount_line",
   shipping_line: true,
@@ -677,15 +676,19 @@ export function planSettingsFrom(raw: Record<string, unknown> | null | undefined
 /** Texto del mensaje al comprador con el link de pago de la percepción. */
 export function perceptionMessage(
   template: string | null | undefined,
-  v: { nombre: string; monto: number; link: string; dias: number; detalle: string },
+  v: { nombre: string; monto: number; link: string; dias: number; detalle: string; jurisdiccion?: string; venta?: string },
 ): string {
   const money = (n: number) => `$ ${n.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
   const t =
     template && template.trim()
       ? template
-      : "Hola {nombre}, para emitirte la factura A tenemos que cobrarte la percepción de Ingresos Brutos ({detalle}): {monto}. Pagala con este link de Mercado Pago dentro de {dias} días: {link} Si preferís factura B, no hace falta que pagues nada.";
+      : // Igual a DEFAULT_PERCEPTION_MESSAGE de billingConfig.ts (este archivo no importa nada).
+        "Hola {comprador}, pediste factura A y figurás en el padrón de percepciones de Ingresos Brutos de {jurisdiccion}. Eso suma {monto} a tu compra. Si no querés abonarlo, te facturamos B; si querés la A, pagá este link: {link}";
   return t
     .replaceAll("{nombre}", v.nombre)
+    .replaceAll("{comprador}", v.nombre)
+    .replaceAll("{jurisdiccion}", v.jurisdiccion ?? v.detalle)
+    .replaceAll("{venta}", v.venta ?? "")
     .replaceAll("{monto}", money(v.monto))
     .replaceAll("{link}", v.link)
     .replaceAll("{dias}", String(v.dias))

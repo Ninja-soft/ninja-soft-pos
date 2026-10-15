@@ -368,7 +368,7 @@ describe("link de pago de la percepción", () => {
     expect(t.full).toContain("$ 1.234,50");
     expect(t.full).toContain("Buenos Aires 3 %, Santa Fe 1,5 %");
     expect(perceptionDetail([{ jurisdiction: "901", effective_rate: 1 }])).toBe("CABA 1 %");
-    expect(perceptionTexts({ template: null, buyer: "", amount: 10, link, days: 2, lines: [] }).full.startsWith("Hola, para")).toBe(true);
+    expect(perceptionTexts({ template: null, buyer: "", amount: 10, link, days: 2, lines: [] }).full.startsWith("Hola, pediste factura A")).toBe(true);
     expect(trimKeepingUrl("abc", 10)).toBe("abc");
   });
 });

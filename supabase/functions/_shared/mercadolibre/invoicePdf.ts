@@ -100,6 +100,29 @@ function truncate(s: string, max: number) {
   return t.length > max ? `${t.slice(0, max - 3)}...` : t;
 }
 
+/** Parte un texto en renglones de hasta `width` caracteres (máximo `lines`). */
+export function wrapText(s: string, width: number, lines: number): string[] {
+  const words = s.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const out: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length <= width) {
+      cur = next;
+      continue;
+    }
+    if (cur) out.push(cur);
+    cur = w.length > width ? w.slice(0, width) : w;
+  }
+  if (cur) out.push(cur);
+  if (out.length > lines) {
+    const kept = out.slice(0, lines);
+    kept[lines - 1] = truncate(`${kept[lines - 1]} ${out.slice(lines).join(" ")}`, width);
+    return kept;
+  }
+  return out;
+}
+
 /** Arma el PDF. Devuelve los bytes (siempre bastante menos de 1 MB). */
 export function buildInvoicePdf(d: InvoicePdfData): Uint8Array {
   if (d.format === "ticket") return buildTicketPdf(d);
@@ -225,7 +248,8 @@ function buildA4Pdf(d: InvoicePdfData): Uint8Array {
       p.text(M + 130, ty, "Comprobante autorizado por ARCA", 9, true);
       p.text(M + 130, ty - 16, `CAE N°: ${d.doc.cae}`, 9);
       p.text(M + 130, ty - 30, `Vencimiento del CAE: ${fmtDate(d.doc.caeVto)}`, 9);
-      if (d.notes) p.text(M + 130, ty - 48, truncate(d.notes, 70), 8);
+      // Leyenda (ADR-145): hasta 4 renglones debajo del CAE.
+      if (d.notes) wrapText(d.notes, 70, 4).forEach((l, i) => p.text(M + 130, ty - 48 - i * 10, l, 8));
     }
     pages.push(p);
   });
@@ -282,7 +306,7 @@ function buildTicketPdf(d: InvoicePdfData): Uint8Array {
   lines.push({ t: "TOTAL", size: 10, bold: true, right: fmtMoney(d.doc.total), gap: 4 });
   lines.push({ t: `CAE ${d.doc.cae}`, size: 7, gap: 6 });
   lines.push({ t: `Vto. CAE ${fmtDate(d.doc.caeVto)}`, size: 7 });
-  if (d.notes) lines.push({ t: truncate(d.notes, 46), size: 6 });
+  if (d.notes) for (const l of wrapText(d.notes, 46, 6)) lines.push({ t: l, size: 6 });
 
   const qrSize = d.doc.qrUrl ? 110 : 0;
   const textH = lines.reduce((h, l) => h + (l.size ?? 7) + 3 + (l.gap ?? 0), 0);

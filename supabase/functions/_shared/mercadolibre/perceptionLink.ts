@@ -1,18 +1,18 @@
 // =============================================================================
 // _shared/mercadolibre/perceptionLink.ts (ADR-141). PURO.
 //
-// Cobro de la percepción de IIBB por link de pago (criterio de ANDESMAR,
-// meli-omni crearLinkPagoMP / holdMensajear):
+// Cobro de la percepción de IIBB por link de pago (ADR-141):
 //   • preferencia de Checkout Pro de Mercado Pago por el monto exacto, un
 //     solo ítem "Percepción IIBB · Venta Mercado Libre #pack", referencia
 //     externa = intent (mp_webhook la valida) y vencimiento;
-//   • el link completo, nunca acortado (con acortadores el pago bajó del 61 %
-//     al 3 % en ANDESMAR);
+//   • el link completo, nunca acortado (con acortadores ML no entrega el
+//     mensaje y el pago se derrumba);
 //   • mensaje al comprador con el monto, el detalle por jurisdicción, los días
 //     y el link, recortado sin cortar la URL (action_guide admite 350
 //     caracteres; mensajes postventa, 3.500).
 // =============================================================================
-import { perceptionMessage, trimKeepingUrl, type PerceptionLine } from "./invoicePlan.ts";
+import { trimKeepingUrl, type PerceptionLine } from "./invoicePlan.ts";
+import { effectiveTemplate, moneyAr, renderTemplate } from "./billingConfig.ts";
 
 export const ACTION_GUIDE_MAX = 350;
 export const POST_SALE_MAX = 3500;
@@ -72,16 +72,19 @@ export function perceptionTexts(v: {
   link: string;
   days: number;
   lines: Array<Pick<PerceptionLine, "jurisdiction" | "effective_rate">>;
+  /** Número de la venta (pack u orden) para {venta}. */
+  packKey?: string | null;
 }): { full: string; short: string } {
-  const full = perceptionMessage(v.template, {
+  const jurs = [...new Set(v.lines.map((l) => jurisdictionName(l.jurisdiction)))];
+  const full = renderTemplate(effectiveTemplate("perception", v.template), {
+    comprador: v.buyer || "",
     nombre: v.buyer || "",
-    monto: v.amount,
+    monto: moneyAr(v.amount),
     link: v.link,
-    dias: v.days,
+    dias: String(v.days),
     detalle: perceptionDetail(v.lines),
-  })
-    .replace(/\s+/g, " ")
-    .replace(/Hola\s+,/, "Hola,")
-    .trim();
+    jurisdiccion: jurs.length > 1 ? `${jurs.slice(0, -1).join(", ")} y ${jurs[jurs.length - 1]}` : (jurs[0] ?? ""),
+    venta: v.packKey ?? "",
+  }).replace(/\s+/g, " ");
   return { full: trimKeepingUrl(full, POST_SALE_MAX), short: trimKeepingUrl(full, ACTION_GUIDE_MAX) };
 }

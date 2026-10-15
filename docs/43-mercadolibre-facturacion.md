@@ -159,7 +159,7 @@ Todas con `tenant_id`, RLS de lectura `tenant_id = (select current_tenant_id())`
 
 - **Bandeja** con filtros y conteos (por facturar, esperando percepción, a revisar, con error, facturadas, no se facturan), selección y acciones en lote (**Facturar**, **No facturar**, **Volver a facturar**), y el resultado por venta.
 - **Detalle** de cada venta: qué se factura (renglones, cupón, envío, total y lo cobrado), a quién (datos del comprador o consumidor final, con su fuente), tipo de factura con las opciones de ARCA (las que no acepta, deshabilitadas con el motivo), punto de venta, concepto y PDF; percepción por jurisdicción con **Ver el mensaje**, **Crear link de pago** (y mandar el mensaje por ML), copiar y reenviar, **Marcar cobrada** con referencia, **Facturar B sin percepción** o **Facturar A sin percibir**; comprobantes con **Subir a la venta** (sí o no), **Subir ahora**, **Volver a subir** y **Nota de crédito por el total**; **Rearmar** con las reglas de hoy.
-- **Configuración** (en Mercado Libre › Configuración › Facturación; la bandeja tiene un acceso directo): cuándo facturar, subir la factura, punto de venta, concepto, PDF, cupones, envío, control, receptor, padrón, consumidor final, jurisdicciones bloqueadas, reintegro, NC y percepciones (modo, estrategia por envío, link, mensaje y reglas por jurisdicción con plantillas de ANDESMAR).
+- **Configuración** (en Mercado Libre › Configuración › Facturación; la bandeja tiene un acceso directo), por pasos desde ADR-145: 1 cuándo facturar, 2 qué factura sale (a quién, punto de venta, PDF, subir a ML y **sucursal y depósito por tipo de envío**), 3 cupones y envío, 4 percepciones (estrategia por envío, link de cobro y reglas por jurisdicción con valores de arranque), 5 notas de crédito y 6 mensajes y leyenda. Modo simple con lo esencial y **Configuración avanzada** para padrón, consumidor final, concepto, control, provincias bloqueadas, modo de jurisdicción y mínimos. Al costado, **la factura de una venta de ejemplo** armada con `buildInvoicePlan` y recalculada con cada cambio. Ver §3.7.
 
 Sin `mercadolibre_facturacion` la sección muestra sólo cuándo facturar y subir la factura (ADR-104) y la invitación al plan. En Ventas, las órdenes "esperando la percepción" o "a revisar" llevan a Facturación.
 
@@ -176,6 +176,16 @@ El pago del link lo marca el trigger `ml_perception_on_intent` sobre `mp_payment
 ### 3.6 Vincular con un producto
 
 El modal muestra la publicación (foto, precio, marca, SKU y EAN leídos con `ml_api · link_context`, sólo GET) y los productos con su miniatura, marca y códigos. Sin buscar, sugiere por **mismo código de barras** (también de una variante), **mismo SKU** o **nombre parecido** (palabras del título); la búsqueda encuentra por nombre, SKU, código, PLU, marca y SKU o código de las variantes (`ml_link_candidates`). La variación clásica se elige de una lista y la variante se preelige.
+
+### 3.7 Mensajes, leyenda y sucursal por envío (ADR-145)
+
+| Qué | Cómo |
+|---|---|
+| Plantillas | `_shared/mercadolibre/billingConfig.ts`: variables entre llaves, ejemplo precargado (null en la base = el ejemplo vigente), lo desconocido queda a la vista |
+| Mensaje de la percepción | `{comprador}`, `{monto}`, `{link}`, `{venta}`, `{jurisdiccion}`, `{detalle}`, `{dias}` (y `{nombre}` por compatibilidad); el ejemplo entra en 350 caracteres con el link completo |
+| Mensaje al facturar | Activo por defecto; el worker lo manda después de subir la factura (guía de mensajes OTHER y, si no, postventa), una vez por factura (`ml_fiscal_uploads.message_sent_at`), nunca para NC; si falla no frena la subida. `{comprador}`, `{factura}`, `{total}`, `{venta}`, `{fecha}` |
+| Leyenda | Activa por defecto; impresa en el PDF debajo del CAE (hasta 240 caracteres). `{venta}`, `{comprador}`, `{envio}`, `{fecha}`. No se informa a ARCA (WSFE no tiene observaciones libres) |
+| Sucursal y depósito por envío | `ml_billing_settings.logistic_stores`; `ml_ingest_pack` crea la venta en la sucursal de la regla del tipo de envío (o la por defecto, o la de la cuenta) y descuenta de su depósito; Full: sucursal elegida, stock del depósito virtual Full; `_ml_invoice_emit` usa el PV de esa sucursal |
 
 ---
 
@@ -216,7 +226,7 @@ El modal muestra la publicación (foto, precio, marca, SKU y EAN leídos con `ml
 
 ## 7. Despliegue
 
-1. Migraciones, en orden: `20261208100000_ml_vincular_candidatos` (parte A), `20261208100100_features_ml_facturacion`, `20261208100200_ml_facturacion`, `20261208100300_ml_facturacion_cron` y `20261212100000_ml_facturacion_ingest` (`ml_ingest_pack` con los bloques de Full y de facturación). Requieren las de ADR-104, ADR-132, ADR-133 y ADR-142 (Full, ya aplicada).
+1. Migraciones, en orden: `20261208100000_ml_vincular_candidatos` (parte A), `20261208100100_features_ml_facturacion`, `20261208100200_ml_facturacion`, `20261208100300_ml_facturacion_cron`, `20261212100000_ml_facturacion_ingest` (`ml_ingest_pack` con los bloques de Full y de facturación) y `20261213100000_ml_facturacion_config_ux` (ADR-145: mensajes, leyenda y sucursal por envío; recrea `ml_ingest_pack` sobre la anterior). Requieren las de ADR-104, ADR-132, ADR-133 y ADR-142 (Full, ya aplicada).
 2. Edges: `ml_api` (parte A: `link_context`; parte B: comparte el worker), `ml_worker` (plan en la ingesta, reemplazo de la subida), `ml_facturacion` (nueva, JWT) y `arca_wsfe` (concepto del comprobante).
 3. DevCenter: sin tópicos nuevos. Permisos: Facturación (ya pedido en ADR-104) y Comunicación (para el mensaje del link).
 4. Para percepciones: plan con `percepciones_retenciones`, el padrón de IIBB importado **completo** (no "sólo mis clientes": los compradores de ML no son clientes hasta que compran) y Mercado Pago conectado.
@@ -228,4 +238,4 @@ El modal muestra la publicación (foto, precio, marca, SKU y EAN leídos con `ml
 - Ruta exacta del `DELETE` de un documento fiscal del pack y si ML acepta la NC en el mismo pack después de la factura.
 - Mensaje por la guía de acciones (`OTHER`) en MLA con la cuenta real.
 - Devolución parcial con NC parcial automática (hoy desde Ventas), factura aparte del envío a convenir, tramo D/C del padrón, corte del vencimiento a fin de mes, Facturador de ML (`ml_billing`).
-- `ml_ingest_pack` la recrea `20261212100000_ml_facturacion_ingest` sobre la versión de Full (ADR-142, `20261209100100`), con los dos bloques. Una migración futura que la toque tiene que partir de esa.
+- `ml_ingest_pack` la recrea `20261212100000_ml_facturacion_ingest` sobre la versión de Full (ADR-142, `20261209100100`), con los dos bloques, y después `20261213100000_ml_facturacion_config_ux` (ADR-145) con la sucursal por envío. Una migración futura que la toque tiene que partir de esta última.

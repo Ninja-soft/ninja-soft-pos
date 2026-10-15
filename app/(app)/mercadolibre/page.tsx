@@ -180,7 +180,7 @@ function MercadoLibreGestor() {
                 value={tab}
                 onChange={setTab}
                 aria-label="Secciones de Mercado Libre"
-                scrollOnMobile
+                scroll
                 options={SECTIONS.map((s) => {
                   const Icon = ICONS[s.key] ?? Tag;
                   return { value: s.key, label: s.label, icon: <Icon size={15} /> };

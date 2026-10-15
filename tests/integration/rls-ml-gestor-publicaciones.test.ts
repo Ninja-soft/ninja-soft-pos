@@ -85,7 +85,7 @@ describe.skipIf(!enabled)("Gestor de Mercado Libre · publicaciones y precios po
     ctx.tB = rows.find((x) => x.slug === `mlgb-${STAMP}`)!.id;
     ctx.tC = rows.find((x) => x.slug === `mlgc-${STAMP}`)!.id;
     const { error: aErr } = await admin.from("subscription_addons").insert(
-      [ctx.tA, ctx.tB].map((tenant) => ({ tenant_id: tenant, addon_key: "mercadolibre", status: "active", source: "granted" })),
+      [ctx.tA, ctx.tB].flatMap((tenant) => ["mercadolibre", "listas_precios"].map((addon_key) => ({ tenant_id: tenant, addon_key, status: "active", source: "granted" }))),
     );
     if (aErr) throw aErr;
 

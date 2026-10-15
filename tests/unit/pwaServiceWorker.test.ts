@@ -124,6 +124,7 @@ describe("sw: exclusiones (nunca se cachea)", () => {
       "/webhooks/getnet",
       "/login",
       "/c/mi-tienda",
+      "/p/mi-tienda/AAAAAAAAAAAAAAAAAAAAAA",
       "/sw.js",
     ]) {
       expect(api.classifyRequest(nav(p), ORIGIN), p).toBe("bypass");

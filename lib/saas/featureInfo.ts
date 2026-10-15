@@ -488,6 +488,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, no se publica el catálogo web del negocio.",
     minPlan: "Pro",
   },
+  etiquetas_pro: {
+    desc: "Etiquetas PRO: modelos de góndola, precio grande, oferta con precio anterior tachado, con logo, con foto y colgante, personalizables (qué datos mostrar, tipografía, tamaños, alineación, borde y color de bandas) y guardados como plantillas del negocio. Suma el QR a la ficha pública del producto con fotos, descripción, precio y simulador de cuotas según tus planes de pago.",
+    impact: "Desactivado, se imprimen los modelos básicos (góndola clásico, minimal y sólo código) sin personalizar: no se guardan plantillas y la ficha pública del QR no abre (el servidor lo rechaza).",
+    minPlan: "Pro",
+  },
   catalogo_pedidos: {
     desc: "Pedidos desde el catálogo web: el cliente arma el carrito con variantes y stock disponible, elige retiro en sucursal o envío a domicilio, deja sus datos y confirma. El pedido entra al POS y a Pedidos con el stock reservado, te llega un aviso, la caja lo cobra y expedición lo entrega; el cliente lo sigue con un link y puede escribirte por WhatsApp.",
     impact: "Desactivado, el catálogo queda como vitrina: el cliente ve productos y precios pero no puede pedir (el servidor lo rechaza).",

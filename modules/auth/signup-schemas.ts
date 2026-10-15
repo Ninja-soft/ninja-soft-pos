@@ -40,6 +40,10 @@ const optionalCuit = z
     "CUIT inválido (11 dígitos)",
   );
 
+// Condición IVA opcional: el select arranca en "" ("Seleccionar…"), que debe
+// contar como "sin dato" y no bloquear el avance (bug: el paso no avanzaba).
+const optionalIva = z.preprocess((v) => (v === "" || v == null ? undefined : v), z.enum(IVA_CONDITIONS).optional());
+
 // Paso 1 — datos de la cuenta + negocio + fiscales/código opcionales.
 export const SignupAccountSchema = z
   .object({
@@ -50,7 +54,7 @@ export const SignupAccountSchema = z
     // Datos fiscales (opcionales).
     cuit: optionalCuit,
     legalName: z.string().trim().max(200).optional(),
-    ivaCondition: z.enum(IVA_CONDITIONS).optional(),
+    ivaCondition: optionalIva,
     // Código de invitación (opcional).
     inviteCode: z.string().trim().max(40).optional(),
   })
@@ -70,7 +74,7 @@ export const SignupBusinessSchema = z.object({
   businessName: z.string().min(2, "Requerido").max(120),
   cuit: optionalCuit,
   legalName: z.string().trim().max(200).optional(),
-  ivaCondition: z.enum(IVA_CONDITIONS).optional(),
+  ivaCondition: optionalIva,
   inviteCode: z.string().trim().max(40).optional(),
 });
 

@@ -23,6 +23,21 @@ export interface MlBillingSettings {
   perc_link_days: number;
   perc_on_expire: "invoice_b" | "invoice_a" | "hold";
   perc_message: string | null;
+  /** ADR-145: mensaje al comprador al subir la factura y leyenda de la factura. */
+  invoice_message_enabled?: boolean;
+  invoice_message?: string | null;
+  invoice_notes_enabled?: boolean;
+  invoice_notes?: string | null;
+  /** ADR-145: sucursal y depósito por tipo de envío. */
+  logistic_stores?: Record<string, { store_id: string; warehouse_id?: string | null }>;
+  account_store?: { store_id: string | null; warehouse_id: string | null } | null;
+  stores?: Array<{
+    id: string;
+    name: string;
+    pto_vta: number | null;
+    is_default: boolean;
+    warehouses: Array<{ id: string; name: string; kind: string }>;
+  }>;
   saved: boolean;
   features: { billing: boolean; perceptions: boolean; arca: boolean; mercado_pago: boolean };
   emitter: { iva_condition: string | null; issues_m: boolean };

@@ -117,7 +117,8 @@ import { buildPausedCart } from "@/modules/paused-sales/logic";
 import { useOrderOrigin } from "@/modules/orders/useOrderOrigin";
 import { useOrderConfig, useReservedStock, useSaleOrders } from "@/modules/orders/hooks";
 import { useFulfillmentSources } from "@/modules/pos/fulfillment";
-import { fulfillmentLines, groupDeliveries, planSummary, type PlanPayload } from "@/lib/stock/fulfillment";
+import { deliverySummary, fulfillmentLines, groupDeliveries, shippingFeeOf, type DeliveryChoice, type PlanPayload } from "@/lib/stock/fulfillment";
+import type { RemitoSource } from "@/components/remitos/RemitoIssueModal";
 import type { FulfillmentState } from "@/components/pos/fulfillment/FulfillmentModal";
 import { DeliveriesDoneModal, DeliveryBar } from "@/components/pos/fulfillment/DeliveryBar";
 import type { CreateSaleResult } from "@/modules/pos/api";
@@ -198,6 +199,13 @@ const QuoteFromCartModal = dynamic(() => import("@/components/quotes/QuoteFromCa
 const OrderFromCartModal = dynamic(() => import("@/components/orders/OrderFromCartModal").then((m) => m.OrderFromCartModal), { ssr: false });
 // ADR-136: entregas de la venta (chunk aparte, se baja al abrirlo).
 const FulfillmentModal = dynamic(() => import("@/components/pos/fulfillment/FulfillmentModal").then((m) => m.FulfillmentModal), { ssr: false });
+// ADR-146: entrega dentro de la hoja de cobro y remito después de cobrar.
+const CheckoutDeliveryBlock = dynamic(
+  () => import("@/components/pos/checkout/CheckoutDeliveryBlock").then((m) => m.CheckoutDeliveryBlock),
+  { ssr: false },
+);
+const RemitoIssueModal = dynamic(() => import("@/components/remitos/RemitoIssueModal").then((m) => m.RemitoIssueModal), { ssr: false });
+const RemitoDetailModal = dynamic(() => import("@/components/remitos/RemitoDetailModal").then((m) => m.RemitoDetailModal), { ssr: false });
 const PosShortcutsHelp = dynamic(() => loadShortcutsHelp().then((m) => m.PosShortcutsHelp), { ssr: false });
 // Cobros en espera (ADR-048): la pestaña se abre como hoja dentro del POS.
 const PendingChargesPanel = dynamic(
@@ -874,6 +882,16 @@ function PosPageInner() {
   );
   const [fulfillOpen, setFulfillOpen] = useState(false);
   const [fulfill, setFulfill] = useState<FulfillmentState | null>(null);
+  // ADR-146: entrega elegida en la hoja de cobro (null = se lo lleva ahora),
+  // lo que falta para cobrarla y si el bloque ya pidió los orígenes con stock.
+  const [deliveryChoice, setDeliveryChoice] = useState<DeliveryChoice | null>(null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [deliverySourcesWanted, setDeliverySourcesWanted] = useState(false);
+  const [remitoIssue, setRemitoIssue] = useState<RemitoSource | null>(null);
+  const [remitoOpen, setRemitoOpen] = useState<string | null>(null);
+  // Domicilio de cada envío del último cobro (para precargar el remito).
+  const lastShipAddress = useRef<Map<string, string>>(new Map());
+  const customerNameAtSale = useRef<string | null>(null);
   const [doneDeliveries, setDoneDeliveries] = useState<{ saleNumber: number; list: NonNullable<CreateSaleResult["deliveries"]> } | null>(null);
   const planRef = useRef<PlanPayload | null>(null);
   // Cobro que esperaba el reparto (no alcanzaba en esta sucursal).
@@ -881,7 +899,7 @@ function PosPageInner() {
   const fSources = useFulfillmentSources(
     posStoreId,
     fLines.map((l) => ({ product_id: l.productId, variant_id: l.variantId })),
-    fulfillEnabled && fulfillOpen,
+    fulfillEnabled && (fulfillOpen || (checkoutOpen && deliverySourcesWanted)),
   );
   const fulfillRules = useMemo(
     () => ({
@@ -897,6 +915,23 @@ function PosPageInner() {
     [fulfill, fulfillRules.storeId],
   );
   const storeNameOf = (id: string) => branchStock.names.get(id) ?? (id === posStoreId ? (branchStock.storeName ?? "Esta sucursal") : "Otra sucursal");
+  const fulfillStores = useMemo(
+    () =>
+      [...branchStock.names.entries()]
+        .map(([id, name]) => ({ id, name }))
+        .concat(posStoreId && !branchStock.names.has(posStoreId) ? [{ id: posStoreId, name: branchStock.storeName ?? "Esta sucursal" }] : []),
+    [branchStock.names, branchStock.storeName, posStoreId],
+  );
+  const fulfillSummary = planRef.current && fulfillGroups.length > 0 ? deliverySummary(fulfillGroups, storeNameOf, fulfill?.info) : null;
+  // ADR-146: costo de envío (renglón "Envío" que agrega el servidor). Va en la
+  // base del cobro, antes del redondeo, igual que en create_sale.
+  const shipFee = deliveryChoice?.kind === "envio" && planRef.current ? shippingFeeOf(deliveryChoice.fee) : 0;
+  const clearDelivery = () => {
+    planRef.current = null;
+    setFulfill(null);
+    setDeliveryChoice(null);
+    setDeliveryError(null);
+  };
   // El reparto deja de valer si cambia el carrito (cantidades o productos).
   const fLinesKey = fLines.map((l) => `${l.key}:${l.quantity}`).join(",");
   useEffect(() => {
@@ -910,6 +945,8 @@ function PosPageInner() {
     if (!fits) {
       planRef.current = null;
       setFulfill(null);
+      setDeliveryChoice(null);
+      setDeliveryError(null);
       if (fLines.length > 0) toast({ title: "Cambió el carrito: volvé a repartir las entregas", variant: "info" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1194,7 +1231,9 @@ function PosPageInner() {
               ? "Los retiros de reservas se cobran en el momento."
               : orderOrigin.active
                 ? "Los pedidos de salón se cobran en el momento."
-                : null;
+                : deliveryChoice
+                  ? "Las ventas con retiro, envío o entrega repartida se cobran en el momento."
+                  : null;
   const parker = usePosPark({
     lines,
     discountTotal,
@@ -1267,10 +1306,20 @@ function PosPageInner() {
     service: hasServiceLines ? (servicePeriod ?? defaultServicePeriod()) : null,
     // ADR-136: reparto de entregas y aviso con los códigos de retiro.
     fulfillmentRef: planRef,
-    onDeliveries: (list, saleNumber) => setDoneDeliveries({ saleNumber, list }),
+    onDeliveries: (list, saleNumber) => {
+      // Domicilio de cada envío (por sucursal de origen) para el remito.
+      const addr = new Map<string, string>();
+      for (const d of planRef.current?.deliveries ?? []) {
+        const origin = d.items[0]?.source_store_id;
+        if (d.mode === "envio" && d.ship_address && origin) addr.set(origin, d.ship_address);
+      }
+      lastShipAddress.current = addr;
+      customerNameAtSale.current = customer?.name ?? null;
+      setDoneDeliveries({ saleNumber, list });
+    },
     onSuccess: ({ saleId, change, hadCash }) => {
-      planRef.current = null;
-      setFulfill(null);
+      clearDelivery();
+      setDeliverySourcesWanted(false);
       // Cajón al cobrar en efectivo (ADR-063): la venta ya está; un fallo sólo avisa.
       void posHw.openOnSale(saleId, hadCash).then((warn) => {
         if (warn) toast({ title: warn, variant: "info" });
@@ -1489,6 +1538,10 @@ function PosPageInner() {
       const allowed =
         action === "help" ||
         (action === "pause" && checkoutOpenRef.current) ||
+        // ADR-146: F4 elige el cliente también desde la hoja de cobro (si no hay otro diálogo encima).
+        (action === "customer" &&
+          checkoutOpenRef.current &&
+          document.querySelectorAll('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]').length <= 1) ||
         (action === "clear" && (checkoutOpenRef.current || Boolean(pauseRef.current.dialogs.clearConfirm)));
       if (dialogOpen && !allowed) return;
       if (shortcutRef.current(action)) e.preventDefault();
@@ -1520,7 +1573,9 @@ function PosPageInner() {
             ? "Un pedido no se pausa: salí sin cobrar y vuelve a la lista de pedidos."
             : editingCharge
             ? "Estás editando un cobro en espera: actualizalo o salí sin cambios."
-            : null;
+            : deliveryChoice
+              ? "Una venta con retiro, envío o entrega repartida no se pausa: volvé a Se lo lleva ahora para pausarla."
+              : null;
   const pauser = usePosPause({
     storeId: register?.store_id ?? null,
     registerId: register?.id ?? null,
@@ -1751,7 +1806,7 @@ function PosPageInner() {
       deliverySlot={
         fulfillEnabled && fLines.length > 0 && preset !== "caja_rapida" ? (
           <DeliveryBar
-            summary={planRef.current && fulfillGroups.length > 0 ? planSummary(fulfillGroups, storeNameOf) : null}
+            summary={fulfillSummary}
             onOpen={() => setFulfillOpen(true)}
           />
         ) : null
@@ -2253,7 +2308,8 @@ function PosPageInner() {
         <CheckoutSheetConnected
           open={checkoutOpen}
           onOpenChange={setCheckoutOpen}
-          base={rawTotal}
+          base={rawTotal + shipFee}
+          shippingFee={shipFee}
           rounding={rounding}
           deliveryFee={origins.deliveryFee}
           cartPromo={pricing.cartPromo}
@@ -2263,7 +2319,62 @@ function PosPageInner() {
           tenders={tenders}
           offline={offline.isOffline}
           customerId={customer?.id ?? null}
-          taxPreview={customer?.id ? { items: taxPreviewItems, customerId: customer.id } : null}
+          taxPreview={
+            customer?.id
+              ? {
+                  items: shipFee > 0 ? [...taxPreviewItems, { product_id: null, quantity: 1, unit_price: shipFee }] : taxPreviewItems,
+                  customerId: customer.id,
+                }
+              : null
+          }
+          customerBlock={{
+            customer,
+            onPick: () => setCustOpen(true),
+            onNew: () => {
+              setNewCustSearch("");
+              setNewCustOpen(true);
+            },
+            onClear: () => setCustomer(null),
+          }}
+          deliverySlot={
+            fulfillEnabled && fLines.length > 0 && posStoreId ? (
+              <CheckoutDeliveryBlock
+                open={checkoutOpen}
+                lines={fLines}
+                sources={fSources.data ?? []}
+                sourcesLoading={fSources.isLoading}
+                rules={fulfillRules}
+                stores={fulfillStores}
+                locks={{
+                  retiro:
+                    ordersFeature !== true
+                      ? "Tu plan no incluye el retiro en sucursal"
+                      : !orderCfg.delivery_types.retiro.enabled
+                        ? "El retiro está apagado en Configuración"
+                        : null,
+                  envio:
+                    ordersFeature !== true
+                      ? "Tu plan no incluye el envío a domicilio"
+                      : !orderCfg.delivery_types.envio.enabled
+                        ? "El envío está apagado en Configuración"
+                        : null,
+                }}
+                choice={deliveryChoice}
+                summary={fulfillSummary}
+                error={deliveryError}
+                customerId={customer?.id ?? null}
+                customerName={customer?.name ?? null}
+                onNeedSources={() => setDeliverySourcesWanted(true)}
+                onApply={(r) => {
+                  planRef.current = r.plan;
+                  setFulfill(r.plan ? r.state : null);
+                  setDeliveryChoice(r.choice);
+                  setDeliveryError(r.error);
+                }}
+                onSplit={() => setFulfillOpen(true)}
+              />
+            ) : null
+          }
           prepaid={origins.appointmentId ? apptPrepaid : null}
           prefs={layout.payments}
           initialTenderId={checkoutTender}
@@ -2278,6 +2389,11 @@ function PosPageInner() {
           style={accentVars(effectiveLayout.accent)}
           loading={saving}
           onConfirm={(...args: Parameters<typeof handleSale>) => {
+            // ADR-146: la entrega elegida en la hoja tiene que estar completa.
+            if (deliveryChoice && deliveryError) {
+              toast({ title: "Revisá la entrega", description: deliveryError, variant: "error" });
+              return;
+            }
             // ADR-136: con reparto, el servidor valida cada origen.
             if (!planRef.current && fulfillEnabled && fLines.length > 0 && branchShortfallExists()) {
               pendingChargeRef.current = args;
@@ -2322,28 +2438,54 @@ function PosPageInner() {
           sources={fSources.data ?? []}
           loading={fSources.isLoading}
           rules={fulfillRules}
-          stores={[...branchStock.names.entries()].map(([id, name]) => ({ id, name })).concat(
-            posStoreId && !branchStock.names.has(posStoreId) ? [{ id: posStoreId, name: branchStock.storeName ?? "Esta sucursal" }] : [],
-          )}
+          stores={fulfillStores}
           customerName={customer?.name ?? null}
           initial={fulfill}
           onConfirm={(state, plan) => {
             planRef.current = plan;
             setFulfill(plan ? state : null);
+            setDeliveryChoice(plan ? { kind: "split" } : null);
+            setDeliveryError(null);
             setFulfillOpen(false);
             const pending = pendingChargeRef.current;
             pendingChargeRef.current = null;
             if (pending) void handleSale(...(pending as Parameters<typeof handleSale>));
           }}
           onClear={() => {
-            planRef.current = null;
-            setFulfill(null);
+            clearDelivery();
             setFulfillOpen(false);
             pendingChargeRef.current = null;
           }}
         />
       )}
-      <DeliveriesDoneModal done={doneDeliveries} storeName={storeNameOf} onClose={() => setDoneDeliveries(null)} />
+      <DeliveriesDoneModal
+        done={doneDeliveries}
+        storeName={storeNameOf}
+        onClose={() => setDoneDeliveries(null)}
+        onRemito={(d, saleNumber) => {
+          setDoneDeliveries(null);
+          setRemitoIssue({
+            dispatchId: d.id,
+            saleId: null,
+            label: `Entrega N° ${d.number} · Venta #${saleNumber}`,
+            kind: "envio",
+            receiverName: customerNameAtSale.current,
+            deliveryAddress: lastShipAddress.current.get(d.origin_store_id) ?? null,
+          });
+        }}
+      />
+      {/* ADR-146: remito del envío recién cobrado (ADR-136). */}
+      <MountWhenOpened open={remitoIssue !== null || remitoOpen !== null}>
+        <RemitoIssueModal
+          source={remitoIssue}
+          onClose={() => setRemitoIssue(null)}
+          onIssued={(id) => {
+            setRemitoIssue(null);
+            setRemitoOpen(id);
+          }}
+        />
+        <RemitoDetailModal id={remitoOpen} canManage={role === "owner" || role === "manager"} onClose={() => setRemitoOpen(null)} />
+      </MountWhenOpened>
 
       <OfflineTicketModal entry={offlineTicket} onOpenChange={(o) => !o && setOfflineTicket(null)} />
       {tickets.map((t) => (

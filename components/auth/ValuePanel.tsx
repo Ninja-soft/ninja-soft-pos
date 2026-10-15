@@ -84,6 +84,13 @@ const PAYMENT_LOGOS = [
   { src: "/images/payments/payway-wordmark-on-dark.webp", alt: "Payway", w: 512, hpx: 98, h: "h-[1.1rem]", f: "brightness-0 invert" },
   { src: "/images/payments/getnet-wordmark-on-dark.webp", alt: "Getnet", w: 512, hpx: 130, h: "h-[1.15rem]", f: "brightness-0 invert" },
   { src: "/images/payments/nave-wordmark-on-dark.webp", alt: "Nave", w: 512, hpx: 213, h: "h-6", f: "brightness-0 invert" },
+  { src: "/images/payments/ualabis-wordmark-on-dark.webp", alt: "Ualá Bis", w: 512, hpx: 136, h: "h-[1.1rem]", f: "brightness-0 invert" },
+  { src: "/images/payments/clover-wordmark-on-dark.webp", alt: "Clover", w: 512, hpx: 125, h: "h-[1.05rem]", f: "brightness-0 invert" },
+  { src: "/images/payments/fiserv-wordmark.webp", alt: "Fiserv", w: 512, hpx: 271, h: "h-6", f: "brightness-0 invert" },
+  { src: "/images/payments/gocuotas-wordmark.webp", alt: "GO Cuotas", w: 662, hpx: 256, h: "h-6", f: "brightness-0 invert" },
+  { src: "/images/payments/pagos360-wordmark.webp", alt: "Pagos360", w: 512, hpx: 142, h: "h-[1.1rem]", f: "brightness-0 invert" },
+  { src: "/images/payments/mobbex-wordmark.webp", alt: "Mobbex", w: 512, hpx: 114, h: "h-4", f: "brightness-0 invert" },
+  { src: "/images/payments/directo-wordmark-on-dark.webp", alt: "Directo", w: 512, hpx: 102, h: "h-4", f: "brightness-0 invert" },
 ];
 
 const num = (n: number) => Math.round(n).toLocaleString("es-AR");
@@ -525,9 +532,13 @@ export function ValuePanel() {
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-ninja-lavender">
           Cobrá con los medios que ya usás
         </p>
-        <ul className="mt-3.5 flex flex-wrap items-center gap-x-6 gap-y-3">
-          {PAYMENT_LOGOS.map((logo) => (
-            <li key={logo.alt}>
+        {/* Carrusel infinito con todos los medios: la lista va dos veces y se
+            desplaza la mitad (loop sin salto). Se pausa al pasar el mouse y sin
+            animación si el sistema pide menos movimiento. */}
+        <div className="ninja-marquee mt-3.5 overflow-hidden">
+        <ul className="ninja-marquee-track flex w-max items-center">
+          {[...PAYMENT_LOGOS, ...PAYMENT_LOGOS].map((logo, i) => (
+            <li key={`${logo.alt}-${i}`} aria-hidden={i >= PAYMENT_LOGOS.length || undefined} className="shrink-0 pr-8">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={logo.src}
@@ -539,6 +550,7 @@ export function ValuePanel() {
             </li>
           ))}
         </ul>
+        </div>
       </div>
 
       <p className="mt-5 flex shrink-0 items-center gap-2 text-xs text-ninja-lavender [@media(max-height:820px)]:mt-0">

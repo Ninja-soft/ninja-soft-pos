@@ -251,11 +251,11 @@ describe.skipIf(!enabled)("ADR-149 · L0: entregas, anulación y stock por sucur
 
   it("A13: un remito por venta y producto", async () => {
     const id1 = crypto.randomUUID();
-    const r1 = await rpc(ctx.cashier, "remito_issue", { p_id: id1, p_data: { sale_id: ctx.saleId } });
+    const r1 = await rpc(ctx.cashier, "remito_issue", { p_id: id1, p_data: { sale_id: ctx.saleId, receiver_name: "Juan Pérez" } });
     expect(r1.error).toBeNull();
     const pv = await rpc(ctx.cashier, "remito_preview", { p_data: { sale_id: ctx.saleId } });
     expect((pv.data as { items: unknown[] }).items).toHaveLength(0);
-    const r2 = await rpc(ctx.cashier, "remito_issue", { p_id: crypto.randomUUID(), p_data: { sale_id: ctx.saleId } });
+    const r2 = await rpc(ctx.cashier, "remito_issue", { p_id: crypto.randomUUID(), p_data: { sale_id: ctx.saleId, receiver_name: "Juan Pérez" } });
     expect(r2.error?.message).toMatch(/remito_already_covered/);
     const v = await rpc(ctx.owner, "remito_void", { p_id: id1, p_reason: "Prueba de L0" });
     expect(v.error).toBeNull();

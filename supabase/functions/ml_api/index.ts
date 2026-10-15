@@ -5,9 +5,14 @@
 // Gating server-side en cada acción: ml_edge_guard (miembro activo, rol y
 // feature `mercadolibre`) y la cuenta tiene que ser del negocio del usuario.
 //
-//   predict_category {title}                       predictor de categoría
+//   predict_category {title}                       predictor de categoría (sin las de prueba)
 //   category {category_id}                         límites, atributos y tipos
+//   shipping_options {account_id, category_id}     modos de envío del vendedor y la
+//                                                  categoría y el que se va a usar
 //   validate {account_id, input}                   chequeos + POST /items/validate
+//                                                  (saca atributos que no aplican y
+//                                                  reintenta una vez si ML pide
+//                                                  borrar un atributo o rechaza el envío)
 //   publish {account_id, product_id, input}        crea el/los ítems (+ descripción)
 //                                                  y los vincula al producto
 //   import_items {account_id}                      trae las publicaciones de la
@@ -19,15 +24,30 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { readJsonLimited } from "../_shared/requestGuard.ts";
-import { MlApiError } from "../_shared/mercadolibre/client.ts";
+import { MlApiError, type MlClient } from "../_shared/mercadolibre/client.ts";
 import {
   attributeForm,
+  attributesToDelete,
   buildItemBodies,
+  filterCategorySuggestions,
   itemIdentifiers,
+  sanitizeAttributes,
+  stripAttributes,
   suggestLinks,
   validatePublish,
+  validationCauses,
+  type AttrField,
+  type ItemBody,
   type PublishInput,
 } from "../_shared/mercadolibre/items.ts";
+import {
+  chooseShippingPlan,
+  excludedModesFromCauses,
+  resolveShipping,
+  shippingBody,
+  type ShippingMode,
+  type ShippingPlan,
+} from "../_shared/mercadolibre/shipping.ts";
 import { labelBatches, labelBlocker } from "../_shared/mercadolibre/orders.ts";
 import { bytesToBase64, extractZpl, isPdf, labelPath, type LabelFormat } from "../_shared/mercadolibre/labels.ts";
 import { ingestOrder, itemPayload, refreshItem } from "../_shared/mercadolibre/worker.ts";
@@ -38,6 +58,46 @@ import { accountClient, adminClient, cors, json, mlConfig, rpcOf } from "../_sha
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MANAGE = new Set(["validate", "publish", "import_items", "sync_account", "refresh_order"]);
+const CATEGORY_RE = /^[A-Z]{3}\d{1,12}$/;
+
+/**
+ * Modos de envío del vendedor y de la categoría (sólo GETs). Cada consulta
+ * puede fallar sola (permiso, 404): el plan se arma con lo que haya.
+ */
+async function shippingPlanFor(
+  client: MlClient,
+  mlUserId: number,
+  categoryId: string,
+  excluded: ShippingMode[] = [],
+): Promise<ShippingPlan> {
+  const [user, category, userCategory] = await Promise.allSettled([
+    client.get<unknown>(`/users/${mlUserId}/shipping_preferences`),
+    client.get<unknown>(`/categories/${encodeURIComponent(categoryId)}/shipping_preferences`),
+    client.get<unknown>(`/users/${mlUserId}/shipping_modes`, { category_id: categoryId }),
+  ]);
+  const val = (r: PromiseSettledResult<unknown>) => (r.status === "fulfilled" ? r.value : undefined);
+  return chooseShippingPlan({ user: val(user), category: val(category), userCategory: val(userCategory), excluded });
+}
+
+/** POST /items/validate de cada cuerpo: errores (código: mensaje) y avisos. */
+async function validateBodies(client: MlClient, bodies: ItemBody[]): Promise<{ errors: string[]; warnings: string[] }> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  for (const it of bodies) {
+    try {
+      await client.request("POST", "/items/validate", { body: it.body });
+    } catch (e) {
+      if (e instanceof MlApiError && (e.code === "validation_error" || e.code === "bad_request")) {
+        const c = validationCauses(e.body, e.causes.length ? e.causes : [e.message]);
+        errors.push(...c.errors);
+        warnings.push(...c.warnings);
+      } else throw e;
+    }
+  }
+  return { errors: [...new Set(errors)], warnings: [...new Set(warnings)] };
+}
+
+const fieldName = (fields: AttrField[], id: string) => fields.find((f) => f.id === id)?.name ?? id;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -109,12 +169,18 @@ Deno.serve(async (req: Request) => {
       case "predict_category": {
         const title = String(b.title ?? "").trim().slice(0, 120);
         if (title.length < 3) return json({ error: "invalid_title" }, 400);
-        const suggestions = await client.get<MlDomainSuggestion[]>(`/sites/${ML_SITE}/domain_discovery/search`, { q: title, limit: 3 });
-        return json({ suggestions });
+        // Se piden más y se filtran las categorías de prueba de ML ("All in One Test").
+        const raw = await client.get<MlDomainSuggestion[]>(`/sites/${ML_SITE}/domain_discovery/search`, { q: title, limit: 8 });
+        return json({ suggestions: filterCategorySuggestions(raw, 3) });
+      }
+      case "shipping_options": {
+        const id = String(b.category_id ?? "");
+        if (!CATEGORY_RE.test(id)) return json({ error: "invalid_category" }, 400);
+        return json({ shipping: await shippingPlanFor(client, account.ml_user_id, id) });
       }
       case "category": {
         const id = String(b.category_id ?? "");
-        if (!/^[A-Z]{3}\d{1,12}$/.test(id)) return json({ error: "invalid_category" }, 400);
+        if (!CATEGORY_RE.test(id)) return json({ error: "invalid_category" }, 400);
         const [cat, attrs, types] = await Promise.all([
           client.get<{ id: string; name: string; settings?: Record<string, unknown> }>(`/categories/${id}`),
           client.get<MlCategoryAttribute[]>(`/categories/${id}/attributes`),
@@ -138,22 +204,53 @@ Deno.serve(async (req: Request) => {
         const input = b.input as PublishInput;
         if (!input || typeof input !== "object") return json({ error: "invalid_input" }, 400);
         input.model = account.user_product_seller ? "user_products" : "classic";
+        if (input.condition !== "used") input.condition = "new";
+        if (!CATEGORY_RE.test(String(input.categoryId ?? ""))) return json({ error: "invalid_category" }, 400);
         const attrs = attributeForm(await client.get<MlCategoryAttribute[]>(`/categories/${encodeURIComponent(input.categoryId)}/attributes`));
+        // Atributos que no aplican (GRADING con "Nuevo", ocultos, de solo lectura) no se mandan.
+        const notices: string[] = [];
+        const removed = Object.keys(input.attributes ?? {}).filter((id) => !(id in sanitizeAttributes(input.attributes ?? {}, attrs, input.condition)));
+        input.attributes = sanitizeAttributes(input.attributes ?? {}, attrs, input.condition);
+        // Envío: el mejor modo que admiten el vendedor y la categoría.
+        const requested = input.shipping ?? { mode: "me2" as const, freeShipping: Boolean(input.freeShipping) };
+        let plan = await shippingPlanFor(client, account.ml_user_id, input.categoryId);
+        let ship = resolveShipping(requested, plan);
+        if (ship.adjusted) notices.push(ship.adjusted);
+        input.shipping = ship.input;
+        input.freeShipping = ship.input.freeShipping;
+
         const local = validatePublish(input, attrs);
-        if (local.length > 0) return json({ ok: false, errors: local });
-        const bodies = buildItemBodies(input);
-        const errors: string[] = [];
-        for (const it of bodies) {
-          try {
-            await client.request("POST", "/items/validate", { body: it.body });
-          } catch (e) {
-            if (e instanceof MlApiError && (e.code === "validation_error" || e.code === "bad_request")) {
-              errors.push(...(e.causes.length ? e.causes : [e.message]));
-            } else throw e;
+        if (local.length > 0) return json({ ok: false, errors: local, notices, shipping: plan, removed_attributes: removed });
+        let bodies = buildItemBodies(input, attrs);
+        let res = await validateBodies(client, bodies);
+
+        // Un reintento automático si ML pide sacar atributos o rechaza el modo de envío.
+        if (res.errors.length > 0) {
+          const del = attributesToDelete(res.errors);
+          const lost = excludedModesFromCauses(res.errors).filter((m) => m === input.shipping!.mode);
+          if (del.length > 0 || lost.length > 0) {
+            if (del.length > 0) {
+              bodies = stripAttributes(bodies, del);
+              for (const id of del) delete input.attributes[id];
+              removed.push(...del);
+              notices.push(
+                `Sacamos ${del.map((id) => `"${fieldName(attrs, id)}"`).join(", ")}: Mercado Libre no lo acepta para esta categoría y condición.`,
+              );
+            }
+            if (lost.length > 0) {
+              plan = await shippingPlanFor(client, account.ml_user_id, input.categoryId, lost);
+              ship = resolveShipping({ ...requested, mode: plan.mode }, plan);
+              input.shipping = ship.input;
+              input.freeShipping = ship.input.freeShipping;
+              bodies = bodies.map((it) => ({ ...it, body: { ...it.body, shipping: shippingBody(ship.input) } }));
+              notices.push(`Mercado Libre no aceptó ese envío. ${plan.reason}`);
+            }
+            res = await validateBodies(client, bodies);
           }
         }
-        if (errors.length > 0) return json({ ok: false, errors: [...new Set(errors)].slice(0, 30) });
-        if (action === "validate") return json({ ok: true });
+        const meta = { notices, warnings: res.warnings.slice(0, 10), shipping: plan, applied_shipping: input.shipping, removed_attributes: [...new Set(removed)] };
+        if (res.errors.length > 0) return json({ ok: false, errors: res.errors.slice(0, 30), ...meta });
+        if (action === "validate") return json({ ok: true, ...meta });
 
         const productId = String(b.product_id ?? "");
         if (!UUID_RE.test(productId)) return json({ error: "invalid_product" }, 400);
@@ -182,7 +279,7 @@ Deno.serve(async (req: Request) => {
           });
           created.push({ ml_item_id: item.id, permalink: item.permalink ?? null });
         }
-        return json({ ok: true, items: created });
+        return json({ ok: true, items: created, ...meta });
       }
       case "import_items": {
         // Hasta 500 publicaciones por corrida (scan); multiget de a 20.

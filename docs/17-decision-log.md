@@ -5362,3 +5362,39 @@ Todo lo nuevo es parte de `mercadolibre_facturacion` (no hay feature nueva: es c
 - Verificado en PGlite con la cadena completa de 422 migraciones: 38 chequeos (reglas guardadas y validadas, sucursal y depósito por ME2, Full en la sucursal elegida sin tocar el stock propio, Flex sin regla, regla por defecto, sin envío, sin la feature, sucursal dada de baja, emisión con el PV de la sucursal de la regla, con el de la cuenta sin regla y con el de la cuenta si la regla se agregó después de que la venta entró en otra sucursal, leyenda y mensaje en `ml_invoice_pdf_data`, mensaje una sola vez, sin la feature, permisos de las internas) y guardarraíles de RLS en 0.
 - A confirmar con la cuenta real: si la guía de mensajes deja usar OTHER dos veces en la misma venta (percepción y factura); si no, el mensaje de la factura va por postventa y, si ML tampoco lo deja, queda anotado.
 - Tests: `tests/unit/mlFacturacionConfig.test.ts`, `tests/components/MlBillingSettings.test.tsx`, `tests/components/SegmentedScroll.test.tsx` y ajustes en `tests/unit/mlFacturacion.test.ts` y `tests/components/MlBillingTab.test.tsx`.
+## ADR-147: Maestro de motivos de reclamo de Mercado Libre como tabla de plataforma, sembrado con GET reales y completado por la Edge, con selector en la configuración del gestor
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261214100000_ml_claim_reasons` sin aplicar; Edge `ml_api` con la acción `reasons_fill`, sin desplegar) · **Hito:** H141 · **Base:** ADR-132 (gestor de ML), ADR-104. Diseño: [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md) §3.6.
+
+### Contexto
+
+En Mercado Libre › Configuración, "Motivos para pedir exclusión" era un campo de texto con códigos separados por coma (`PDD9939, PNR9501, PDD9502, PDD9829`). El dueño: "no se entiende porque no hay un maestro para entender qué es cada uno". En Métricas y Posventa el motivo se mostraba sólo por familia ("Producto distinto o con fallas").
+
+Relevamiento del 15/10/2026:
+
+- **API.** `GET /post-purchase/v1/claims/reasons/{id}` responde `{ id, flow, name, detail, position, parent_id, children_title, status, filter: { group[], site_id[] }, settings: { allowed_flows[], expected_resolutions[], rules_engine_triage[] }, date_created, last_updated }`. `detail` es el texto en castellano que ve el comprador. **No hay listado**: `/post-purchase/v1/claims/reasons`, `/reasons/search`, `/reasons/{id}/children` y `/v2/claims/reasons` dan 404. Los `PNR34xx` responden con otro id (`PNR3430` → `PNR9502`).
+- **ANDESMAR** (sólo lectura) no tiene maestro: sólo un mapa por familia (`MOTIVO_FAMILIA` en `js/jsPosventa/posventaMetricasLogica.js:104`), la misma lista de 4 por defecto (`posventaConfig.js:175`) y la validación `^[A-Z]{2,4}\d{3,5}$`. La única API de motivos que usa es `/post-purchase/v1/returns/reasons` (SRF2 a SRF7, revisión de devoluciones), que es otra cosa.
+- **Producción:** `ml_claims` está vacía (la cuenta de prueba no tiene reclamos), así que no aportó códigos.
+- **Barrido con la cuenta conectada** (sólo GET, token leído en el servidor y nunca impreso): PDD9500-9999, PNR9500-9560, PNR3400-3460 y CS9500-9560. 616 motivos existen (604 del sitio MLA, 17 inactivos) y 18 alias. Los 4 por defecto resultaron ser: PDD9939 "Llegó lo que compré en buenas condiciones pero no lo quiero", PNR9501 "Me arrepentí de la compra", PDD9502 "Me arrepentí de comprarlo" y PDD9829 "Lo compré por error".
+
+### Decisión
+
+1. **Tabla de plataforma `ml_claim_reasons`** (sin `tenant_id`: un código significa lo mismo para todos). Clave = el código de ML, no un uuid, como `features.key` o `payment_providers.key`: es lo que traen `ml_claims.reason_id` y `ml_gestor_settings.exclusion_reasons`. Columnas: familia (PDD, PNR, CS, OTRO), título y descripción en castellano, `ml_name`, `ml_detail`, `flow`, `parent_id`, `alias_of`, resoluciones, triage, `excludable`, `recommended`, `active`, `source` (`seed` o `api`). RLS: lectura `authenticated` (`using (true)`), sin policies de escritura, `revoke all` a anon y authenticated; escribe sólo service_role.
+2. **Seed** con los 622 motivos MLA (604 + 18 alias), generado con `reasonFromApi` (`_shared/mercadolibre/reasons.ts`), la misma función que usa la Edge. Título = `detail`; si no se entiende solo ("Otro", "Llegó bien", 14 caracteres o menos) va con el del padre adelante ("El producto está dañado: llegó bien"). Descripción = el circuito (`flow`) y lo que puede pedir el comprador (`expected_resolutions`).
+3. **"Suele poder excluirse" es orientativo**: arrepentimiento, compra por error, mejor precio, ya no lo necesita o compra no reconocida (por `name` y `rules_engine_triage = repentant`), sin las demoras ni "la calidad no es la que esperaba". ML decide cada pedido. "Recomendados" son los 4 que ya venían por defecto.
+4. **Edge `ml_api`, acción `reasons_fill {ids[]}`**: completa los códigos que no estén en el maestro (hasta 20 por llamada, sólo GET, el padre sólo si hace falta para el título, memo de 6 h por isolate también para los 404, inserta sin pisar). Gating: `ml_edge_guard` sin `p_manage` (cualquier miembro activo con `mercadolibre`; escribe el servidor y sólo lo que ML confirma). La UI la llama una vez por código y sesión cuando ve un código que no está (en la configuración, Posventa y Métricas).
+5. **UI.** El campo de texto pasa a `MlReasonPicker`: chips con código y título (al tocarlos, la descripción y si suele poder excluirse), buscador sin acentos por código, título o descripción con resultados agrupados por tipo, "Recomendados" sin búsqueda, filtro "Sólo los que suelen poder excluirse" y **Agregar a mano** para un código que no está (se muestra "Sin descripción" o "Buscando descripción" y se completa desde la API). Se guarda lo mismo de antes: la lista de códigos en `exclusion_reasons` (la RPC `ml_gestor_settings_save` y la marca `candidato` de la ingesta no cambian). Métricas, Posventa (lista, detalle y búsqueda) y Embudos muestran el título del motivo con el código.
+
+### Alternativas descartadas
+
+- **Mapa fijo en el código (TS)**: 600 motivos que ML cambia (17 ya están inactivos); una tabla con fill desde la API se actualiza sola y la leen la UI y el SQL.
+- **Tabla por negocio**: duplicaría el mismo dato en cada tenant.
+- **Consultar la API en cada render**: un GET por código y por usuario; el maestro más el memo dejan a ML afuera del camino caliente.
+- **Mostrar sólo `detail`**: muchos hijos no se entienden solos ("Llegó bien", "Otro").
+
+### Consecuencias
+
+- Deploy: migración `20261214100000_ml_claim_reasons` (no depende de otras de ML; usa `set_updated_at()`) y Edge `ml_api`. Sin la migración, el selector muestra "Todavía no está el maestro de motivos" y permite agregar códigos a mano; la configuración se sigue guardando igual.
+- El barrido no cubre todos los rangos posibles: un código fuera de ellos entra por `reasons_fill` la primera vez que aparece.
+- Guardarraíles `rls_internal_scope_leaks()`, `rls_bare_current_tenant_policies()` y `rls_policies_without_initplan()` en 0 en PGlite con la migración (dos veces, idempotente) y `db-audit-perf --strict` sin hallazgos nuevos.
+- Tests: `tests/unit/mlClaimReasons.test.ts` (armado desde respuestas reales, alias, título con padre, excluibles, `fillReasons` con fetch falso que sólo hace GET, búsqueda, agrupado, seed de la migración), `tests/components/MlReasonPicker.test.tsx` y `tests/components/MlGestorTabs.test.tsx` (título del motivo en Métricas y Posventa).

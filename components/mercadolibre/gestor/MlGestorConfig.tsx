@@ -14,13 +14,16 @@ import { selectCls } from "@/components/stock/transfers/shared";
 import { mlErrorMessage } from "@/lib/mercadolibre/labels";
 import { DEFAULT_THRESHOLDS, cleanThresholds } from "@/supabase/functions/_shared/mercadolibre/reputation";
 import { useMlGestorMutations, useMlGestorSettings, useMlTemplates, type MlTemplate } from "@/modules/mercadolibre/gestorHooks";
+import { useEnsureClaimReasons, useMlClaimReasons } from "@/modules/mercadolibre/reasonHooks";
+import { RECOMMENDED_REASONS, REASON_CODE_RE } from "@/lib/mercadolibre/claimReasons";
+import { MlReasonPicker } from "@/components/mercadolibre/gestor/MlReasonPicker";
 import type { MlAccount } from "@/modules/mercadolibre/hooks";
 
 // Configuración del gestor (H141 · ADR-132, parte B): umbrales de reputación
 // (como "Configuración > Reputación" de ANDESMAR), motivos que se pueden
 // pedir excluir, avisos y plantillas de respuesta.
 
-const DEFAULT_REASONS = ["PDD9939", "PNR9501", "PDD9502", "PDD9829"];
+const DEFAULT_REASONS: string[] = [...RECOMMENDED_REASONS];
 const SCOPE_LABELS: Record<MlTemplate["scope"], string> = { question: "Preguntas", claim: "Reclamos", message: "Mensajes de la venta" };
 
 /** Qué parte mostrar: posventa (umbrales, avisos, plantillas de reclamos y mensajes) o preguntas (sus plantillas). */
@@ -36,13 +39,13 @@ function PostsaleConfig({ account, canManage, scopes }: { account: MlAccount; ca
   const { data: settings, isLoading, isError, refetch } = useMlGestorSettings(account.id);
   const { saveSettings } = useMlGestorMutations();
   const th = cleanThresholds(settings?.thresholds ?? DEFAULT_THRESHOLDS);
-  const [f, setF] = useState({ claims: "1", cancellations: "0.5", delayed: "8", reasons: DEFAULT_REASONS.join(", "), notifyClaims: true, dueHours: "24", notifyRep: true });
+  const [f, setF] = useState({ claims: "1", cancellations: "0.5", delayed: "8", reasons: DEFAULT_REASONS, notifyClaims: true, dueHours: "24", notifyRep: true });
   useEffect(() => {
     setF({
       claims: String(th.claims),
       cancellations: String(th.cancellations),
       delayed: String(th.delayed),
-      reasons: (settings?.exclusion_reasons ?? DEFAULT_REASONS).join(", "),
+      reasons: settings?.exclusion_reasons ?? DEFAULT_REASONS,
       notifyClaims: settings?.notify?.claims ?? true,
       dueHours: String(settings?.notify?.due_hours ?? 24),
       notifyRep: settings?.notify?.reputation ?? true,
@@ -50,16 +53,15 @@ function PostsaleConfig({ account, canManage, scopes }: { account: MlAccount; ca
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
-  const reasons = f.reasons
-    .split(/[\s,;]+/)
-    .map((x) => x.trim().toUpperCase())
-    .filter(Boolean);
+  const reasons = f.reasons;
+  const { data: catalog = [], index: reasonIndex } = useMlClaimReasons();
+  const reasonsLoading = useEnsureClaimReasons(reasonIndex, reasons);
   const n = (v: string) => Number(v.replace(",", "."));
   const valid =
     n(f.claims) >= 0.1 && n(f.claims) <= 20 &&
     n(f.cancellations) >= 0.1 && n(f.cancellations) <= 20 &&
     n(f.delayed) >= 0.1 && n(f.delayed) <= 50 &&
-    reasons.every((r) => /^[A-Z]{2,4}\d{3,5}$/.test(r)) && reasons.length <= 50 &&
+    reasons.every((r) => REASON_CODE_RE.test(r)) && reasons.length <= 50 &&
     Number.isInteger(n(f.dueHours)) && n(f.dueHours) >= 1 && n(f.dueHours) <= 168;
   const disabled = !canManage || saveSettings.isPending || isLoading;
 
@@ -98,8 +100,12 @@ function PostsaleConfig({ account, canManage, scopes }: { account: MlAccount; ca
               <Input label="Demoras %" inputMode="decimal" value={f.delayed} disabled={disabled} onChange={(e) => setF({ ...f, delayed: e.target.value })} />
             </div>
           </SettingRow>
-          <SettingRow label="Motivos para pedir exclusión" description="Si un caso afecta la reputación y su motivo está en esta lista, se marca para que pidas la exclusión en Mercado Libre.">
-            <Input className="sm:w-96" aria-label="Motivos" value={f.reasons} disabled={disabled} onChange={(e) => setF({ ...f, reasons: e.target.value })} hint="Códigos separados por coma, por ejemplo PDD9939" />
+          <SettingRow
+            stacked
+            label="Motivos para pedir exclusión"
+            description="Si un caso afecta la reputación y su motivo está en esta lista, se marca para que pidas la exclusión en Mercado Libre. Tocá un motivo elegido para ver qué significa."
+          >
+            <MlReasonPicker value={f.reasons} onChange={(next) => setF({ ...f, reasons: next })} reasons={catalog} loadingIds={reasonsLoading} disabled={disabled} />
           </SettingRow>
         </div>
       </SettingsCard>

@@ -23,7 +23,6 @@ import {
   autoSalesKey,
   dueLabel,
   effectiveStage,
-  reasonLabel,
   urgency,
   type AutoKey,
   type Board,
@@ -32,6 +31,8 @@ import {
 import { useTeamMembers } from "@/modules/customers/hooks";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { useMlOrders, useMlShipments, type MlAccount } from "@/modules/mercadolibre/hooks";
+import { reasonTitleOf } from "@/lib/mercadolibre/claimReasons";
+import { useMlClaimReasons } from "@/modules/mercadolibre/reasonHooks";
 import { useMlBoard, useMlClaims, useMlGestorMutations, type MlBoardCard } from "@/modules/mercadolibre/gestorHooks";
 
 // Embudos (H141 · ADR-132): tableros de ventas y de posventa. Cada tarjeta
@@ -81,6 +82,7 @@ export function MlBoardsTab({ account, canManage }: { account: MlAccount; canMan
   const { data: orders = [] } = useMlOrders(account.id);
   const { data: shipments = [] } = useMlShipments(account.id);
   const { data: claims = [] } = useMlClaims(account.id, 60);
+  const { index: reasons } = useMlClaimReasons();
   const { data: team = [] } = useTeamMembers();
   const { setCard } = useMlGestorMutations();
   const [me, setMe] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function MlBoardsTab({ account, canManage }: { account: MlAccount; canMan
     if (board === "claims") {
       return claims.map((c) => ({
         key: String(c.claim_id),
-        title: c.detail_title || reasonLabel(c.reason_id),
+        title: c.detail_title || reasonTitleOf(reasons, c.reason_id),
         sub: `Reclamo ${c.claim_id}${c.resource_id ? ` · venta ${c.resource_id}` : ""}${c.status === "opened" ? ` · ${dueLabel(c.due_at)}` : ""}`,
         amount: null,
         badges: [
@@ -133,7 +135,7 @@ export function MlBoardsTab({ account, canManage }: { account: MlAccount; canMan
         updatedAt: claim?.ml_last_updated ?? null,
       };
     });
-  }, [board, claims, orders, shipments]);
+  }, [board, claims, orders, shipments, reasons]);
 
   const stages = useMemo(() => [...(data?.stages ?? [])].sort((a, b) => a.sort - b.sort), [data?.stages]);
   const cards = useMemo(() => new Map((data?.cards ?? []).map((c) => [c.ref_key, c])), [data?.cards]);

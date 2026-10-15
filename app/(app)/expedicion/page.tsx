@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowRight, Lock, PackageCheck, Plus, Send } from "lucide-react";
+import { ArrowRight, FileText, Lock, PackageCheck, Plus, Send } from "lucide-react";
+import { RemitoIssueModal, type RemitoSource } from "@/components/remitos/RemitoIssueModal";
+import { RemitoDetailModal } from "@/components/remitos/RemitoDetailModal";
+import { remitosApi } from "@/modules/remitos/api";
+import { remitoErrorMessage } from "@/lib/remitos/logic";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -73,6 +77,32 @@ export default function ExpedicionPage() {
   const [cancelling, setCancelling] = useState<Dispatch | null>(null);
   const [adding, setAdding] = useState(false);
   const m = useOrderMutations();
+  // ADR-136: remito de cada entrega.
+  const remitosOn = useFeature("entregas_remitos") === true;
+  const [remitoIssue, setRemitoIssue] = useState<RemitoSource | null>(null);
+  const [remitoOpen, setRemitoOpen] = useState<string | null>(null);
+  const [remitoBusy, setRemitoBusy] = useState<string | null>(null);
+
+  async function openRemito(d: Dispatch) {
+    setRemitoBusy(d.id);
+    try {
+      const existing = await remitosApi.forDispatch(d.id);
+      if (existing) setRemitoOpen(existing.id);
+      else
+        setRemitoIssue({
+          dispatchId: d.id,
+          saleId: d.sale_id,
+          label: `Entrega N° ${d.number} · Venta #${d.sale?.number ?? "-"}`,
+          kind: d.delivery_type === "envio" ? "envio" : "entrega",
+          receiverName: d.pickup_name ?? d.customer_name,
+          deliveryAddress: d.ship_address,
+        });
+    } catch (e) {
+      toast({ title: "No se pudo abrir el remito", description: remitoErrorMessage(e), variant: "error" });
+    } finally {
+      setRemitoBusy(null);
+    }
+  }
 
   useEffect(() => {
     if (storeId === null && ctx.ready) setStoreId(ctx.posStoreId ?? ctx.filterStoreId ?? "");
@@ -267,6 +297,13 @@ export default function ExpedicionPage() {
                       {d.cancel_reason && <p>Motivo: {d.cancel_reason}</p>}
                     </div>
                   )}
+                  {remitosOn && canOperate && d.status !== "cancelado" && (
+                    <div className={cn("pt-3", !action && "mt-auto")}>
+                      <Button size="sm" variant="ghost" onClick={() => void openRemito(d)} loading={remitoBusy === d.id}>
+                        <FileText size={15} /> Remito
+                      </Button>
+                    </div>
+                  )}
                   {action && canOperate && (
                     <div className="mt-auto flex flex-col gap-2 pt-4 sm:flex-row">
                       <Button className="w-full sm:flex-1" onClick={() => void primary(d)} loading={m.advance.isPending && m.advance.variables?.id === d.id}>
@@ -296,6 +333,15 @@ export default function ExpedicionPage() {
       <ShipModal dispatch={shipping} onClose={() => setShipping(null)} />
       <CancelDispatchModal dispatch={cancelling} onClose={() => setCancelling(null)} />
       <AddSaleModal open={adding} onOpenChange={setAdding} stores={stores} defaultStoreId={storeId || null} />
+      <RemitoIssueModal
+        source={remitoIssue}
+        onClose={() => setRemitoIssue(null)}
+        onIssued={(id) => {
+          setRemitoIssue(null);
+          setRemitoOpen(id);
+        }}
+      />
+      <RemitoDetailModal id={remitoOpen} canManage={canManage} onClose={() => setRemitoOpen(null)} />
     </PageContainer>
   );
 }

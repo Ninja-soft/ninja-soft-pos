@@ -392,10 +392,10 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         key: "pedidos",
         label: "Pedidos y expedición",
         title: "Pedidos de salón y expedición",
-        description: "Minutos de reserva del stock, qué pasa al vencer y los tipos de entrega (también en otra sucursal).",
+        description: "Minutos de reserva del stock, qué pasa al vencer, los tipos de entrega (también en otra sucursal) y los remitos con COT.",
         icon: ClipboardList,
         feature: "pedidos_despacho",
-        keywords: "pedido salon vendedor caja reserva stock minutos vencer expedicion despacho entrega retiro sucursal envio domicilio codigo",
+        keywords: "pedido salon vendedor caja reserva stock minutos vencer expedicion despacho entrega retiro sucursal envio domicilio codigo remito cot arba agip traslado",
       },
       {
         key: "facturacion",

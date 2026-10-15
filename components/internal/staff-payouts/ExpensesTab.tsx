@@ -2,10 +2,11 @@
 
 // Gastos (F21 · ADR-121): servidores, dominios, servicios, sueldos,
 // impuestos, comisiones y otros, con recurrencia, moneda, prorrateo y a quién
-// se le descuentan. Cotización del dólar por mes.
+// se le descuentan. Cotización del dólar diaria (venta oficial de
+// ArgentinaDatos, ADR-135) con su evolución y carga manual.
 
 import { useMemo, useState } from "react";
-import { CalendarRange, DollarSign, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
+import { CalendarRange, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -32,7 +33,8 @@ import {
 } from "@/lib/staffPayouts/format";
 import type { ExpenseAllocation, ExpenseCategory, Recurrence } from "@/supabase/functions/_shared/staff/settlement";
 import { useStaffMutations, useTenantsForStaff, type ExpenseRow, type StaffData } from "@/modules/staffPayouts/api";
-import { Card, FIELD_LABEL, NATIVE_SELECT } from "./parts";
+import { FxRateCard } from "@/components/internal/fx/FxRateCard";
+import { FIELD_LABEL, NATIVE_SELECT } from "./parts";
 
 const money = (cents: number, currency: "ARS" | "USD") =>
   currency === "USD" ? `USD ${(cents / 100).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : formatCents(cents);
@@ -322,59 +324,6 @@ function MonthAmountModal({ expense, onClose }: { expense: ExpenseRow; onClose: 
   );
 }
 
-function FxCard({ data }: { data: StaffData }) {
-  const { toast } = useToast();
-  const mut = useStaffMutations();
-  const [period, setPeriod] = useState(todayAR().slice(0, 7));
-  const [rate, setRate] = useState("");
-  const [source, setSource] = useState("BNA venta");
-  const value = Number(rate.replace(/\./g, "").replace(",", "."));
-  return (
-    <Card>
-      <h3 className="flex items-center gap-2 font-semibold">
-        <DollarSign size={16} className="text-ninja-flameSoft" aria-hidden /> Cotización del dólar
-      </h3>
-      <p className="mt-1 text-xs text-muted-foreground">Se usa la del mes en que ocurre cada gasto en dólares. Si falta, la del último mes cargado (y se avisa).</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-        <Input label="Mes" type="month" value={period} onChange={(e) => setPeriod(e.target.value)} />
-        <Input label="$ por USD" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="Ej. 1.450,50" />
-        <Input label="Fuente" value={source} onChange={(e) => setSource(e.target.value)} />
-        <Button
-          onClick={() =>
-            mut.setFx.mutate(
-              { period: `${period}-01`, rate: value, source: source.trim() || null },
-              {
-                onSuccess: () => {
-                  toast({ title: "Cotización guardada", variant: "success" });
-                  setRate("");
-                },
-                onError: (e) => toast({ title: staffErrorMessage(e), variant: "error" }),
-              },
-            )
-          }
-          loading={mut.setFx.isPending}
-          disabled={!(value > 0)}
-        >
-          Guardar
-        </Button>
-      </div>
-      {data.fx.length > 0 && (
-        <ul className="mt-3 divide-y divide-border/60 text-sm">
-          {data.fx.slice(0, 6).map((f) => (
-            <li key={f.period} className="flex justify-between py-1.5">
-              <span className="text-muted-foreground">
-                {monthLabel(f.period)}
-                {f.source ? ` · ${f.source}` : ""}
-              </span>
-              <span className="tabular-nums">$ {Number(f.rate).toLocaleString("es-AR", { maximumFractionDigits: 4 })}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
 export function ExpensesTab({ data }: { data: StaffData }) {
   const { toast } = useToast();
   const mut = useStaffMutations();
@@ -454,7 +403,7 @@ export function ExpensesTab({ data }: { data: StaffData }) {
         )}
       </section>
 
-      <FxCard data={data} />
+      <FxRateCard legacy={data.fx} />
 
       {editing !== null && <ExpenseModal open onOpenChange={(o) => !o && setEditing(null)} data={data} expense={editing === "new" ? null : editing} />}
       {month && <MonthAmountModal expense={month} onClose={() => setMonth(null)} />}

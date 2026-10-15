@@ -120,6 +120,8 @@ const ERRORS: Record<string, string> = {
   custom_must_sum_100: "Los porcentajes a medida tienen que sumar 100 %.",
   expense_not_found: "No encontramos ese gasto.",
   invalid_rate: "La cotización no es válida.",
+  invalid_date: "La fecha de la cotización no es válida.",
+  fx_manual_not_found: "No hay una carga manual para ese día.",
   invalid_cbu: "El CBU o CVU no es válido (revisá los dígitos).",
   invalid_cuit: "El CUIT no es válido.",
   cbu_or_alias_required: "Cargá el CBU / CVU o el alias.",

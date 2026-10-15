@@ -121,6 +121,15 @@ export function formatWhen(iso: string | null | undefined): string {
 export function friendlyPriceError(e: unknown): string {
   const m = String((e as { message?: string })?.message ?? e ?? "");
   if (m.includes("listas_precios_pro")) return "Necesitás Listas de precios PRO (plan Business).";
+  if (m.includes("precios_usd")) return "Tu plan no incluye Costos en dólares (desde el plan Pro).";
+  if (m.includes("costo_final")) return "Tu plan no incluye Costo final y utilidad.";
+  if (m.includes("fx_rate_missing")) return "No hay cotización del dólar para esa fuente. Cargala o usá una manual.";
+  if (m.includes("fx_cannot_schedule")) return "La actualización por dólar se aplica en el momento, no se programa.";
+  if (m.includes("invalid_fx_rate")) return "La cotización no es válida.";
+  if (m.includes("no_targets")) return "Elegí al menos un precio para actualizar.";
+  if (m.includes("invalid_cost_extras")) return "Revisá los componentes del costo.";
+  if (m.includes("invalid_floor_margin")) return "El margen mínimo tiene que ser entre 0 y 99,9 %.";
+  if (m.includes("invalid_threshold")) return "La variación tiene que ser mayor a 0 y hasta 100 %.";
   if (m.includes("feature_not_in_plan: listas_precios")) return "Tu plan no incluye listas de precios.";
   if (m.includes("multi_sucursal")) return "Asignar listas por sucursal requiere Multi-sucursal.";
   if (m.includes("price_list_cycle")) return "Esa lista ya deriva de esta: armaría un círculo.";

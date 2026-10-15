@@ -298,6 +298,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   nave_point: "Nave Point",
   gocuotas: "GO Cuotas",
   directo: "Directo",
+  ualabis: "Ualá Bis",
   account: "Cuenta corriente",
 };
 

@@ -204,6 +204,7 @@ export const PROVIDER_MAX_TTL_MINUTES: Record<string, number> = {
   nave: 60,
   gocuotas: 24 * 60,
   directo: 24 * 60,
+  ualabis: 24 * 60,
 };
 
 export function maxTtlMinutes(provider: string): number {

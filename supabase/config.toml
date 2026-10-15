@@ -120,6 +120,10 @@ verify_jwt = false
 [functions.send_password_recovery]
 verify_jwt = false
 
+# Ualá Bis (ADR-143): webhook de órdenes y devoluciones + pantallas de retorno.
+[functions.ualabis_webhook]
+verify_jwt = false
+
 # -----------------------------------------------------------------------------
 # Edge Functions con JWT declaradas explícitamente (no van en PUBLIC_FUNCTIONS).
 # catalog_sync (ADR-106): la llama el cron con X-Cron-Secret (anon key como

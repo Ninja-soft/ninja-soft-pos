@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Pencil, Plus, Tags, Trash2, TrendingUp, Upload } from "lucide-react";
+import { DollarSign, Download, Pencil, Plus, Tags, Trash2, TrendingUp, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -27,16 +27,17 @@ import { priceListImportDefinition } from "@/modules/imports/entities";
 import { describeRounding } from "@/lib/prices/rounding";
 import { PriceListEditorModal } from "@/components/prices/PriceListEditorModal";
 import { PriceListFormModal } from "@/components/prices/PriceListFormModal";
-import { BulkUpdateWizard } from "@/components/prices/BulkUpdateWizard";
+import { BulkUpdateWizard, type WizardMode } from "@/components/prices/BulkUpdateWizard";
+import { FxDollarPanel } from "@/components/prices/FxDollarPanel";
 import {
   FxIndexPanel,
   PaymentTermsPanel,
   PriceBatchesPanel,
   UpcomingPricesPanel,
 } from "@/components/prices/PriceProPanels";
-import { formatWhen, friendlyPriceError } from "@/components/prices/shared";
+import { fieldCls, formatWhen, friendlyPriceError, numOrNull } from "@/components/prices/shared";
 
-type Tab = "lists" | "changes" | "upcoming" | "terms" | "fx";
+type Tab = "lists" | "changes" | "dollar" | "upcoming" | "terms" | "fx";
 
 const CHANNEL_LABELS: Record<string, string> = Object.fromEntries(PRICE_CHANNELS.map((c) => [c.value, c.label]));
 
@@ -55,6 +56,7 @@ export function PriceListsCard() {
   const m = usePriceProMutations();
   const hasPro = useFeature("listas_precios_pro") !== false && (settings?.pro ?? false);
   const pro = hasPro && settings?.mode === "pro";
+  const hasUsd = useFeature("precios_usd") !== false && (settings?.usd ?? false);
 
   const [tab, setTab] = useState<Tab>("lists");
   const [formOpen, setFormOpen] = useState(false);
@@ -62,6 +64,8 @@ export function PriceListsCard() {
   const [pricing, setPricing] = useState<ProList | null>(null);
   const [toDelete, setToDelete] = useState<ProList | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<WizardMode | undefined>(undefined);
+  const [floorDraft, setFloorDraft] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -88,6 +92,7 @@ export function PriceListsCard() {
   const tabs: { value: Tab; label: string }[] = [
     { value: "lists", label: "Listas" },
     { value: "changes", label: "Cambios" },
+    ...(hasUsd ? [{ value: "dollar" as const, label: "Dólar" }] : []),
     ...(pro
       ? [
           { value: "upcoming" as const, label: "Programados" },
@@ -129,7 +134,25 @@ export function PriceListsCard() {
             >
               <Upload size={15} /> Importar
             </GatedButton>
-            <Button size="sm" onClick={() => setBulkOpen(true)}>
+            {hasUsd && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setBulkMode("fx");
+                  setBulkOpen(true);
+                }}
+              >
+                <DollarSign size={15} /> Actualizar por dólar
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={() => {
+                setBulkMode(undefined);
+                setBulkOpen(true);
+              }}
+            >
               <TrendingUp size={15} /> Actualizar precios
             </Button>
           </div>
@@ -154,6 +177,49 @@ export function PriceListsCard() {
               }
               label="Aprobación de cambios masivos"
             />
+          </div>
+        )}
+
+        {pro && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/60 px-3 py-2.5">
+            <span className="text-sm">
+              Margen mínimo sobre el costo final
+              <span className="block text-xs text-muted-foreground">
+                El POS, el catálogo y Mercado Libre nunca cobran menos que el costo final más este margen (con IVA). Vacío = sin
+                mínimo.
+              </span>
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                className={fieldCls + " h-9 w-24 text-right"}
+                inputMode="decimal"
+                aria-label="Margen mínimo %"
+                disabled={!isOwner}
+                placeholder="Sin mínimo"
+                value={floorDraft ?? (settings?.floor_margin_pct != null ? String(settings.floor_margin_pct).replace(".", ",") : "")}
+                onChange={(e) => setFloorDraft(e.target.value)}
+              />
+              <span className="text-sm text-muted-foreground">%</span>
+              {floorDraft !== null && (
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    m.saveSettings.mutate(
+                      { floor_margin_pct: numOrNull(floorDraft) },
+                      {
+                        onSuccess: () => {
+                          setFloorDraft(null);
+                          toast({ title: "Margen mínimo guardado", variant: "success" });
+                        },
+                        onError: (e) => toast({ title: friendlyPriceError(e), variant: "error" }),
+                      },
+                    )
+                  }
+                >
+                  Guardar
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -254,6 +320,16 @@ export function PriceListsCard() {
         )}
 
         {activeTab === "changes" && <PriceBatchesPanel lists={all} isOwner={isOwner} />}
+        {activeTab === "dollar" && (
+          <FxDollarPanel
+            lists={all}
+            isOwner={isOwner}
+            onUpdateByDollar={() => {
+              setBulkMode("fx");
+              setBulkOpen(true);
+            }}
+          />
+        )}
         {activeTab === "upcoming" && <UpcomingPricesPanel lists={all} />}
         {activeTab === "terms" && <PaymentTermsPanel />}
         {activeTab === "fx" && <FxIndexPanel />}
@@ -272,6 +348,7 @@ export function PriceListsCard() {
         lists={all}
         pro={pro}
         requireApproval={pro && (settings?.require_approval ?? false) && !isOwner}
+        initialMode={bulkMode}
       />
 
       <ImportWizard

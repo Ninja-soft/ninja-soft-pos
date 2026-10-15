@@ -129,7 +129,7 @@ export function groupPayments(
   for (const p of payments) {
     const voucher = voucherInfo({ ...p, id: "", created_at: "", reconciled_at: null } as SalePaymentRow);
     const acq = typeof p.card_voucher?.adquirente === "string" ? (p.card_voucher.adquirente as string) : null;
-    const provider = providerOf(p.reference) ?? (p.method === "directo" ? "directo" : acq);
+    const provider = providerOf(p.reference) ?? (p.method === "directo" || p.method === "ualabis" ? p.method : acq);
     const brandKey = normalizeCardBrand(voucher.brand);
     const key = `${p.method}|${provider ?? ""}|${brandKey ?? voucher.brand ?? ""}`;
     const prev = map.get(key);

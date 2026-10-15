@@ -202,6 +202,16 @@ const FORMS: Record<string, FormSpec> = {
     ],
     envNote: "Elegí QA (prueba) sólo si las credenciales y la URL son de QA.",
   },
+  // Ualá Bis (ADR-143): las tres credenciales de Cobros online › API. Se
+  // prueban al guardar (set_payment_secret pide un token en el ambiente).
+  ualabis: {
+    fields: [
+      { name: "username", label: "Usuario", min: 3, placeholder: "El username de tu cuenta Ualá Bis" },
+      { name: "client_id", label: "Client ID", min: 8, placeholder: "Tu Client ID" },
+      { name: "client_secret_id", label: "Client Secret", secret: true, min: 8, placeholder: "Tu Client Secret" },
+    ],
+    envNote: "Prueba usa el ambiente stage de Ualá Bis: los pagos son simulados con la tarjeta de prueba de tu cuenta.",
+  },
   // Clover Point (ADR-047): conexión de la marca Fiserv. Las terminales salen
   // de Clover (GET devices); las series cargadas acá acotan y nombran.
   fiserv: {
@@ -409,7 +419,12 @@ export function ConnectProviderModal({
       // Getnet (ADR-069 adenda): el servidor no guarda credenciales de
       // Checkout API / Plugin VTEX ni credenciales rechazadas.
       const getnetMsg = isGetnet ? getnetSaveError(e instanceof Error ? e.message : undefined) : null;
-      setServerError(getnetMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
+      // Ualá Bis (ADR-143): el servidor prueba las credenciales antes de guardarlas.
+      const ualaMsg =
+        providerKey === "ualabis" && e instanceof Error && e.message === "ualabis_invalid_credentials"
+          ? "Ualá Bis no aceptó estas credenciales en el ambiente elegido. Revisalas o probá el otro ambiente."
+          : null;
+      setServerError(getnetMsg ?? ualaMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -721,7 +736,7 @@ export function ConnectProviderModal({
                       ? `Probar ${GETNET_SLOT_BY_KEY[slot].short}`
                       : "Probar conexión"}
                 </button>
-                {probe && <ProbePanel result={probe} />}
+                {probe && <ProbePanel result={probe} brandName={brand.name} />}
               </div>
             )}
 
@@ -861,6 +876,7 @@ export function ConnectProviderModal({
                 {probe && (
                   <ProbePanel
                     result={probe}
+                    brandName={brand.name}
                     onSwitchEnv={(v) => {
                       setEnv(v);
                       setProbe(null);
@@ -937,6 +953,11 @@ export function ConnectProviderModal({
               <NextStep n={1}>Activá los canales que vas a usar ({channelNames.join(", ")}).</NextStep>
               {isMp && <NextStep n={2}>Configurá la caja QR para mostrar un QR único por venta.</NextStep>}
               {providerKey === "nave" && <NextStep n={2}>Pasale a Nave la URL de notificaciones.</NextStep>}
+              {providerKey === "ualabis" && (
+                <NextStep n={2}>
+                  Al cobrar elegís Ualá Bis, Link o QR: la venta se cierra sola cuando Ualá acredita el pago.
+                </NextStep>
+              )}
               {providerKey === "directo" && (
                 <NextStep n={2}>
                   Al cobrar elegís Directo QR o Link: la venta se cierra sola cuando Directo aprueba el crédito.
@@ -1002,12 +1023,20 @@ function NextStep({ n, children }: { n: number; children: React.ReactNode }) {
 
 // Resultado de "Probar credenciales" (Getnet, ADR-065): qué API respondió, y
 // si falló, cada servicio probado con su HTTP y el código de Getnet.
-function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwitchEnv?: (v: Env) => void }) {
+function ProbePanel({
+  result,
+  onSwitchEnv,
+  brandName = "Getnet",
+}: {
+  result: GetnetProbeResult;
+  onSwitchEnv?: (v: Env) => void;
+  brandName?: string;
+}) {
   const { toast } = useToast();
   const attempts = result.attempts ?? [];
   const switchTo = probeMismatchEnv(result);
   if (result.error === "not_connected") {
-    return <Notice tone="warning">Cargá el Client ID y el Client Secret para probarlos.</Notice>;
+    return <Notice tone="warning">Cargá las credenciales para probarlas.</Notice>;
   }
   if (result.error === "checkout_api_unavailable") {
     return (
@@ -1092,7 +1121,7 @@ function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwit
   }
   return (
     <div className="space-y-2">
-      <Notice tone="danger" title="Getnet no aceptó las credenciales">
+      <Notice tone="danger" title={`${brandName} no aceptó las credenciales`}>
         {result.summary ?? "No pudimos validar las credenciales."}
       </Notice>
       {switchTo && onSwitchEnv && (

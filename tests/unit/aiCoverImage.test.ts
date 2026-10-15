@@ -119,3 +119,16 @@ describe("Gemini (mock)", () => {
     expect(aiCoverError("???")).toBe("No se pudo generar la imagen.");
   });
 });
+
+describe("prompt de productos", () => {
+  it("se centra en el producto, sin el rubro del negocio", () => {
+    const p = buildCoverPrompt({ name: "Aceite 1L", description: "Aceite 1L", business: "clothing store", kind: "product", category: "Almacén", style: "soft_3d" });
+    expect(p).toContain('retail product "Aceite 1L" (category: Almacén).');
+    expect(p).not.toContain("clothing store");
+    expect(p).not.toContain("Details:");
+  });
+  it("respeta el prompt propio del negocio", () => {
+    const p = buildCoverPrompt({ name: "Aceite 1L", kind: "product", basePrompt: "Foto de {nombre}" });
+    expect(p.startsWith("Foto de Aceite 1L")).toBe(true);
+  });
+});

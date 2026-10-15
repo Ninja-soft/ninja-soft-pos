@@ -101,6 +101,14 @@ export function coverStyleInfo(style: unknown): CoverStyleInfo {
 export const DEFAULT_BASE_PROMPT =
   "Cover image for the service \"{nombre}\" ({tipo}) of a {rubro}. Show what the service is about: {descripcion}.";
 
+/**
+ * Prompt por defecto para productos (no servicios): el sujeto es el producto
+ * tal cual lo reconoce un comprador. No usa el rubro: con "tienda de ropa"
+ * el modelo metía perchas en la imagen de un aceite.
+ */
+export const DEFAULT_PRODUCT_PROMPT =
+  "Image of the retail product \"{nombre}\"{categoria}.{detalle} Show only this exact product on its own, centered, as a shopper would recognize it on a store shelf, with no unrelated objects. Any label or packaging must be completely blank: never write the product name or any other text on it.";
+
 export const BASE_PROMPT_MAX = 1500;
 
 /** Reglas fijas del final (no se pueden pisar desde el prompt base). */
@@ -119,6 +127,10 @@ export interface CoverPromptInput {
   accent?: string | null;
   /** Prompt base del negocio (null o vacío = el default). */
   basePrompt?: string | null;
+  /** "product" usa DEFAULT_PRODUCT_PROMPT si el negocio no cargó uno propio. */
+  kind?: "product" | "service" | null;
+  /** Categoría del producto, da contexto ("Almacén > Aceites"). */
+  category?: string | null;
 }
 
 const clean = (v: string | null | undefined, max: number) =>
@@ -133,8 +145,12 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 /** Prompt final que se manda al modelo. Determinístico (testeable). */
 export function buildCoverPrompt(input: CoverPromptInput): string {
   const style = coverStyleInfo(input.style);
-  const base = clean(input.basePrompt, BASE_PROMPT_MAX) || DEFAULT_BASE_PROMPT;
-  const name = clean(input.name, 120) || "service";
+  const custom = clean(input.basePrompt, BASE_PROMPT_MAX);
+  const isProduct = input.kind === "product";
+  const base = custom || (isProduct ? DEFAULT_PRODUCT_PROMPT : DEFAULT_BASE_PROMPT);
+  const name = clean(input.name, 120) || (isProduct ? "product" : "service");
+  const rawDesc = clean(input.description, 400);
+  const category = clean(input.category, 80);
   const type = clean(input.type, 40) || "service";
   const desc = clean(input.description, 400) || name;
   const business = clean(input.business, 80) || "small business";
@@ -143,7 +159,9 @@ export function buildCoverPrompt(input: CoverPromptInput): string {
     .replace(/\{tipo\}/gi, type)
     .replace(/\{descripcion\}/gi, desc)
     .replace(/\{descripción\}/gi, desc)
-    .replace(/\{rubro\}/gi, business);
+    .replace(/\{rubro\}/gi, business)
+    .replace(/\{categoria\}/gi, category ? ` (category: ${category})` : "")
+    .replace(/\{detalle\}/gi, rawDesc && rawDesc.toLowerCase() !== name.toLowerCase() ? ` Details: ${rawDesc}.` : "");
   const accent = input.accent && HEX.test(input.accent) ? ` Use ${input.accent.toUpperCase()} as the main accent color.` : "";
   return `${filled} Style: ${style.prompt}.${accent} ${COVER_RULES}`;
 }

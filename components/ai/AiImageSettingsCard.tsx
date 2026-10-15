@@ -56,7 +56,7 @@ export function AiImageSettingsCard() {
   }, [settings]);
   const dirty = JSON.stringify(s) !== JSON.stringify(settings ?? DEFAULT_AI_IMAGE_SETTINGS);
   const preview = useMemo(
-    () => buildCoverPrompt({ ...SAMPLE, style: s.style, accent: s.accent, basePrompt: s.base_prompt }),
+    () => buildCoverPrompt({ ...SAMPLE, kind: "product", category: "Almacén", style: s.style, accent: s.accent, basePrompt: s.base_prompt }),
     [s.style, s.accent, s.base_prompt],
   );
   const editable = canEdit && enabled === true;

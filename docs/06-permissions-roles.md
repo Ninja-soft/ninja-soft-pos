@@ -52,6 +52,19 @@ Los roles viven en la tabla `tenant_users.role`. Un usuario puede tener distinto
 
 Lo que no tiene capacidad propia (otras tablas `manage`, `is_tenant_manager()`, RPC con `member_role_in`) sigue por nivel base. Por eso las capacidades de nivel Encargado (`purchases.manage`, `team.manage`, `config.edit`, etc.) sólo se conceden a roles con nivel base Encargado.
 
+**Editor (Panel del dueño › Equipo › Roles y permisos, `/dashboard-team/permisos`, migración `20261204100200_roles_personalizados`):**
+
+| Acción | Dueño | Con `team.manage` (Encargado) | Resto |
+|---|---|---|---|
+| Ver roles, matriz y comparar | ✅ | ✅ | ✅ (sólo sus permisos en Personas) |
+| Crear, editar, duplicar roles propios (`permission_role_save`, `_duplicate`) | ✅ con `roles_permisos` | ❌ | ❌ |
+| Borrar un rol propio reasignando (`permission_role_delete`) | ✅ (también sin la feature) | ❌ | ❌ |
+| Asignar rol (`permission_assign_role`) | Todos menos Dueño | Sólo a cajeros y solo lectura, roles de esos niveles y sin permisos que él no tenga | ❌ |
+| Rol por sucursal (`permission_branch_role_set`, asignación vigente, `multi_sucursal`) | ✅ | Igual que asignar | ❌ |
+| Permisos puntuales (`permission_override_set`) | ✅ con `roles_permisos`, nunca al dueño ni lo del dueño | ❌ | ❌ |
+
+Nadie se cambia a sí mismo. Roles de sistema en todo plan; propios con la feature. Todo queda en `audit_logs` (`permission_role_created`, `_updated` con lo sumado y lo quitado, `_deleted`, `permission_role_assigned`, `permission_branch_role_set`, `permission_override_set`).
+
 ## 3. Roles internos NinjaSoft
 
 Definidos por la combinación `is_internal = true` + `internal_level` en `app_metadata` y espejo `users.internal_level`.
@@ -398,10 +411,11 @@ F11 agrega roles configurables por tenant para comercios con separación de sal�
 
 Reglas:
 
-- [ ] Los roles de sistema se pueden editar pero no borrar.
-- [ ] El tenant puede crear roles propios con permisos granulares.
-- [ ] Cada cambio de permiso queda en `audit_logs`.
-- [ ] Las Edge Functions revalidan permisos; no alcanza con ocultar botones.
+- [x] Los roles de sistema no se borran ni se editan (se duplican). *(ADR-138)*
+- [x] El tenant puede crear roles propios con permisos granulares. *(ADR-138, feature `roles_permisos`)*
+- [x] Cada cambio de permiso queda en `audit_logs`. *(ADR-138)*
+- [x] Las Edge Functions revalidan permisos; no alcanza con ocultar botones. *(`member_admin`, `invite_user` con `user_has_capability`)*
+- [x] Presets: Vendedor (≈ `salesperson_retail`) y Auditor son roles de sistema; `dispatcher`, `cashier_plus` y `retail_manager` se arman como roles propios.
 
 ## 9.1b Alcance por sucursal (F17 · H91, ADR-045)
 

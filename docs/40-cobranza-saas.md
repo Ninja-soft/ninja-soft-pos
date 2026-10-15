@@ -1672,3 +1672,22 @@ Código en `feat/h128-mrr-kpis`, decisión [ADR-127](./17-decision-log.md). Migr
 - Cobranzas › **Métricas**: MRR, ARR, ARPA, MRR en mora, NRR, GRR, churn de clientes, movimiento de MRR por mes (gráfico y tabla), cobrado bruto y neto, deuda vencida con aging, DSO y efectividad. Sólo Cobranzas, admin y super_admin.
 - **Diferencias con §15.2:** el NRR no suma la reactivación (no es de la cohorte paga al inicio); el churn de MRR cuenta toda cuenta que deja de pagar (el churn de clientes mantiene la regla de los 30 días de suspensión); "facturado" para el DSO es lo cargado en la cuenta corriente hasta que existan facturas (F20-4); las tablas de snapshots no tienen SELECT para el staff (sólo la RPC).
 - **Pendiente:** `tenants.status` como espejo de `subscriptions.status` (§5.1) y el MRR en riesgo con promesas (F20-9).
+
+## 26. Estado de F20-9: punitorios, mora y promesas (2026-10-14)
+
+Código en `feat/h135-mora-punitorios`, decisión [ADR-128](./17-decision-log.md). Migración **sin aplicar**: `20261124100000_cobranza_mora_punitorios`. Sin Edges.
+
+| Pieza | Cómo quedó |
+|---|---|
+| Políticas (§6.1, §10.3, §22 #4 y #5) | `platform_interest_policies` con tasa, gracia, diario o por mes empezado, tope y mínimo; por plan (`platform_interest_policy_plans`), por negocio (`tenant_billing_terms.interest_policy_id`) o la de por defecto. Se siembra "Punitorio estándar" (5 % mensual, diario, tope 50 %) con los punitorios **apagados**; switch aparte para el débito automático. |
+| Cálculo | `lib/billing/interest.ts` y `platform_interest_schedule` son la misma función (300 casos al azar idénticos en PGlite). Capital por día con lo imputado hasta ese día, redondeo una vez por mes calendario, interés simple, tope sobre el capital original, mínimo que arrastra al mes siguiente, pausas. El vencimiento corre al próximo día hábil. |
+| Devengamiento | Cron `platform-interest` 06:30 ART: recalcula cada cargo vencido desde cero y postea en el ledger sólo la diferencia por mes (clave `int:{cargo}:{mes}:{liquidado}`). La política se congela por cargo al empezar a devengar. Prender los punitorios no devenga hacia atrás (`interest_since`); apagarlos o pausar un negocio corta hacia adelante. |
+| Condonar / saldar | `internal_interest_waive`: total, parcial o todo ("Saldar"), con motivo y el tope del nivel (ADR-115); arriba del tope queda `pending_approval` y lo resuelve un super admin. Movimiento `interest_waiver` imputado a los punitorios más viejos. |
+| ND y NC | **Pendientes de H130**: `platform_fiscal_pending` guarda la ND al cobrar el punitorio (`on_collection`, trigger sobre `platform_allocations`) o al cierre del mes (`monthly`) y la NC por condonar lo que ya tenía ND. El worker de H130 las tiene que emitir con `CbtesAsoc`. |
+| Escalera (§11) | `platform_dunning_ladders` / `_steps` editables (aviso, pago pendiente, restricción parcial, suspensión, incobrable). Cron `platform-dunning` 09:00 ART: deuda más vieja por negocio, un paso por deuda, sólo el último del día avisa; no avanza en fin de semana ni feriado. Reemplaza a `saas-dunning` (desprogramado; `run_saas_dunning` queda con los avisos de prueba y de renovación de MP). Al pagar lo vencido se levanta la restricción y la suspensión que puso la escalera; un contracargo la vuelve a correr. |
+| Restricción blanda | Reportes y configuración (configurable: también importaciones e integraciones) muestran "regularizá tu cuenta"; el POS, la caja, las ventas, las devoluciones y el panel del dueño nunca. |
+| Promesas (§10.5, §22 #10) | Staff (hasta 30 días, ampliable) y dueño ("Voy a pagar el día…", hasta 15 días, una por deuda, bloqueado tras 2 incumplidas en 90 días). Frenan los pasos marcados; se cumplen solas al pagar; si vencen sin pago, la escalera retoma. |
+| Feriados | `platform_holidays` con los nacionales 2026 y 2027 sembrados; editable por super admin. |
+| Pantallas | Cobranzas › **Mora y punitorios** (negocios en mora con próximo paso, condonaciones para aprobar, pendientes de H130 y la configuración con simulador, línea de tiempo de la escalera y feriados); ficha › Cuenta corriente › **Mora y punitorios**; panel del dueño › **Pagos atrasados**. |
+
+**Diferencias con la spec:** los eventos de la escalera viven en `platform_dunning_events` (no se extendió `dunning_events`); la ND y la NC no se emiten (no hay factura con CAE); el devengo se postea a diario (un movimiento por cargo, mes y día con cambio) y la historia lo agrupa por mes; la restricción blanda es de interfaz (la barrera dura sigue siendo la suspensión).

@@ -448,6 +448,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["listas_precios"],
     needs: "Activá el modo profesional en Configuración > Precios.",
   },
+  costo_final: {
+    desc: "Costo final y utilidad en la ficha del producto: lo que se suma al costo de compra (impuestos internos y percepciones no recuperables, flete, otros, en % o en pesos), el costo final, la utilidad objetivo con markup sobre costo o margen sobre precio, el precio sugerido y la ganancia real en pesos y en %. Las listas sobre costo y el margen mínimo pueden usar el costo final.",
+    impact: "Desactivado, el servidor rechaza cargar componentes del costo o utilidad objetivo; lo cargado se conserva y el costo final queda igual al de compra para lo nuevo.",
+    minPlan: "Start",
+  },
+  precios_usd: {
+    desc: "Costos en dólares: el costo del producto se carga en USD y se pasa a pesos con la cotización oficial venta del día (la trae NinjaSoft todos los días) o la que cargue el negocio. Actualizar precios por dólar en lote (por categorías, marcas, proveedores y listas) manteniendo la ganancia o con la utilidad objetivo, con vista previa, alertas y deshacer, y reglas automáticas cuando el dólar se mueve más de un % con aprobación del dueño.",
+    impact: "Desactivado, no se pueden cargar costos nuevos en dólares ni actualizar por dólar; las reglas automáticas dejan de correr. Los productos que ya estaban en dólares conservan su costo en pesos.",
+    minPlan: "Pro",
+  },
   catalogo_publico: {
     desc: "Catálogo web público: una vitrina online del comercio con sus productos y precios, compartible por link.",
     impact: "Desactivado, no se publica el catálogo web del negocio.",

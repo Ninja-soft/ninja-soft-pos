@@ -27,6 +27,7 @@
 
 import type { IvaCode } from "@/lib/tax/catalog";
 import { priceToFinal, type InternalTax } from "@/lib/tax/engine";
+import { priceFloorFromFinal } from "./costing";
 import {
   applyRounding,
   fromCents,
@@ -72,7 +73,7 @@ export function resolvePrice(
 // ── Modelo PRO ──────────────────────────────────────────────────────────────
 
 export type ListKind = "fixed" | "derived" | "cost" | "currency";
-export type ListCostBasis = "cost" | "last" | "average" | "replacement";
+export type ListCostBasis = "cost" | "last" | "average" | "replacement" | "final";
 export type MarkupMode = "markup" | "margin";
 
 export interface ProPriceList {
@@ -141,6 +142,8 @@ export interface FxRateLike {
   rate: number;
   /** YYYY-MM-DD (fecha de la cotización, vale desde ese día). */
   rate_date: string;
+  /** ADR-140: 'plataforma' = oficial venta de ADR-135; si empata la fecha, gana la del negocio. */
+  origin?: "negocio" | "plataforma" | null;
 }
 
 export interface ProductCostsLike {
@@ -149,6 +152,10 @@ export interface ProductCostsLike {
   avg_cost?: number | null;
   replacement_cost?: number | null;
   min_price?: number | null;
+  /** ADR-140: costo final (costo + componentes). */
+  final_cost?: number | null;
+  /** ADR-140: IVA del precio final (sólo viene con piso global). */
+  iva_pct?: number | null;
 }
 
 /** Datos fiscales de un producto para llevar el precio a final (ADR-068). */
@@ -191,6 +198,8 @@ export interface PricingWorld {
   customerTermId: string | null;
   /** Datos fiscales (ADR-068). Sin esto, el precio de lista es el final. */
   tax?: PricingTax | null;
+  /** ADR-140: piso global de margen sobre el costo final (PRO). */
+  floorMarginPct?: number | null;
 }
 
 export interface PriceQuery {
@@ -286,8 +295,14 @@ function fxRate(w: PricingWorld, currency: string | null | undefined, source: st
   const src = source || "manual";
   let best: FxRateLike | null = null;
   for (const r of w.fx) {
-    if (r.currency !== currency || r.source !== src || r.rate_date > day) continue;
-    if (!best || r.rate_date > best.rate_date) best = r;
+    if (r.currency !== currency || r.source !== src || r.rate_date > day || !(Number(r.rate) > 0)) continue;
+    // ADR-140: la fecha más nueva; si empatan, la del negocio sobre la de la plataforma.
+    if (
+      !best ||
+      r.rate_date > best.rate_date ||
+      (r.rate_date === best.rate_date && best.origin === "plataforma" && r.origin !== "plataforma")
+    )
+      best = r;
   }
   return best && Number(best.rate) > 0 ? Number(best.rate) : null;
 }
@@ -295,7 +310,15 @@ function fxRate(w: PricingWorld, currency: string | null | undefined, source: st
 export function costFor(c: ProductCostsLike | undefined, basis: ListCostBasis | null | undefined): number | null {
   if (!c) return null;
   const pick =
-    basis === "last" ? c.last_cost : basis === "average" ? c.avg_cost : basis === "replacement" ? c.replacement_cost : c.cost;
+    basis === "last"
+      ? c.last_cost
+      : basis === "average"
+        ? c.avg_cost
+        : basis === "replacement"
+          ? c.replacement_cost
+          : basis === "final"
+            ? (c.final_cost ?? (c.cost == null ? null : fromCents(toCents(Number(c.cost)))))
+            : c.cost;
   const v = pick ?? c.cost;
   return v == null ? null : Number(v);
 }
@@ -464,6 +487,13 @@ export function resolveUnitPrice(w: PricingWorld, q: PriceQuery): PriceResolutio
     if (list && list.min_margin_pct != null && Number(list.min_margin_pct) < 100) {
       const c = costFor(costs, list.cost_basis);
       if (c != null && c > 0) floor = Math.max(floor, toCentsCeil(c / (1 - Number(list.min_margin_pct) / 100)));
+    }
+    // ADR-140: piso global sobre el costo final (con IVA si la lista lo lleva).
+    const fm = w.floorMarginPct;
+    const fc = costFor(costs, "final");
+    if (fm != null && fc != null && fc > 0) {
+      const iva = list?.prices_include_tax !== false ? Number(costs?.iva_pct ?? 0) : 0;
+      floor = Math.max(floor, toCents(priceFloorFromFinal(fc, Number(fm), iva)));
     }
     if (step.cents < floor) step = { cents: floor, computed: true };
   }

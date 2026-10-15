@@ -90,7 +90,7 @@ describe.skipIf(!enabled)("ADR-140 costos en dólares y actualización por dóla
     ctx.tenantB = rows.find((x) => x.slug === `usdb-${STAMP}`)!.id;
     await must(
       admin.from("subscription_addons").insert(
-        ["listas_precios", "precios_usd"].map((key) => ({ tenant_id: ctx.tenant, addon_key: key, status: "active", source: "granted" })),
+        ["listas_precios", "listas_precios_pro", "precios_usd"].map((key) => ({ tenant_id: ctx.tenant, addon_key: key, status: "active", source: "granted" })),
       ),
       "addons",
     );
@@ -109,11 +109,12 @@ describe.skipIf(!enabled)("ADR-140 costos en dólares y actualización por dóla
     if (fxErr) throw fxErr;
     ctx.fxIds.push(...((fx ?? []) as { id: string }[]).map((x) => x.id));
 
-    const { data: l } = await ctx.owner.client
+    const { data: l, error: lErr } = await ctx.owner.client
       .from("price_lists")
       .insert({ name: "Mayorista", channel: "mayorista", adjustment_pct: -10 } as never)
       .select("id")
       .single();
+    if (lErr || !l) throw lErr ?? new Error("price_list");
     ctx.list = (l as { id: string }).id;
   });
 

@@ -196,7 +196,15 @@ export interface BillingAccess {
   can_set_terms: boolean;
   can_configure: boolean;
   caps: BillingCap[];
+  /** F20-11 (ADR-131): capacidades finas sobre el permiso Cobranzas. */
+  capabilities?: ("view" | "manage" | "assign")[];
+  can_view_360?: boolean;
+  can_manage?: boolean;
+  can_assign?: boolean;
 }
+
+/** Permisos de cobranza sumables al nivel (ADR-115, ADR-131). */
+export type StaffBillingPermission = "cobranzas" | "cobranzas_ver" | "cobranzas_asignar";
 
 // ── Lecturas ────────────────────────────────────────────────────────────────
 
@@ -343,10 +351,10 @@ export function useBillingConfigMutations() {
       onSuccess: () => void qc.invalidateQueries({ queryKey: ["billing-access"] }),
     }),
     setPermission: useMutation({
-      mutationFn: (v: { userId: string; enabled: boolean; reason: string }) =>
+      mutationFn: (v: { userId: string; enabled: boolean; reason: string; permission?: StaffBillingPermission }) =>
         call<null>("internal_set_staff_permission", {
           p_user: v.userId,
-          p_permission: "cobranzas",
+          p_permission: v.permission ?? "cobranzas",
           p_enabled: v.enabled,
           p_reason: v.reason,
         }),

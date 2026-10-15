@@ -5,6 +5,7 @@
 // cada uno puede hacerse en otra sucursal. Se guarda en
 // pos_settings.order_config (sólo el dueño, RLS de pos_settings) y el
 // servidor lo lee con pos_order_config (mismos defaults que orderConfig).
+// ADR-130: también los pedidos desde el catálogo público (order_config.catalog).
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,8 @@ import { SettingRow, SettingsCard } from "@/components/settings/Settings";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { useMyTenant } from "@/modules/tenants/hooks";
+import { useFeature } from "@/modules/saas/gating";
+import { useStores } from "@/modules/stock/hooks";
 import { ORDER_CONFIG_KEY, useOrderConfig } from "@/modules/orders/hooks";
 import {
   DELIVERY_TYPE_HINT,
@@ -35,6 +38,9 @@ export function OrderSettingsCard() {
   const { data: me } = useMyTenant();
   const canEdit = me?.role === "owner";
   const { config, raw } = useOrderConfig();
+  // ADR-130: pedidos desde el catálogo público (OPTIONAL; el servidor lo exige).
+  const catalogFeature = useFeature("catalogo_pedidos");
+  const { data: stores = [] } = useStores();
   const [c, setC] = useState<OrderConfig>(config);
   useEffect(() => setC(config), [config]);
   const dirty = JSON.stringify(c) !== JSON.stringify(config);
@@ -63,6 +69,9 @@ export function OrderSettingsCard() {
 
   const setType = (t: "inmediato" | "retiro" | "envio", patch: Record<string, boolean>) =>
     setC({ ...c, delivery_types: { ...c.delivery_types, [t]: { ...c.delivery_types[t], ...patch } } });
+  const setCatalog = (patch: Partial<OrderConfig["catalog"]>) => setC({ ...c, catalog: { ...c.catalog, ...patch } });
+  const catalogTypes = c.delivery_types.retiro.enabled || c.delivery_types.envio.enabled;
+  const liveStores = stores;
 
   return (
     <SettingsCard
@@ -170,6 +179,64 @@ export function OrderSettingsCard() {
           </div>
         </SettingRow>
       ))}
+      <SettingRow
+        label="Pedidos desde el catálogo web"
+        description={
+          catalogFeature === false
+            ? "Tu plan no incluye pedidos desde el catálogo. Están en el plan Pro."
+            : "El cliente arma el carrito en tu catálogo público, elige retiro o envío y confirma. El pedido entra acá con el stock reservado y te llega un aviso."
+        }
+        stacked
+      >
+        <div className="flex flex-col gap-2.5">
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>Recibir pedidos desde el catálogo</span>
+            <Switch
+              checked={c.catalog.enabled && catalogFeature !== false}
+              disabled={!canEdit || catalogFeature === false}
+              onCheckedChange={(v) => setCatalog({ enabled: v })}
+              label="Recibir pedidos desde el catálogo"
+            />
+          </label>
+          {c.catalog.enabled && catalogFeature !== false && (
+            <>
+              {!catalogTypes && (
+                <p className="text-xs text-warning">Prendé Retira después o Envío a domicilio: el catálogo sólo ofrece esos dos.</p>
+              )}
+              {liveStores.length > 1 && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span>Sucursal que reserva el stock y cobra</span>
+                  <select
+                    className={field}
+                    disabled={!canEdit}
+                    value={c.catalog.store_id ?? ""}
+                    onChange={(e) => setCatalog({ store_id: e.target.value || null })}
+                  >
+                    <option value="">La principal</option>
+                    {liveStores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Ofrecer pagar con link (Mercado Pago u otro proveedor conectado)</span>
+                <Switch
+                  checked={c.catalog.pay_link}
+                  disabled={!canEdit}
+                  onCheckedChange={(v) => setCatalog({ pay_link: v })}
+                  label="Ofrecer pagar con link"
+                />
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Retiro en otra sucursal y código de retiro siguen lo que elegiste arriba para Retira después.
+              </p>
+            </>
+          )}
+        </div>
+      </SettingRow>
       {!canEdit && <p className="px-1 text-xs text-muted-foreground">Sólo el dueño cambia esta configuración.</p>}
     </SettingsCard>
   );

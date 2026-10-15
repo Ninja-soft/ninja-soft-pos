@@ -968,7 +968,8 @@ Hay plantillas nuevas en `system_email_templates`, con el diseño de NinjaSoft d
 | `platform-invoicing` | cada minuto (sólo si hay algo para hacer) | Worker fiscal |
 | `platform-interest` | diario, 06:30 ART | Devenga los punitorios |
 | `platform-dunning` | diario, 09:00 ART | Escalera de mora y promesas vencidas. **Reemplaza a `saas-dunning`**, que se desprograma en la misma migración |
-| `platform-mp-reconcile` | diario, 04:00 ART | Conciliación con Mercado Pago |
+| `platform-mp-reconcile` | diario, 04:00 ART | Conciliación con Mercado Pago (Edge `platform_mp_reconcile`, F20-10, construido) |
+| `platform-plan-changes` | cada hora (:07) | Aplica los cambios de plan y ciclo programados al fin del período (F20-10, construido) |
 | `platform-mrr-snapshot` | diario, 00:10 ART | Foto del MRR por suscripción |
 | `platform-padron-refresh` | mensual | Revalidación de perfiles verificados |
 | `dispatch-system-emails` (existente) | 5 min | Ahora con adjuntos |
@@ -1691,3 +1692,25 @@ Código en `feat/h135-mora-punitorios`, decisión [ADR-128](./17-decision-log.md
 | Pantallas | Cobranzas › **Mora y punitorios** (negocios en mora con próximo paso, condonaciones para aprobar, pendientes de H130 y la configuración con simulador, línea de tiempo de la escalera y feriados); ficha › Cuenta corriente › **Mora y punitorios**; panel del dueño › **Pagos atrasados**. |
 
 **Diferencias con la spec:** los eventos de la escalera viven en `platform_dunning_events` (no se extendió `dunning_events`); la ND y la NC no se emiten (no hay factura con CAE); el devengo se postea a diario (un movimiento por cargo, mes y día con cambio) y la historia lo agrupa por mes; la restricción blanda es de interfaz (la barrera dura sigue siendo la suspensión).
+
+## 27. Estado de F20-10 y F20-11: prorrateo, conciliación y cobranza 360 (2026-10-14)
+
+Código en `feat/h136-cobranza-360`, decisión [ADR-131](./17-decision-log.md). Migración **sin aplicar**: `20261126100000_cobranza_360`. Edge nueva **sin desplegar**: `platform_mp_reconcile`.
+
+| Pieza | Cómo quedó |
+|---|---|
+| Prorrateo (§17.4) | Un solo cálculo, `platform_prorate_cents` (espejo `prorateCents` en `lib/billing/proration.ts`), y un núcleo, `platform_proration_core` (espejo `prorationQuote`): upgrade inmediato con cargo `proration` que vence con el próximo cobro (§22 #12); downgrade al fin del período sin crédito o inmediato con lo no usado como bonificación (tope del nivel); mensual a anual desde hoy con el cargo del período nuevo menos lo no usado; anual a mensual al fin del período. El trigger de F20-1 usa el núcleo (mismo importe y clave). Sólo se acredita lo que se cargó: sin el cargo del período vigente no hay prorrateo (antes se cobraba doble). |
+| Addons (§17.4) | Alta paga a mitad de período: cargo `addon` por los días que quedan hasta el fin del período del plan. Bonificados, no. Baja al fin del período, como antes. |
+| Simulador | Ficha › Cuenta corriente › **Plan y ciclo**: plan, ciclo y momento (automático, inmediato o al fin del período), líneas, lo que se carga, lo que queda a favor, período nuevo y avisos. Confirmar (admin o super_admin) vuelve a cotizar y no aplica si el importe cambió (`quote_changed`). Los programados (`platform_plan_changes`) los aplica el cron `platform-plan-changes` y se pueden cancelar. Con débito automático se actualiza el monto del preapproval. |
+| Conciliación (§9.5, §17.2, §17.3) | Edge `platform_mp_reconcile`: sólo GET a `/v1/payments/search` de la cuenta de NinjaSoft, ventana de 72 h (configurable), lógica pura en `_shared/billing/reconcile.ts`. Sólo los pagos de suscripciones (las compras de catálogos de Tiendita, que cobra la misma cuenta, quedan fuera). Diferencias: faltante en el ledger, faltante en MP, duplicado (mismo período en el ledger, o mismo negocio y monto en 72 h en MP), monto distinto, contracargo o mediación, reintegro (total o parcial) y estado distinto. Bandeja Cobranzas › **Conciliación** con imputar, dejar a cuenta, registrar reintegro o contracargo, aceptar o ignorar, con motivo. Sin credenciales, corrida degradada que sólo revisa duplicados del ledger. Guarda comisión y neto de MP en los pagos. |
+| Cobranza 360 (§10.6, §14.3) | Cobranzas › **Cartera** (aging, monto, escalera, promesa, cobrador, última gestión, próxima acción, export XLSX, asignar cobrador) y **Cobranza 360** por negocio (timeline unificado con filtros y export, notas de gestión con resultado y próxima acción, cobrador). |
+| Permisos (§18, §22 #8) | Sobre Cobranzas: `cobranzas` (ver y gestionar), `cobranzas_ver` (sólo ver) y `cobranzas_asignar` (asignar cobradores). Ver `06-permissions-roles.md` §3.1b. |
+
+**Diferencias con la spec**
+
+- La conciliación no imputa ni revierte sola (§9.5 decía que el faltante "lo crea" y el estado distinto "registra la reversa"): la bandeja lo propone y el staff confirma, para que un cruce flojo equivocado no mueva plata. El webhook sigue siendo la entrada automática.
+- El reintegro por API de MP (§17.2) no se hace desde acá: se hace en MP y se registra en la bandeja.
+- El downgrade inmediato deja una bonificación pero no emite NC (no hay factura con CAE hasta H130).
+- `assigned_staff_id` vive en `tenant_billing_terms` como dice §6.2; el estado `en_gestion` de §5.1 no se agregó a `platform_collection_status`: la cartera muestra el cobrador aparte.
+
+**Pendiente:** revalidación mensual del padrón (`platform-padron-refresh`, sin certificado de la plataforma), tarea automática al cobrador cuando se rompe una promesa, NC por downgrade inmediato (H130).

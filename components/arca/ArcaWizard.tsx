@@ -42,7 +42,8 @@ import type { ArcaConfig, TestResult } from "@/modules/arca/api";
 import { arcaApi } from "@/modules/arca/api";
 import { useArcaMutations } from "@/modules/arca/hooks";
 import { CertificateFlow, aliasFromSubject, defaultAlias } from "./CertificateFlow";
-import { TestResults } from "./TestResults";
+import { ProductionGuide } from "./ProductionGuide";
+import { SavedConnection, TestResults, useConnectionTest } from "./TestResults";
 import { CopyValue, Dot, ExtLink, HowTo, Term } from "./shared";
 
 // Asistente de Configuración > Facturación electrónica (ADR-072): un paso por
@@ -117,7 +118,7 @@ export function ArcaWizard({
           {step === "punto_venta" && <StepPuntoVenta config={config} canWrite={canWrite} env={env} />}
           {step === "prueba" && <StepPrueba config={config} canWrite={canWrite} env={env} />}
           {step === "contingencia" && <StepContingencia config={config} canWrite={canWrite} />}
-          {step === "produccion" && <StepProduccion config={config} canWrite={canWrite} />}
+          {step === "produccion" && <ProductionGuide config={config} canWrite={canWrite} onGoStep={setStep} />}
         </div>
         <div className="mt-5 flex items-center justify-between gap-2">
           <Button variant="ghost" onClick={() => go(-1)} disabled={idx === 0}>
@@ -285,20 +286,6 @@ function StepCertificado({ config, canWrite, env }: { config: ArcaConfig; canWri
 // ---------------------------------------------------------------------------
 // 4. Autorizar
 // ---------------------------------------------------------------------------
-function useTest(env: ArcaEnv) {
-  const m = useArcaMutations();
-  const { toast } = useToast();
-  const [result, setResult] = useState<TestResult | null>(null);
-  const run = async () => {
-    try {
-      setResult(await m.testConexion.mutateAsync(env));
-    } catch (e) {
-      toast({ title: "No se pudo probar", description: arcaErrorMessage(e), variant: "error" });
-    }
-  };
-  return { result, run, pending: m.testConexion.isPending };
-}
-
 function AuthorizeHowTo({ config, env }: { config: ArcaConfig; env: ArcaEnv }) {
   const cert = config.certificates.find((c) => c.environment === env && c.status === "active");
   const alias = aliasFromSubject(cert?.subject) ?? defaultAlias(config.emitter.cuit);
@@ -340,14 +327,19 @@ function AuthorizeHowTo({ config, env }: { config: ArcaConfig; env: ArcaEnv }) {
               ]
             : [
                 { title: "Entrá a ARCA", body: <ExtLink href={ARCA_LINKS.login}>Ingresar con clave fiscal</ExtLink> },
-                { title: "Administrador de Relaciones de Clave Fiscal", body: <>Tocá <strong>Nueva relación</strong>.</> },
+                { title: "Administrador de Relaciones de Clave Fiscal", body: <>Tocá <strong>Nueva Relación</strong>.</> },
                 {
-                  title: "Servicio Facturación Electrónica",
+                  title: "Buscar el servicio",
                   body: "ARCA > WebServices > Facturación Electrónica.",
                 },
                 {
                   title: "Representante: Computador Fiscal",
-                  body: "Elegí el alias del certificado y confirmá.",
+                  body: (
+                    <>
+                      Elegí el Computador Fiscal con el alias <span className="font-mono text-foreground">{alias}</span> y
+                      confirmá.
+                    </>
+                  ),
                 },
               ]
         }
@@ -362,7 +354,7 @@ function AuthorizeHowTo({ config, env }: { config: ArcaConfig; env: ArcaEnv }) {
 }
 
 function StepAutorizar({ config, canWrite, env }: { config: ArcaConfig; canWrite: boolean; env: ArcaEnv }) {
-  const t = useTest(env);
+  const t = useConnectionTest(env);
   const deleg = config.settings?.auth_mode === "delegado";
   return (
     <div className="space-y-4 text-sm">
@@ -377,9 +369,17 @@ function StepAutorizar({ config, canWrite, env }: { config: ArcaConfig; canWrite
         )}
       </p>
       <AuthorizeHowTo config={config} env={env} />
-      <Button onClick={t.run} loading={t.pending} disabled={!canWrite}>
-        <PlugZap size={16} /> {deleg ? "Verificar delegación" : "Verificar autorización"}
+      <div className="rounded-md bg-muted p-3">
+        <SavedConnection settings={config.settings} env={env} />
+      </div>
+      <Button onClick={() => void t.run()} loading={t.pending} disabled={!canWrite}>
+        <PlugZap size={16} /> {deleg ? "Verificar delegación" : "Ya lo hice: verificar"}
       </Button>
+      {t.error && (
+        <Callout tone="danger" icon={AlertTriangle} title="No se pudo verificar">
+          {t.error}
+        </Callout>
+      )}
       {t.result && <TestResults result={t.result} />}
     </div>
   );
@@ -451,12 +451,14 @@ function StepPuntoVenta({ config, canWrite, env }: { config: ArcaConfig; canWrit
       setLoading(false);
     }
   };
+  const [saveError, setSaveError] = useState<string | null>(null);
   const save = async (fn: Promise<unknown>) => {
+    setSaveError(null);
     try {
       await fn;
       toast({ title: "Punto de venta guardado", variant: "success" });
     } catch (e) {
-      toast({ title: "No se pudo guardar", description: arcaErrorMessage(e), variant: "error" });
+      setSaveError(arcaErrorMessage(e));
     }
   };
   const options = (list ?? []).filter((p) => !/caea/i.test(p.emisionTipo));
@@ -497,6 +499,11 @@ function StepPuntoVenta({ config, canWrite, env }: { config: ArcaConfig; canWrit
         <Building2 size={16} /> Consultar mis puntos de venta en ARCA
       </Button>
       {list && list.length === 0 && <p className="text-muted-foreground">ARCA no listó puntos de venta Web Services. Escribí el número a mano.</p>}
+      {saveError && (
+        <Callout tone="danger" icon={AlertTriangle} title="El punto de venta no se guardó">
+          {saveError}
+        </Callout>
+      )}
       <ul className="divide-y divide-border rounded-md border border-border">
         {config.stores.map((s) => (
           <li key={s.id} className="space-y-2 p-3">
@@ -544,43 +551,60 @@ function StepPuntoVenta({ config, canWrite, env }: { config: ArcaConfig; canWrit
 // 6. Prueba y activación
 // ---------------------------------------------------------------------------
 function StepPrueba({ config, canWrite, env }: { config: ArcaConfig; canWrite: boolean; env: ArcaEnv }) {
-  const t = useTest(env);
+  const t = useConnectionTest(env);
   const m = useArcaMutations();
   const { toast } = useToast();
+  const [toggleError, setToggleError] = useState<string | null>(null);
   const enabled = Boolean(config.settings?.enabled);
-  const approved = config.counts.aprobado ?? 0;
+  const approved = config.checklist.items.find((i) => i.key === "homologacion_ok")?.count ?? config.counts.aprobado ?? 0;
   const min = config.settings?.homo_min_approved ?? 3;
   const toggle = async (v: boolean) => {
+    setToggleError(null);
     try {
       await m.saveSettings.mutateAsync({ enabled: v });
-      toast({ title: v ? "Facturación activada" : "Facturación pausada", variant: "success" });
+      toast({ title: v ? "Facturación activada y guardada" : "Facturación pausada", variant: "success" });
     } catch (e) {
-      toast({ title: "No se pudo cambiar", description: arcaErrorMessage(e), variant: "error" });
+      setToggleError(arcaErrorMessage(e));
     }
   };
   return (
     <div className="space-y-4 text-sm">
       <p className="text-muted-foreground">
         Probá la conexión: NinjaSoft pide el permiso de acceso a ARCA, revisa que sus servidores respondan y consulta el
-        último número autorizado.
+        último número autorizado. No emite ninguna factura.
       </p>
-      <Button onClick={t.run} loading={t.pending} disabled={!canWrite}>
+      <div className="rounded-md bg-muted p-3">
+        <SavedConnection settings={config.settings} env={env} />
+      </div>
+      <Button onClick={() => void t.run()} loading={t.pending} disabled={!canWrite}>
         <PlugZap size={16} /> Probar conexión
       </Button>
+      {t.error && (
+        <Callout tone="danger" icon={AlertTriangle} title="No se pudo probar">
+          {t.error}
+        </Callout>
+      )}
       {t.result && <TestResults result={t.result} />}
       <div className="flex items-start justify-between gap-4 rounded-md bg-muted p-3">
         <div>
           <p className="font-semibold text-foreground">Activar la facturación electrónica</p>
           <p className="text-muted-foreground">
-            Desde que la activás, cada venta nueva genera su factura sola.
+            {enabled ? "Activada: cada venta nueva genera su factura sola." : "Desde que la activás, cada venta nueva genera su factura sola."}
             {env === "homologacion" && " En modo prueba no tienen validez fiscal."}
           </p>
         </div>
         <Switch checked={enabled} onCheckedChange={toggle} disabled={!canWrite || m.saveSettings.isPending} label="Activar" />
       </div>
+      {toggleError && (
+        <Callout tone="danger" icon={AlertTriangle} title="No se pudo cambiar">
+          {toggleError}
+        </Callout>
+      )}
       {enabled && env === "homologacion" && (
         <Callout tone={approved >= min ? "success" : "info"} title={`Facturas de prueba aprobadas: ${approved} de ${min}`}>
-          Hacé algunas ventas de prueba desde el POS. Cuando ARCA apruebe {min}, vas a poder pasar a facturar en real.
+          {approved >= min
+            ? "Listo: ya podés seguir con el paso Real."
+            : `Hacé algunas ventas de prueba desde el POS. Cuando ARCA apruebe ${min}, vas a poder pasar a facturar en real.`}
         </Callout>
       )}
     </div>
@@ -684,105 +708,5 @@ function StepContingencia({ config, canWrite }: { config: ArcaConfig; canWrite: 
 }
 
 // ---------------------------------------------------------------------------
-// 8. Producción
+// 8. Producción: guía paso a paso (ProductionGuide, ADR-149).
 // ---------------------------------------------------------------------------
-function StepProduccion({ config, canWrite }: { config: ArcaConfig; canWrite: boolean }) {
-  const m = useArcaMutations();
-  const { toast } = useToast();
-  const t = useTest("produccion");
-  const [confirm, setConfirm] = useState(false);
-  const env = config.settings?.environment ?? "homologacion";
-  const deleg = config.settings?.auth_mode === "delegado";
-  const items = config.checklist.items.filter((i) => i.key !== "homologacion_ok" || i.required !== false);
-
-  if (env === "produccion") {
-    return (
-      <Callout tone="success" icon={Rocket} title="Estás facturando en real">
-        Cada factura que sale tiene validez fiscal. Podés volver al modo prueba desde Ajustes.
-      </Callout>
-    );
-  }
-  return (
-    <div className="space-y-5 text-sm">
-      <p className="text-muted-foreground">
-        Para facturar en real (<Term k="produccion" />) hacen falta los mismos pasos con los datos reales. Cuando la lista
-        esté completa se habilita el botón.
-      </p>
-      {!deleg && (
-        <Disclosure title="Certificado real" defaultOpen={!config.checklist.items.find((i) => i.key === "certificado")?.ok}>
-          <CertificateFlow config={config} env="produccion" canWrite={canWrite} />
-        </Disclosure>
-      )}
-      <Disclosure title={deleg ? "Delegación en producción" : "Autorizar el servicio en producción"}>
-        <AuthorizeHowTo config={config} env="produccion" />
-      </Disclosure>
-      <div className="space-y-2">
-        <Button variant="secondary" onClick={t.run} loading={t.pending} disabled={!canWrite}>
-          <PlugZap size={16} /> Probar conexión real y verificar puntos de venta
-        </Button>
-        {t.result && <TestResults result={t.result} />}
-      </div>
-
-      <div className="rounded-md border border-border">
-        <p className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Lista para facturar en real
-        </p>
-        <ul className="divide-y divide-border">
-          {items.map((i) => {
-            const l = CHECKLIST_LABEL[i.key];
-            return (
-              <li key={i.key} className="flex items-start gap-3 px-3 py-2.5">
-                <span className="mt-1.5">
-                  <Dot tone={i.ok ? "success" : "warning"} />
-                </span>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">
-                    {l?.label ?? i.key}
-                    {i.key === "homologacion_ok" && i.count != null && ` (${i.count} de ${i.min})`}
-                  </p>
-                  <p className="text-muted-foreground">{l?.help}</p>
-                  {i.key === "puntos_de_venta" && !i.ok && (i.pos?.length ?? 0) > 0 && (
-                    <p className="text-muted-foreground">
-                      Tus sucursales usan {i.pos?.join(", ")}; ARCA confirmó {(i.verified ?? []).join(", ") || "ninguno"}.
-                    </p>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {!config.can_owner && (
-        <Callout tone="neutral" icon={Lock} title="Sólo el dueño puede pasar a facturar en real" />
-      )}
-      <Button
-        size="lg"
-        className="w-full sm:w-auto"
-        disabled={!canWrite || !config.checklist.ready || !config.can_owner}
-        onClick={() => setConfirm(true)}
-      >
-        <Rocket size={18} /> Pasar a facturar en real
-      </Button>
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title="¿Pasar a facturar en real?"
-        description={`Desde ahora cada venta genera una factura con validez fiscal ante ARCA (${ENV_LABEL.produccion.toLowerCase()}). Las facturas de prueba no se convierten. Podés volver al modo prueba cuando quieras.`}
-        confirmLabel="Sí, facturar en real"
-        withReason
-        reasonLabel="Comentario (queda en la auditoría)"
-        loading={m.setEnvironment.isPending}
-        onConfirm={async (reason) => {
-          try {
-            await m.setEnvironment.mutateAsync({ env: "produccion", reason });
-            setConfirm(false);
-            toast({ title: "Listo: estás facturando en real", variant: "success" });
-          } catch (e) {
-            toast({ title: "No se pudo cambiar", description: arcaErrorMessage(e), variant: "error" });
-          }
-        }}
-      />
-    </div>
-  );
-}

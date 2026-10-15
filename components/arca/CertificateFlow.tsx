@@ -242,7 +242,9 @@ export function CertificateFlow({ config, env, canWrite }: { config: ArcaConfig;
                 title: "Abrí Administración de Certificados Digitales",
                 body: (
                   <>
-                    Si no lo ves, adherilo desde <strong>Administrador de Relaciones de Clave Fiscal</strong>.
+                    Si no lo ves en tus servicios, adherilo desde <strong>Administrador de Relaciones de Clave Fiscal</strong>{" "}
+                    (Adherir servicio &gt; ARCA &gt; Administración de Certificados Digitales). Elegí tu CUIT{" "}
+                    <span className="font-mono">{config.emitter.cuit ?? ""}</span>.
                   </>
                 ),
               },
@@ -250,14 +252,19 @@ export function CertificateFlow({ config, env, canWrite }: { config: ArcaConfig;
                 title: "Agregá un alias",
                 body: (
                   <>
-                    Tocá <strong>Agregar alias</strong>, escribí <span className="font-mono">{alias}</span> y subí el archivo
-                    del pedido (el .csr que descargaste) o pegalo.
+                    Tocá <strong>Agregar alias</strong>, escribí exactamente <span className="font-mono text-foreground">{alias}</span>,
+                    tocá <strong>Examinar</strong>, elegí el archivo .csr que descargaste arriba y tocá <strong>Agregar alias</strong>.
                   </>
                 ),
               },
               {
                 title: "Descargá el certificado",
-                body: <>En el alias, tocá <strong>Ver</strong> y descargá el certificado (.crt). Subilo o pegalo abajo.</>,
+                body: (
+                  <>
+                    En la lista, tocá <strong>Ver</strong> al lado del alias y después <strong>Descargar</strong>. Te baja un
+                    archivo .crt: subilo o pegalo abajo. Ese alias es el que vas a elegir después, al autorizar el servicio.
+                  </>
+                ),
               },
             ]}
           />

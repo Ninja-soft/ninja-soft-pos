@@ -248,9 +248,11 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
       - [ ] *Criterio:* checklist de aceptación de `docs/38-mercadolibre.md` §1.6 con usuarios de test (pendiente: app de ML y secrets).
     - **Fase v2: logística y stock avanzado**:
       - [ ] Panel por logística (ME1, ME2 drop_off / Colecta / Places, Flex, Full) con KPIs.
-      - [ ] Convivencia Full/Flex con `selling_address` separado y depósito virtual "Full" (sólo lectura) con inventario, no disponibles y operaciones (`fbm_stock_operations`).
+      - [x] Depósito virtual "Mercado Libre Full" por cuenta (sólo lectura, no vendible en el POS) con inventario, no disponibles por motivo, en camino y operaciones; ventas por Full que no descuentan el stock propio. *(ADR-142, `docs/42-mercadolibre-full.md`, rama `feat/ml-full`, migraciones `20261209100000` a `20261209100200` sin aplicar, Edge `ml_full` sin desplegar)*
+      - [ ] Convivencia Full/Flex con `selling_address` separado (el push de stock propio ya respeta `selling_address`; falta el panel).
       - [ ] Multi-origen: mapeo de depósitos de ML a sucursales/depósitos del POS (`ml_location_map` tipo `seller_warehouse`).
-      - [ ] Planificador de envíos a Full (replenishment) con reserva en tránsito y conciliación por `inbound_reception`.
+      - [x] Envíos a Full (replenishment) con tránsito y conciliación por `inbound_reception`, etiquetas por unidad y por bulto, cobertura en días y alertas de quiebre, costos de Full. *(ADR-142)* El envío se crea en ML (la API no lo permite) y se registra su número.
+      - [ ] *Criterio:* con una cuenta real que use Full, el disponible de cada producto coincide con Ventas › Full › Stock y un envío se concilia con lo que informa ML (pendiente de cuenta piloto).
       - [ ] ME1: tracking y estados por `/v2/shipments/{id}/seller_notifications` (punto de enganche `ml_shipments.me1_tracking`; se integra con la rama de envíos).
       - [ ] Flex: zonas, rangos, feriados, registro del cadete y conciliación con `flex-handshakes`.
       - [ ] Reclamos y devoluciones que generan `sale_return` y NC ARCA; NC subida al pack.

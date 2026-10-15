@@ -33,6 +33,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
 | **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-2, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120, ADR-126; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
+| **F22** | Tesorería ordenada: cuentas de dinero unificadas, liquidaciones a la billetera, extracto bancario, NubCeo dentro de la Contabilidad, gastos con categoría y menú propio | 6–9 semanas | 🟡 Plan y auditoría (ADR-150, [`46-tesoreria.md`](./46-tesoreria.md)); arreglos chicos con código, migración sin aplicar |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1528,6 +1529,26 @@ Objetivo: cada persona del staff tiene un porcentaje del **cobrado neto** de Nin
 - [x] **H139 · Pagos al staff.** Parciales, cuentas de cobro con el editor de Transferencia, operación de Mercado Pago leída de la cuenta de NinjaSoft y email de acreditación.
 - [ ] **H140 · Puesta en marcha.** Migración aplicada y `staff_payouts` desplegada (14/10). Falta (dueño): cargar personas, gastos y cotización, y probar una operación de MP real (§20.8 #5).
 
+### F22 · Tesorería ordenada (de la venta al asiento)
+
+Objetivo: cada peso se sigue desde la venta hasta el banco y hasta el asiento, en una sola pantalla y sin contarlo dos veces. Une Tesorería (H111), Conciliación (H110), Contabilidad (H109), Impuestos como sujeto (H106) y NubCeo. Pedido del dueño del 2026-10-15; auditoría, modelo y fases en [`46-tesoreria.md`](./46-tesoreria.md); decisión ADR-150. Arreglos chicos de la auditoría (importación de asientos de NubCeo, devolución por MP contra la caja, fecha argentina en `_treasury_move`, totales por moneda en Tesorería) en `docs/plan-tesoreria`, migración `20261217100000` sin aplicar y Edge `nubceo_sync` sin desplegar.
+
+- [ ] **H150 · Cuentas de dinero unificadas.** Cajas del POS, billeteras y "a acreditar" como cuentas de Tesorería; cobros por transferencia a su cuenta; mapeo contable por cuenta; asiento de saldo inicial; fechas argentinas; señas y medios sin cuenta; moneda en los asientos; regenerar por documento. · *OPTIONAL `tesoreria` (existe).*
+  - [ ] *Criterio:* una venta por transferencia a "Galicia" suma en Galicia en Tesorería y en el Mayor de la subcuenta Galicia, al centavo; anularla resta en los dos.
+- [ ] **H151 · Liquidaciones a la billetera.** Acreditación como movimiento en la billetera o banco, retiros del cajón con destino, IVA de la comisión separado, asiento de liquidación sólo para líneas conciliadas con contra-asiento al desvincular o ignorar, contracargos por cambio de estado. · *OPTIONAL `conciliacion_procesadores` (existe).*
+  - [ ] *Criterio:* un mes de Mercado Pago: saldo de la billetera en Tesorería = extracto de MP = Mayor de la billetera.
+- [ ] **H152 · A acreditar, extracto bancario y flujo de fondos.** Pantalla A acreditar, import de extracto con matching, flujo con lo pendiente de liquidar, presets de Ualá, MODO, Transferencias y Directo. · *OPTIONAL `conciliacion_bancaria` (nueva, Business).*
+  - [ ] *Criterio:* el dueño sube el extracto de un mes y ve tildado lo que coincide y en "Pendientes de revisar" lo que no.
+- [ ] **H153 · NubCeo dentro de la Contabilidad.** Fuente única de los asientos de liquidación (NinjaPOS o NubCeo), tabla de equivalencias de cuentas, asientos de NubCeo al Diario con control de balance, estado de conciliación por venta. · *OPTIONAL `integracion_nubceo` + `contabilidad` (existen).*
+  - [ ] *Criterio:* con fuente NubCeo cada liquidación aparece una sola vez en el Diario y Sumas y saldos cierra.
+- [ ] **H154 · Gastos con categoría y cheques bien contabilizados.** Gasto con cuenta de gasto, comprobante y adjunto; asiento al recibir un cheque de tercero; rechazo de cheque propio contra la deuda. · *OPTIONAL `tesoreria` (existe).*
+  - [ ] *Criterio:* un alquiler pagado desde Galicia aparece en el Mayor de Alquileres y "Valores a depositar" nunca queda negativo.
+- [ ] **H155 · Menú y copy de Tesorería.** Grupo Tesorería (Posición, Movimientos, A acreditar, Conciliación, Cheques, Flujo, NubCeo), Mapeos y Cierres en el menú, grupo Impuestos, "Ver asiento" y "Ver origen", estados vacíos útiles. · *Sin feature nueva.*
+  - [ ] *Criterio:* un dueño nuevo encuentra dónde está su plata, qué falta acreditar y el asiento de una venta en menos de tres clics.
+- [ ] **H156 · Controles de caja.** Confirmación al cerrar con contado 0 y esperado positivo; conciliación del Z con motivo. · *BASE.*
+- [ ] **H157 · Prueba de punta a punta.** Un día con efectivo, transferencia, QR de MP y tarjeta Payway, retiro, depósito, liquidación, cierre de mes y export al estudio. · *Test de integración.*
+  - [ ] *Criterio:* Tesorería, Mayor y Sumas y saldos cuadran al centavo y el export abre en Xubio.
+
 ---
 
 ## TX — Mejoras transversales (UX y datos)
@@ -1702,25 +1723,26 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
 | **F4** | 12/29 | 10 | 7 | 41% | 59% |
-| **F5** | 23/49 | 10 | 16 | 47% | 57% |
-| **F6** | 55/62 | 4 | 3 | 89% | 92% |
+| **F5** | 38/70 | 12 | 20 | 54% | 63% |
+| **F6** | 58/63 | 3 | 2 | 92% | 94% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
 | **F8** | 18/57 | 22 | 17 | 32% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
-| **F10** | 31/47 | 13 | 3 | 66% | 80% |
-| **F11** | 65/89 | 12 | 12 | 73% | 80% |
-| **F12** | 39/51 | 7 | 5 | 76% | 83% |
+| **F10** | 32/48 | 13 | 3 | 67% | 80% |
+| **F11** | 76/93 | 13 | 4 | 82% | 89% |
+| **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
 | **F14** | 5/61 | 39 | 17 | 8% | 40% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
-| **F18** | 42/113 | 53 | 18 | 37% | 61% |
+| **F18** | 43/114 | 54 | 17 | 38% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
-| **F20** | 0/61 | 0 | 61 | 0% | 0% |
+| **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
+| **F22** | 0/15 | 0 | 15 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 582/1114 | 302 | 230 | 52% | 66% |
+| **Total** | 654/1183 | 305 | 224 | 55% | 68% |
 <!-- roadmap-progress:end -->
 
 ---

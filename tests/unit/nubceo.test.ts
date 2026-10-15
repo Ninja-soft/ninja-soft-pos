@@ -10,6 +10,7 @@ import {
   exhausted,
   fechaAr,
   inWindow,
+  ledgerNextCursor,
   ledgerQuery,
   mappingWarnings,
   netOf,
@@ -846,6 +847,38 @@ describe("asientos contables", () => {
       cost_center: "CCC",
       amount: 202698.93,
     });
+  });
+
+  it("cuenta las filas crudas y toma el updatedAt más nuevo de la página", () => {
+    const r = parseLedgerPage({
+      data: [
+        { ...BODY.data[0], updatedAt: "2026-10-02T10:00:00.000Z" },
+        { id: "", date: "2025-05-20", updatedAt: "2026-10-03T11:00:00.000Z" },
+        { id: "x", date: "2026-10-01", updatedAt: "no es fecha" },
+      ],
+    });
+    // La fila sin id no es un asiento, pero sí cuenta para saber si hay más páginas.
+    expect(r.headers).toHaveLength(2);
+    expect(r.rows).toBe(3);
+    expect(r.lastUpdatedAt).toBe("2026-10-03T11:00:00.000Z");
+    expect(parseLedgerPage({ data: [] }).lastUpdatedAt).toBeNull();
+  });
+
+  it("el cursor de la próxima importación no saltea lo que quedó sin traer", () => {
+    const base = { startedAt: "2026-10-15T12:00:00.000Z", previous: "2026-10-01T00:00:00.000Z" };
+    // Trajo todo: sigue desde que empezó la vuelta.
+    expect(ledgerNextCursor({ ...base, ok: true, complete: true, lastUpdatedAt: "2026-10-14T00:00:00Z" })).toBe(
+      base.startedAt,
+    );
+    // Cortó por el tope de páginas: sigue desde el último asiento traído.
+    expect(ledgerNextCursor({ ...base, ok: true, complete: false, lastUpdatedAt: "2026-10-05T08:00:00Z" })).toBe(
+      "2026-10-05T08:00:00Z",
+    );
+    // Cortó sin updatedAt conocido o falló: queda el cursor anterior.
+    expect(ledgerNextCursor({ ...base, ok: true, complete: false, lastUpdatedAt: null })).toBe(base.previous);
+    expect(ledgerNextCursor({ ...base, ok: false, complete: false, lastUpdatedAt: "2026-10-05T08:00:00Z" })).toBe(
+      base.previous,
+    );
   });
 
   it("query con página, orden y filtro por actualización", () => {

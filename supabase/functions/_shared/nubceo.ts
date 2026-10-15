@@ -1458,6 +1458,10 @@ export function parseLedgerPage(body: unknown): {
   headers: LedgerHeader[];
   total: number;
   count: number;
+  /** Filas que vinieron en la página, válidas o no (para saber si hay más). */
+  rows: number;
+  /** El `updatedAt` más nuevo de la página (el listado viene ordenado por él). */
+  lastUpdatedAt: string | null;
 } {
   const b = isObj(body) ? body : {};
   const meta = isObj(b.meta) ? b.meta : {};
@@ -1496,11 +1500,41 @@ export function parseLedgerPage(body: unknown): {
       };
     })
     .filter((h) => h.nubceo_id && h.date);
+  let lastUpdatedAt: string | null = null;
+  for (const h of rows) {
+    const u = txt(pick(h, "updatedAt", "updated_at"));
+    if (u && !Number.isNaN(Date.parse(u)) && (!lastUpdatedAt || Date.parse(u) > Date.parse(lastUpdatedAt))) {
+      lastUpdatedAt = u;
+    }
+  }
   return {
     headers,
     total: Number(meta.total) || 0,
     count: Number(meta.count) || headers.length,
+    rows: rows.length,
+    lastUpdatedAt,
   };
+}
+
+/**
+ * Desde dónde sigue la próxima importación de asientos.
+ *
+ * Si la vuelta trajo todo, desde que empezó. Si cortó por el tope de páginas,
+ * desde el `updatedAt` del último asiento traído (el filtro es `gte`, así que
+ * ese asiento se vuelve a traer y se pisa igual): nunca desde que empezó,
+ * porque los asientos que quedaron sin traer tienen un `updatedAt` anterior y
+ * se perderían para siempre. Si falló, queda el cursor anterior.
+ */
+export function ledgerNextCursor(o: {
+  ok: boolean;
+  complete: boolean;
+  startedAt: string;
+  previous: string | null;
+  lastUpdatedAt: string | null;
+}): string | null {
+  if (!o.ok) return o.previous;
+  if (o.complete) return o.startedAt;
+  return o.lastUpdatedAt ?? o.previous;
 }
 
 export const LEDGER_CATEGORY_LABEL: Record<string, string> = {

@@ -332,7 +332,10 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   // Ticket o A4, preseleccionado con el del perfil "ticket de venta" (H22) y
   // elegible en la ventana; el ancho del rollo, el del perfil o el del
   // branding. La impresión automática usa el predeterminado.
-  const defaultFormat: PrintFormat = saleProfile?.paper === "a4" ? "a4" : "ticket";
+  // Formato al abrir: el elegido en Comprobantes; "auto" = según la impresora.
+  const posFormat = invoice.style.posFormat;
+  const defaultFormat: PrintFormat =
+    posFormat === "ticket" || posFormat === "a4" ? posFormat : saleProfile?.paper === "a4" ? "a4" : "ticket";
   const printFormat: PrintFormat = formatChoice ?? defaultFormat;
   const rollPaper: "80" | "58" =
     saleProfile?.paper === "58" || saleProfile?.paper === "80"

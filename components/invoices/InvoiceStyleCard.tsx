@@ -503,6 +503,19 @@ export function InvoiceStyleCard() {
                   size="sm"
                 />
               </Row>
+              <Row title="Al cobrar en el POS" hint="Qué comprobante se muestra primero en la ventana después de cobrar.">
+                <Segmented
+                  value={s.pos_format}
+                  onChange={(v) => setStyle({ pos_format: v })}
+                  options={[
+                    { value: "auto", label: "Según impresora" },
+                    { value: "ticket", label: "Ticket" },
+                    { value: "a4", label: "Hoja A4" },
+                  ]}
+                  size="sm"
+                  scrollOnMobile
+                />
+              </Row>
               <Row title="PDF del email" hint="Qué se adjunta al mandar el comprobante por email.">
                 <Segmented
                   value={s.email_format}

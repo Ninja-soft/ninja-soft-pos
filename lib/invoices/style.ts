@@ -68,8 +68,13 @@ export interface InvoiceStyleSettings {
   show_internal_ref: boolean;
   /** Copias de la hoja A4: 1 = Original; 2 = Original y Duplicado. */
   a4_copies: 1 | 2;
-  /** Formato del PDF que se adjunta al email. */
+  /** Formato del PDF que se adjunta al email (por defecto la hoja A4). */
   email_format: "ticket" | "a4";
+  /**
+   * Formato que muestra la ventana del comprobante al cobrar en el POS.
+   * "auto" = según el papel de la impresora de ventas.
+   */
+  pos_format: "auto" | "ticket" | "a4";
   // --- ADR-119: aspecto (Pro) ---
   font_family: InvoiceFont;
   density: InvoiceDensity;
@@ -107,7 +112,8 @@ export const DEFAULT_INVOICE_STYLE: InvoiceStyleSettings = {
   show_payments: true,
   show_internal_ref: true,
   a4_copies: 1,
-  email_format: "ticket",
+  email_format: "a4",
+  pos_format: "auto",
   font_family: "auto",
   density: "normal",
   corners: "rounded",
@@ -145,7 +151,8 @@ export function normalizeInvoiceStyle(raw: unknown): InvoiceStyleSettings {
     show_payments: bool(r.show_payments, d.show_payments),
     show_internal_ref: bool(r.show_internal_ref, d.show_internal_ref),
     a4_copies: r.a4_copies === 2 ? 2 : 1,
-    email_format: r.email_format === "a4" ? "a4" : "ticket",
+    email_format: r.email_format === "ticket" ? "ticket" : "a4",
+    pos_format: r.pos_format === "ticket" || r.pos_format === "a4" ? r.pos_format : "auto",
     font_family: oneOf(r.font_family, ["auto", "inter", "helvetica", "serif", "mono"] as const, d.font_family),
     density: oneOf(r.density, ["compacta", "normal", "amplia"] as const, d.density),
     corners: oneOf(r.corners, ["rounded", "square"] as const, d.corners),
@@ -266,6 +273,7 @@ export interface ResolvedInvoiceStyle {
   showInternalRef: boolean;
   a4Copies: 1 | 2;
   emailFormat: "ticket" | "a4";
+  posFormat: "auto" | "ticket" | "a4";
   /** ADR-119: familia elegida (null = la del modelo). */
   fontFamily: string | null;
   /** Factor del tamaño de letra (0,9 / 1 / 1,12). */
@@ -372,6 +380,7 @@ export function resolveInvoiceStyle(
     showInternalRef: s.show_internal_ref,
     a4Copies: s.a4_copies,
     emailFormat: s.email_format,
+    posFormat: s.pos_format,
     fontFamily: s.font_family === "auto" ? null : FONT_STACKS[s.font_family],
     fontScale: FONT_SCALE[s.font_size],
     density: DENSITY_SCALE[s.density],

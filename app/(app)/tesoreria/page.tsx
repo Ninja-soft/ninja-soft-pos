@@ -29,6 +29,7 @@ import {
   type ChequeStatus,
 } from "@/lib/treasury/cheques";
 import { buildCashFlow, firstShortfall, type CashFlowGranularity } from "@/lib/treasury/cashflow";
+import { treasuryTotals } from "@/lib/treasury/totals";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { usePaymentAllocations, useSupplierEntries, useSuppliers } from "@/modules/purchases/hooks";
 import {
@@ -175,16 +176,24 @@ function AccountsTab({
   const { data: accounts = [], isLoading } = useTreasuryAccounts();
   const { data: balances = [] } = useTreasuryBalances();
   const byId = new Map(balances.map((b) => [b.account_id, b]));
-  const total = balances.filter((b) => b.currency === "ARS").reduce((t, b) => t + b.balance, 0);
-  const cash = balances.filter((b) => b.kind === "cash").reduce((t, b) => t + b.balance, 0);
+  const totals = treasuryTotals(balances);
+  const others = Object.entries(totals.otherCurrencies);
 
   return (
     <div className="mt-4 space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Disponible total" value={formatCurrency(total)} />
-        <Stat label="En bancos" value={formatCurrency(total - cash)} />
-        <Stat label="En caja general" value={formatCurrency(cash)} />
+        <Stat label="Disponible total en pesos" value={formatCurrency(totals.total)} />
+        <Stat label="En bancos" value={formatCurrency(totals.banks)} />
+        <Stat label="En caja general" value={formatCurrency(totals.cash)} />
       </div>
+      {others.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Además, en otras monedas:{" "}
+          {others
+            .map(([cur, amount]) => `${cur} ${amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`)
+            .join(" · ")}
+        </p>
+      )}
       <TableWrap>
         <table className="w-full text-sm">
           <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -590,7 +599,7 @@ function CashFlowTab() {
   const { data: allocations = [] } = usePaymentAllocations();
   const { data: cheques = [] } = useCheques({ statuses: ["en_cartera", "entregado"] });
 
-  const start = balances.filter((b) => b.currency === "ARS" && b.is_active).reduce((t, b) => t + b.balance, 0);
+  const start = treasuryTotals(balances).total;
   const payables = useMemo(() => {
     const out: Array<{ date: string; amount: number }> = [];
     for (const aging of agingBySupplier(entries, now, allocations).values()) {

@@ -330,3 +330,35 @@ describe("feature de plan contabilidad (CLAUDE.md §6)", () => {
     expect(gating).toMatch(/tenant_has_feature_for\(p_tenant, 'contabilidad'\)/);
   });
 });
+
+describe("auditoría de tesorería (ADR-150): arreglos chicos", () => {
+  it("la devolución reintegrada por Mercado Pago no va a la Caja del POS", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync("supabase/migrations/20261217100000_tesoreria_fixes_auditoria.sql", "utf8");
+    const reintegro = sql.match(/case r\.refund_method([\s\S]*?)end,/)?.[1] ?? "";
+    // Cada medio de reintegro que admite sale_returns tiene su rama explícita.
+    const check = readFileSync("supabase/migrations/20261030100100_reintegro_mp.sql", "utf8").match(
+      /check \(refund_method in \(([^)]*)\)\)/,
+    )?.[1];
+    const methods = (check ?? "").split(",").map((m) => m.trim().replace(/'/g, ""));
+    expect(methods).toEqual(["cash", "store_credit", "account", "mercadopago"]);
+    for (const m of methods.filter((x) => x !== "cash")) expect(reintegro).toContain(`when '${m}'`);
+    expect(reintegro).toMatch(/when 'mercadopago' then '\*:mercadopago'/);
+
+    // Con la plantilla, '*:mercadopago' resuelve a "Mercado Pago a cobrar", no a la caja.
+    const rows: MappingRow[] = [
+      { concept: "cobro", qualifier: "*", store_id: null, account_id: "otros_a_cobrar" },
+      { concept: "cobro", qualifier: "cash", store_id: null, account_id: "caja" },
+      { concept: "cobro", qualifier: "*:mercadopago", store_id: null, account_id: "mp_a_cobrar" },
+    ];
+    expect(resolveMapping(rows, "cobro", "*:mercadopago", null)?.account_id).toBe("mp_a_cobrar");
+  });
+
+  it("los movimientos de tesorería sin fecha toman el día de Argentina, no el de UTC", async () => {
+    const { readFileSync } = await import("node:fs");
+    const sql = readFileSync("supabase/migrations/20261217100000_tesoreria_fixes_auditoria.sql", "utf8");
+    const fn = sql.slice(sql.indexOf("create or replace function _treasury_move"));
+    expect(fn).toMatch(/coalesce\(p_date, \(now\(\) at time zone 'America\/Argentina\/Buenos_Aires'\)::date\)/);
+    expect(fn).not.toMatch(/current_date/);
+  });
+});

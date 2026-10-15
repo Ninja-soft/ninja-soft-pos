@@ -5532,3 +5532,43 @@ Caso real de un negocio (15/10/2026): con el certificado de producción cargado,
 - La prueba sólo hace lecturas y login (WSAA, FEDummy, FEParamGetPtosVenta, FECompUltimoAutorizado): nunca emite comprobantes.
 - **No se probó el login WSAA real del negocio desde esta rama:** la clave está cifrada con `ARCA_KEY_ENC` (sólo en la Edge) y la única vía sería iniciar sesión como el dueño. Se verificó FEDummy de producción (AppServer, DbServer y AuthServer OK) y la base muestra el `coe.notAuthorized` real de la Edge desplegada.
 - Tests: `tests/unit/arcaPasarAReal.test.ts` (causa de los pasos 4 y 6, conexión por ambiente con y sin migración, guía de producción con el caso real, mapeo de errores, reintentos, puntos de venta, contratos de la migración y la Edge) y `tests/components/ArcaProductionGuide.test.tsx` (guía y pasos 4, 5 y 6 del asistente).
+---
+
+## ADR-150: Tesorería ordenada: las cuentas de dinero de Tesorería son la única definición de dónde está la plata, cada hecho genera un movimiento y un asiento desde su documento, y una sola fuente (NinjaPOS o NubCeo) para los asientos de liquidación (F22)
+
+**Fecha:** 2026-10-15 · **Estado:** propuesta (auditoría y plan; arreglos chicos en `docs/plan-tesoreria`, migración `20261217100000` sin aplicar y Edge `nubceo_sync` sin desplegar) · **Base:** ADR-044, ADR-059, ADR-061, ADR-062, ADR-064, ADR-066, ADR-095 · **Numeración:** ADR-149 queda para otra rama. Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md)
+
+### Contexto
+
+El dueño pidió ordenar toda la tesorería: que se entienda, que esté relacionada, que los asientos se manejen bien y que quede claro qué se le manda a NubCeo y qué devuelve. La auditoría del 2026-10-15 (código, definiciones vigentes en producción en sólo lectura, 177 tests del área en verde y el flujo del dueño en ANDESMAR) encontró que las piezas andan por separado (los asientos balancean en la base, la conciliación de MP corre sola, NubCeo manda y trae) pero no están unidas:
+
+- Tesorería sólo ve movimientos manuales, cheques y órdenes de pago: los cobros por transferencia, las acreditaciones de los procesadores y los retiros del cajón no entran a ninguna cuenta (`treasury_accounts.transfer_account_id` es una columna muerta).
+- La Contabilidad registra esa plata en cuentas genéricas ("Banco cuenta corriente", "Mercado Pago (saldo)"), mientras los movimientos de Tesorería van a la cuenta de cada banco: el Mayor nunca coincide con el saldo.
+- NubCeo devuelve los asientos de las mismas liquidaciones que ya contabiliza `acc_sync_settlement_line`, sin cruce ni regla: con las dos prendidas se cuentan dos veces.
+- ANDESMAR no trae nada de NubCeo más que la respuesta del envío; las minutas del cierre de Mercado Libre se arman a mano.
+- Hallazgos puntuales: devolución por MP contra la Caja, liquidaciones que no se corrigen al desvincularlas, contracargos que vuelven a cero, señas sin cuenta, cheques de terceros que dejan "Valores a depositar" negativo, monedas mezcladas, fechas por defecto en UTC, importación de asientos de NubCeo que perdía páginas.
+
+En producción nadie usa todavía Tesorería, Contabilidad ni NubCeo (0 filas): es el momento de cambiar el modelo sin migrar datos.
+
+### Decisión
+
+1. **Cuentas de dinero.** `treasury_accounts` es el único lugar que define dónde está la plata, con tipos nuevos: caja del POS (una por caja registradora, sólo lectura), billetera (vinculada a la credencial del procesador) y "a acreditar" (virtual, por procesador o adquirente), además de caja general y banco. Un banco se vincula a una o más cuentas de transferencia (tabla puente, reemplaza la columna muerta).
+2. **Un hecho, un movimiento y un asiento, desde el mismo documento.** Los movimientos con origen (cobro por transferencia, acreditación de liquidación, débito del procesador, retiro del cajón) se generan por trigger diferido y no contabilizan por su cuenta: el asiento lo arma el documento, como ya pasa con las órdenes de pago.
+3. **Cuenta contable por cuenta de dinero.** Los mapeos `cobro:transfer` y `acreditacion:<proveedor>` resuelven primero la cuenta contable de la cuenta de Tesorería vinculada; el Mayor de cada banco y billetera coincide con su saldo. El saldo inicial genera asiento de apertura.
+4. **Fuente única de los asientos de liquidación por negocio:** NinjaPOS (por defecto; los asientos de NubCeo se ven como control) o NubCeo (se traducen con una tabla de equivalencias de cuentas, entran al Diario como `source_type = 'nubceo_ledger'` sólo si balancean, y `acc_sync_settlement_line` no genera nada). El cambio vale desde el primer día de un mes abierto.
+5. **Menú propio de Tesorería** (Posición, Movimientos, A acreditar, Conciliación, Cheques, Flujo de fondos, NubCeo), Contabilidad con Mapeos y Cierres a la vista, Impuestos como grupo propio, y en cada renglón "Ver asiento" / "Ver origen".
+6. **Fases H150 a H157** (F22) con criterio de cierre al centavo; la única feature nueva es `conciliacion_bancaria` (OPTIONAL, Business, ya prevista en H110). El resto entra en `tesoreria`, `conciliacion_procesadores`, `contabilidad` e `integracion_nubceo`.
+7. **Arreglos chicos ya hechos en esta rama:** importación de asientos de NubCeo con cursor por el último `updatedAt` traído y fin de páginas por filas crudas; devolución reintegrada por MP contra `cobro:*:mercadopago`; `_treasury_move` con fecha argentina; totales de Tesorería sólo en pesos y con cuentas activas.
+
+### Alternativas descartadas
+
+- **Dejar Tesorería como libro manual y que la Contabilidad sea la fuente de saldos:** el dueño no mira el Mayor; necesita ver dónde está la plata en lenguaje simple, y la conciliación bancaria se hace contra movimientos, no contra renglones de asiento.
+- **Que los movimientos de Tesorería con origen contabilicen por su cuenta:** duplicaría cada venta por transferencia y cada liquidación.
+- **Importar siempre los asientos de NubCeo al Diario además de los propios:** doble contabilización garantizada.
+- **Copiar el esquema de ANDESMAR (minutas a mano):** sirve como referencia de qué asientos espera el estudio, no como mecanismo.
+
+### Consecuencias
+
+- Migraciones nuevas por fase (ver `46-tesoreria.md` §7); `create_sale` y `close_cash_shift` no se tocan (triggers diferidos, como la Contabilidad).
+- Las respuestas a las preguntas del dueño (§9: fuente de liquidaciones, plan del estudio en NubCeo, minutas de ML, depósito directo desde la caja) definen H151 y H153.
+- Deploy de esta fase: migración `20261217100000_tesoreria_fixes_auditoria.sql` y Edge `nubceo_sync`. Tests: `tests/unit/nubceo.test.ts`, `tests/unit/accounting.test.ts`, `tests/unit/treasuryTotals.test.ts`.

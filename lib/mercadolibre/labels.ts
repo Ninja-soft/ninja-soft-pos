@@ -239,8 +239,37 @@ export interface MlCauseInfo {
 
 const attrInBrackets = (raw: string) => /\[([A-Z0-9_]+)\]/.exec(raw)?.[1] ?? null;
 
-const CAUSES: Array<{ re: RegExp; message: (raw: string) => string; action: string | null }> = [
+type Names = Record<string, string>;
+const attrLabel = (raw: string, names: Names) => {
+  const id = attrInBrackets(raw);
+  return id ? (names[id] ?? id) : null;
+};
+const quoted = (raw: string) => /"([^"]{1,80})"/.exec(raw)?.[1] ?? null;
+const money = (n: number) => `$ ${Math.round(n).toLocaleString("es-AR")}`;
+
+const CAUSES: Array<{ re: RegExp; message: (raw: string, names: Names) => string; action: string | ((raw: string) => string) | null }> = [
+  // Chequeos propios del POS con código (publish.ts).
+  {
+    re: /^pos\.listing_type_unavailable/i,
+    message: (raw) => `${LISTING_TYPE_LABELS[attrInBrackets(raw.toUpperCase())?.toLowerCase() ?? ""] ?? "Ese tipo de publicación"} no está disponible para tu cuenta en esta categoría.`,
+    action: "Destildalo o elegí otro tipo de publicación.",
+  },
   // Envío
+  {
+    re: /^shipping\.lost_me2_by_intersected_logistics/i,
+    message: () => "Tu cuenta no tiene la logística de Mercado Envíos que pide esta categoría (por ejemplo, Flex para productos grandes).",
+    action: "Se publica con envío a convenir. Para ofrecer Mercado Envíos, activá esa logística en Mercado Libre.",
+  },
+  {
+    re: /^item\.shipping\.mandatory_free_shipping/i,
+    message: () => "Mercado Libre agrega envío gratis obligatorio por el precio del producto.",
+    action: "El costo del envío lo pagás vos: tenelo en cuenta en el precio.",
+  },
+  {
+    re: /^shipping\.free_shipping\.cost_exceeded/i,
+    message: () => "El costo del envío gratis supera el precio de venta.",
+    action: "Subí el precio o publicá sin envío gratis.",
+  },
   {
     re: /^shipping\.lost_me2_by_(catalog|category)/i,
     message: () => "Esta categoría no admite Mercado Envíos.",
@@ -249,7 +278,7 @@ const CAUSES: Array<{ re: RegExp; message: (raw: string) => string; action: stri
   {
     re: /^shipping\.lost_me2_by_user/i,
     message: () => "Tu cuenta no tiene Mercado Envíos activo.",
-    action: "Activalo en Mercado Libre (Configuración > Envíos) o elegí envío a convenir.",
+    action: "Activalo en Mercado Libre (Mi cuenta > Configuración > Preferencias de venta > Envíos) o elegí envío a convenir.",
   },
   {
     re: /^shipping\.lost_me1/i,
@@ -275,31 +304,53 @@ const CAUSES: Array<{ re: RegExp; message: (raw: string) => string; action: stri
   // Atributos
   {
     re: /^delete\.item\.attribute/i,
-    message: (raw) => `El dato "${attrInBrackets(raw) ?? "atributo"}" no corresponde para esta categoría o condición.`,
+    message: (raw, names) => `El dato "${attrLabel(raw, names) ?? "atributo"}" no corresponde para esta categoría o condición.`,
     action: "Se saca solo al validar de nuevo.",
   },
   {
+    // Aviso: no frena la publicación, pero sin el dato no compite en el catálogo.
+    re: /^item\.attributes?\.missing_catalog_required/i,
+    message: (raw, names) => `Conviene completar "${quoted(raw) ?? attrLabel(raw, names) ?? "un dato"}": sin eso la publicación compite peor.`,
+    action: "Completalo en la publicación completa cuando puedas.",
+  },
+  {
     re: /^item\.attributes?\.missing_(conditional_)?required/i,
-    message: (raw) => `Falta un dato obligatorio de la categoría${attrInBrackets(raw) ? ` (${attrInBrackets(raw)})` : ""}.`,
-    action: "Completalo en \"Datos que pide la categoría\".",
+    message: (raw, names) => {
+      const ids = [...raw.matchAll(/\[([A-Z0-9_,\s]+)\]/g)].flatMap((m) => m[1]!.split(",").map((x) => x.trim())).filter(Boolean);
+      const list = ids.map((id) => `"${names[id] ?? id}"`).join(", ");
+      return list ? `Falta ${list}, obligatorio en esta categoría.` : "Falta un dato obligatorio de la categoría.";
+    },
+    action: "Completalo en los datos que pide la categoría.",
   },
   {
     re: /^item\.attributes?\..*(gtin|product_identifier)/i,
-    message: () => "El código de barras (GTIN) no es válido para Mercado Libre.",
-    action: "Revisá el código o elegí el motivo por el que no tiene.",
+    message: (raw) => {
+      const all = [...raw.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]!);
+      const code = all.find((x) => /^\d{6,14}$/.test(x.trim()));
+      return code ? `El código de barras ${code.trim()} no es válido para Mercado Libre.` : "El código de barras (GTIN) no es válido para Mercado Libre.";
+    },
+    action: "Revisá el código (EAN de 13 dígitos con su dígito verificador) o elegí el motivo por el que no tiene.",
   },
   {
     re: /^item\.attributes?\./i,
-    message: (raw) => `Un dato de la categoría no es válido${attrInBrackets(raw) ? ` (${attrInBrackets(raw)})` : ""}.`,
+    message: (raw, names) => `Un dato de la categoría no es válido${attrLabel(raw, names) ? ` (${attrLabel(raw, names)})` : ""}.`,
     action: "Revisá los valores elegidos y usá las opciones de la lista cuando las haya.",
   },
   // Precio
   {
-    re: /^item\.price\..*(minimum|min)/i,
-    message: () => "El precio está por debajo del mínimo de la categoría.",
-    action: "Subí el precio.",
+    re: /^item\.price\./i,
+    message: (raw) => {
+      const min = /minimum of price\s+([\d.,]+)/i.exec(raw)?.[1];
+      const n = min ? Number(min.replace(/,/g, "")) : NaN;
+      if (Number.isFinite(n) && n > 0) return `El precio mínimo de esta categoría es ${money(n)}.`;
+      if (/minimum|min/i.test(raw)) return "El precio está por debajo del mínimo de la categoría.";
+      return "El precio no es válido.";
+    },
+    action: (raw) =>
+      /minimum|min/i.test(raw)
+        ? "Subí el precio del producto o el mínimo del tipo de publicación en Configuración > Publicaciones y precios."
+        : "Cargá un precio mayor a cero, sin centavos raros.",
   },
-  { re: /^item\.price\./i, message: () => "El precio no es válido.", action: "Cargá un precio mayor a cero, sin centavos raros." },
   // Título
   {
     re: /^item\.title\..*(length|max|min)/i,
@@ -319,10 +370,25 @@ const CAUSES: Array<{ re: RegExp; message: (raw: string) => string; action: stri
   },
   { re: /^item\.pictures?\./i, message: () => "Hay un problema con las fotos.", action: "Revisá las fotos del producto (entre 1 y 12)." },
   // Otros frecuentes
+  {
+    re: /^item\.listing_type_id\.requires_?pictures/i,
+    message: () => "Este tipo de publicación necesita al menos una foto.",
+    action: "Cargá una foto en la ficha del producto (pestaña Imágenes).",
+  },
   { re: /^item\.category_id\./i, message: () => "La categoría no es válida o no admite publicaciones.", action: "Elegí otra categoría." },
   { re: /^item\.listing_type_id\./i, message: () => "Ese tipo de publicación no está disponible.", action: "Elegí Clásica o Premium." },
   { re: /^item\.available_quantity\./i, message: () => "La cantidad no es válida.", action: "Cargá una cantidad mayor a cero." },
   { re: /^item\.(condition|attribute\.item_condition)/i, message: () => "La condición no es válida para la categoría.", action: "Elegí otra condición." },
+  {
+    re: /^moderations\.seller\.not_authorized|^seller\.not_authorized/i,
+    message: () => "Tu cuenta no está autorizada para publicar en esta categoría (por ejemplo, bebidas alcohólicas o productos regulados).",
+    action: "Pedí la habilitación en la ayuda de Mercado Libre o elegí otra categoría.",
+  },
+  {
+    re: /^moderations\./i,
+    message: () => "Mercado Libre moderaría esta publicación.",
+    action: "Revisá el título, las fotos y la categoría.",
+  },
   {
     re: /^seller\.|^user\.(unable|restricted|blocked)/i,
     message: () => "Tu cuenta de Mercado Libre no puede publicar en este momento.",
@@ -330,12 +396,15 @@ const CAUSES: Array<{ re: RegExp; message: (raw: string) => string; action: stri
   },
 ];
 
-/** Traduce una causa de ML ("codigo: mensaje"). */
-export function mlCauseInfo(raw: string): MlCauseInfo {
+/**
+ * Traduce una causa de ML ("codigo: mensaje"). `names` da el nombre de los
+ * atributos que ML nombra por id ([POWER_SUPPLY_TYPE] = "Tipo de alimentación").
+ */
+export function mlCauseInfo(raw: string, names: Record<string, string> = {}): MlCauseInfo {
   const text = String(raw ?? "").trim();
   const code = /^([a-z_][\w.]*\.[\w.]+)/i.exec(text)?.[1] ?? null;
   const hit = code ? CAUSES.find((c) => c.re.test(code)) : undefined;
-  if (hit) return { message: hit.message(text), action: hit.action, code, raw: text };
+  if (hit) return { message: hit.message(text, names), action: typeof hit.action === "function" ? hit.action(text) : hit.action, code, raw: text };
   // Errores ya en español (chequeos del POS) o códigos que no conocemos.
   const msg = code ? text.slice(code.length).replace(/^\s*:\s*/, "") || text : text;
   return { message: msg || "Mercado Libre rechazó un dato.", action: null, code, raw: text };
@@ -357,4 +426,21 @@ export function mlErrorMessage(e: unknown): string {
   const t = errorText(e);
   for (const [re, msg] of MESSAGES) if (re.test(t)) return msg;
   return t && t.length < 160 ? t : "No se pudo completar la operación con Mercado Libre.";
+}
+
+/**
+ * Avisos de ML que no le dicen nada útil al vendedor: me1 (nadie lo usa) y la
+ * pérdida de me2 cuando ya se publica sin Mercado Envíos (el porqué ya se
+ * explica en el envío elegido).
+ */
+export function isNoiseWarning(raw: string, appliedMode?: string | null): boolean {
+  const t = String(raw ?? "");
+  if (/^shipping\.lost_me1/i.test(t)) return true;
+  if (/^shipping\.lost_me2/i.test(t) && appliedMode && appliedMode !== "me2") return true;
+  return false;
+}
+
+/** Avisos para mostrar (sin ruido, sin repetidos). */
+export function visibleWarnings(warnings: string[] | null | undefined, appliedMode?: string | null): string[] {
+  return [...new Set((warnings ?? []).filter((w) => !isNoiseWarning(w, appliedMode)))];
 }

@@ -24,6 +24,12 @@ export interface MlPublishResult {
   shipping?: ShippingPlan;
   applied_shipping?: ShippingInput;
   removed_attributes?: string[];
+  /** Título que se usó (acortado al largo de la categoría si hacía falta). */
+  applied_title?: string;
+  /** Nombre de los atributos que ML nombra por id en errores y avisos. */
+  attribute_names?: Record<string, string>;
+  /** La cuenta no tiene Mercado Envíos: dónde activarlo. */
+  me_activation?: { url: string; path: string } | null;
   items?: Array<{ ml_item_id: string; permalink: string | null; listing_type_id?: string }>;
   /** Varios tipos (ADR-132): los que fallaron y los que no tenían precio. */
   failed?: Array<{ listing_type_id: string; errors: string[] }>;
@@ -623,8 +629,36 @@ export function useMlMutations() {
   };
 }
 
+/** Estado de Mercado Envíos de la cuenta (GET users/me + preferencias, en ml_api). */
+export interface MlAccountShipping {
+  /** false: no se pudo leer nada de Mercado Libre. */
+  read: boolean;
+  /** status.mercadoenvios: "accepted", "not_accepted"... */
+  mercadoenvios: string | null;
+  me2_usable: boolean;
+  modes: string[];
+  me2_logistics: string[];
+  local_pick_up: boolean;
+  mandatory_mode: string | null;
+  reason: string;
+  settings_url: string;
+  settings_path: string;
+}
+
+export function useMlAccountShipping(accountId: string | null) {
+  return useQuery({
+    queryKey: ["ml", "account_shipping", accountId],
+    enabled: Boolean(accountId),
+    staleTime: 5 * 60_000,
+    retry: 1,
+    queryFn: () => mlEdge<MlAccountShipping>("ml_api", { action: "account_shipping", account_id: accountId }),
+  });
+}
+
 // Publicar (llamadas directas desde el modal).
 export const mlPublishApi = {
+  accountShipping: (accountId: string, refresh = false) =>
+    mlEdge<MlAccountShipping>("ml_api", { action: "account_shipping", account_id: accountId, refresh }),
   predict: (title: string) => mlEdge<{ suggestions: MlDomainSuggestion[] }>("ml_api", { action: "predict_category", title }),
   category: (categoryId: string) => mlEdge<MlCategoryInfo>("ml_api", { action: "category", category_id: categoryId }),
   shipping: (accountId: string, categoryId: string) =>

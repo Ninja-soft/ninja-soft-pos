@@ -10,8 +10,9 @@
 //       GET /users/{id}/shipping_preferences       { modes: [...], logistics: [{ mode }] }
 //       GET /categories/{id}/shipping_preferences  { logistics: [{ mode, types }] }
 //       GET /users/{id}/shipping_modes?category_id { [{ mode }, ...] }
-//   • chooseShippingPlan: elige el mejor modo válido. me2 si vendedor y
-//     categoría lo admiten; si no, `not_specified` (a convenir) o `custom`
+//   • chooseShippingPlan: elige el mejor modo válido. me2 sólo si la cuenta
+//     aceptó Mercado Envíos (users/me), vendedor y categoría lo admiten y
+//     comparten una logística (ADR-136); si no, `not_specified` (a convenir) o `custom`
 //     (costos propios). me1 nunca (el POS no lo maneja y casi ningún vendedor
 //     lo tiene). Envío gratis sólo con me2.
 //   • resolveShipping: ajusta lo que pidió el usuario a lo que se puede.
@@ -44,6 +45,10 @@ export interface ShippingPlan {
   reason: string;
   /** false si no se pudo consultar nada y el modo es una suposición. */
   known: boolean;
+  /** Por qué Mercado Envíos no está disponible (null si está o no se sabe). */
+  me2Blocker?: Me2Blocker;
+  /** status.mercadoenvios de /users/me (null si no se pudo leer). */
+  mercadoEnvios?: string | null;
 }
 
 const ORDER: ShippingMode[] = ["me2", "not_specified", "custom"];
@@ -75,6 +80,8 @@ export function modesFrom(raw: unknown): Set<string> | null {
 }
 
 export interface ShippingSources {
+  /** GET /users/me (status.mercadoenvios: "accepted" | "not_accepted" | ...). */
+  me?: unknown;
   /** GET /users/{id}/shipping_preferences */
   user?: unknown;
   /** GET /categories/{id}/shipping_preferences (sólo lista logísticas de Mercado Envíos). */
@@ -89,10 +96,70 @@ export const SHIPPING_REASONS = {
   me2: "Tu cuenta y la categoría admiten Mercado Envíos.",
   noMe2Category: "Esta categoría no admite Mercado Envíos: el envío lo acordás vos.",
   noMe2User: "Tu cuenta no tiene Mercado Envíos activo: el envío lo acordás vos.",
+  noMe2NotAccepted:
+    "Tu cuenta de Mercado Libre no tiene Mercado Envíos aceptado: se publica con envío a convenir. Si querés ofrecer Mercado Envíos, activalo en Mercado Libre.",
+  noMe2Logistics: "Tu cuenta no tiene una logística de Mercado Envíos que esta categoría admita: el envío lo acordás vos.",
   noMe2Rejected: "Mercado Libre no aceptó Mercado Envíos para esta publicación: el envío lo acordás vos.",
   unknown: "No pudimos consultar los envíos de tu cuenta: se usa Mercado Envíos y, si Mercado Libre no lo acepta, se pasa solo a envío a convenir.",
 } as const;
 
+/** Por qué no se usa Mercado Envíos (null = se puede usar). */
+export type Me2Blocker = "rejected" | "not_accepted" | "user" | "logistics" | "category" | null;
+
+/** Dónde se activa Mercado Envíos: Mi cuenta de Mercado Libre. */
+export const ME_SETTINGS_URL = "https://myaccount.mercadolibre.com.ar/";
+export const ME_SETTINGS_PATH = "Mi cuenta > Configuración > Preferencias de venta > Envíos";
+
+const LOGISTIC_NAMES: Record<string, string> = {
+  drop_off: "Correo",
+  xd_drop_off: "Places",
+  cross_docking: "Colecta",
+  self_service: "Flex",
+  fulfillment: "Full",
+};
+export const logisticName = (t: string) => LOGISTIC_NAMES[t] ?? t;
+
+/** status.mercadoenvios de GET /users/me (null si no viene). */
+export function sellerMercadoEnvios(me: unknown): string | null {
+  const v = (me as { status?: { mercadoenvios?: unknown } } | null)?.status?.mercadoenvios;
+  return typeof v === "string" && v.trim() ? v.trim().toLowerCase() : null;
+}
+
+/**
+ * Logísticas de me2 activas (drop_off, self_service...). Lee las preferencias
+ * del vendedor ({logistics: [{mode, types: [{type, status}]}]}) y las de la
+ * categoría ({logistics: [{mode, types: ["self_service"]}]}).
+ * null = la respuesta no trae logísticas; Set vacío = ninguna de me2.
+ */
+export function me2Logistics(raw: unknown): Set<string> | null {
+  const list = (raw as { logistics?: unknown } | null)?.logistics;
+  if (!Array.isArray(list)) return null;
+  const out = new Set<string>();
+  for (const l of list) {
+    if (!l || typeof l !== "object" || String((l as { mode?: unknown }).mode ?? "").toLowerCase() !== "me2") continue;
+    const types = (l as { types?: unknown }).types;
+    if (!Array.isArray(types)) continue;
+    for (const t of types) {
+      if (typeof t === "string" && t.trim()) out.add(t.trim().toLowerCase());
+      else if (t && typeof t === "object") {
+        const o = t as { type?: unknown; status?: unknown };
+        const status = typeof o.status === "string" ? o.status.toLowerCase() : "active";
+        if (typeof o.type === "string" && o.type.trim() && status === "active") out.add(o.type.trim().toLowerCase());
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Mejor modo de envío con lo que se sabe del vendedor y la categoría.
+ * Mercado Envíos (me2) sólo si: ML no lo rechazó, la cuenta lo tiene
+ * aceptado (users/me status.mercadoenvios = "accepted"), el vendedor lo lista
+ * con al menos una logística activa, la categoría lo admite y alguna
+ * logística del vendedor coincide con las de la categoría (un horno pide
+ * Flex: con sólo Correo no hay intersección y ML responde
+ * `shipping.lost_me2_by_intersected_logistics`).
+ */
 export function chooseShippingPlan(src: ShippingSources): ShippingPlan {
   const uc = modesFrom(src.userCategory);
   const userCat = uc && uc.size > 0 ? uc : null;
@@ -100,11 +167,25 @@ export function chooseShippingPlan(src: ShippingSources): ShippingPlan {
   const userKnown = user && user.size > 0 ? user : null;
   const category = modesFrom(src.category);
   const excluded = new Set(src.excluded ?? []);
+  const meStatus = sellerMercadoEnvios(src.me);
+  const userLog = me2Logistics(src.user);
+  const catLog = me2Logistics(src.category);
+
+  let me2Blocker: Me2Blocker = null;
+  if (excluded.has("me2")) me2Blocker = "rejected";
+  else if (meStatus !== null && meStatus !== "accepted") me2Blocker = "not_accepted";
+  else if (userCat) me2Blocker = userCat.has("me2") ? null : "user";
+  else if (userKnown && !userKnown.has("me2")) me2Blocker = "user";
+  else if (category && !category.has("me2")) me2Blocker = "category";
+  else if (userLog && userKnown?.has("me2") && userLog.size === 0) me2Blocker = "user";
+  else if (userLog && catLog && userLog.size > 0 && catLog.size > 0 && !catLog.has("default") && ![...userLog].some((t) => catLog.has(t))) {
+    me2Blocker = "logistics";
+  }
 
   const ok = (m: ShippingMode): boolean => {
     if (excluded.has(m)) return false;
+    if (m === "me2") return me2Blocker === null;
     if (userCat) return userCat.has(m);
-    if (m === "me2") return (userKnown ? userKnown.has("me2") : true) && (category ? category.has("me2") : true);
     // La categoría sólo lista Mercado Envíos: custom y a convenir dependen del vendedor.
     return userKnown ? userKnown.has(m) : true;
   };
@@ -112,16 +193,23 @@ export function chooseShippingPlan(src: ShippingSources): ShippingPlan {
   // Sin ningún modo válido (respuesta rara): a convenir es lo que menos falla.
   if (allowed.length === 0) allowed = ["not_specified"];
   const mode = allowed[0]!;
-  const known = Boolean(userCat || userKnown || category);
+  const known = Boolean(userCat || userKnown || category || meStatus);
 
   let reason: string;
   if (mode === "me2") reason = known ? SHIPPING_REASONS.me2 : SHIPPING_REASONS.unknown;
-  else if (excluded.has("me2")) reason = SHIPPING_REASONS.noMe2Rejected;
-  else if (userKnown && !userKnown.has("me2")) reason = SHIPPING_REASONS.noMe2User;
-  else reason = SHIPPING_REASONS.noMe2Category;
+  else if (me2Blocker === "rejected") reason = SHIPPING_REASONS.noMe2Rejected;
+  else if (me2Blocker === "not_accepted") reason = SHIPPING_REASONS.noMe2NotAccepted;
+  else if (me2Blocker === "user") reason = SHIPPING_REASONS.noMe2User;
+  else if (me2Blocker === "logistics") {
+    const need = [...(catLog ?? [])].map(logisticName).join(" o ");
+    reason = need ? `Esta categoría sólo admite Mercado Envíos ${need} y tu cuenta no lo tiene: el envío lo acordás vos.` : SHIPPING_REASONS.noMe2Logistics;
+  } else reason = SHIPPING_REASONS.noMe2Category;
 
-  return { mode, allowed, freeShippingAllowed: allowed.includes("me2"), reason, known };
+  return { mode, allowed, freeShippingAllowed: allowed.includes("me2"), reason, known, me2Blocker, mercadoEnvios: meStatus };
 }
+
+/** ¿Hay que mandar a activar Mercado Envíos? (la cuenta no lo tiene). */
+export const needsMeActivation = (p: Pick<ShippingPlan, "me2Blocker">) => p.me2Blocker === "not_accepted" || p.me2Blocker === "user";
 
 const validCosts = (costs: ShippingCost[] | undefined) =>
   (costs ?? []).filter((c) => c && String(c.description ?? "").trim() && Number.isFinite(Number(c.cost)) && Number(c.cost) >= 0);

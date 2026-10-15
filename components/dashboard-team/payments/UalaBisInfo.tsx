@@ -13,7 +13,7 @@ const DEVELOPERS_URL = "https://developers.ualabis.com.ar/v2/ambientes";
 
 const API_STEPS = [
   "En el POS elegís Ualá Bis, Link o QR.",
-  "El cliente paga con tarjeta de crédito, débito o prepaga en el checkout de Ualá Bis.",
+  "El cliente escanea el QR con la cámara del celular (no con una billetera virtual: no es un QR interoperable) o abre el link, y paga con tarjeta de crédito, débito o prepaga en el checkout de Ualá Bis.",
   "Ualá nos avisa, verificamos la orden y la venta se cierra sola.",
 ];
 

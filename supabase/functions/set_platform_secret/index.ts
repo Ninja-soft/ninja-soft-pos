@@ -78,6 +78,9 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
     // se devuelve en claro para prefijar el campo de la card. La Edge Function
     // ai_assistant lo lee con fallback al default (500k).
     "monthly_quota",
+    // Imágenes con IA por día por negocio (número como string, público). Lo
+    // lee ai_image_daily_limit() en la base (default 20).
+    "image_daily_limit",
   ]),
   // App de Mercado Libre (ADR-126). client_secret nunca vuelve en claro.
   ml_app: new Set(["client_id", "client_secret", "redirect_uri"]),

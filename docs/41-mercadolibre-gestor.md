@@ -179,10 +179,10 @@ Scopes de la cuenta conectada hoy (15/10/2026): `offline_access read write` más
 |---|---|---|
 | `claims` | Reclamo nuevo o cambiado → `claim_refresh` | **nuevo**, tildar |
 | `claims_actions` | Acción sobre un reclamo | **nuevo**, tildar |
-| `messages` | Mensaje postventa nuevo (se ignora `read`) | ya listado en v2, ahora se procesa |
+| `messages` | Mensajes postventa | opcional: hoy se guarda como `ignored`; los mensajes se leen en vivo al abrir el caso (`mark_as_read=false`) |
 | `post_purchase` | Alias que algunas apps reciben para los reclamos | se procesa igual si llega |
 
-Los tres van al mismo patrón `^/post-purchase/v\d/claims/\d+`. Hasta que se tilden, la reconciliación cada 10 minutos (`ml-reconcile`) busca los reclamos abiertos y los cerrados recientes, así que nada se pierde.
+`claims`, `claims_actions` y `post_purchase` van al mismo patrón `^/post-purchase/v\d/claims/\d+` y disparan la relectura del reclamo. Hasta que se tilden, la reconciliación cada 10 minutos (`ml-reconcile`) busca los reclamos abiertos y los cerrados recientes, así que nada se pierde.
 
 ---
 
@@ -221,5 +221,5 @@ Los tres van al mismo patrón `^/post-purchase/v\d/claims/\d+`. Hasta que se til
 ## 9. Despliegue
 
 1. Migraciones en orden: `20261127100000_ml_gestor_publicaciones` (parte A), `20261127100100_features_mercadolibre_gestor`, `20261127100200_ml_gestor_posventa` y `20261127100300_ml_gestor_cron` (parte B). Requieren las de ADR-104.
-2. Edges: `ml_api` y `ml_worker` (modificadas), `ml_gestor` (nueva, JWT) y `ml_webhook` (tópicos nuevos).
-3. DevCenter: tildar `claims`, `claims_actions` y `messages`.
+2. Edges: `ml_api` (parte A), `ml_worker` y `ml_webhook` (modificadas en la parte B: tópicos de reclamos, reconciliación y foto diaria) y `ml_gestor` (nueva, JWT, parte B).
+3. DevCenter: tildar `claims` y `claims_actions` (`messages` es opcional).

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Handshake, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Zap } from "lucide-react";
+import { Columns3, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Zap } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonVariants } from "@/components/ui/Button";
@@ -28,24 +28,30 @@ import { MlShipmentsTab } from "@/components/mercadolibre/MlShipmentsTab";
 import { MlQuickPublish } from "@/components/mercadolibre/gestor/MlQuickPublish";
 import { MlConfigTab } from "@/components/mercadolibre/gestor/MlConfigTab";
 import { MlSetupChecklist } from "@/components/mercadolibre/gestor/MlSetupChecklist";
+import { MlMetricsTab } from "@/components/mercadolibre/gestor/MlMetricsTab";
+import { MlPostsaleTab } from "@/components/mercadolibre/gestor/MlPostsaleTab";
+import { MlBoardsTab } from "@/components/mercadolibre/gestor/MlBoardsTab";
+import { MlGestorConfig } from "@/components/mercadolibre/gestor/MlGestorConfig";
 
 const ICONS: Partial<Record<GestorSection, typeof Tag>> = {
   items: Tag,
   orders: Receipt,
   questions: MessageCircleQuestion,
   shipments: Truck,
+  postsale: LifeBuoy,
+  boards: Columns3,
+  metrics: Gauge,
   config: Settings2,
 };
 
-// Secciones de esta versión del gestor (las de `mercadolibre_gestor` llegan
-// con la parte B de H141).
-const SECTIONS = GESTOR_SECTIONS.filter((s) => s.feature === null);
+const SECTIONS = GESTOR_SECTIONS;
 const isSection = (v: string | null): v is GestorSection => SECTIONS.some((s) => s.key === v);
 
 // Gestor de Mercado Libre (H87 · ADR-104, H141 · ADR-132): publicar rápido y
-// en varios tipos con su precio, ventas, preguntas, envíos y configuración de
-// la cuenta, todo en una pantalla con secciones. Dueño o encargado; el
-// servidor exige la feature `mercadolibre` en cada escritura.
+// en varios tipos con su precio, ventas, preguntas, envíos, posventa,
+// embudos, métricas y configuración de la cuenta, todo en una pantalla con
+// secciones. Dueño o encargado; el servidor exige `mercadolibre` (y
+// `mercadolibre_gestor` para posventa, embudos y métricas) en cada escritura.
 export default function MercadoLibrePage() {
   return (
     <Suspense fallback={<SpinnerBlock className="py-16" />}>
@@ -56,6 +62,7 @@ export default function MercadoLibrePage() {
 
 function MercadoLibreGestor() {
   const enabled = useFeature("mercadolibre");
+  const gestor = useFeature("mercadolibre_gestor");
   const { data: me } = useMyTenant();
   const canManage = Boolean(me?.canManage);
   const { data: accounts = [], isLoading } = useMlAccounts(canManage && enabled === true);
@@ -67,6 +74,7 @@ function MercadoLibreGestor() {
   const tab: GestorSection = isSection(tabParam) ? tabParam : "items";
   const [upgrade, setUpgrade] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [upgradeGestor, setUpgradeGestor] = useState(false);
 
   const setTab = (t: GestorSection) => {
     const q = new URLSearchParams(params.toString());
@@ -86,7 +94,7 @@ function MercadoLibreGestor() {
         eyebrow="Canales"
         title="Mercado Libre"
         icon={Handshake}
-        description="Tu cuenta de Mercado Libre manejada desde el POS: publicás tu catálogo en minutos con el precio de cada tipo de publicación, las ventas entran solas con su comisión y el stock se sincroniza solo."
+        description="Tu cuenta de Mercado Libre manejada desde el POS: publicás tu catálogo en minutos con el precio de cada tipo de publicación, las ventas entran solas con su comisión, respondés reclamos a tiempo y ves cuánto margen te queda para cuidar tu reputación."
         actions={
           <>
             {account && ready && tab !== "items" && (
@@ -179,7 +187,22 @@ function MercadoLibreGestor() {
             {account && tab === "orders" && <MlOrdersTab accountId={account.id} />}
             {account && tab === "questions" && <MlQuestionsTab accountId={account.id} />}
             {account && tab === "shipments" && <MlShipmentsTab key={account.id} account={account} />}
-            {account && tab === "config" && <MlConfigTab account={account} canManage={canManage} />}
+            {account && sectionInfo(tab).feature === "mercadolibre_gestor" && gestor === false && (
+              <Callout
+                tone="brand"
+                icon={Lock}
+                title="El gestor de Mercado Libre no está en tu plan"
+                actions={<Button size="sm" onClick={() => setUpgradeGestor(true)}>Ver planes</Button>}
+              >
+                Métricas y reputación con el margen que te queda, posventa con vencimientos y embudos de ventas y reclamos.
+              </Callout>
+            )}
+            {account && gestor && tab === "metrics" && <MlMetricsTab account={account} canManage={canManage} />}
+            {account && gestor && tab === "postsale" && <MlPostsaleTab account={account} canManage={canManage} />}
+            {account && gestor && tab === "boards" && <MlBoardsTab account={account} canManage={canManage} />}
+            {account && tab === "config" && (
+              <MlConfigTab account={account} canManage={canManage} extra={gestor ? <MlGestorConfig account={account} canManage={canManage} /> : null} />
+            )}
 
             <SectionGuide onPick={setTab} />
             {account && ready && <MlQuickPublish open={quick} onOpenChange={setQuick} account={account} />}
@@ -187,6 +210,7 @@ function MercadoLibreGestor() {
         )}
       </div>
       <UpgradeModal open={upgrade} onOpenChange={setUpgrade} featureKey="mercadolibre" featureLabel="Mercado Libre" />
+      <UpgradeModal open={upgradeGestor} onOpenChange={setUpgradeGestor} featureKey="mercadolibre_gestor" featureLabel="Gestor de Mercado Libre" />
     </PageContainer>
   );
 }

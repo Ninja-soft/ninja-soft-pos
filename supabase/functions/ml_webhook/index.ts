@@ -16,7 +16,7 @@
 // un payload falso no puede escribir nada.
 // =============================================================================
 import { clientIp, createIpLimiter, readTextLimited } from "../_shared/requestGuard.ts";
-import { isMvpTopic, parseNotification } from "../_shared/mercadolibre/notifications.ts";
+import { isHandledTopic, parseNotification } from "../_shared/mercadolibre/notifications.ts";
 import { adminClient, mlConfigLoader } from "../_shared/mercadolibre/runtime.ts";
 
 const ok = () => new Response("ok", { status: 200, headers: { "Content-Type": "text/plain" } });
@@ -56,7 +56,7 @@ Deno.serve(async (req: Request) => {
       sent: n.sent,
       actions: n.actions,
       source: "webhook",
-      handled: isMvpTopic(n.topic),
+      handled: isHandledTopic(n.topic),
     },
   });
   if (error) {

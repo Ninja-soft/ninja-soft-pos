@@ -59,8 +59,23 @@ function arToday(): string {
 }
 
 async function loadInputs(admin: SupabaseClient, period: string): Promise<Inputs> {
-  const { data, error } = await admin.rpc("staff_settlement_inputs", { p_period: period });
+  const [{ data, error }, fx] = await Promise.all([
+    admin.rpc("staff_settlement_inputs", { p_period: period }),
+    // Cotización diaria (ADR-135): venta del oficial, una por día, manual > API.
+    // 24 meses alcanzan para los prorrateos (y quedan bajo el tope de filas
+    // de PostgREST); lo más viejo cae en la mensual de respaldo.
+    admin.rpc("platform_fx_daily_rates", { p_casa: "oficial", p_from: addMonths(periodOf(period), -24), p_to: null }),
+  ]);
   if (error || !data) throw new Error(error?.message ?? "inputs_failed");
+  // Sin la tabla nueva (migración sin aplicar) sigue con la mensual.
+  const dailyRates = fx.error
+    ? []
+    : arr<Raw>(fx.data).map((f) => ({
+        date: String(f.rate_date),
+        rate: num(f.venta),
+        source: f.source === "manual" ? ("manual" as const) : ("api" as const),
+        note: (f.note as string | null) ?? null,
+      }));
   const d = data as Raw;
   const s = (d.settings ?? {}) as Raw;
   const p = (d.projection ?? {}) as Raw;
@@ -127,6 +142,7 @@ async function loadInputs(admin: SupabaseClient, period: string): Promise<Inputs
       period_amounts: arr<Raw>(e.period_amounts).map((x) => ({ period: String(x.period), amount_cents: num(x.amount_cents) })),
     })),
     fxRates: arr<Raw>(d.fxRates).map((f) => ({ period: String(f.period), currency: "USD" as const, rate: num(f.rate) })),
+    dailyRates,
     adjustments: arr<Raw>(d.adjustments).map((a) => ({
       id: String(a.id),
       member_id: String(a.member_id),
@@ -172,7 +188,7 @@ function project(inp: Inputs, current: SettlementResult) {
       "Mensuales: una vez en el mes. Anuales: sólo si renuevan en ese mes.",
       "No suma pruebas que todavía no pagaron ni bajas programadas.",
       "Comisión de cobro estimada con el promedio de los últimos 90 días.",
-      "Gastos recurrentes del mes; los en dólares con la última cotización cargada.",
+      "Gastos recurrentes del mes; los en dólares con la venta del dólar oficial del día o la última disponible.",
       "Sin ajustes manuales del mes próximo; incluye el saldo negativo que arrastre el mes en curso.",
     ],
   };

@@ -24,7 +24,8 @@
 //     la casa.
 //   · Gastos: recurrencia (única, mensual, anual, cada N meses, cada N días),
 //     fecha de fin, monto distinto en un mes puntual (o 0 = no hubo), USD con
-//     la cotización del mes en que ocurre, prorrateo en N meses (un anual en
+//     la cotización del día en que ocurre (venta oficial, ADR-135; si no hay,
+//     la última anterior y, de respaldo, la mensual cargada a mano), prorrateo en N meses (un anual en
 //     12). Asignación: proporcional (por defecto, con el % de gastos de cada
 //     uno y la casa con el resto), exenciones, 100 % a una persona, a la
 //     casa, porcentajes a medida o por cliente (en proporción a lo que cada
@@ -40,8 +41,9 @@
 // =============================================================================
 
 import { addDays, addMonths, daysOfPeriod, inRange, monthIndex, periodEnd, periodFromIndex, periodLabel, periodOf } from "./dates.ts";
+import { FX_STALE_DAYS, effectiveDaily, rateOn, type DailyFxRate, type FxSource } from "../fx/rates.ts";
 
-export const ENGINE_VERSION = "staff-settlement/1";
+export const ENGINE_VERSION = "staff-settlement/2"; // 2: cotización diaria (ADR-135)
 export const HOUSE = "__house__";
 export const FULL_BP = 10_000;
 
@@ -161,7 +163,14 @@ export interface SettlementInput {
   appliedSignupRuleIds: string[];
   items: MoneyItem[];
   expenses: StaffExpense[];
+  /** Cotización mensual cargada a mano (staff_fx_rates, previa a ADR-135): respaldo. */
   fxRates: FxRate[];
+  /**
+   * Cotización diaria (ADR-135, platform_fx_daily_rates: venta del oficial, manual >
+   * API). Se usa la del día de la ocurrencia o la última anterior; si no hay
+   * ninguna, la mensual de fxRates.
+   */
+  dailyRates?: DailyFxRate[];
   adjustments: StaffAdjustment[];
   carryIn: CarryIn[];
 }
@@ -215,6 +224,10 @@ export interface ExpenseOut {
   original_cents: number;
   fx_rate: number | null;
   fx_period: string | null;
+  /** Día de la cotización usada (diaria) o null si vino de la mensual. */
+  fx_date?: string | null;
+  /** De dónde salió: API, carga manual del día o la mensual vieja. */
+  fx_source?: FxSource | "monthly" | null;
   amount_cents: number;
   /** Ocurrencias que aportan a este mes (fechas) y si es una cuota de un prorrateo. */
   occurrences: { date: string; installment: number; of: number }[];
@@ -332,6 +345,8 @@ export function sharesOverflow(shares: StaffShare[]): { day: string; total_bp: n
 
 interface Ctx {
   input: SettlementInput;
+  /** Cotización diaria efectiva (una por día, manual > API). */
+  daily: DailyFxRate[];
   memberIds: string[];
   warnings: Set<string>;
   errors: Set<string>;
@@ -449,17 +464,34 @@ export function spreadParts(amount: number, n: number): number[] {
   return parts;
 }
 
-function fxFor(ctx: Ctx, period: string, expenseName: string): { rate: number; period: string } | null {
+type FxUsed = { rate: number; period: string; date: string | null; source: FxSource | "monthly" };
+
+function fxFor(ctx: Ctx, day: string, expenseName: string): FxUsed | null {
+  const period = periodOf(day);
+  // 1) Diaria (ADR-135): la del día o la última anterior; manual > API.
+  const daily = ctx.daily.length > 0 ? rateOn(ctx.daily, day) : null;
+  if (daily) {
+    if (daily.lagDays > FX_STALE_DAYS) {
+      ctx.warnings.add(`No hay cotización del dólar cerca del ${formatDayAR(day)}: se usó la del ${formatDayAR(daily.date)}.`);
+    }
+    return { rate: daily.rate, period: periodOf(daily.date), date: daily.date, source: daily.source };
+  }
+  // 2) Respaldo: la mensual cargada a mano (antes de ADR-135).
   const rates = ctx.input.fxRates.filter((r) => r.currency === "USD" && r.rate > 0).sort((a, b) => (a.period < b.period ? 1 : -1));
   const exact = rates.find((r) => r.period === period);
-  if (exact) return { rate: exact.rate, period: exact.period };
+  if (exact) return { rate: exact.rate, period: exact.period, date: null, source: "monthly" };
   const prior = rates.find((r) => r.period < period);
   if (prior) {
     ctx.warnings.add(`Falta la cotización del dólar de ${periodLabel(period)}: se usó la de ${periodLabel(prior.period)}.`);
-    return { rate: prior.rate, period: prior.period };
+    return { rate: prior.rate, period: prior.period, date: null, source: "monthly" };
   }
   ctx.errors.add(`Falta la cotización del dólar de ${periodLabel(period)} para "${expenseName}".`);
   return null;
+}
+
+function formatDayAR(day: string): string {
+  const [y, m, d] = day.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 interface Portion {
@@ -468,7 +500,7 @@ interface Portion {
   of: number;
   original: number;
   ars: number;
-  fx: { rate: number; period: string } | null;
+  fx: FxUsed | null;
 }
 
 /** Lo que el gasto aporta al período (en pesos), por ocurrencia. */
@@ -496,7 +528,7 @@ export function expensePortions(ctx: Ctx, e: StaffExpense, period: string): Port
     let ars = part;
     let fx: Portion["fx"] = null;
     if (e.currency === "USD") {
-      fx = fxFor(ctx, occPeriod, e.name);
+      fx = fxFor(ctx, ds[0]!, e.name);
       if (!fx) continue;
       ars = Math.round(part * fx.rate);
     }
@@ -567,7 +599,7 @@ const emptyAcc = (): Acc => ({
 export function computeSettlement(input: SettlementInput): SettlementResult {
   const period = periodOf(input.period);
   const end = periodEnd(period);
-  const ctx: Ctx = { input, memberIds: input.members.map((m) => m.id), warnings: new Set(), errors: new Set() };
+  const ctx: Ctx = { input, daily: effectiveDaily(input.dailyRates ?? []), memberIds: input.members.map((m) => m.id), warnings: new Set(), errors: new Set() };
   const names = new Map(input.members.map((m) => [m.id, m.name]));
   const acc = new Map<string, Acc>();
   const get = (id: string) => {
@@ -677,6 +709,8 @@ export function computeSettlement(input: SettlementInput): SettlementResult {
       original_cents: original,
       fx_rate: fx?.rate ?? null,
       fx_period: fx?.period ?? null,
+      fx_date: fx?.date ?? null,
+      fx_source: fx?.source ?? null,
       amount_cents: amount,
       occurrences: portions.map((p) => ({ date: p.date, installment: p.installment, of: p.of })),
       split: [...split.entries()].map(([k, cents]) => ({ member_id: k === HOUSE ? null : k, cents })),
@@ -848,9 +882,21 @@ export function explainBase(r: SettlementResult, reserveBp: number): ExplainStep
       cents: r.base.late_net_cents,
       detail: "Pagos cargados tarde o contracargos de meses liquidados: entran en esta liquidación.",
     });
-  for (const e of r.expenses) s.push({ label: `Gasto: ${e.name}`, cents: -e.amount_cents, tone: "minus" });
+  for (const e of r.expenses) s.push({ label: `Gasto: ${e.name}`, cents: -e.amount_cents, tone: "minus", ...(fxDetail(e) ? { detail: fxDetail(e)! } : {}) });
   s.push({ label: "A repartir", cents: r.to_share_cents, tone: "total" });
   return s;
+}
+
+const FX_DETAIL_SOURCE: Record<string, string> = { api: "ArgentinaDatos", manual: "carga manual", monthly: "cotización mensual" };
+
+/** "USD 23,40 a $ 1.535 (oficial venta del 14/10/2026, ArgentinaDatos)". null si el gasto es en pesos. */
+export function fxDetail(e: Pick<ExpenseOut, "currency" | "original_cents" | "fx_rate" | "fx_period" | "fx_date" | "fx_source">): string | null {
+  if (e.currency !== "USD" || !e.fx_rate) return null;
+  const usd = (e.original_cents / 100).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const rate = e.fx_rate.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+  const when = e.fx_date ? `oficial venta del ${formatDayAR(e.fx_date)}` : e.fx_period ? `cotización de ${periodLabel(e.fx_period)}` : "cotización";
+  const src = e.fx_source && e.fx_date ? `, ${FX_DETAIL_SOURCE[e.fx_source] ?? e.fx_source}` : "";
+  return `USD ${usd} a $ ${rate} (${when}${src})`;
 }
 
 export function explainLine(l: SettlementLine): ExplainStep[] {

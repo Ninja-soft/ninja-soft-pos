@@ -181,7 +181,16 @@ export function orderNet(total: number, fee: number | null | undefined, shipping
 
 const MESSAGES: Array<[RegExp, string]> = [
   [/ml_app_not_configured|platform_not_configured/, "Falta configurar la app de Mercado Libre. Avisale a soporte de NinjaSoft para que la active."],
+  [/feature_not_in_plan: mercadolibre_gestor|gestor_not_in_plan/, "El gestor de Mercado Libre (métricas, posventa y embudos) no está incluido en tu plan."],
   [/feature_not_in_plan/, "Mercado Libre no está incluido en tu plan."],
+  [/price_list_required/, "Elegí la lista de precios del tipo de publicación."],
+  [/invalid_listing_type/, "Hay un tipo de publicación repetido o no válido."],
+  [/invalid_fixed_price/, "El precio fijo tiene que ser mayor a cero."],
+  [/invalid_reserve_pct/, "El porcentaje a guardar va de 0 a 95."],
+  [/invalid_max_qty/, "El tope tiene que ser un número entero, cero o más."],
+  [/action_not_available/, "Mercado Libre ya no ofrece esa acción para este reclamo. Actualizá el detalle."],
+  [/amount_changed/, "El monto cambió en Mercado Libre: revisalo antes de confirmar."],
+  [/uncertain/, "No sabemos si Mercado Libre recibió la acción. Revisá el reclamo antes de reintentar."],
   [/ml_account_taken/, "Esa cuenta de Mercado Libre ya está conectada a otro negocio."],
   [/operator_user|invalid_operator/, "Conectá con el usuario administrador de la cuenta de Mercado Libre, no con un colaborador."],
   [/invalid_grant|reauth/, "La conexión con Mercado Libre venció: reconectá la cuenta."],

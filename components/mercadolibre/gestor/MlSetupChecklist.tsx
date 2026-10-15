@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
 import { setupSteps, showSetup, type GestorSection, type SetupStep } from "@/lib/mercadolibre/gestor";
 import { useMlListingRules, useMlWebhookSeen, type MlAccount } from "@/modules/mercadolibre/hooks";
+import { SETUP_TARGET, type ConfigSection } from "@/lib/mercadolibre/configSections";
 
 // Puesta en marcha de una cuenta recién conectada (H141 · ADR-132): qué falta
 // para operar tranquilo. Se oculta sola cuando está todo o a los 30 días, y
@@ -37,7 +38,7 @@ const TARGET: Record<SetupStep["key"], GestorSection> = {
   topics: "config",
 };
 
-export function MlSetupChecklist({ account, onGo }: { account: MlAccount; onGo: (s: GestorSection) => void }) {
+export function MlSetupChecklist({ account, onGo }: { account: MlAccount; onGo: (s: GestorSection, cfg?: ConfigSection) => void }) {
   const { data: rules = [] } = useMlListingRules(account.id);
   const { data: webhookSeen = false } = useMlWebhookSeen(account.id);
   const [hidden, setHidden] = useState(true);
@@ -95,7 +96,7 @@ export function MlSetupChecklist({ account, onGo }: { account: MlAccount; onGo: 
               <p className="text-xs text-muted-foreground">{s.hint}</p>
               {!s.done && s.key !== "topics" && (
                 <div className="mt-1 flex flex-wrap gap-2">
-                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => onGo(TARGET[s.key])}>
+                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => onGo(TARGET[s.key], SETUP_TARGET[s.key])}>
                     Configurar
                   </Button>
                   {s.key === "invoice" && (

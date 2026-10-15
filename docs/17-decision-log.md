@@ -5459,3 +5459,43 @@ Relevamiento del 15/10/2026:
 - El barrido no cubre todos los rangos posibles: un código fuera de ellos entra por `reasons_fill` la primera vez que aparece.
 - Guardarraíles `rls_internal_scope_leaks()`, `rls_bare_current_tenant_policies()` y `rls_policies_without_initplan()` en 0 en PGlite con la migración (dos veces, idempotente) y `db-audit-perf --strict` sin hallazgos nuevos.
 - Tests: `tests/unit/mlClaimReasons.test.ts` (armado desde respuestas reales, alias, título con padre, excluibles, `fillReasons` con fetch falso que sólo hace GET, búsqueda, agrupado, seed de la migración), `tests/components/MlReasonPicker.test.tsx` y `tests/components/MlGestorTabs.test.tsx` (título del motivo en Métricas y Posventa).
+
+## ADR-149: Logística unificada sobre la entrega, reparto propio con hojas de ruta, rol Repartidor, mapas y ruteo con servicios gratuitos y COT automático por el web service de ARBA (F22)
+
+**Fecha:** 2026-10-15 · **Estado:** propuesta (sin código, sin migraciones) · **Hitos:** F22 · H143 a H149 · **Base:** ADR-129 (pedidos y expedición), ADR-136 (depósitos, entregas y remitos con COT), ADR-146 (cliente y entrega en la hoja de cobro), ADR-103 (envíos con logísticas), ADR-137/138 (permisos por capacidad), ADR-046 (traslados), ADR-087 (PWA y venta offline), H49 (delivery gastronómico). Auditoría y diseño completos: [`45-logistica-reparto.md`](./45-logistica-reparto.md).
+
+### Contexto
+
+El dueño pidió (2026-10-15) ordenar el envío: cliente obligatorio, dirección con búsqueda en el mapa, envío configurable en una pestaña de la hoja de cobro, remitos con copias y modelos, COT automático, hojas de ruta por localidad y por camión, un usuario repartidor que sólo vea sus repartos y cargue estados con geolocalización, foto y firma, seguimiento del camión en el mapa, pestaña de pendientes con escaneo, entregas parciales y roturas, pedidos de stock a otra sucursal, y la marca de retiro o envío en cada venta.
+
+La auditoría (doc 45 §2) encontró 28 hallazgos. Los centrales: cinco circuitos distintos para entregar (`dispatches`, `delivery_orders`, `delivery_channel_orders`, `shipments`, Mercado Libre) que no se hablan; ninguna coordenada ni dirección estructurada en todo el esquema (sólo texto libre, que además imposibilita el COT automático); ningún vehículo, repartidor ni hoja de ruta; ninguna capacidad de logística; errores concretos como `dispatch_create_for_sale` que rechaza toda venta repartida, anulaciones que no cierran entregas, cancelaciones cruzadas que no devuelven stock y el envío equivocado enganchado a la entrega. Producción tiene 0 entregas, 0 remitos y 0 envíos: se puede cambiar el modelo sin migrar datos.
+
+### Decisión
+
+1. **La entrega (`dispatches`) es el eje único.** Ventas, pedidos del catálogo, delivery gastronómico que sale a la calle y transferencias que viajan en camión propio generan entregas. Las logísticas externas son un tramo de la entrega (`delivery_type = 'logistica'`, `shipment_id` correcto y estado que vuelve por trigger). Mercado Libre queda aparte salvo Flex (L6).
+2. **Reparto propio como capa sobre la entrega:** `vehicles` y `vehicle_photos` (bucket privado `logistics-media`), `driver_profiles`, `logistics_origins`, `route_plans`, `delivery_routes`, `route_stops` y `route_stop_dispatches`, `delivery_events` append-only con id generado en el teléfono (idempotencia offline), geo, fotos, firma y motivo, `dispatch_item_checks` para escaneo, parciales y roturas, `route_positions` y `route_positions_last` con retención por `pg_cron`.
+3. **Direcciones estructuradas** en `customer_addresses` (calle, número, localidad, partido, provincia con código ARBA, CP, lat/lng, calidad) con snapshot `ship_to` en la entrega; `customers.address` queda como domicilio fiscal.
+4. **Servicios gratuitos dentro de sus términos**, todos detrás de Edges con caché e interruptor por proveedor: mapa **MapLibre GL + OpenFreeMap** (plan B: PMTiles de Protomaps propios); autocompletar con **Photon**; normalización con **Georef AR**; **Nominatim sólo para geocodificación inversa** (su política prohíbe autocompletar y limita a 1 pedido por segundo por aplicación); ruteo y optimización con **OpenRouteService** con clave gratuita (500 optimizaciones por día) y **heurística local** (agrupado por localidad, vecino más cercano y 2-opt) siempre disponible; VROOM + OSRM propios como destino si el volumen lo pide. Descartados: OSRM público (no es para producción), tiles de `tile.openstreetmap.org` (política de uso), Google Maps y Mapbox (costo).
+5. **COT automático** con el web service de ARBA (`cot.arba.gov.ar/TransporteBienes/SeguridadCliente/presentarRemitos.do`, POST multipart con usuario y clave de transporte, archivo TXT `TB_<CUIT>_<planta><puerta>_<fecha>_<secuencia>.txt` con registros 01/02/03/04, respuesta XML con COT por remito); CABA por el mismo servicio con `token` y `sign` de AGIP. Edge `cot`, `cot_submissions`, credenciales en `logistics_secrets` (sólo `service_role`), disparo al salir la hoja, reintentos, bloqueo configurable y TXT o carga manual de respaldo.
+6. **Configuración > Logística** única (`logistics_settings` + override por sucursal) que absorbe `order_config.delivery_types` y `remito_config`: modos, orígenes y zonas, remitos (nunca, a pedido, siempre; 1 a 3 copias; A4, medio A4, ticket 80 mm, preimpreso), COT, escaneo, exigencias de la entrega, motivos de no entrega, seguimiento y ruteo.
+7. **Permisos:** módulo `logistica` con `logistics.view/prepare/route.manage/deliver/track/fleet.manage/remito.void/cot.manage/settings`; rol de sistema **Repartidor** (base `cashier`, sólo `logistics.deliver`, inicio `/reparto`, RLS por `driver_user_id`); plantilla Expedicionista. **Prerequisito:** venta y caja pasan a exigir capacidad antes de habilitar el rol, porque el nivel `cashier` hoy abre esas RPC.
+8. **App del repartidor** en `app/(reparto)` dentro de la PWA, con cola IndexedDB propia, cámara, firma en canvas, escaneo con el `BarcodeScanner` existente y seguimiento con `watchPosition` en lote cada 30 s mientras la hoja está en curso. Mapa en vivo por polling en L3 y Realtime Broadcast en L6.
+9. **Hoja de cobro con pestañas** Pago / Cliente / Envío; el servidor exige cliente para envío y logística; un único costo de envío.
+10. **Plan (§6):** `direcciones_geo` BASE; `reparto_propio` OPTIONAL Pro+; `reparto_optimizado` OPTIONAL Business+; `cot_automatico` OPTIONAL Pro+; escaneo y exigencias de entrega FLAG-OPERATIVO; link de seguimiento para el cliente MARKETING-FUTURO (deuda: no existe).
+11. **Fases:** L0 arreglos y menú Logística (H143), L1 cliente y direcciones (H144), L2 flota, hojas y app (H145), L3 mapa, optimización y seguimiento (H146), L4 COT (H147), L5 expedición robusta (H148), L6 tiempo real y escala (H149).
+
+### Alternativas descartadas
+
+- **Una tabla de "repartos" separada de las entregas:** repetiría el error de hoy (otro circuito con sus estados). La parada referencia entregas.
+- **PostGIS desde el día uno:** no hace falta para L1 y L2; se instala en L3 para polígonos y desvíos (gratis en Supabase), con haversine como alternativa.
+- **Realtime desde L2:** el resto de la app usa polling; Broadcast se suma cuando el mapa en vivo lo justifique y se mida el cupo.
+- **App nativa desde el inicio:** la PWA cubre foto, firma, geo del evento y offline; el seguimiento en segundo plano queda como decisión del dueño (Capacitor) en L6.
+- **Seguir con la dirección en texto libre:** hace imposible el COT automático, las zonas por polígono y el ruteo.
+
+### Consecuencias
+
+- Producción sin datos de logística: las migraciones pueden cambiar estados y columnas sin backfill, salvo `pos_settings.order_config`/`remito_config` (se copian a `logistics_settings`).
+- La documentación de ADR-129, ADR-136 y ADR-146 dice "migración sin aplicar" pero las tablas y funciones existen en producción (incluida `20261215100000_cobro_envio_costo`); se corrige en L0.
+- Dependencias nuevas previstas: `maplibre-gl` (sólo en pantallas con mapa); opcional `signature_pad`.
+- Cuentas para el dueño: OpenRouteService (gratis), contacto para User-Agent, clave de transporte de ARBA de prueba y del piloto, consulta a AGIP, contador del piloto para umbral y códigos de producto. Costo externo cero hasta L5.
+- Pendiente de confirmar: diseño de registro vigente del TXT de ARBA campo por campo, umbral y validez del COT, `token`/`sign` de AGIP y régimen de confirmación de recepción.

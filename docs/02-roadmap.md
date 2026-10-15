@@ -33,6 +33,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
 | **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-2, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120, ADR-126; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
+| **F22** | Logística y reparto propio (entrega unificada, direcciones con mapa, flota, hojas de ruta, app del repartidor, seguimiento, COT automático) | 14–20 semanas | 🔵 Propuesta (ADR-149, auditoría y plan en [`45-logistica-reparto.md`](./45-logistica-reparto.md)) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1534,6 +1535,25 @@ Objetivo: cada persona del staff tiene un porcentaje del **cobrado neto** de Nin
 - [x] **H139 · Pagos al staff.** Parciales, cuentas de cobro con el editor de Transferencia, operación de Mercado Pago leída de la cuenta de NinjaSoft y email de acreditación.
 - [ ] **H140 · Puesta en marcha.** Migración aplicada y `staff_payouts` desplegada (14/10). Falta (dueño): cargar personas, gastos y cotización, y probar una operación de MP real (§20.8 #5).
 
+### F22 · Logística y reparto propio
+
+Objetivo: que todo lo que sale hacia un cliente o una sucursal sea **una entrega** conectada con su remito, su COT, su envío con logística o su parada en una hoja de ruta, con direcciones reales en el mapa, flota con fotos, un rol **Repartidor** que sólo ve sus repartos y carga eventos con geolocalización, foto y firma, seguimiento del camión y COT automático. Sale del pedido del dueño del 2026-10-15 ("el envío está muy desordenado") y de la auditoría de [`45-logistica-reparto.md`](./45-logistica-reparto.md) §2 (28 hallazgos). Decisión: [ADR-149](./17-decision-log.md). Features: `direcciones_geo` (BASE), `reparto_propio` (OPTIONAL Pro+), `reparto_optimizado` (OPTIONAL Business+), `cot_automatico` (OPTIONAL Pro+); escaneo y exigencias de la entrega son FLAG-OPERATIVO. Servicios gratuitos: MapLibre GL + OpenFreeMap, Photon, Georef AR, Nominatim sólo inverso, OpenRouteService con clave gratuita y heurística local de respaldo.
+
+- [ ] **H143 · L0: ordenar y arreglar lo que hay.** Agregar entregas a ventas repartidas, anular o devolver una venta cierra sus entregas, cancelar una entrega cruzada devuelve el stock, la sucursal que vende ve y opera, envío correcto enganchado y estado de la logística que vuelve a la entrega, unicidad del remito por venta, un solo costo de envío, "Crear envío" con todo precargado, `sales.fulfillment_mode` con chip en Ventas, menú **Logística** con pestaña Pendientes, limpieza de código muerto y de docs.
+  - [ ] *Criterio:* test PGlite del circuito venta repartida → agregar entrega → anular → stock correcto por sucursal; los 196 tests actuales de logística siguen verdes.
+- [ ] **H144 · L1: cliente obligatorio y direcciones reales.** `customer_addresses` con lat/lng, snapshot en la entrega, Edge `geo` (Photon, Georef, Nominatim inverso) con caché, `AddressAutocomplete` con lista flotante y mini mapa, hoja de cobro con pestañas Pago / Cliente / Envío y cliente obligatorio en el servidor, zonas por localidad.
+  - [ ] *Criterio:* cobrar un envío a un cliente nuevo con dirección autocompletada en menos de 45 s en 390 px; el servidor rechaza envío sin cliente; 0 pedidos a Nominatim por tipeo.
+- [ ] **H145 · L2: flota, hojas de ruta y app del repartidor.** Vehículos con fotos, repartidores, orígenes, hojas de ruta, paradas, eventos con geo, foto y firma, Configuración > Logística, capacidades `logistics.*`, rol de sistema Repartidor (con venta y caja pasadas a capacidad antes), remitos con copias y modelos, hoja de ruta imprimible, app `/reparto` offline.
+  - [ ] *Criterio:* reparto real de 10 paradas en el piloto con evidencia en cada entrega; 3 entregas en modo avión se sincronizan sin duplicar; un Repartidor no puede vender ni ver clientes fuera de su hoja (test de RLS).
+- [ ] **H146 · L3: mapa, optimización, varios camiones y seguimiento.** Planificar reparto por localidad y capacidad entre camiones (ORS y heurística), seguimiento con envío en lote, mapa en vivo con polling, desvíos de ruta y detalle de cada entrega en el mapa.
+  - [ ] *Criterio:* 40 entregas en 3 camiones planificadas en menos de 10 s (ORS) o 2 s (heurística); posición con menos de 60 s de atraso; aviso de desvío a 600 m por 5 minutos.
+- [ ] **H147 · L4: COT automático.** Web service de ARBA (y CABA con `token`/`sign` de AGIP) al salir la hoja, reintentos, bloqueo configurable, TXT descargable y carga manual de respaldo.
+  - [ ] *Criterio:* en el ambiente de prueba de ARBA, 5 remitos devuelven 5 COT impresos; un error de datos vuelve legible sin bloquear a los otros; reenviar no duplica.
+- [ ] **H148 · L5: expedición robusta.** Escaneo al armar, cargar y entregar; entrega parcial por producto; rotura a merma con foto; reprogramación con entrega hija; pedir stock a otra sucursal con transferencia enlazada; pestaña Con problemas.
+  - [ ] *Criterio:* escanear un producto ajeno da error y queda registrado; 5 ítems con 1 roto y 1 rechazado dejan stock, merma y entrega hija correctos (PGlite).
+- [ ] **H149 · L6: tiempo real y escala.** Realtime Broadcast para el mapa, delivery gastronómico y canales sobre hojas y repartidores reales, Flex en hojas propias, cobro contra entrega y rendición, reportes; VROOM/OSRM o Photon propios y app nativa sólo si se deciden.
+  - [ ] *Criterio:* se define al iniciar la fase con datos del piloto.
+
 ---
 
 ## TX — Mejoras transversales (UX y datos)
@@ -1708,25 +1728,26 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
 | **F4** | 12/29 | 10 | 7 | 41% | 59% |
-| **F5** | 23/49 | 10 | 16 | 47% | 57% |
-| **F6** | 55/62 | 4 | 3 | 89% | 92% |
+| **F5** | 38/70 | 12 | 20 | 54% | 63% |
+| **F6** | 58/63 | 3 | 2 | 92% | 94% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
 | **F8** | 18/57 | 22 | 17 | 32% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
-| **F10** | 31/47 | 13 | 3 | 66% | 80% |
-| **F11** | 65/89 | 12 | 12 | 73% | 80% |
-| **F12** | 39/51 | 7 | 5 | 76% | 83% |
+| **F10** | 32/48 | 13 | 3 | 67% | 80% |
+| **F11** | 76/93 | 13 | 4 | 82% | 89% |
+| **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
 | **F14** | 5/61 | 39 | 17 | 8% | 40% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
-| **F18** | 42/113 | 53 | 18 | 37% | 61% |
+| **F18** | 43/114 | 54 | 17 | 38% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
-| **F20** | 0/61 | 0 | 61 | 0% | 0% |
+| **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
+| **F22** | 0/14 | 0 | 14 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 582/1114 | 302 | 230 | 52% | 66% |
+| **Total** | 654/1182 | 305 | 223 | 55% | 68% |
 <!-- roadmap-progress:end -->
 
 ---

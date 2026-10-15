@@ -483,7 +483,7 @@ export default function InternalNotificacionesPage() {
         <CardContent className="space-y-5 p-4 sm:p-5">
           {/* Audiencia */}
           <FormBlock title="Audiencia">
-            <Segmented<Audience>
+            <Segmented<Audience> scrollOnMobile
               aria-label="Audiencia"
               value={audience}
               onChange={setAudience}

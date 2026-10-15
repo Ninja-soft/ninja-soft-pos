@@ -242,7 +242,7 @@ export function StaffBoard({
       )}
 
       <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-        <Segmented
+        <Segmented scrollOnMobile
           size="sm"
           value={filter}
           onChange={setFilter}

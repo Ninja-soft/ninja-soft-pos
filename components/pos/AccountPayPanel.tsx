@@ -167,7 +167,7 @@ export function AccountPayPanel({
 
   return (
     <div className="space-y-3 rounded-lg bg-muted/40 p-3 text-sm">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 [overflow-wrap:anywhere] [&>*]:min-w-0">
         <div>
           <div className="text-xs text-muted-foreground">Saldo</div>
           <div className="font-semibold tabular-nums">{formatCurrency(info.balance)}</div>

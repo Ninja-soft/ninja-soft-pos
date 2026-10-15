@@ -60,7 +60,7 @@ export default async function PublicCatalogPage({
   return (
     <main className="min-h-dvh bg-neutral-50 text-neutral-900">
       <header
-        className="border-b-4 bg-[#15111f] px-6 py-10 text-white"
+        className="border-b-4 bg-[#15111f] px-4 py-10 text-white sm:px-6"
         style={{ borderColor: accent }}
       >
         <div className="mx-auto flex max-w-5xl items-center gap-4">
@@ -72,8 +72,8 @@ export default async function PublicCatalogPage({
               className="h-16 w-16 rounded-lg bg-white/10 object-contain p-1"
             />
           )}
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+          <div className="min-w-0">
+            <h1 className="break-words text-2xl font-extrabold tracking-tight">{title}</h1>
             <p className="text-sm opacity-90">
               {[catalog.branding?.address, catalog.branding?.phone]
                 .filter(Boolean)

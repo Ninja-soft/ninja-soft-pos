@@ -125,7 +125,7 @@ export function PromotionPerfModal({
 
         {report && (
           <>
-            <div className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-muted/20 p-4">
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-3 [&>*]:min-w-0">
               <Metric label="Ventas con promo" value={String(report.count)} />
               <Metric
                 label="Descuento total"

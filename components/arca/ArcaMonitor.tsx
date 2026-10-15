@@ -144,7 +144,7 @@ export function ArcaMonitor({ config, canWrite }: { config: ArcaConfig; canWrite
 
       {/* Comprobantes */}
       <div className="space-y-3">
-        <Segmented
+        <Segmented scrollOnMobile
           value={filter}
           onChange={setFilter}
           aria-label="Filtro"

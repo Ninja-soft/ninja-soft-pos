@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
 import { SpinnerBlock } from "@/components/ui/Spinner";
@@ -241,7 +242,7 @@ export default function CustomerAccountPage() {
                   {st.customer.account_config && <span>Condiciones propias</span>}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className={headerActionsRow}>
                 <Button onClick={() => setCollectOpen(true)}>
                   <HandCoins size={16} /> Cobrar
                 </Button>
@@ -264,7 +265,7 @@ export default function CustomerAccountPage() {
             </div>
 
             <div className="mt-6 overflow-x-auto [scrollbar-width:none]">
-              <Segmented
+              <Segmented scrollOnMobile
                 value={tab}
                 onChange={setTab}
                 options={[
@@ -299,7 +300,7 @@ export default function CustomerAccountPage() {
                       className="mt-1 block h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
                     />
                   </label>
-                  <Segmented
+                  <Segmented scrollOnMobile
                     value={kindFilter}
                     onChange={setKindFilter}
                     options={[

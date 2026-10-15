@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { Segmented } from "@/components/ui/Segmented";
 import { Callout } from "@/components/ui/Callout";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
@@ -155,7 +156,7 @@ export function CatalogSyncScheduleCard() {
           />
         </div>
 
-        <fieldset disabled={!draft.enabled} className={cn("space-y-5", !draft.enabled && "opacity-60")}>
+        <fieldset disabled={!draft.enabled} className={cn("min-w-0 space-y-5", !draft.enabled && "opacity-60")}>
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">Frecuencia</p>
             <Segmented
@@ -163,13 +164,15 @@ export function CatalogSyncScheduleCard() {
               options={FREQUENCIES}
               onChange={(v) => set({ frequency: v, intervalDays: v === "interval" ? draft.intervalDays ?? 2 : draft.intervalDays })}
               size="sm"
+              scrollOnMobile
+              aria-label="Frecuencia"
             />
           </div>
 
           {draft.frequency === "weekly" && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">Días</p>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Días de la semana">
+              <div className={headerActionsRow} role="group" aria-label="Días de la semana">
                 {[1, 2, 3, 4, 5, 6, 0].map((d) => {
                   const on = draft.weekdays.includes(d);
                   return (
@@ -195,7 +198,7 @@ export function CatalogSyncScheduleCard() {
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
             {draft.frequency === "interval" && (
               <Input
                 label="Cada cuántos días"
@@ -237,7 +240,14 @@ export function CatalogSyncScheduleCard() {
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">Tipo de corrida automática</p>
-            <Segmented value={draft.runKind} options={KINDS} onChange={(v) => set({ runKind: v })} size="sm" />
+            <Segmented
+              value={draft.runKind}
+              options={KINDS}
+              onChange={(v) => set({ runKind: v })}
+              size="sm"
+              scrollOnMobile
+              aria-label="Tipo de corrida automática"
+            />
             <p className="text-xs text-muted-foreground">
               {draft.runKind === "full"
                 ? "Lee todo el catálogo cada vez (varias horas con 1M de publicaciones) y marca como no disponibles las ofertas que ya no están."
@@ -246,29 +256,36 @@ export function CatalogSyncScheduleCard() {
           </div>
 
           {draft.runKind === "incremental" && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="space-y-2">
               <div className="flex items-center gap-3">
                 <Switch
                   checked={draft.fullEvery !== null}
                   onCheckedChange={(v) => set({ fullEvery: v ? draft.fullEvery ?? 4 : null })}
                   label="Hacer una lectura completa cada tantas corridas"
                 />
-                <span className="text-sm text-foreground">Una lectura completa cada</span>
+                {/* La frase con el campo en línea; si no entra, pasa entera
+                    a la línea de abajo sin separar el campo de "corridas". */}
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-foreground">
+                  <span>Una lectura completa cada</span>
+                  <span className="inline-flex shrink-0 items-center gap-2">
+                    <span className="w-16 shrink-0">
+                      <Input
+                        aria-label="Cantidad de corridas"
+                        type="number"
+                        inputMode="numeric"
+                        min={FULL_EVERY_MIN}
+                        max={FULL_EVERY_MAX}
+                        disabled={draft.fullEvery === null}
+                        value={draft.fullEvery ?? ""}
+                        onChange={(e) => set({ fullEvery: e.target.value === "" ? NaN : Number(e.target.value) })}
+                        className="h-9 px-2 text-center tabular-nums"
+                      />
+                    </span>
+                    <span>corridas</span>
+                  </span>
+                </div>
               </div>
-              <div className="w-20">
-                <Input
-                  aria-label="Cantidad de corridas"
-                  type="number"
-                  inputMode="numeric"
-                  min={FULL_EVERY_MIN}
-                  max={FULL_EVERY_MAX}
-                  disabled={draft.fullEvery === null}
-                  value={draft.fullEvery ?? ""}
-                  onChange={(e) => set({ fullEvery: e.target.value === "" ? NaN : Number(e.target.value) })}
-                />
-              </div>
-              <span className="text-sm text-foreground">corridas</span>
-              {errors.fullEvery && <p className="w-full text-xs text-danger">{errors.fullEvery}</p>}
+              {errors.fullEvery && <p className="text-xs text-danger">{errors.fullEvery}</p>}
             </div>
           )}
         </fieldset>

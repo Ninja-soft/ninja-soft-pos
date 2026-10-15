@@ -208,7 +208,7 @@ export default function DeliveryPage() {
       />
 
       {/* Filtro por tipo */}
-      <Segmented
+      <Segmented scrollOnMobile
         className="mb-4"
         aria-label="Tipo de pedido"
         value={typeFilter}
@@ -223,7 +223,7 @@ export default function DeliveryPage() {
 
       {/* Filtro por canal (apps de delivery, ADR-102) */}
       {channelsAccess.enabled && channelBrands.length > 0 && (
-        <Segmented
+        <Segmented scrollOnMobile
           className="mb-4"
           aria-label="Canal"
           size="sm"

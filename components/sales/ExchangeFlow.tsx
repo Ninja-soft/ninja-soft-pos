@@ -271,7 +271,7 @@ export function ExchangeFlow({
       </div>
 
       {/* Pie: resumen + navegación */}
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
         <div className="text-xs">
           <div className="flex items-center gap-3 text-muted-foreground">
             <span>

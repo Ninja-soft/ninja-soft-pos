@@ -1,6 +1,7 @@
 import type { SettingsIcon } from "./brandIcons";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils/cn";
+import { headerActionsRow } from "@/components/ui/PageHeader";
 
 // Primitivos del centro de Configuración. Una sección = encabezado único
 // (título + bajada + acciones) y debajo cards con filas de ajuste:
@@ -47,7 +48,7 @@ export function SettingsSection({
           )}
         </div>
         {actions && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+          <div className={cn(headerActionsRow, "sm:shrink-0")}>{actions}</div>
         )}
       </header>
       <div className="mt-6 space-y-5">{children}</div>
@@ -97,7 +98,7 @@ export function SettingsCard({
             )}
           </div>
           {actions && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+            <div className={cn(headerActionsRow, "sm:shrink-0")}>{actions}</div>
           )}
         </div>
       )}

@@ -62,7 +62,7 @@ export function StaffPayoutsAdmin() {
         description="Cuánto le toca a cada persona del staff del cobrado neto, los gastos que se descuentan, las liquidaciones mensuales y los pagos."
       />
       <div className="slim-scrollbar -mx-4 mt-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <Segmented<Tab> aria-label="Secciones" value={tab} onChange={setTab} options={TABS.map((t) => ({ ...t }))} className="flex-nowrap" />
+        <Segmented<Tab> aria-label="Secciones" value={tab} onChange={setTab} options={TABS.map((t) => ({ ...t }))} className="max-w-none flex-nowrap" />
       </div>
       <div className="mt-6">
         {err && (

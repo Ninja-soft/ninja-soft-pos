@@ -238,7 +238,7 @@ export function CustomerFormModal({
           onJurisdiction={(v) => setValue("iibb_jurisdiction", v, { shouldDirty: true })}
           selectCls={selectCls}
         />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
             label={`Email${star("email")}`}
             type="email"

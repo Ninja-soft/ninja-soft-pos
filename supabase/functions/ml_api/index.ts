@@ -70,7 +70,7 @@ Deno.serve(async (req: Request) => {
   });
   if (gErr) return json({ error: "guard_failed" }, 500);
   if (guard) return json({ error: guard }, 403);
-  const cfg = mlConfig();
+  const cfg = await mlConfig(admin);
   if (!cfg.ok) return json({ error: cfg.error, message: cfg.message }, 503);
   const rpc = rpcOf(admin);
 

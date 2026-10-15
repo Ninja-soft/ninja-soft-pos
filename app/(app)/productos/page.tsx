@@ -286,7 +286,7 @@ export default function ProductosPage() {
           icon={Package}
           help={<InfoHint section="productos" size={18} />}
           actions={
-          <div className="flex min-w-0 flex-wrap gap-2">
+          <div className="contents">
             <GatedButton
               feature="export_xlsx"
               featureLabel="Exportar a Excel"
@@ -369,7 +369,7 @@ export default function ProductosPage() {
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="h-11 min-w-[11rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
+            className="h-11 min-w-[9rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
           >
             <option value="">Todas las categorías</option>
             {(categories ?? []).map((c) => (
@@ -381,7 +381,7 @@ export default function ProductosPage() {
           <select
             value={brandId}
             onChange={(e) => setBrandId(e.target.value)}
-            className="h-11 min-w-[11rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
+            className="h-11 min-w-[9rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
           >
             <option value="">Todas las marcas</option>
             {(brands ?? []).map((b) => (
@@ -395,7 +395,7 @@ export default function ProductosPage() {
               value={serviceTypeId}
               onChange={(e) => setServiceTypeId(e.target.value)}
               aria-label="Tipo de servicio"
-              className="h-11 min-w-[11rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
+              className="h-11 min-w-[9rem] flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:flex-none"
             >
               <option value="">Todos los tipos</option>
               {serviceTypes.map((t) => (

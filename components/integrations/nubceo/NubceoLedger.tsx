@@ -105,9 +105,9 @@ export function NubceoLedger({ config, canWrite }: { config: NubceoConfig; canWr
       </Callout>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-        <div className="flex items-end gap-2">
-          <Input type="date" label="Desde" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[170px]" />
-          <Input type="date" label="Hasta" value={to} onChange={(e) => setTo(e.target.value)} className="w-[170px]" />
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-end">
+          <Input type="date" label="Desde" value={from} onChange={(e) => setFrom(e.target.value)} className="sm:w-[170px]" />
+          <Input type="date" label="Hasta" value={to} onChange={(e) => setTo(e.target.value)} className="sm:w-[170px]" />
         </div>
         <Segmented
           size="sm"

@@ -8,20 +8,22 @@
 // (ml_worker, cron cada minuto) la procesa con un GET autenticado.
 //
 // ML no firma las notificaciones. Defensa: cuerpo limitado (16 KB,
-// requestGuard), application_id = ML_CLIENT_ID, user_id de una cuenta
+// requestGuard), application_id = APP_ID de la app (platform_secrets.ml_app o
+// ML_CLIENT_ID, ADR-126; memo de 60 s por isolate para no sumar una lectura de
+// la base a cada aviso), user_id de una cuenta
 // conectada (si no, se descarta), `resource` con el patrón del tópico, límite
 // por IP y, sobre todo, el estado real sólo se lee con el token del vendedor:
 // un payload falso no puede escribir nada.
 // =============================================================================
 import { clientIp, createIpLimiter, readTextLimited } from "../_shared/requestGuard.ts";
-import { appIdOf } from "../_shared/mercadolibre/config.ts";
 import { isMvpTopic, parseNotification } from "../_shared/mercadolibre/notifications.ts";
-import { adminClient } from "../_shared/mercadolibre/runtime.ts";
+import { adminClient, mlConfigLoader } from "../_shared/mercadolibre/runtime.ts";
 
 const ok = () => new Response("ok", { status: 200, headers: { "Content-Type": "text/plain" } });
 // Ráfagas desde una misma IP (best-effort por isolate). ML manda desde ~50 IPs.
 const limiter = createIpLimiter(600, 60_000);
 const admin = adminClient();
+const config = mlConfigLoader(admin, 60_000);
 
 Deno.serve(async (req: Request) => {
   const t0 = Date.now();
@@ -35,7 +37,8 @@ Deno.serve(async (req: Request) => {
   } catch {
     return new Response("invalid_payload", { status: 400 });
   }
-  const parsed = parseNotification(raw, appIdOf(Deno.env.toObject()));
+  const cfg = await config();
+  const parsed = parseNotification(raw, cfg.ok ? cfg.config.clientId : null);
   if (!parsed.ok) {
     console.log(JSON.stringify({ fn: "ml_webhook", ignored: parsed.reason, ms: Date.now() - t0 }));
     // 200 igual: ML no tiene que reintentar algo que no vamos a procesar.

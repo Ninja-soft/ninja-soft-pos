@@ -1591,7 +1591,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                   <Gift size={12} /> Propina
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Segmented
+                  <Segmented scrollOnMobile
                     size="sm"
                     aria-label="Propina"
                     value={tipPct == null ? ((Number(tipCustom) || 0) === 0 ? "none" : "custom") : String(tipPct)}
@@ -1623,7 +1623,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                 <p className={cn(LABEL, "mb-1.5 flex items-center gap-1.5")}>
                   <ShieldCheck size={12} /> Garantía extendida
                 </p>
-                <Segmented
+                <Segmented scrollOnMobile
                   size="sm"
                   aria-label="Garantía extendida"
                   value={warrantyId || "none"}
@@ -1652,7 +1652,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                 <p className={cn(LABEL, "mb-1.5 flex items-center gap-1.5")}>
                   <UserRound size={12} /> Vendedor
                 </p>
-                <Segmented
+                <Segmented scrollOnMobile
                   size="sm"
                   aria-label="Vendedor"
                   value={professionalId || "none"}

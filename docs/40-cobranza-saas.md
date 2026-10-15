@@ -1663,3 +1663,12 @@ Código en `feat/cobranza-cta-cte`, decisión [ADR-120](./17-decision-log.md). M
 - El aviso es no fiscal y no lleva PDF (no hay emisor ni plantillas de PDF hasta F20-4 y F20-6): los datos bancarios van en el cuerpo del email.
 
 **Pendiente:** pagar el saldo con Checkout Pro (`platform_checkout`), PDF del aviso (F20-6), detección automática de transferencias a la cuenta de la plataforma (§9.3 punto 4) y que el pase a MP pueda cobrar en el momento el saldo de la cuenta corriente.
+
+## 25. Estado de F20-2: snapshots de MRR y KPIs de cobranza (2026-10-14)
+
+Código en `feat/h128-mrr-kpis`, decisión [ADR-127](./17-decision-log.md). Migración **sin aplicar**: `20261122100000_cobranza_mrr_snapshots`.
+
+- `platform_mrr_snapshots` (por negocio y día) y `platform_mrr_daily` (agregado), cron `platform-mrr-snapshot` 00:10 ART que completa los días faltantes y backfill de hasta 400 días desde la auditoría de `subscriptions`.
+- Cobranzas › **Métricas**: MRR, ARR, ARPA, MRR en mora, NRR, GRR, churn de clientes, movimiento de MRR por mes (gráfico y tabla), cobrado bruto y neto, deuda vencida con aging, DSO y efectividad. Sólo Cobranzas, admin y super_admin.
+- **Diferencias con §15.2:** el NRR no suma la reactivación (no es de la cohorte paga al inicio); el churn de MRR cuenta toda cuenta que deja de pagar (el churn de clientes mantiene la regla de los 30 días de suspensión); "facturado" para el DSO es lo cargado en la cuenta corriente hasta que existan facturas (F20-4); las tablas de snapshots no tienen SELECT para el staff (sólo la RPC).
+- **Pendiente:** `tenants.status` como espejo de `subscriptions.status` (§5.1) y el MRR en riesgo con promesas (F20-9).

@@ -5,7 +5,7 @@
 // Body: { reconnect_id?: uuid }  (reconectar una cuenta que pide reconexión)
 // Respuesta: { url } a la pantalla de autorización de ML, o
 //            { error: "ml_app_not_configured", message } mientras no estén
-//            cargados ML_CLIENT_ID / ML_CLIENT_SECRET.
+//            configurada la app (panel interno o ML_CLIENT_ID / ML_CLIENT_SECRET).
 // Sólo dueño o encargado y con la feature `mercadolibre` (ml_edge_guard).
 // El state (64 hex, un solo uso, 15 min) y el code_verifier quedan en
 // ml_oauth_states (sólo service_role); el redirect_uri es fijo.
@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
   if (gErr) return json({ error: "guard_failed" }, 500);
   if (guard) return json({ error: guard }, 403);
 
-  const cfg = mlConfig();
+  const cfg = await mlConfig(admin);
   if (!cfg.ok) return json({ error: cfg.error, message: cfg.message }, 503);
 
   let body: { reconnect_id?: unknown } = {};

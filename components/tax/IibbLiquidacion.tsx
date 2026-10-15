@@ -102,7 +102,7 @@ export function IibbLiquidacion() {
           </Callout>
         ) : (
           <>
-            <Segmented<Tab>
+            <Segmented<Tab> scrollOnMobile
               value={tab}
               onChange={setTab}
               aria-label="Sección"

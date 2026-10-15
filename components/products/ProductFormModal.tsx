@@ -833,7 +833,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               ) : undefined
             }
           >
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-sm:[&>*:last-child]:col-span-2 sm:grid-cols-3">
               <Input
                 variant="filled"
                 label="Costo"

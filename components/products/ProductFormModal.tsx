@@ -58,6 +58,18 @@ import { CategoryPathEditor } from "@/components/products/CategoryPathEditor";
 import { PackagesEditor } from "@/components/products/PackagesEditor";
 import { Barcode } from "@/components/products/Barcode";
 import { ProductCostsPanel } from "@/components/purchases/ProductCostsPanel";
+import { ProductCostBuilder } from "@/components/prices/ProductCostBuilder";
+import {
+  EMPTY_COSTING,
+  costingApi,
+  costingEquals,
+  costingFromProduct,
+  type CostingDraft,
+} from "@/modules/prices/costingApi";
+import { useFxQuote } from "@/modules/prices/proHooks";
+import { useTaxSettings } from "@/modules/tax/hooks";
+import { IVA_RATES, emitterDiscriminatesIva, type IvaCode } from "@/lib/tax/catalog";
+import { usdToArs } from "@/lib/prices/costing";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
@@ -303,6 +315,9 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const [packages, setPackages] = useState<ProductPackage[]>([]);
   const [marginDraft, setMarginDraft] = useState<string | null>(null);
   const [savingExtras, setSavingExtras] = useState(false);
+  // ADR-140: costo final y utilidad (se guarda después del producto, como los bultos).
+  const [costing, setCosting] = useState<CostingDraft>(EMPTY_COSTING);
+  const [costingSaved, setCostingSaved] = useState<CostingDraft>(EMPTY_COSTING);
 
   const {
     register,
@@ -343,6 +358,9 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     setFreshImage(null);
     setMarginDraft(null);
     setAddingBrand(false);
+    const cd = costingFromProduct(product);
+    setCosting(cd);
+    setCostingSaved(cd);
     setAttributes(normalizeAttributes(product?.attributes));
     setNodes(pathToCategory(product?.category_id ?? null, categories));
     reset({
@@ -408,6 +426,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     if (created?.plu) setValue("plu", created.plu);
   }, [created, setValue]);
 
+  const fxQuote = useFxQuote(costing.cost_currency === "USD" ? costing.cost_fx_source : "oficial", open && costing.cost_currency === "USD");
+  const { data: taxSettings } = useTaxSettings(open);
+  const ivaCode = (watch("tax_rate_code") ?? "21") as IvaCode;
+  const ivaPct =
+    emitterDiscriminatesIva(taxSettings?.iva_condition) && IVA_RATES[ivaCode]?.kind === "gravado" ? IVA_RATES[ivaCode].rate : 0;
+  // En dólares, el costo en pesos sale de USD × cotización (el campo queda de sólo lectura).
+  const usdArs =
+    costing.cost_currency === "USD"
+      ? usdToArs(Number(costing.cost_usd.replace(",", ".")) || null, fxQuote.data?.rate ?? null)
+      : null;
+  useEffect(() => {
+    if (open && usdArs != null) setValue("cost", usdArs, { shouldDirty: true });
+  }, [open, usdArs, setValue]);
+
   const price = Number(priceRaw ?? 0) || 0;
   const cost =
     costRaw == null || (costRaw as unknown) === "" ? null : Number(costRaw);
@@ -443,6 +475,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   }
 
   async function saveExtras(productId: string) {
+    if (!costingEquals(costing, costingSaved)) {
+      await costingApi.save(productId, costing, costing.cost_currency === "USD" ? (fxQuote.data?.rate ?? null) : null);
+      setCostingSaved(costing);
+      await qc.invalidateQueries({ queryKey: ["products"] });
+    }
     if (!packagesAllowed) return;
     const d = diffPackages(savedPackages, packages);
     if (d.insert.length + d.update.length + d.remove.length === 0) return;
@@ -900,6 +937,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 inputMode="decimal"
                 placeholder="0"
                 error={errors.cost?.message}
+                readOnly={costing.cost_currency === "USD"}
+                hint={costing.cost_currency === "USD" ? "Sale del costo en dólares" : undefined}
                 {...register("cost", { onChange: () => setMarginDraft(null) })}
               />
               <Input
@@ -924,6 +963,24 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             </div>
             {/* Referencia de mercado (ADR-109): sólo con catálogo y el switch del dueño prendido. */}
             <MarketReferencePanel ean={barcodeVal} myPrice={price} className="pt-2" />
+          </Group>
+
+          <Group
+            title="Costo final y utilidad"
+            description="Costo de compra en pesos o dólares, lo que se le suma y la ganancia que buscás."
+          >
+            <ProductCostBuilder
+              draft={costing}
+              onChange={setCosting}
+              arsCost={cost}
+              price={price}
+              ivaPct={ivaPct}
+              quote={fxQuote.data}
+              onUsePrice={(p) => {
+                setMarginDraft(null);
+                setValue("price", p, { shouldDirty: true });
+              }}
+            />
           </Group>
 
           <Group

@@ -111,6 +111,14 @@ export const BRANDS: BrandDef[] = [
     channels: ["directo"],
   },
   {
+    key: "ualabis",
+    name: "Ualá Bis",
+    tagline: "Link de pago y QR, más tu QR, POS o Tap",
+    credentialsUrl: "https://developers.ualabis.com.ar/v2/ambientes",
+    credentialsLabel: "Ualá Bis para desarrolladores",
+    channels: ["ualabis"],
+  },
+  {
     key: "fiserv",
     name: "Fiserv",
     tagline: "Terminales Clover integradas y Posnet",
@@ -129,7 +137,8 @@ export const DIRECT_BRANDS = new Set(["cash", "transfer"]);
 // Marcas con API que, sin conectar, igual se cobran a mano (registro del
 // número de operación). Directo (ADR-041): conectada cobra por QR + link.
 // Fiserv (ADR-047): sin conectar, Posnet o Clover sin integrar (cupón manual).
-export const MANUAL_FALLBACK = new Set(["directo", "fiserv"]);
+// Ualá Bis (ADR-143): el registro manual (QR, POS, Tap) sigue con la API conectada.
+export const MANUAL_FALLBACK = new Set(["directo", "fiserv", "ualabis"]);
 
 export const BRAND_BY_KEY: Record<string, BrandDef> = Object.fromEntries(
   BRANDS.map((b) => [b.key, b]),
@@ -154,6 +163,7 @@ export const PROVIDER_CHANNEL_FALLBACK: Record<string, { brand: string; channel:
   fiserv_point: { brand: "fiserv", channel: "point" },
   gocuotas: { brand: "gocuotas", channel: "qr_link" },
   directo: { brand: "directo", channel: "qr_link" },
+  ualabis: { brand: "ualabis", channel: "qr_link" },
 };
 
 // Canales con flujo de cobro real implementado. El resto se muestra como
@@ -172,6 +182,8 @@ export const IMPLEMENTED = new Set([
   "nave_point",
   "gocuotas",
   "directo",
+  // Ualá Bis (ADR-143): link + QR por API y registro manual.
+  "ualabis",
   // Fiserv (ADR-047): Posnet/Clover sin integrar (habilita la Tarjeta en
   // posnet) y Clover Point por Cloud Pay Display.
   "fiserv",
@@ -181,7 +193,7 @@ export const IMPLEMENTED = new Set([
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
 // getnet (ADR-065): prueba = Web Checkout sandbox u homologación.
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet"]);
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet", "ualabis"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point

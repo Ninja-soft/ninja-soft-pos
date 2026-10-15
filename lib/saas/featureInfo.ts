@@ -303,6 +303,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de comercio en Directo. Para el cobro integrado, las credenciales de la API de Directo (API Key, usuario y contraseña del comercio y URL de la API); sin ellas se cobra en su portal y se registra el número de operación.",
   },
+  ualabis: {
+    desc: "Cobros con Ualá Bis. Con la API conectada, el POS arma un link de pago (también como QR): el cliente paga con tarjeta de crédito, débito o prepaga en el checkout de Ualá Bis y la venta se cierra sola al acreditarse; los cobros aprobados sin venta se pueden devolver desde la conciliación. Tu QR de Ualá, el POS Mini o Pro y Tap en tu celu no tienen API: se cobran en la app y el POS registra el número de operación.",
+    impact: "Desactivado, Ualá Bis no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de Ualá Bis. Para el link de pago integrado, las credenciales de Cobros online (usuario, Client ID y Client Secret de Ualá Bis, Cobros online, API); sin ellas se cobra en la app y se registra el número de operación.",
+  },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
     impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",
@@ -467,6 +473,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["listas_precios"],
     needs: "Activá el modo profesional en Configuración > Precios.",
   },
+  costo_final: {
+    desc: "Costo final y utilidad en la ficha del producto: lo que se suma al costo de compra (impuestos internos y percepciones no recuperables, flete, otros, en % o en pesos), el costo final, la utilidad objetivo con markup sobre costo o margen sobre precio, el precio sugerido y la ganancia real en pesos y en %. Las listas sobre costo y el margen mínimo pueden usar el costo final.",
+    impact: "Desactivado, el servidor rechaza cargar componentes del costo o utilidad objetivo; lo cargado se conserva y el costo final queda igual al de compra para lo nuevo.",
+    minPlan: "Start",
+  },
+  precios_usd: {
+    desc: "Costos en dólares: el costo del producto se carga en USD y se pasa a pesos con la cotización oficial venta del día (la trae NinjaSoft todos los días) o la que cargue el negocio. Actualizar precios por dólar en lote (por categorías, marcas, proveedores y listas) manteniendo la ganancia o con la utilidad objetivo, con vista previa, alertas y deshacer, y reglas automáticas cuando el dólar se mueve más de un % con aprobación del dueño.",
+    impact: "Desactivado, no se pueden cargar costos nuevos en dólares ni actualizar por dólar; las reglas automáticas dejan de correr. Los productos que ya estaban en dólares conservan su costo en pesos.",
+    minPlan: "Pro",
+  },
   catalogo_publico: {
     desc: "Catálogo web público: una vitrina online del comercio con sus productos y precios, compartible por link.",
     impact: "Desactivado, no se publica el catálogo web del negocio.",
@@ -622,6 +638,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["mercadolibre"],
     needs: "Una cuenta de Mercado Libre conectada.",
+  },
+  mercadolibre_full: {
+    desc: "Mercado Libre Full bajo control: cada cuenta tiene un depósito virtual Mercado Libre Full con el stock real de Full sincronizado cada 15 minutos (disponible, no disponible por motivo: dañado, perdido, retiro, control o transferencia, y en camino), que no se vende en el mostrador ni se mezcla con tu stock propio; las ventas que despacha Full descuentan de Full, no de tus sucursales. Envíos a Full desde una sucursal o depósito con validación de productos habilitados y de stock, el número del envío de Mercado Libre, tránsito y conciliación de lo recibido (recibido, dañado, faltante perdido o que vuelve, con motivo y auditoría). Etiquetas por unidad con el código de inventario de ML en Code 128 y de bulto, en rollo de 50 x 25 mm o en hoja A4. Cobertura en días con las ventas de 30 días, alertas de quiebre, cuánto conviene mandar y los cargos de Full de tu facturación de ML.",
+    impact: "Desactivado, el stock de Full no se sincroniza ni se arman envíos a Full desde el sistema (el servidor lo rechaza); las ventas por Full igual entran y nunca descuentan tu stock propio.",
+    minPlan: "Business",
+    requires: ["mercadolibre"],
+    needs: "Publicaciones de Mercado Libre con Full activo y vinculadas a tus productos. El envío a Full se crea en Mercado Libre (su API no lo permite desde otro sistema) y se registra su número.",
   },
   integracion_nubceo: {
     desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",

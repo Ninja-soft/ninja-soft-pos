@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, FileText, Gauge, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { Callout } from "@/components/ui/Callout";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -22,9 +23,17 @@ import type { MlAccount } from "@/modules/mercadolibre/hooks";
 const DEFAULT_REASONS = ["PDD9939", "PNR9501", "PDD9502", "PDD9829"];
 const SCOPE_LABELS: Record<MlTemplate["scope"], string> = { question: "Preguntas", claim: "Reclamos", message: "Mensajes de la venta" };
 
-export function MlGestorConfig({ account, canManage }: { account: MlAccount; canManage: boolean }) {
+/** Qué parte mostrar: posventa (umbrales, avisos, plantillas de reclamos y mensajes) o preguntas (sus plantillas). */
+export type GestorConfigPart = "all" | "postsale" | "questions";
+
+export function MlGestorConfig({ account, canManage, part = "all" }: { account: MlAccount; canManage: boolean; part?: GestorConfigPart }) {
+  if (part === "questions") return <TemplatesCard canManage={canManage} scopes={["question"]} />;
+  return <PostsaleConfig account={account} canManage={canManage} scopes={part === "all" ? ["question", "claim", "message"] : ["claim", "message"]} />;
+}
+
+function PostsaleConfig({ account, canManage, scopes }: { account: MlAccount; canManage: boolean; scopes: MlTemplate["scope"][] }) {
   const { toast } = useToast();
-  const { data: settings } = useMlGestorSettings(account.id);
+  const { data: settings, isLoading, isError, refetch } = useMlGestorSettings(account.id);
   const { saveSettings } = useMlGestorMutations();
   const th = cleanThresholds(settings?.thresholds ?? DEFAULT_THRESHOLDS);
   const [f, setF] = useState({ claims: "1", cancellations: "0.5", delayed: "8", reasons: DEFAULT_REASONS.join(", "), notifyClaims: true, dueHours: "24", notifyRep: true });
@@ -52,7 +61,7 @@ export function MlGestorConfig({ account, canManage }: { account: MlAccount; can
     n(f.delayed) >= 0.1 && n(f.delayed) <= 50 &&
     reasons.every((r) => /^[A-Z]{2,4}\d{3,5}$/.test(r)) && reasons.length <= 50 &&
     Number.isInteger(n(f.dueHours)) && n(f.dueHours) >= 1 && n(f.dueHours) <= 168;
-  const disabled = !canManage || saveSettings.isPending;
+  const disabled = !canManage || saveSettings.isPending || isLoading;
 
   const save = () =>
     saveSettings.mutate(
@@ -69,6 +78,14 @@ export function MlGestorConfig({ account, canManage }: { account: MlAccount; can
         onError: (e) => toast({ title: "No se pudo guardar", description: mlErrorMessage(e), variant: "error" }),
       },
     );
+
+  if (isError) {
+    return (
+      <Callout tone="warning" title="No pudimos leer la configuración de posventa" actions={<Button size="sm" variant="secondary" onClick={() => void refetch()}>Reintentar</Button>}>
+        Probá de nuevo en unos segundos.
+      </Callout>
+    );
+  }
 
   return (
     <>
@@ -108,26 +125,31 @@ export function MlGestorConfig({ account, canManage }: { account: MlAccount; can
         </div>
       </SettingsCard>
 
-      <TemplatesCard canManage={canManage} />
+      <TemplatesCard canManage={canManage} scopes={scopes} />
     </>
   );
 }
 
-function TemplatesCard({ canManage }: { canManage: boolean }) {
+function TemplatesCard({ canManage, scopes }: { canManage: boolean; scopes: MlTemplate["scope"][] }) {
   const { toast } = useToast();
-  const { data: templates = [] } = useMlTemplates(null);
+  const { data: all = [] } = useMlTemplates(null);
+  const templates = all.filter((t) => scopes.includes(t.scope));
   const { saveTemplate, deleteTemplate } = useMlGestorMutations();
   const [edit, setEdit] = useState<{ id: string | null; scope: MlTemplate["scope"]; name: string; body: string } | null>(null);
   const valid = edit && edit.name.trim().length >= 1 && edit.body.trim().length >= 2;
 
   return (
     <SettingsCard
-      title="Plantillas de respuesta"
-      description="Textos listos para preguntas, reclamos y mensajes de la venta. Se eligen al responder."
+      title={scopes.length === 1 && scopes[0] === "question" ? "Respuestas rápidas a preguntas" : "Plantillas de respuesta"}
+      description={
+        scopes.length === 1 && scopes[0] === "question"
+          ? "Textos listos para las preguntas que más se repiten (stock, factura, envío). Se eligen al responder en Preguntas."
+          : "Textos listos para reclamos y mensajes de la venta. Se eligen al responder."
+      }
       icon={FileText}
       actions={
         canManage ? (
-          <Button size="sm" variant="secondary" onClick={() => setEdit({ id: null, scope: "claim", name: "", body: "" })}>
+          <Button size="sm" variant="secondary" onClick={() => setEdit({ id: null, scope: scopes[0] ?? "claim", name: "", body: "" })}>
             <Plus size={15} /> Nueva
           </Button>
         ) : undefined
@@ -204,7 +226,7 @@ function TemplatesCard({ canManage }: { canManage: boolean }) {
             <label className="block space-y-1 text-sm">
               <span className="font-medium">Para</span>
               <select className={selectCls} value={edit.scope} onChange={(e) => setEdit({ ...edit, scope: e.target.value as MlTemplate["scope"] })}>
-                {(Object.keys(SCOPE_LABELS) as MlTemplate["scope"][]).map((k) => (
+                {(Object.keys(SCOPE_LABELS) as MlTemplate["scope"][]).filter((k) => scopes.includes(k) || k === edit.scope).map((k) => (
                   <option key={k} value={k}>
                     {SCOPE_LABELS[k]}
                   </option>

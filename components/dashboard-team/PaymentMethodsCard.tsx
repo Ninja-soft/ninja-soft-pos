@@ -32,6 +32,7 @@ import {
 } from "@/lib/payments/getnetSlots";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
+import { UalaBisInfo } from "@/components/dashboard-team/payments/UalaBisInfo";
 import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
 import { MpRefundSetting } from "@/components/dashboard-team/payments/MpRefundSetting";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
@@ -77,6 +78,24 @@ async function probeGetnet(v: ConnectProbe, storeId: string | null): Promise<Get
       ...(api && !id ? {} : { environment: v.env }),
       ...(id ? { client_id: id } : {}),
       ...(secret ? { client_secret: secret } : {}),
+      ...(storeId ? { store_id: storeId } : {}),
+    },
+  });
+  if (error) throw error;
+  return data as GetnetProbeResult;
+}
+
+// "Probar conexión" de Ualá Bis (ADR-143): la Edge pide un token con las
+// credenciales tipeadas (o, sin tipear, las guardadas del alcance). No guarda nada.
+async function probeUalaBis(v: ConnectProbe, storeId: string | null): Promise<GetnetProbeResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("ualabis", {
+    body: {
+      action: "probe",
+      environment: v.env,
+      ...(v.secrets?.username ? { username: v.secrets.username } : {}),
+      ...(v.secrets?.client_id ? { client_id: v.secrets.client_id } : {}),
+      ...(v.secrets?.client_secret_id ? { client_secret_id: v.secrets.client_secret_id } : {}),
       ...(storeId ? { store_id: storeId } : {}),
     },
   });
@@ -386,6 +405,8 @@ export function PaymentMethodsCard() {
               />
             ) : key === "directo" ? (
               <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />
+            ) : key === "ualabis" ? (
+              <UalaBisInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("ualabis")} />
             ) : null,
         }}
       />
@@ -416,7 +437,13 @@ export function PaymentMethodsCard() {
             await invalidate();
             await qc.invalidateQueries({ queryKey: ["payment-secret-scopes", tenantId] });
           }}
-          onProbe={connKey === "getnet" ? (v) => probeGetnet(v, connectScope) : undefined}
+          onProbe={
+            connKey === "getnet"
+              ? (v) => probeGetnet(v, connectScope)
+              : connKey === "ualabis"
+                ? (v) => probeUalaBis(v, connectScope)
+                : undefined
+          }
           getnetSlots={getnetSlots}
           getnetOwnCheckout={getnetOwnCheckout}
           onClearSlot={connKey === "getnet" ? clearGetnetSlot : undefined}

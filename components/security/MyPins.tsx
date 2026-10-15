@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
+import { IntegrationLogo, integrationLabel, type IntegrationKey } from "@/components/ui/IntegrationLogo";
 import { LocalQr } from "@/components/pos/LocalQr";
 import { EYEBROW, FLAT_PANEL, SOLID_CTA } from "@/components/security/styles";
 import {
@@ -150,7 +151,7 @@ function CodeActions({ code, until, kind, actionLabel }: { code: string; until: 
 
 function BigCode({ code }: { code: string }) {
   return (
-    <p className="font-display text-4xl font-bold tabular-nums tracking-[0.12em] sm:text-5xl" aria-label={`Código ${code.split("").join(" ")}`}>
+    <p className="whitespace-nowrap font-display text-[2rem] font-bold leading-tight tabular-nums tracking-[0.1em] sm:text-5xl" aria-label={`Código ${code.split("").join(" ")}`}>
       {groupCode(code)}
     </p>
   );
@@ -191,10 +192,14 @@ export function MyPinsPanel() {
   }
 
   const has = (m: PinMode) => pins.modes.includes(m);
-  // El modo por defecto del negocio va primero.
-  const order = (["rotating", "one_time", "totp", "fixed"] as PinMode[]).sort((a, b) =>
-    a === pins.default_mode ? -1 : b === pins.default_mode ? 1 : 0,
-  );
+  // Una sola columna a todo el ancho (modal y Seguridad), en el orden de uso:
+  // 1. PIN rotativo, arriba si está activo (es el que se dicta en el día).
+  // 2. PIN fijo, la credencial de base que todo supervisor tiene.
+  // 3. PIN de un uso y sus activos: se generan en el momento, para un caso
+  //    puntual, así que van después de los PINes de todos los días.
+  // 4. PIN rotativo apagado (sólo la invitación a activarlo).
+  // 5. App autenticadora al final, con su estado de conexión.
+  const rotatingOn = pins.rotating.enabled;
 
   return (
     <div className="space-y-5">
@@ -209,16 +214,16 @@ export function MyPinsPanel() {
           PIN rotativo, PIN de un uso y app autenticadora vienen desde el plan Pro. Hoy autorizás con tu PIN fijo.
         </Callout>
       )}
-      <div className="grid gap-5 lg:grid-cols-2">
-        {order.map((m) => {
-          if (!has(m)) return null;
-          if (m === "rotating") return <RotatingCard key={m} pins={pins} />;
-          if (m === "one_time") return <OneTimeCard key={m} pins={pins} />;
-          if (m === "totp") return <TotpCard key={m} pins={pins} />;
-          return <FixedPinCard key={m} />;
-        })}
-      </div>
-      {has("one_time") && <ActiveOneTimeList />}
+      {has("rotating") && rotatingOn && <RotatingCard pins={pins} />}
+      {has("fixed") && <FixedPinCard />}
+      {has("one_time") && (
+        <>
+          <OneTimeCard pins={pins} />
+          <ActiveOneTimeList />
+        </>
+      )}
+      {has("rotating") && !rotatingOn && <RotatingCard pins={pins} />}
+      {has("totp") && <TotpCard pins={pins} />}
       <HistoryList />
     </div>
   );
@@ -520,6 +525,32 @@ function ActiveOneTimeList() {
 }
 
 // ── App autenticadora ─────────────────────────────────────────────────────────
+// Las más usadas. El servidor no sabe con cuál se escaneó el QR (el estándar
+// TOTP no lo informa), así que se muestran todas como compatibles.
+const AUTHENTICATOR_APPS = [
+  "google_authenticator",
+  "microsoft_authenticator",
+  "authy",
+  "onepassword",
+  "bitwarden",
+] as const satisfies readonly IntegrationKey[];
+
+function AuthenticatorApps() {
+  return (
+    <div>
+      <span className={cn(EYEBROW, "mb-2 block")}>Compatible con</span>
+      <ul className="flex flex-wrap gap-x-4 gap-y-2">
+        {AUTHENTICATOR_APPS.map((k) => (
+          <li key={k} className="flex items-center gap-2 text-sm">
+            <IntegrationLogo name={k} size={22} bare />
+            <span className="whitespace-nowrap text-muted-foreground">{integrationLabel(k)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function TotpCard({ pins }: { pins: MyPins }) {
   const { toast } = useToast();
   const { totpBegin, totpConfirm, totpDisable } = useMyPinsMutations();
@@ -534,14 +565,16 @@ function TotpCard({ pins }: { pins: MyPins }) {
       <CardHeader
         icon={Smartphone}
         title="App autenticadora"
-        desc="Google Authenticator, Microsoft Authenticator o similar. El código cambia cada 30 o 60 segundos."
-        right={pins.totp.enabled ? <Badge tone="success">Vinculada</Badge> : undefined}
+        desc="Un código que cambia cada 30 o 60 segundos en tu celular, aunque no tengas internet."
+        right={
+          pins.totp.enabled ? <Badge tone="success">Conectada</Badge> : <Badge tone="neutral">No conectada</Badge>
+        }
       />
       <div className="space-y-4 p-4">
         {pins.totp.enabled ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Vinculada el {fmtDate(pins.totp.confirmed_at)} · el código cambia cada {pins.totp.step} s. Abrí la app y dictale el
+              Conectada el {fmtDate(pins.totp.confirmed_at)} · el código cambia cada {pins.totp.step} s. Abrí la app y dictale el
               código al empleado.
             </p>
             <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmOff(true)}>
@@ -626,6 +659,7 @@ function TotpCard({ pins }: { pins: MyPins }) {
             </Button>
           </div>
         )}
+        <AuthenticatorApps />
       </div>
       <ConfirmDialog
         open={confirmOff}

@@ -23,6 +23,10 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   // respaldo manual (payments.method = 'directo'); ambos caminos los gatea el
   // trigger vía payment_method_plan_key('directo').
   directo: "directo",
+  // Ualá Bis (ADR-143): link + QR por API (method 'qr' + intent ualabis) y
+  // registro manual (payments.method = 'ualabis'); los dos los gatea el
+  // trigger vía payment_method_plan_key('ualabis').
+  ualabis: "ualabis",
 };
 
 export function providerFeature(provider: string): string | null {

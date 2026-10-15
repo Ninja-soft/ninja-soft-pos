@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Columns3, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Zap } from "lucide-react";
+import { Columns3, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Warehouse, Zap } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonVariants } from "@/components/ui/Button";
@@ -32,12 +32,15 @@ import { MlMetricsTab } from "@/components/mercadolibre/gestor/MlMetricsTab";
 import { MlPostsaleTab } from "@/components/mercadolibre/gestor/MlPostsaleTab";
 import { MlBoardsTab } from "@/components/mercadolibre/gestor/MlBoardsTab";
 import { MlGestorConfig } from "@/components/mercadolibre/gestor/MlGestorConfig";
+import { MlFullTab } from "@/components/mercadolibre/full/MlFullTab";
+import { isConfigSection, type ConfigSection } from "@/lib/mercadolibre/configSections";
 
 const ICONS: Partial<Record<GestorSection, typeof Tag>> = {
   items: Tag,
   orders: Receipt,
   questions: MessageCircleQuestion,
   shipments: Truck,
+  full: Warehouse,
   postsale: LifeBuoy,
   boards: Columns3,
   metrics: Gauge,
@@ -72,13 +75,17 @@ function MercadoLibreGestor() {
   const [accountId, setAccountId] = useState<string | null>(null);
   const tabParam = params.get("tab");
   const tab: GestorSection = isSection(tabParam) ? tabParam : "items";
+  const cfgParam = params.get("cfg");
+  const cfg: ConfigSection = isConfigSection(cfgParam) ? cfgParam : "cuenta";
   const [upgrade, setUpgrade] = useState(false);
   const [quick, setQuick] = useState(false);
   const [upgradeGestor, setUpgradeGestor] = useState(false);
 
-  const setTab = (t: GestorSection) => {
+  const setTab = (t: GestorSection, section?: ConfigSection) => {
     const q = new URLSearchParams(params.toString());
     q.set("tab", t);
+    if (t === "config" && section) q.set("cfg", section);
+    else if (t !== "config") q.delete("cfg");
     router.replace(`${pathname}?${q.toString()}` as Route, { scroll: false });
   };
 
@@ -182,11 +189,13 @@ function MercadoLibreGestor() {
             </div>
 
             {account && tab === "items" && (
-              <MlItemsTab accountId={account.id} onQuickPublish={ready ? () => setQuick(true) : undefined} onConfigurePrices={() => setTab("config")} />
+              <MlItemsTab accountId={account.id} onQuickPublish={ready ? () => setQuick(true) : undefined} onConfigurePrices={() => setTab("config", "publicaciones")} />
             )}
             {account && tab === "orders" && <MlOrdersTab accountId={account.id} />}
             {account && tab === "questions" && <MlQuestionsTab accountId={account.id} />}
             {account && tab === "shipments" && <MlShipmentsTab key={account.id} account={account} />}
+            {/* Full (ADR-142): depósito virtual, envíos a Full y etiquetas; la pestaña maneja su gating. */}
+            {account && tab === "full" && <MlFullTab key={account.id} account={account} canManage={canManage} />}
             {account && sectionInfo(tab).feature === "mercadolibre_gestor" && gestor === false && (
               <Callout
                 tone="brand"
@@ -201,7 +210,7 @@ function MercadoLibreGestor() {
             {account && gestor && tab === "postsale" && <MlPostsaleTab account={account} canManage={canManage} />}
             {account && gestor && tab === "boards" && <MlBoardsTab account={account} canManage={canManage} />}
             {account && tab === "config" && (
-              <MlConfigTab account={account} canManage={canManage} extra={gestor ? <MlGestorConfig account={account} canManage={canManage} /> : null} />
+              <MlConfigTab account={account} canManage={canManage} section={cfg} onSection={(s) => setTab("config", s)} />
             )}
 
             <SectionGuide onPick={setTab} />

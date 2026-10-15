@@ -533,9 +533,10 @@ function NavLink({
   );
 }
 
-// Pie del menú compacto (ADR-134): una fila con avatar chico, nombre y rol; el
-// email va en el tooltip y en el desplegable. El acceso al panel interno es un
-// ícono al lado (sólo staff NinjaSoft).
+// Pie del menú compacto (ADR-134): avatar, a la derecha el nombre completo
+// (hasta 2 líneas) con el perfil abajo en chico; el email va en el tooltip y en
+// el desplegable. Mis PINes y el panel interno (sólo staff NinjaSoft) son
+// íconos al lado, centrados en vertical.
 function UserMenu({
   email,
   role,
@@ -584,19 +585,19 @@ function UserMenu({
   const roleLabel = role ? (ROLE_LABELS[role] ?? role) : null;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0.5">
       <Dropdown>
         <DropdownTrigger asChild>
           <button
             title={email}
             aria-label={`Cuenta: ${shown}${roleLabel ? `, ${roleLabel}` : ""}`}
-            className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Avatar name={name} avatar={me?.avatar} size={26} loading={meLoading} />
-            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-              <span className="truncate text-sm font-medium text-foreground">{shown}</span>
+            <Avatar name={name} avatar={me?.avatar} size={28} loading={meLoading} />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="line-clamp-2 break-words text-sm font-medium leading-tight text-foreground">{shown}</span>
               {roleLabel && (
-                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{roleLabel}</span>
+                <span className="truncate text-[11px] font-medium leading-tight text-muted-foreground">{roleLabel}</span>
               )}
             </span>
           </button>
@@ -643,7 +644,7 @@ function UserMenu({
           onClick={onNavigate}
           title="Panel NinjaSoft · Modo interno"
           aria-label="Panel NinjaSoft, modo interno"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-ninja-flameSoft transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="grid h-10 w-9 shrink-0 place-items-center rounded-lg text-ninja-flameSoft transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ShieldCheck size={17} aria-hidden />
         </Link>

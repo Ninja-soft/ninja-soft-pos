@@ -1,19 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, Layers, Package, ScanBarcode, Search, Sparkles } from "lucide-react";
+import { Package, ScanBarcode, Search, Sparkles, Truck } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
-import { Spinner, SpinnerBlock } from "@/components/ui/Spinner";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import { Callout } from "@/components/ui/Callout";
 import { useToast } from "@/components/ui/Toast";
-import { selectCls } from "@/components/stock/transfers/shared";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
-import { LISTING_TYPE_LABELS, mlErrorMessage } from "@/lib/mercadolibre/labels";
+import { LISTING_TYPE_LABELS, mlErrorMessage, visibleWarnings } from "@/lib/mercadolibre/labels";
 import {
   buildQuickInput,
   isValidGtin,
@@ -30,6 +30,7 @@ import {
 import {
   mlApi,
   mlPublishApi,
+  useMlAccountShipping,
   useMlCategoryMemory,
   useMlQuickCandidates,
   type AttrField,
@@ -37,9 +38,12 @@ import {
   type MlCategoryInfo,
   type MlChannelPreview,
   type MlDomainSuggestion,
+  type MlPublishResult,
   type MlQuickCandidate,
 } from "@/modules/mercadolibre/hooks";
 import { MlPublishModal } from "@/components/mercadolibre/MlPublishModal";
+import { MlMeActivationHint } from "@/components/mercadolibre/MlPublishFeedback";
+import { MlQuickRow } from "./MlQuickRow";
 
 // Publicación rápida en lote (H141 · ADR-132). Elegís productos (búsqueda,
 // escáner, sólo sin publicar), el sistema sugiere la categoría por título y
@@ -57,26 +61,6 @@ const EMPTY_GTIN_FALLBACK = [
   { id: "17055159", name: "Es artesanal o hecho a medida" },
 ];
 
-const SOURCE_LABEL: Record<AttrSource, string> = {
-  user: "",
-  product: "de la ficha",
-  catalog: "del catálogo de ML",
-  domain: "sugerido",
-  memory: "del último uso",
-};
-
-const STATE: Record<QuickRowState, { label: string; tone: "neutral" | "warning" | "success" | "danger" | "info" }> = {
-  loading: { label: "Preparando", tone: "neutral" },
-  needs_input: { label: "Falta completar", tone: "warning" },
-  ready: { label: "Lista", tone: "info" },
-  validating: { label: "Validando", tone: "neutral" },
-  valid: { label: "Validada", tone: "success" },
-  publishing: { label: "Publicando", tone: "neutral" },
-  published: { label: "Publicada", tone: "success" },
-  partial: { label: "Publicada en parte", tone: "warning" },
-  error: { label: "Corregir", tone: "danger" },
-};
-
 interface Row extends QuickRow {
   productId: string;
   preview: MlChannelPreview | null;
@@ -86,9 +70,14 @@ interface Row extends QuickRow {
   sources: Record<string, AttrSource>;
   types: string[];
   catalogName: string | null;
+  catalogId: string | null;
   catalogAttrs: ExternalAttr[];
   state: QuickRowState;
   errors: string[];
+  /** Avisos de ML (no frenan) y ajustes automáticos del servidor. */
+  warnings: string[];
+  notices: string[];
+  attrNames: Record<string, string>;
   published: Array<{ ml_item_id: string; permalink: string | null; listing_type_id?: string }>;
   skip: "variants" | "kit" | "failed" | null;
 }
@@ -117,47 +106,6 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>) {
   );
 }
 
-function AttrCell({ f, value, source, onChange }: { f: AttrField; value: AttrValues[string] | undefined; source?: AttrSource; onChange: (v: AttrValues[string]) => void }) {
-  const label = f.name;
-  const hint = source && SOURCE_LABEL[source] ? SOURCE_LABEL[source] : undefined;
-  if (f.options.length > 0 && f.valueType !== "number_unit") {
-    return (
-      <label className="block min-w-[9rem] space-y-1 text-xs">
-        <span className="font-medium">{label}</span>
-        <select
-          className={cn(selectCls, "h-9")}
-          value={value?.value_id ?? ""}
-          onChange={(e) => {
-            const opt = f.options.find((o) => o.id === e.target.value);
-            onChange(opt ? { value_id: opt.id, value_name: opt.name } : {});
-          }}
-        >
-          <option value="">Elegí</option>
-          {f.options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-        {hint && <span className="text-muted-foreground">{hint}</span>}
-      </label>
-    );
-  }
-  return (
-    <div className="min-w-[9rem]">
-      <Input
-        label={label}
-        className="h-9"
-        value={value?.value_name ?? ""}
-        maxLength={f.maxLength ?? 255}
-        placeholder={f.valueType === "number_unit" && f.defaultUnit ? `10 ${f.defaultUnit}` : undefined}
-        hint={hint}
-        onChange={(e) => onChange({ value_name: e.target.value })}
-      />
-    </div>
-  );
-}
-
 export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean; onOpenChange: (o: boolean) => void; account: MlAccount }) {
   const { toast } = useToast();
   const [step, setStep] = useState<"select" | "grid">("select");
@@ -171,6 +119,10 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
   const [full, setFull] = useState<string | null>(null);
   const catCache = useRef(new Map<string, Promise<MlCategoryInfo>>());
   const { data: memory = [] } = useMlCategoryMemory(open ? account.id : null);
+  // Estado real de Mercado Envíos de la cuenta (users/me): sin ME, lo de
+  // catálogo sale como publicación propia con envío a convenir.
+  const { data: shipping } = useMlAccountShipping(open ? account.id : null);
+  const noMe = Boolean(shipping?.read && !shipping.me2_usable);
   const { data: candidates = [], isFetching } = useMlQuickCandidates(open && step === "select" ? account.id : null, debounced, null, onlyUnpublished);
 
   useEffect(() => {
@@ -288,6 +240,7 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
       patch(c.product_id, {
         suggestions,
         catalogName: sug.catalog?.name ?? null,
+        catalogId: sug.catalog?.catalog_product_id ?? null,
         catalogAttrs: sug.catalog?.attributes ?? [],
       });
       const first = suggestions[0] ?? (memory[0] ? { category_id: memory[0].category_id, category_name: memory[0].category_name, attributes: [] } : null);
@@ -314,7 +267,11 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
         sources: {},
         types: [],
         catalogName: null,
+        catalogId: null,
         catalogAttrs: [],
+        warnings: [],
+        notices: [],
+        attrNames: {},
         title: c.name,
         maxTitleLength: 60,
         attrs: {},
@@ -341,20 +298,31 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
     const pv = r.preview!;
     const firstType = r.types[0] ?? account.default_listing_type;
     const price = pv.listing_prices?.find((l) => l.listing_type_id === firstType)?.price ?? pv.price ?? 0;
-    return buildQuickInput(previewProduct(r), r, firstType, Number(price), account.user_product_seller ? "user_products" : "classic");
+    return {
+      ...buildQuickInput(previewProduct(r), r, firstType, Number(price), account.user_product_seller ? "user_products" : "classic"),
+      catalogProductId: r.catalogId,
+    };
   };
+
+  /** Lo que devolvió el servidor además del ok: ajustes, avisos y título final. */
+  const feedback = (res: MlPublishResult): Partial<Row> => ({
+    notices: res.notices ?? [],
+    warnings: visibleWarnings(res.warnings, res.applied_shipping?.mode),
+    attrNames: res.attribute_names ?? {},
+    ...(res.applied_title ? { title: res.applied_title } : {}),
+  });
 
   const eligible = (r: Row, states: QuickRowState[]) => !r.skip && r.preview && r.fields && states.includes(r.state) && r.types.length > 0;
 
   const validateRow = async (r: Row): Promise<boolean> => {
-    patch(r.productId, { state: "validating", errors: [] });
+    patch(r.productId, { state: "validating", errors: [], warnings: [], notices: [] });
     try {
       const res = await withRetry(() => mlPublishApi.validate(account.id, inputOf(r)));
       if (res.ok) {
-        patch(r.productId, { state: "valid", errors: [] });
+        patch(r.productId, { state: "valid", errors: [], ...feedback(res) });
         return true;
       }
-      patch(r.productId, { state: "error", errors: res.errors ?? ["Mercado Libre rechazó los datos."] });
+      patch(r.productId, { state: "error", errors: res.errors ?? ["Mercado Libre rechazó los datos."], ...feedback(res) });
     } catch (e) {
       patch(r.productId, { state: "error", errors: [mlErrorMessage(e)] });
     }
@@ -366,15 +334,19 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
     try {
       const res = await mlPublishApi.publish(account.id, r.productId, inputOf(r), { listingTypes: r.types, categoryName: r.categoryName });
       const failed = (res.failed ?? []).flatMap((f) => f.errors.map((e) => `${LISTING_TYPE_LABELS[f.listing_type_id] ?? f.listing_type_id}: ${e}`));
-      const skipped = (res.skipped ?? []).map((s) => `${LISTING_TYPE_LABELS[s.listing_type_id] ?? s.listing_type_id}: sin precio o marcado para no publicar`);
+      const skipped = (res.skipped ?? []).map(
+        (s) =>
+          `${LISTING_TYPE_LABELS[s.listing_type_id] ?? s.listing_type_id}: ${s.reason === "unavailable" ? "no está disponible para tu cuenta en esta categoría" : "sin precio o marcado para no publicar"}`,
+      );
       if (res.ok) {
         patch(r.productId, {
           state: failed.length || skipped.length ? "partial" : "published",
           published: res.items ?? [],
           errors: [...failed, ...skipped],
+          ...feedback(res),
         });
       } else {
-        patch(r.productId, { state: "error", errors: res.errors ?? ["No se pudo publicar."] });
+        patch(r.productId, { state: "error", errors: res.errors ?? ["No se pudo publicar."], ...feedback(res) });
       }
     } catch (e) {
       patch(r.productId, { state: "error", errors: [mlErrorMessage(e)] });
@@ -516,11 +488,18 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
           </div>
         ) : (
           <div className="space-y-3">
+            {noMe && shipping && (
+              <Callout tone="neutral" icon={Truck} title="Tu cuenta no tiene Mercado Envíos activo">
+                <span className="block">
+                  Se publica con envío a convenir y lo que está en el catálogo de Mercado Libre sale como publicación propia: no hace falta hacer nada para publicar.
+                </span>
+                <MlMeActivationHint url={shipping.settings_url} path={shipping.settings_path} compact />
+              </Callout>
+            )}
             {rows.map((r) => {
-              const st = STATE[r.state];
               const fields = r.fields ?? [];
               const missing = r.fields ? missingRequired(fields, r.attrs) : [];
-              const filledFromSuggestion = Object.entries(r.sources).filter(([, s]) => s !== "user");
+              const prefilled = Object.values(r.sources).filter((s) => s !== "user").length;
               const emptyGtinOptions = fields.find((f) => f.id === "EMPTY_GTIN_REASON")?.options ?? [];
               const pv = r.preview;
               const done = r.state === "published" || r.state === "partial";
@@ -530,208 +509,71 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
                   .filter((m) => !r.suggestions.some((s) => s.category_id === m.category_id))
                   .map((m) => ({ id: m.category_id, name: `${m.category_name || m.category_id} (usada antes)`, attrs: [] })),
               ];
+              if (r.categoryId && !catOptions.some((o) => o.id === r.categoryId)) catOptions.unshift({ id: r.categoryId, name: r.categoryName || r.categoryId, attrs: [] });
+              const meta = [
+                pv ? `${pv.pictures.length} ${pv.pictures.length === 1 ? "foto" : "fotos"}` : null,
+                pv?.qty != null ? `${pv.qty} para publicar` : null,
+                prefilled > 0 ? `${prefilled} datos precompletados` : null,
+                pv?.sku ? `SKU ${pv.sku}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              const local = r.fields ? localRowState(previewProduct(r), r, r.fields) : { state: r.state, problems: [] as string[] };
+              const setLocal = (fn: (x: Row) => Partial<Row>) =>
+                patch(r.productId, (x) => {
+                  const next = { ...x, ...fn(x) };
+                  return { ...fn(x), ...(x.state === "published" || x.state === "partial" ? {} : localRowState(previewProduct(next), next, x.fields)), errors: [], warnings: [], notices: [] };
+                });
               return (
-                <div key={r.productId} className="rounded-lg bg-muted/60 p-3">
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(0,1.3fr)]">
-                    {/* Producto y título */}
-                    <div className="flex min-w-0 gap-3">
-                      {pv?.pictures[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={pv.pictures[0]} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
-                      ) : (
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                          <Package size={18} />
-                        </span>
-                      )}
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge tone={st.tone}>{r.state === "loading" || r.state === "validating" || r.state === "publishing" ? <Spinner size={12} /> : null}{st.label}</Badge>
-                          {r.catalogName && <Badge tone="info">En el catálogo de ML</Badge>}
-                        </div>
-                        <Input
-                          aria-label="Título"
-                          className="h-9"
-                          value={r.title}
-                          maxLength={r.maxTitleLength}
-                          disabled={done || r.skip !== null}
-                          onChange={(e) => {
-                            const title = e.target.value;
-                            patch(r.productId, (x) => ({ title, ...localRowState(previewProduct(x), { ...x, title }, x.fields) }));
-                          }}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {r.title.length}/{r.maxTitleLength}
-                          {pv ? ` · ${pv.pictures.length} fotos` : ""}
-                          {pv?.qty != null ? ` · ${pv.qty} para publicar` : ""}
-                          {filledFromSuggestion.length > 0 ? ` · ${filledFromSuggestion.length} datos precompletados` : ""}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Categoría y GTIN */}
-                    <div className="min-w-0 space-y-2">
-                      {r.skip === "variants" ? (
-                        <div className="space-y-2 text-sm">
-                          <p className="text-muted-foreground">Tiene variantes: se publica con la pantalla completa (talle, color y precio por variante).</p>
-                          <Button variant="secondary" size="sm" onClick={() => setFull(r.productId)}>
-                            <Layers size={15} /> Publicación completa
-                          </Button>
-                        </div>
-                      ) : r.skip === "kit" ? (
-                        <p className="text-sm text-muted-foreground">Los combos no se publican: publicá cada producto del combo.</p>
-                      ) : (
-                        <>
-                          <label className="block space-y-1 text-xs">
-                            <span className="font-medium">Categoría</span>
-                            <select
-                              className={cn(selectCls, "h-9")}
-                              value={r.categoryId}
-                              disabled={done || busy === "publish"}
-                              onChange={(e) => {
-                                const opt = catOptions.find((o) => o.id === e.target.value);
-                                if (opt) void applyCategory(r.productId, opt.id, opt.name, { domainAttrs: opt.attrs });
-                              }}
-                            >
-                              {!r.categoryId && <option value="">Elegí la categoría</option>}
-                              {catOptions.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              label="Código de barras"
-                              className="h-9"
-                              value={r.gtin ?? ""}
-                              disabled={done}
-                              onChange={(e) => {
-                                const gtin = e.target.value;
-                                patch(r.productId, (x) => ({ gtin, ...localRowState(previewProduct(x), { ...x, gtin }, x.fields) }));
-                              }}
-                            />
-                            {!(r.gtin ?? "").trim() ? (
-                              <label className="block space-y-1 text-xs">
-                                <span className="font-medium">Sin código porque</span>
-                                <select
-                                  className={cn(selectCls, "h-9")}
-                                  value={r.emptyGtinReason ?? ""}
-                                  disabled={done}
-                                  onChange={(e) => {
-                                    const emptyGtinReason = e.target.value || null;
-                                    patch(r.productId, (x) => ({ emptyGtinReason, ...localRowState(previewProduct(x), { ...x, emptyGtinReason }, x.fields) }));
-                                  }}
-                                >
-                                  <option value="">Elegí</option>
-                                  {(emptyGtinOptions.length ? emptyGtinOptions : EMPTY_GTIN_FALLBACK).map((o) => (
-                                    <option key={o.id} value={o.id}>
-                                      {o.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            ) : (
-                              <label className="block space-y-1 text-xs">
-                                <span className="font-medium">Condición</span>
-                                <select
-                                  className={cn(selectCls, "h-9")}
-                                  value={r.condition}
-                                  disabled={done}
-                                  onChange={(e) => patch(r.productId, { condition: e.target.value as "new" | "used" })}
-                                >
-                                  <option value="new">Nuevo</option>
-                                  <option value="used">Usado</option>
-                                </select>
-                              </label>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Tipos y precio */}
-                    {!r.skip && (
-                      <fieldset className="min-w-0 space-y-1" disabled={done}>
-                        <legend className="text-xs font-medium">Publicar como</legend>
-                        {(pv?.listing_prices ?? []).filter((l) => l.rule?.enabled !== false).length === 0 && <p className="text-xs text-muted-foreground">Preparando precios…</p>}
-                        {(pv?.listing_prices ?? [])
-                          .filter((l) => l.rule?.enabled !== false)
-                          .map((l) => {
-                            const on = r.types.includes(l.listing_type_id);
-                            const noPrice = !(typeof l.price === "number" && l.price > 0);
-                            return (
-                              <label key={l.listing_type_id} className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5 text-sm">
-                                <span className="flex items-center gap-2">
-                                  <Checkbox
-                                    checked={on}
-                                    disabled={noPrice}
-                                    onCheckedChange={(v) =>
-                                      patch(r.productId, (x) => ({
-                                        types: v ? [...new Set([...x.types, l.listing_type_id])] : x.types.filter((t) => t !== l.listing_type_id),
-                                      }))
-                                    }
-                                  />
-                                  {LISTING_TYPE_LABELS[l.listing_type_id] ?? l.listing_type_id}
-                                </span>
-                                <span className="tabular-nums text-muted-foreground">{noPrice ? (l.override?.mode === "skip" ? "No se publica" : "Sin precio") : formatCurrency(Number(l.price))}</span>
-                              </label>
-                            );
-                          })}
-                      </fieldset>
-                    )}
-                  </div>
-
-                  {/* Obligatorios que faltan */}
-                  {!r.skip && r.fields && missing.length > 0 && !done && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {missing.map((f) => (
-                        <AttrCell
-                          key={f.id}
-                          f={f}
-                          value={r.attrs[f.id]}
-                          source={r.sources[f.id]}
-                          onChange={(v) =>
-                            patch(r.productId, (x) => {
-                              const attrs = { ...x.attrs, [f.id]: v };
-                              const sources = { ...x.sources, [f.id]: "user" as AttrSource };
-                              return { attrs, sources, ...localRowState(previewProduct(x), { ...x, attrs }, x.fields) };
-                            })
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Resultado */}
-                  {r.published.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                      <CheckCircle2 size={15} className="text-success" />
-                      {r.published.map((p) => (
-                        <span key={p.ml_item_id} className="inline-flex items-center gap-1">
-                          {LISTING_TYPE_LABELS[p.listing_type_id ?? ""] ?? ""} {p.ml_item_id}
-                          {p.permalink && (
-                            <a href={p.permalink} target="_blank" rel="noreferrer" className="text-muted-foreground hover:underline" aria-label={`Ver ${p.ml_item_id} en Mercado Libre`}>
-                              <ExternalLink size={13} />
-                            </a>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {r.errors.length > 0 && (
-                    <ul className="mt-2 space-y-0.5 text-xs text-danger">
-                      {r.errors.slice(0, 6).map((e, i) => (
-                        <li key={i} className="flex gap-1">
-                          <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {e}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {r.state === "needs_input" && r.errors.length === 0 && r.fields && (
-                    <p className="mt-2 text-xs text-warning">{localRowState(previewProduct(r), r, r.fields).problems.join(" ")}</p>
-                  )}
-                </div>
+                <MlQuickRow
+                  key={r.productId}
+                  productId={r.productId}
+                  name={pv?.name ?? r.title}
+                  picture={pv?.pictures[0] ?? null}
+                  meta={meta || "Preparando…"}
+                  state={r.state}
+                  catalogName={r.catalogName}
+                  ownListingNote={noMe && r.catalogId ? "Se publica como publicación propia porque tu cuenta no tiene Mercado Envíos activo." : null}
+                  skip={r.skip}
+                  done={done}
+                  locked={busy === "publish"}
+                  title={r.title}
+                  maxTitleLength={r.maxTitleLength}
+                  categoryId={r.categoryId}
+                  catOptions={catOptions}
+                  gtin={r.gtin ?? ""}
+                  emptyGtinReason={r.emptyGtinReason}
+                  emptyGtinOptions={emptyGtinOptions.length ? emptyGtinOptions : EMPTY_GTIN_FALLBACK}
+                  condition={r.condition}
+                  listingPrices={(pv?.listing_prices ?? [])
+                    .filter((l) => l.rule?.enabled !== false)
+                    .map((l) => ({ id: l.listing_type_id, price: typeof l.price === "number" ? l.price : null, skip: l.override?.mode === "skip" }))}
+                  types={r.types}
+                  missing={missing}
+                  attrs={r.attrs}
+                  sources={r.sources}
+                  published={r.published}
+                  errors={r.errors}
+                  warnings={r.warnings}
+                  notices={r.notices}
+                  attrNames={r.attrNames}
+                  problems={local.problems}
+                  onTitle={(title) => setLocal(() => ({ title }))}
+                  onCategory={(id) => {
+                    const opt = catOptions.find((o) => o.id === id);
+                    if (opt) void applyCategory(r.productId, opt.id, opt.name, { domainAttrs: opt.attrs });
+                  }}
+                  onGtin={(gtin) => setLocal(() => ({ gtin }))}
+                  onEmptyGtin={(emptyGtinReason) => setLocal(() => ({ emptyGtinReason }))}
+                  onCondition={(condition) => setLocal(() => ({ condition }))}
+                  onToggleType={(id, on) =>
+                    patch(r.productId, (x) => ({ types: on ? [...new Set([...x.types, id])] : x.types.filter((t) => t !== id) }))
+                  }
+                  onAttr={(id, v) =>
+                    setLocal((x) => ({ attrs: { ...x.attrs, [id]: v }, sources: { ...x.sources, [id]: "user" as AttrSource } }))
+                  }
+                  onFull={() => setFull(r.productId)}
+                />
               );
             })}
           </div>

@@ -9,10 +9,15 @@
 //   category {category_id}                         límites, atributos y tipos
 //   shipping_options {account_id, category_id}     modos de envío del vendedor y la
 //                                                  categoría y el que se va a usar
-//   validate {account_id, input}                   chequeos + POST /items/validate
-//                                                  (saca atributos que no aplican y
-//                                                  reintenta una vez si ML pide
-//                                                  borrar un atributo o rechaza el envío)
+//   account_shipping {account_id, refresh?}        estado de Mercado Envíos de la
+//                                                  cuenta (users/me + preferencias)
+//   validate {account_id, input}                   chequeos + POST /items/validate con
+//                                                  validateForPublish (publish.ts): título
+//                                                  al largo de la categoría, envío según el
+//                                                  estado real de la cuenta, tipo disponible
+//                                                  y un reintento si ML pide borrar un
+//                                                  atributo o pierde el envío. Los avisos
+//                                                  de ML no frenan.
 //   publish {account_id, product_id, input}        crea el/los ítems (+ descripción)
 //                                                  y los vincula al producto
 //   import_items {account_id}                      trae las publicaciones de la
@@ -34,30 +39,33 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { readJsonLimited } from "../_shared/requestGuard.ts";
-import { MlApiError, type MlClient } from "../_shared/mercadolibre/client.ts";
+import { MlApiError } from "../_shared/mercadolibre/client.ts";
 import {
   attributeForm,
-  attributesToDelete,
   buildItemBodies,
   filterCategorySuggestions,
   itemIdentifiers,
-  sanitizeAttributes,
-  stripAttributes,
   suggestLinks,
-  validatePublish,
-  validationCauses,
-  type AttrField,
   type ItemBody,
   type PublishInput,
 } from "../_shared/mercadolibre/items.ts";
 import {
+  ME_SETTINGS_PATH,
+  ME_SETTINGS_URL,
   chooseShippingPlan,
-  excludedModesFromCauses,
+  me2Logistics,
+  modesFrom,
   resolveShipping,
-  shippingBody,
+  sellerMercadoEnvios,
   type ShippingMode,
-  type ShippingPlan,
 } from "../_shared/mercadolibre/shipping.ts";
+import {
+  availableListingTypes,
+  loadShippingSources,
+  newPublishCaches,
+  postItemWithFixes,
+  validateForPublish,
+} from "../_shared/mercadolibre/publish.ts";
 import { labelBatches, labelBlocker } from "../_shared/mercadolibre/orders.ts";
 import { bytesToBase64, extractZpl, isPdf, labelPath, type LabelFormat } from "../_shared/mercadolibre/labels.ts";
 import { ingestOrder, itemPayload, refreshItem } from "../_shared/mercadolibre/worker.ts";
@@ -80,44 +88,21 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MANAGE = new Set(["validate", "publish", "import_items", "sync_account", "refresh_order", "visits"]);
 const CATEGORY_RE = /^[A-Z]{3}\d{1,12}$/;
 
-/**
- * Modos de envío del vendedor y de la categoría (sólo GETs). Cada consulta
- * puede fallar sola (permiso, 404): el plan se arma con lo que haya.
- */
-async function shippingPlanFor(
-  client: MlClient,
-  mlUserId: number,
-  categoryId: string,
-  excluded: ShippingMode[] = [],
-): Promise<ShippingPlan> {
-  const [user, category, userCategory] = await Promise.allSettled([
-    client.get<unknown>(`/users/${mlUserId}/shipping_preferences`),
-    client.get<unknown>(`/categories/${encodeURIComponent(categoryId)}/shipping_preferences`),
-    client.get<unknown>(`/users/${mlUserId}/shipping_modes`, { category_id: categoryId }),
-  ]);
-  const val = (r: PromiseSettledResult<unknown>) => (r.status === "fulfilled" ? r.value : undefined);
-  return chooseShippingPlan({ user: val(user), category: val(category), userCategory: val(userCategory), excluded });
+// Memo por isolate: users/me y preferencias de envío de cada cuenta (5 min),
+// envíos, atributos y datos de cada categoría (30 min). Ver publish.ts.
+const caches = newPublishCaches();
+type CatInfo = { id: string; name: string; settings?: Record<string, unknown> };
+const catAttrs = new Map<string, { at: number; value: Promise<MlCategoryAttribute[]> }>();
+const catInfo = new Map<string, { at: number; value: Promise<CatInfo> }>();
+function memo<T>(map: Map<string, { at: number; value: Promise<T> }>, key: string, load: () => Promise<T>, ttl = 30 * 60_000): Promise<T> {
+  const hit = map.get(key);
+  if (hit && Date.now() - hit.at < ttl) return hit.value;
+  const value = load();
+  if (map.size > 300) map.clear();
+  map.set(key, { at: Date.now(), value });
+  value.catch(() => map.delete(key));
+  return value;
 }
-
-/** POST /items/validate de cada cuerpo: errores (código: mensaje) y avisos. */
-async function validateBodies(client: MlClient, bodies: ItemBody[]): Promise<{ errors: string[]; warnings: string[] }> {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  for (const it of bodies) {
-    try {
-      await client.request("POST", "/items/validate", { body: it.body });
-    } catch (e) {
-      if (e instanceof MlApiError && (e.code === "validation_error" || e.code === "bad_request")) {
-        const c = validationCauses(e.body, e.causes.length ? e.causes : [e.message]);
-        errors.push(...c.errors);
-        warnings.push(...c.warnings);
-      } else throw e;
-    }
-  }
-  return { errors: [...new Set(errors)], warnings: [...new Set(warnings)] };
-}
-
-const fieldName = (fields: AttrField[], id: string) => fields.find((f) => f.id === id)?.name ?? id;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -196,7 +181,29 @@ Deno.serve(async (req: Request) => {
       case "shipping_options": {
         const id = String(b.category_id ?? "");
         if (!CATEGORY_RE.test(id)) return json({ error: "invalid_category" }, 400);
-        return json({ shipping: await shippingPlanFor(client, account.ml_user_id, id) });
+        const sources = await loadShippingSources(client, account.ml_user_id, id, caches);
+        return json({ shipping: chooseShippingPlan(sources) });
+      }
+      case "account_shipping": {
+        // Estado de Mercado Envíos de la cuenta (Configuración > Envíos y la
+        // publicación rápida). Sólo GETs; `refresh` saltea el memo.
+        if (b.refresh === true) caches.account.clear(`${account.ml_user_id}:`);
+        const src = await loadShippingSources(client, account.ml_user_id, null, caches);
+        const prefs = (src.user ?? null) as { local_pick_up?: boolean; option?: string; mandatory_settings?: { mode?: string } } | null;
+        const plan = chooseShippingPlan(src);
+        const read = Boolean(src.me || src.user);
+        return json({
+          read,
+          mercadoenvios: sellerMercadoEnvios(src.me),
+          me2_usable: read && plan.me2Blocker === null,
+          modes: [...(modesFrom(src.user) ?? [])],
+          me2_logistics: [...(me2Logistics(src.user) ?? [])],
+          local_pick_up: Boolean(prefs?.local_pick_up),
+          mandatory_mode: prefs?.mandatory_settings?.mode ?? null,
+          reason: plan.reason,
+          settings_url: ME_SETTINGS_URL,
+          settings_path: ME_SETTINGS_PATH,
+        });
       }
       case "category": {
         const id = String(b.category_id ?? "");
@@ -226,66 +233,52 @@ Deno.serve(async (req: Request) => {
         input.model = account.user_product_seller ? "user_products" : "classic";
         if (input.condition !== "used") input.condition = "new";
         if (!CATEGORY_RE.test(String(input.categoryId ?? ""))) return json({ error: "invalid_category" }, 400);
-        const attrs = attributeForm(await client.get<MlCategoryAttribute[]>(`/categories/${encodeURIComponent(input.categoryId)}/attributes`));
-        // Atributos que no aplican (GRADING con "Nuevo", ocultos, de solo lectura) no se mandan.
-        const notices: string[] = [];
-        const removed = Object.keys(input.attributes ?? {}).filter((id) => !(id in sanitizeAttributes(input.attributes ?? {}, attrs, input.condition)));
-        input.attributes = sanitizeAttributes(input.attributes ?? {}, attrs, input.condition);
-        // Envío: el mejor modo que admiten el vendedor y la categoría.
-        const requested = input.shipping ?? { mode: "me2" as const, freeShipping: Boolean(input.freeShipping) };
-        let plan = await shippingPlanFor(client, account.ml_user_id, input.categoryId);
-        let ship = resolveShipping(requested, plan);
-        if (ship.adjusted) notices.push(ship.adjusted);
-        input.shipping = ship.input;
-        input.freeShipping = ship.input.freeShipping;
-
-        const local = validatePublish(input, attrs);
-        if (local.length > 0) return json({ ok: false, errors: local, notices, shipping: plan, removed_attributes: removed });
-        let bodies = buildItemBodies(input, attrs);
-        let res = await validateBodies(client, bodies);
-
-        // Un reintento automático si ML pide sacar atributos o rechaza el modo de envío.
-        if (res.errors.length > 0) {
-          const del = attributesToDelete(res.errors);
-          const lost = excludedModesFromCauses(res.errors).filter((m) => m === input.shipping!.mode);
-          if (del.length > 0 || lost.length > 0) {
-            if (del.length > 0) {
-              bodies = stripAttributes(bodies, del);
-              for (const id of del) delete input.attributes[id];
-              removed.push(...del);
-              notices.push(
-                `Sacamos ${del.map((id) => `"${fieldName(attrs, id)}"`).join(", ")}: Mercado Libre no lo acepta para esta categoría y condición.`,
-              );
-            }
-            if (lost.length > 0) {
-              plan = await shippingPlanFor(client, account.ml_user_id, input.categoryId, lost);
-              ship = resolveShipping({ ...requested, mode: plan.mode }, plan);
-              input.shipping = ship.input;
-              input.freeShipping = ship.input.freeShipping;
-              bodies = bodies.map((it) => ({ ...it, body: { ...it.body, shipping: shippingBody(ship.input) } }));
-              notices.push(`Mercado Libre no aceptó ese envío. ${plan.reason}`);
-            }
-            res = await validateBodies(client, bodies);
-          }
-        }
-        const meta = { notices, warnings: res.warnings.slice(0, 10), shipping: plan, applied_shipping: input.shipping, removed_attributes: [...new Set(removed)] };
-        if (res.errors.length > 0) return json({ ok: false, errors: res.errors.slice(0, 30), ...meta });
+        const catId = input.categoryId;
+        const [rawAttrs, cat] = await Promise.all([
+          memo(catAttrs, catId, () => client.get<MlCategoryAttribute[]>(`/categories/${encodeURIComponent(catId)}/attributes`)),
+          memo(catInfo, catId, () => client.get<CatInfo>(`/categories/${encodeURIComponent(catId)}`)).catch(() => null),
+        ]);
+        const attrs = attributeForm(rawAttrs);
+        const catalogProductId = typeof input.catalogProductId === "string" ? input.catalogProductId.slice(0, 40) : null;
+        // Una sola función para el modal y la publicación rápida: sanea,
+        // ajusta título y envío, valida y reintenta una vez (publish.ts).
+        const v = await validateForPublish({ client, mlUserId: account.ml_user_id, caches }, input, attrs, {
+          maxTitleLength: cat?.settings?.max_title_length != null ? Number(cat.settings.max_title_length) : input.maxTitleLength,
+          catalogProductId,
+        });
+        const meta = {
+          notices: v.notices,
+          warnings: v.warnings,
+          shipping: v.plan,
+          applied_shipping: v.input.shipping,
+          applied_title: v.input.title,
+          removed_attributes: v.removed,
+          attribute_names: v.attributeNames,
+          me_activation: v.meActivation ? { url: ME_SETTINGS_URL, path: ME_SETTINGS_PATH } : null,
+        };
+        if (!v.ok) return json({ ok: false, errors: v.errors, ...meta });
         if (action === "validate") return json({ ok: true, ...meta });
 
+        const fixed = v.input;
         const productId = String(b.product_id ?? "");
         if (!UUID_RE.test(productId)) return json({ error: "invalid_product" }, 400);
         const { data: prod } = await admin.from("products").select("id").eq("id", productId).eq("tenant_id", tenantId).maybeSingle();
         if (!prod) return json({ error: "product_not_found" }, 404);
         // Varios tipos (ADR-132): un ítem por tipo con el precio que calcula el
         // servidor con las reglas, sobre el input ya saneado y validado; sin
-        // listing_types, los cuerpos validados tal cual (ADR-104).
-        let plans: Array<{ listing: string; bodies: ItemBody[]; input: PublishInput }> = [{ listing: input.listingTypeId, bodies, input }];
+        // listing_types, los cuerpos validados tal cual (ADR-104). Un tipo que
+        // la cuenta no tiene en la categoría se saltea con su motivo.
+        let plans: Array<{ listing: string; bodies: ItemBody[]; input: PublishInput }> = [{ listing: fixed.listingTypeId, bodies: v.bodies, input: fixed }];
         const skipped: Array<{ listing_type_id: string; reason: string }> = [];
         if (Array.isArray(b.listing_types) && b.listing_types.length > 0) {
           const prices = (await rpc("ml_listing_prices_for", { p_account: account.id, p_product: productId })) as ListingPriceRow[];
           plans = [];
-          for (const t of pickListingTypes(b.listing_types, input.listingTypeId)) {
-            const inp = inputForListing(input, t, prices ?? []);
+          for (const t of pickListingTypes(b.listing_types, fixed.listingTypeId)) {
+            if (v.listingTypes && !v.listingTypes.has(t)) {
+              skipped.push({ listing_type_id: t, reason: "unavailable" });
+              continue;
+            }
+            const inp = inputForListing(fixed, t, prices ?? []);
             if (inp) plans.push({ listing: t, input: inp, bodies: buildItemBodies(inp, attrs) });
             else skipped.push({ listing_type_id: t, reason: "no_price_or_skipped" });
           }
@@ -294,54 +287,68 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        // Si POST /items pierde el envío pedido (shipping.lost_*), otro modo válido.
+        const sources = await loadShippingSources(client, account.ml_user_id, catId, caches);
+        const replan = (lost: ShippingMode[]) => {
+          const alt = chooseShippingPlan({ ...sources, excluded: lost });
+          if (lost.includes(alt.mode)) return null;
+          return resolveShipping({ ...(fixed.shipping ?? { mode: alt.mode }), mode: alt.mode }, alt).input;
+        };
         const created: Array<{ ml_item_id: string; permalink: string | null; listing_type_id: string }> = [];
         const failed: Array<{ listing_type_id: string; errors: string[] }> = [];
+        const notices = [...v.notices];
+        let meActivation = v.meActivation;
         for (const plan of plans) {
-          try {
-            for (const it of plan.bodies) {
-              const item = await client.post<MlItem>("/items", it.body);
-              if (plan.input.description && plan.input.description.trim()) {
-                await client
-                  .post(`/items/${item.id}/description`, { plain_text: plan.input.description.trim().slice(0, 50_000) })
-                  .catch(() => undefined);
-              }
-              // Vínculos: UP = uno por ítem (variante); clásico = uno por variación.
-              let links: Array<{ variant_id: string | null; ml_variation_id: string | null }>;
-              if (it.variantKey || !(plan.input.variants ?? []).length) {
-                links = [{ variant_id: it.variantKey, ml_variation_id: null }];
-              } else {
-                const vars = item.variations ?? [];
-                links = (plan.input.variants ?? []).map((v, i) => ({ variant_id: v.key, ml_variation_id: vars[i] ? String(vars[i]!.id) : null }));
-              }
-              await rpc("ml_publish_register", {
-                p_account: account.id,
-                p_user: user.id,
-                p_item: itemPayload(item),
-                p_product: productId,
-                p_links: links,
-              });
-              created.push({ ml_item_id: item.id, permalink: item.permalink ?? null, listing_type_id: plan.listing });
+          for (const it of plan.bodies) {
+            const r = await postItemWithFixes<MlItem>(client, it.body, replan);
+            if (!r.ok) {
+              failed.push({ listing_type_id: plan.listing, errors: r.errors });
+              meActivation = meActivation || r.meActivation;
+              break;
             }
-          } catch (e) {
-            if (e instanceof MlApiError && !e.retryable) {
-              const c = validationCauses(e.body, e.causes.length ? e.causes : [e.message]);
-              failed.push({ listing_type_id: plan.listing, errors: (c.errors.length ? c.errors : [e.message]).slice(0, 10) });
-            } else throw e;
+            notices.push(...r.notices);
+            const item = r.item;
+            if (plan.input.description && plan.input.description.trim()) {
+              await client
+                .post(`/items/${item.id}/description`, { plain_text: plan.input.description.trim().slice(0, 50_000) })
+                .catch(() => undefined);
+            }
+            // Vínculos: UP = uno por ítem (variante); clásico = uno por variación.
+            let links: Array<{ variant_id: string | null; ml_variation_id: string | null }>;
+            if (it.variantKey || !(plan.input.variants ?? []).length) {
+              links = [{ variant_id: it.variantKey, ml_variation_id: null }];
+            } else {
+              const vars = item.variations ?? [];
+              links = (plan.input.variants ?? []).map((pv, i) => ({ variant_id: pv.key, ml_variation_id: vars[i] ? String(vars[i]!.id) : null }));
+            }
+            await rpc("ml_publish_register", {
+              p_account: account.id,
+              p_user: user.id,
+              p_item: itemPayload(item),
+              p_product: productId,
+              p_links: links,
+            });
+            created.push({ ml_item_id: item.id, permalink: item.permalink ?? null, listing_type_id: plan.listing });
           }
         }
+        const out = {
+          ...meta,
+          notices: [...new Set(notices)],
+          me_activation: meActivation ? { url: ME_SETTINGS_URL, path: ME_SETTINGS_PATH } : null,
+        };
         if (created.length > 0) {
           // Memoria de la categoría para la próxima publicación rápida.
           await rpc("ml_category_memory_touch", {
             p_account: account.id,
-            p_category: input.categoryId,
+            p_category: catId,
             p_name: String(b.category_name ?? ""),
-            p_attrs: memoryAttrs(input.attributes ?? {}),
+            p_attrs: memoryAttrs(fixed.attributes ?? {}),
           }).catch(() => undefined);
         }
         if (created.length === 0) {
-          return json({ ok: false, errors: failed.flatMap((f) => f.errors).slice(0, 30), failed, skipped, ...meta });
+          return json({ ok: false, errors: failed.flatMap((f) => f.errors).slice(0, 30), failed, skipped, ...out });
         }
-        return json({ ok: true, items: created, failed, skipped, ...meta });
+        return json({ ok: true, items: created, failed, skipped, ...out });
       }
       case "quick_suggest": {
         const title = String(b.title ?? "").trim().slice(0, 120);

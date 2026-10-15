@@ -237,7 +237,19 @@ export function AiConfigCard({ bare = false }: { bare?: boolean } = {}) {
       // La burbuja del cliente lee la imagen del proveedor activo vía RPC.
       qc.invalidateQueries({ queryKey: ["ai-public-config"] });
     },
-    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
+    onError: async (e) => {
+      // La Edge prueba la clave con el proveedor antes de guardarla: si la
+      // rechaza, devuelve 400 con el motivo por campo.
+      let detail: string | undefined;
+      try {
+        const body = await (e as { context?: Response }).context?.json?.();
+        const fields = (body as { fields?: Record<string, string> } | undefined)?.fields;
+        detail = fields ? Object.values(fields)[0] : undefined;
+      } catch {
+        /* sin detalle */
+      }
+      toast({ title: "No se pudo guardar", description: detail, variant: "error" });
+    },
   });
 
   // Test: pinguea al proveedor activo en MODO INTERNO ({test:true}). La Edge

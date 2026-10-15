@@ -14,6 +14,8 @@ const FEATURE_LABELS: Record<string, string> = {
   clientes: "la gestión de clientes",
   stock: "el control de stock",
   depositos: "los depósitos internos",
+  ajustes_stock: "los ajustes de stock",
+  aprobacion_ajustes: "la aprobación de ajustes",
 };
 
 const CODES: Record<string, string> = {
@@ -46,6 +48,16 @@ const CODES: Record<string, string> = {
   insufficient_warehouse_stock: "No alcanza el stock del salón para pasar esa cantidad al depósito.",
   warehouse_principal_is_computed: "El salón de ventas no se cuenta: su stock es lo que queda de la sucursal.",
   store_forbidden: "No tenés acceso a esa sucursal.",
+  invalid_mode: "La operación tiene que ser Sumar, Restar o Fijar.",
+  invalid_reason: "El motivo no es uno de la lista.",
+  reason_notes_required: "Con el motivo Otro, contá qué pasó en la nota.",
+  notes_too_long: "La nota es demasiado larga (máx. 300).",
+  photo_required: "Este ajuste va a aprobación y el negocio pide foto: cargalo desde Inventario con la foto.",
+  warehouse_store_mismatch: "Ese depósito es de otra sucursal.",
+  warehouse_not_found: "No se encontró el depósito.",
+  forbidden_capability: "No tenés permiso para ajustar stock.",
+  forbidden_read_only: "Tu usuario es de solo lectura.",
+  variant_not_allowed: "Ese producto no tiene variantes: usá el SKU del producto.",
 };
 
 const CONSTRAINTS: Array<[RegExp, string]> = [
@@ -65,6 +77,8 @@ const NOTES: Record<string, string> = {
   unchanged: "Sin cambios: ya está igual en el sistema.",
   stock_ignored: "El stock no se cambia al actualizar un producto: usá la importación de stock.",
   scheduled: "Queda programado para la fecha indicada.",
+  pending_approval: "Supera el umbral: queda esperando que lo apruebe el dueño o un auditor.",
+  no_qty: "Sin cantidad: esta fila no se toca.",
 };
 
 /** Traduce el error del servidor (código o texto de Postgres) a lenguaje simple. */

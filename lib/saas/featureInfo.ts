@@ -403,6 +403,18 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["productos"],
   },
+  ajustes_stock: {
+    desc: "Ajustes de stock con motivo: sumar, restar o fijar la cantidad de un producto por sucursal o depósito, eligiendo qué pasó (rotura, vencimiento, robo, error de carga, conteo, consumo interno), con nota y foto de respaldo. Cada ajuste queda en el historial con quién lo hizo y cuándo.",
+    impact: "Desactivado, no se cargan ajustes desde Inventario (el servidor lo rechaza); el stock se mueve sólo con ventas, compras y traslados.",
+    minPlan: "Start",
+    requires: ["stock"],
+  },
+  aprobacion_ajustes: {
+    desc: "Aprobación de ajustes de stock: el dueño fija un umbral (unidades o pesos al costo) y los ajustes de sus empleados que lo superan quedan pendientes hasta que los aprueba él o un auditor que elija. Nadie aprueba lo propio y todo queda auditado.",
+    impact: "Desactivado, los ajustes se aplican en el momento sin aprobación (el servidor no deja prender el circuito ni aprobar como auditor).",
+    minPlan: "Pro",
+    requires: ["ajustes_stock"],
+  },
   compras: {
     desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado. Incluye devoluciones al proveedor con nota de crédito, anulación de recepciones con reversa de stock y costos, órdenes de pago con imputación a facturas, pago en efectivo desde la caja propia y retenciones con certificado, trazabilidad por lote y n° de despacho hasta la venta e importación de la lista de precios del proveedor.",
     impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes, devoluciones, órdenes de pago ni cuenta corriente de proveedores (el servidor lo rechaza).",

@@ -259,6 +259,25 @@ Notas sobre lo que hace cumplir la base (diferencias detectadas en ADR-086):
 
 Pendiente (no lo hace cumplir la base): edición de clientes acotada a datos de contacto para el cajero, importación masiva con confirmación para el encargado y el cambio de rol de usuarios (lo hacen las Edge Functions `member_admin` e `invite_user`, sin test de integración en esta suite).
 
+### 4.8 Capacidades por miembro: Inventario (ADR-137)
+
+Una **capacidad** es un permiso fino que **se suma al rol**. El dueño las tiene todas; al resto se le otorgan una por una. Catálogo único en `lib/permissions/capabilities.ts` (`CAPABILITIES`: clave, grupo, etiqueta, descripción y si escribe datos) con su espejo en la base (`capability_catalog()`). **El editor de roles y permisos (`feat/permisos-editor`) toma este catálogo**: muestra el grupo "Inventario" con estas etiquetas y, para guardar, escribe otorgamientos con `member_capability_set(user, capability, granted, reason)` (sólo el dueño, auditado `capability_granted` / `capability_revoked`). Si el editor arma grupos personalizados, alcanza con que resuelva a otorgamientos por miembro en `member_capabilities`: el servidor siempre pregunta `member_has_capability(tenant, cap)` (rol + otorgadas, membresía activa) y no hay que tocar las RPC.
+
+| Capacidad | Qué permite | Owner | Manager | Cashier | Viewer | Dónde se hace cumplir |
+|---|---|---|---|---|---|---|
+| `stock.view` | Ver stock, movimientos e historial de ajustes | ✅ | ✅ | ✅ | ✅ | `inventory_stock_sheet`, `inventory_movements`, `stock_adjustments_list` |
+| `stock.valuation` | Ver costos, valor del stock y de cada ajuste | ✅ | ✅ | ⚙️ | ✅ | `inventory_valuation`; las demás lecturas devuelven el costo en null sin ella |
+| `stock.export` | Descargar la planilla de stock y la de conteo | ✅ | ✅ | ⚙️ | ✅ | UI (los datos salen de lecturas con `stock.view`) |
+| `stock.adjust` | Pedir o hacer ajustes de stock | ✅ | ✅ | ⚙️ | ❌ | `stock_adjustment_request` |
+| `stock.count` | Ajustes con motivo Conteo (inventario físico) | ✅ | ✅ | ⚙️ | ❌ | `stock_adjustment_request` (motivo `conteo`) |
+| `stock.import` | Importar ajustes y conteos desde Excel | ✅ | ✅ | ❌ (\*) | ❌ | `_import_stock_adjustments_run` + `_import_guard` |
+| `stock.adjust.approve` | Aprobar o rechazar ajustes de otros (auditor) | ✅ | ⚙️ | ⚙️ | ❌ | `stock_adjustment_decide` vía `_stock_can_approve` (con la política en "auditor" y `aprobacion_ajustes` en el plan) |
+| `stock.settings` | Configurar la aprobación, el umbral y los auditores | ✅ | ⚙️ | ⚙️ | ❌ | `stock_adjustment_policy_save`, `stock_capability_members` |
+
+⚙️ = no viene con el rol, el dueño la puede otorgar. ❌ = no se puede otorgar: "Solo lectura" no escribe nunca (ADR-071, `role_write_guard`), así que `member_capability_set` rechaza darle capacidades que escriben (`capability_needs_write_role`). Un **auditor** externo se invita como cajero y se le da `stock.adjust.approve` (preset `AUDITOR_PRESET`). (\*) La importación además pide dueño o encargado en `_import_guard` (igual que el resto de las importaciones, ADR-078).
+
+Reglas de la aprobación: el dueño nunca espera; con la aprobación prendida, el resto espera si no hay umbrales o si el ajuste llega a alguno (unidades o pesos al costo, "desde"); nadie aprueba lo que pidió (`self_approval_forbidden`); rechazar pide motivo; quien pidió (o el dueño) puede retirar un pedido pendiente. Pendiente: el conteo cíclico (ADR-092) sigue exigiendo dueño o encargado y no usa `stock.count`.
+
 ## 5. Matriz de permisos — Internos NinjaSoft
 
 | Acción | super_admin | admin | support | sales | billing | developer |

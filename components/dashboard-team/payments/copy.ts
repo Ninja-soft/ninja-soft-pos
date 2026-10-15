@@ -184,7 +184,7 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "Conectada la API, el POS arma un link de pago de Ualá Bis (también como QR) y la venta se cierra sola al acreditarse. Sin conectar, o para tu QR, POS Mini, POS Pro o Tap en tu celu, cobrás en la app de Ualá y cargás el número de operación.",
     pasos: [
       "En el POS elegís Ualá Bis: Link, QR o QR, POS o Tap.",
-      "Con Link o QR el cliente paga con tarjeta en el checkout de Ualá Bis.",
+      "Con Link o QR el cliente paga con tarjeta en el checkout de Ualá Bis. El QR se escanea con la cámara del celular: no lo leen las billeteras virtuales (no es interoperable).",
       "Ualá nos avisa, verificamos la orden y la venta se cierra sola.",
     ],
   },

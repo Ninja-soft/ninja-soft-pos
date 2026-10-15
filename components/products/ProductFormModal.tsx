@@ -22,14 +22,11 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/Switch";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
-import { formatCurrency } from "@/lib/utils/format";
 import { ProductTaxFields } from "./ProductTaxFields";
 import { productTaxDefaults } from "@/modules/products/tax";
 import {
@@ -69,7 +66,10 @@ import {
 import { useFxQuote } from "@/modules/prices/proHooks";
 import { useTaxSettings } from "@/modules/tax/hooks";
 import { IVA_RATES, emitterDiscriminatesIva, type IvaCode } from "@/lib/tax/catalog";
-import { usdToArs } from "@/lib/prices/costing";
+import { finalCost as calcFinalCost, usdToArs } from "@/lib/prices/costing";
+import type { PriceMode } from "@/lib/prices/openPrice";
+import { usePriceProLists } from "@/modules/prices/proHooks";
+import { ProductListPrices, ProductPriceSection } from "@/components/products/ProductPriceSection";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
@@ -313,11 +313,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const [nodes, setNodes] = useState<CategoryNode[]>([]);
   const [attributes, setAttributes] = useState<ProductAttribute[]>([]);
   const [packages, setPackages] = useState<ProductPackage[]>([]);
-  const [marginDraft, setMarginDraft] = useState<string | null>(null);
   const [savingExtras, setSavingExtras] = useState(false);
   // ADR-140: costo final y utilidad (se guarda después del producto, como los bultos).
   const [costing, setCosting] = useState<CostingDraft>(EMPTY_COSTING);
   const [costingSaved, setCostingSaved] = useState<CostingDraft>(EMPTY_COSTING);
+  // ADR-151: costo final y costos de compra plegados, abiertos si ya tienen datos.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const {
     register,
@@ -356,11 +357,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     setTab("general");
     setImageModeTouched(false);
     setFreshImage(null);
-    setMarginDraft(null);
     setAddingBrand(false);
     const cd = costingFromProduct(product);
     setCosting(cd);
     setCostingSaved(cd);
+    setAdvancedOpen(cd.cost_currency === "USD" || cd.cost_extras.length > 0 || cd.markup_pct !== "");
     setAttributes(normalizeAttributes(product?.attributes));
     setNodes(pathToCategory(product?.category_id ?? null, categories));
     reset({
@@ -403,6 +404,10 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       invoice_detail: product?.invoice_detail ?? "",
       service_clarification_ids: product?.service_clarification_ids ?? [],
       service_type_id: product?.service_type_id ?? "",
+      // ADR-151: modo de precio (undefined = fijo sin tocar).
+      price_mode: product?.price_mode === "open" ? "open" : undefined,
+      open_price_min: product?.open_price_min ?? "",
+      open_price_max: product?.open_price_max ?? "",
     });
     // categories entra aparte (abajo) para no resetear el form al llegar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -443,29 +448,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const price = Number(priceRaw ?? 0) || 0;
   const cost =
     costRaw == null || (costRaw as unknown) === "" ? null : Number(costRaw);
-  const margin = cost && cost > 0 ? ((price - cost) / cost) * 100 : null;
-  const profit = cost != null ? price - cost : null;
-
-  function onMarginChange(v: string) {
-    setMarginDraft(v);
-    const m = Number(v.replace(",", "."));
-    if (cost && cost > 0 && Number.isFinite(m)) {
-      setValue("price", Math.round(cost * (1 + m / 100) * 100) / 100, { shouldDirty: true });
-    }
-  }
-
-  const listPreview = useMemo(
-    () =>
-      priceLists
-        .filter((l) => l.is_active)
-        .map((l) => ({
-          id: l.id,
-          name: l.name,
-          pct: l.adjustment_pct,
-          price: l.adjustment_pct == null ? null : price * (1 + Number(l.adjustment_pct) / 100),
-        })),
-    [priceLists, price],
-  );
+  // ADR-151: margen y markup contra el costo final (compra + componentes).
+  const purchaseCost = costing.cost_currency === "USD" ? usdArs : cost;
+  const finalCostNow = calcFinalCost(purchaseCost, costing.cost_extras);
+  const priceMode: PriceMode = watch("price_mode") === "open" ? "open" : "fixed";
+  const { data: proLists = [] } = usePriceProLists();
+  const listCosts = useMemo(() => ({ cost: purchaseCost, final_cost: finalCostNow }), [purchaseCost, finalCostNow]);
 
   function onInvalid(errs: FieldErrors<ProductInput>) {
     const first = Object.keys(errs)[0] as keyof ProductInput | undefined;
@@ -503,8 +491,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       const path = normalizeNodes(nodes, categories);
       const categoryId = path.length === 0 ? null : await categoriesApi.ensurePath(path);
       if (path.some((n) => !n.id)) qc.invalidateQueries({ queryKey: ["categories"] });
+      const wasOpen = active?.price_mode === "open";
       const input: ProductOutput = {
         ...parsed,
+        // ADR-151: un producto fijo que sigue fijo no manda las columnas nuevas.
+        price_mode: parsed.price_mode === "open" ? "open" : wasOpen ? "fixed" : undefined,
         category_id: categoryId,
         attributes: normalizeAttributes(attributes),
       };
@@ -918,71 +909,43 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
         {/* ── Precios ─────────────────────────────────────────────── */}
         <div className={show("precios")}>
-          <Group
-            title="Precio"
-            aside={
-              margin != null ? (
-                <Badge tone={margin >= 0 ? "success" : "danger"}>
-                  Ganás {profit != null ? formatCurrency(profit) : ""}
-                </Badge>
-              ) : undefined
-            }
-          >
-            <div className="grid grid-cols-2 gap-3 max-sm:[&>*:last-child]:col-span-2 sm:grid-cols-3">
-              <Input
-                variant="filled"
-                label="Costo"
-                type="number"
-                step="0.01"
-                inputMode="decimal"
-                placeholder="0"
-                error={errors.cost?.message}
-                readOnly={costing.cost_currency === "USD"}
-                hint={costing.cost_currency === "USD" ? "Sale del costo en dólares" : undefined}
-                {...register("cost", { onChange: () => setMarginDraft(null) })}
-              />
-              <Input
-                variant="filled"
-                label="Margen %"
-                inputMode="decimal"
-                placeholder={cost ? "0" : "Cargá el costo"}
-                disabled={!cost}
-                value={marginDraft ?? (margin != null ? String(Math.round(margin * 10) / 10).replace(".", ",") : "")}
-                onChange={(e) => onMarginChange(e.target.value)}
-                onBlur={() => setMarginDraft(null)}
-              />
-              <Input
-                variant="filled"
-                label={isService ? "Honorarios" : "Precio de venta"}
-                type="number"
-                step="0.01"
-                inputMode="decimal"
-                error={errors.price?.message}
-                {...register("price", { onChange: () => setMarginDraft(null) })}
-              />
-            </div>
+          <Group title={isService ? "Honorarios" : "Precio"}>
+            <ProductPriceSection
+              active={open && tab === "precios"}
+              isService={isService}
+              ivaPct={ivaPct}
+              price={price}
+              finalCost={finalCostNow}
+              priceRegister={register("price")}
+              costRegister={register("cost")}
+              priceError={errors.price?.message}
+              costError={errors.cost?.message}
+              costReadOnly={costing.cost_currency === "USD"}
+              onPriceChange={(p) => setValue("price", p, { shouldDirty: true })}
+              priceMode={priceMode}
+              onPriceModeChange={(m) => setValue("price_mode", m, { shouldDirty: true })}
+              openMinRegister={register("open_price_min")}
+              openMaxRegister={register("open_price_max")}
+              openMin={watch("open_price_min") as string | number | null | undefined}
+              openMax={watch("open_price_max") as string | number | null | undefined}
+              openMaxError={errors.open_price_max?.message}
+            />
             {/* Referencia de mercado (ADR-109): sólo con catálogo y el switch del dueño prendido. */}
             <MarketReferencePanel ean={barcodeVal} myPrice={price} className="pt-2" />
           </Group>
 
           <Group
-            title="Costo final y utilidad"
-            description="Costo de compra en pesos o dólares, lo que se le suma y la ganancia que buscás."
+            title="Listas de precios"
+            description="Cómo queda este precio en cada lista activa y de dónde sale, con la misma cuenta que usa el POS."
           >
-            <ProductCostBuilder
-              draft={costing}
-              onChange={setCosting}
-              arsCost={cost}
+            <ProductListPrices
+              productId={active?.id ?? null}
               price={price}
-              ivaPct={ivaPct}
-              quote={fxQuote.data}
-              onUsePrice={(p) => {
-                setMarginDraft(null);
-                setValue("price", p, { shouldDirty: true });
-              }}
+              lists={proLists}
+              priceMode={priceMode}
+              costs={listCosts}
             />
           </Group>
-
           <Group
             title="Impuestos"
             description="Alícuota de IVA del catálogo, servicio e impuestos internos. El precio de venta es final (con IVA)."
@@ -990,46 +953,43 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             <ProductTaxFields register={register} watch={watch} setValue={setValue} price={price} cost={cost ?? 0} />
           </Group>
 
-          <Group
-            title="Costos de compra"
-            description="Último costo, promedio ponderado y reposición, sin IVA. El que elegiste en Configuración de compras alimenta el margen."
+          {/* Lo avanzado del costo, plegado salvo que ya tenga datos. */}
+          <Disclosure
+            title="Costo final, utilidad objetivo y costos de compra"
+            open={advancedOpen}
+            onOpenChange={setAdvancedOpen}
           >
-            <ProductCostsPanel
-              product={active}
-              price={price}
-              replacementField={register("replacement_cost")}
-            />
-            {errors.replacement_cost?.message && (
-              <p className="text-xs text-destructive">{errors.replacement_cost.message}</p>
-            )}
-          </Group>
+            <div className="space-y-6">
+              <Group
+                title="Costo final y utilidad"
+                description="Costo de compra en pesos o dólares, lo que se le suma y la ganancia que buscás."
+              >
+                <ProductCostBuilder
+                  draft={costing}
+                  onChange={setCosting}
+                  arsCost={cost}
+                  price={price}
+                  ivaPct={ivaPct}
+                  quote={fxQuote.data}
+                  onUsePrice={(p) => setValue("price", p, { shouldDirty: true })}
+                />
+              </Group>
 
-          <Group title="Listas de precios" description="Cómo queda este precio en cada lista activa.">
-            {listPreview.length === 0 ? (
-              <SaveFirst>
-                No tenés listas de precios activas. Las armás en Productos, en Listas de precios.
-              </SaveFirst>
-            ) : (
-              <div className="divide-y divide-border rounded-lg bg-muted">
-                {listPreview.map((l) => (
-                  <div key={l.id} className="flex items-center justify-between gap-3 px-3.5 py-3 text-sm">
-                    <span className="min-w-0 truncate font-medium text-foreground">{l.name}</span>
-                    <span className="flex items-center gap-2 tabular-nums">
-                      {l.pct != null && (
-                        <span className="text-xs text-muted-foreground">
-                          {Number(l.pct) > 0 ? "+" : ""}
-                          {Number(l.pct)}%
-                        </span>
-                      )}
-                      <span className="font-semibold text-foreground">
-                        {l.price != null ? formatCurrency(l.price) : <NoData />}
-                      </span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Group>
+              <Group
+                title="Costos de compra"
+                description="Último costo, promedio ponderado y reposición, sin IVA. El que elegiste en Configuración de compras alimenta el margen."
+              >
+                <ProductCostsPanel
+                  product={active}
+                  price={price}
+                  replacementField={register("replacement_cost")}
+                />
+                {errors.replacement_cost?.message && (
+                  <p className="text-xs text-destructive">{errors.replacement_cost.message}</p>
+                )}
+              </Group>
+            </div>
+          </Disclosure>
         </div>
 
         {/* ── Stock ───────────────────────────────────────────────── */}

@@ -50,6 +50,10 @@ export type Product = Tables<"products"> & {
   service_clarification_ids?: string[] | null;
   // ADR-122: tipo del servicio.
   service_type_id?: string | null;
+  // ADR-151: precio a definir al cobrar ('open'); price queda como sugerido.
+  price_mode?: "fixed" | "open" | null;
+  open_price_min?: number | null;
+  open_price_max?: number | null;
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
@@ -60,6 +64,19 @@ export interface KitComponent {
   componentProductId: string;
   name: string;
   quantity: number;
+}
+
+// ADR-151: el modo de precio sólo viaja si el form lo manda (undefined = no se
+// tocó y el producto era fijo). Así el front funciona contra una base sin la
+// migración mientras nadie use el precio libre.
+export function openPriceColumns(input: Pick<ProductOutput, "price_mode" | "open_price_min" | "open_price_max">) {
+  if (!input.price_mode) return {};
+  const open = input.price_mode === "open";
+  return {
+    price_mode: input.price_mode,
+    open_price_min: open ? (input.open_price_min ?? null) : null,
+    open_price_max: open ? (input.open_price_max ?? null) : null,
+  };
 }
 
 // "oferta, premium" -> ["oferta","premium"]; null/"" -> [].
@@ -386,6 +403,7 @@ export const productsApi = {
         ...(input.is_service ? { track_stock: false } : {}),
         // ADR-122: tipo del servicio (sólo los servicios mandan la columna).
         ...(input.is_service ? { service_type_id: input.service_type_id ?? null } : {}),
+        ...openPriceColumns(input),
         // `plu`/`is_favorite` aún no están en los tipos generados: casteamos el payload.
       } as never)
       .select("*")
@@ -449,6 +467,7 @@ export const productsApi = {
         ...(input.is_service ? { track_stock: false } : {}),
         // ADR-122: tipo del servicio (sólo los servicios mandan la columna).
         ...(input.is_service ? { service_type_id: input.service_type_id ?? null } : {}),
+        ...openPriceColumns(input),
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       } as never)

@@ -141,6 +141,12 @@ export function CartLines({
                       <Tag size={12} aria-hidden /> Precio manual
                     </span>
                   )}
+                  {/* ADR-151: precio a definir al cobrar (lo cargó el cajero). */}
+                  {l.openPrice && (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-info/15 px-1.5 py-0.5 text-[11px] font-semibold text-info">
+                      <Tag size={12} aria-hidden /> Precio libre
+                    </span>
+                  )}
                 </span>
                 <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>
                 {service && l.lineNote && (
@@ -239,7 +245,7 @@ export function CartLines({
                     onClick={() => onEditPrice(l.lineId)}
                     className={cn(lineAction, "bg-card text-foreground hover:bg-fg-10")}
                   >
-                    <Tag size={14} aria-hidden /> Cambiar precio
+                    <Tag size={14} aria-hidden /> {l.openPrice ? "Editar precio" : "Cambiar precio"}
                   </button>
                 )}
                 {editable && (

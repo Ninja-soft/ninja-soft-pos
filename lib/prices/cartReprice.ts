@@ -2,7 +2,7 @@
 // ADR-058). PURO. Al elegir otra lista o condición de pago, cambiar el cliente
 // o la cantidad (escalas), cada línea de producto vuelve a su precio de lista
 // (+ modificadores). No se tocan las líneas con precio manual, los regalos, las
-// cubiertas por un pack ni los ítems sin producto.
+// cubiertas por un pack, las de precio libre (ADR-151) ni los ítems sin producto.
 
 import { round2 } from "./rounding";
 
@@ -18,6 +18,8 @@ export interface RepriceLine {
   packCreditId?: string | null;
   packId?: string | null;
   modifiers?: { options: { price_delta: number }[] }[] | null;
+  /** ADR-151: precio a definir al cobrar (lo cargó el cajero): no se reprecia. */
+  openPrice?: unknown;
 }
 
 export interface CartRepriceChange {
@@ -43,7 +45,7 @@ export function cartRepriceChanges(
 ): CartRepriceChange[] {
   const out: CartRepriceChange[] = [];
   for (const l of lines) {
-    if (!l.productId || l.priceOverride || l.giftPromoId || l.packCreditId || l.packId) continue;
+    if (!l.productId || l.priceOverride || l.giftPromoId || l.packCreditId || l.packId || l.openPrice) continue;
     const p = listPrice(l);
     if (p == null) continue;
     const to = round2(p + modifiersDelta(l.modifiers));

@@ -9,6 +9,8 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils/cn";
 import { formatQty } from "@/lib/utils/format";
 import { money } from "../ui/posStyles";
+import { Keypad, applyKey } from "../ui/Keypad";
+import { openPriceError, openPriceErrorText, openPriceRangeText, parseTypedPrice } from "@/lib/prices/openPrice";
 
 // Diálogos chicos del POS (cliente, venta libre, peso y N° de serie). Misma
 // lógica que antes; sólo cambia la piel (filas con relleno, sin bordes).
@@ -389,6 +391,118 @@ function PriceOverrideForm({
         <Button onClick={submit} disabled={!valid || !reasonOk}>
           {backToList ? "Volver al precio de lista" : "Aplicar precio"}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// Precio a definir al cobrar (ADR-151). Se abre al agregar un producto o
+// servicio en modo libre (y al editar el precio de esa línea): teclado
+// numérico y foco directo en el precio, con el sugerido y el rango del
+// producto. El servidor valida el mínimo y el máximo.
+export interface OpenPriceTarget {
+  name: string;
+  min: number | null;
+  max: number | null;
+  suggested: number | null;
+  /** Precio ya cargado (al editar la línea). */
+  current?: number | null;
+  isService?: boolean;
+}
+
+export function OpenPriceDialog({
+  target,
+  onClose,
+  onConfirm,
+}: {
+  target: OpenPriceTarget | null;
+  onClose: () => void;
+  onConfirm: (price: number) => void;
+}) {
+  return (
+    <Modal
+      open={target !== null}
+      onOpenChange={(o) => !o && onClose()}
+      title={target ? `Precio de ${target.name}` : "Precio"}
+    >
+      {target && (
+        <OpenPriceForm
+          key={`${target.name}:${target.current ?? ""}`}
+          target={target}
+          onClose={onClose}
+          onConfirm={onConfirm}
+        />
+      )}
+    </Modal>
+  );
+}
+
+function OpenPriceForm({
+  target,
+  onClose,
+  onConfirm,
+}: {
+  target: OpenPriceTarget;
+  onClose: () => void;
+  onConfirm: (price: number) => void;
+}) {
+  const fmt = (n: number) => money(n);
+  const [value, setValue] = useState(target.current != null ? String(target.current).replace(".", ",") : "");
+  const [touched, setTouched] = useState(false);
+  const price = parseTypedPrice(value);
+  const err = openPriceError(price, target.min, target.max);
+  const range = openPriceRangeText(target.min, target.max, fmt);
+  const editing = target.current != null;
+  const submit = () => {
+    setTouched(true);
+    if (!err && price != null) onConfirm(price);
+  };
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {target.isService ? "Los honorarios se definen" : "El precio se define"} al cobrar.
+        {range ? ` ${range}.` : ""}
+      </p>
+      <input
+        autoFocus
+        inputMode="decimal"
+        aria-label="Precio"
+        aria-invalid={touched && err ? true : undefined}
+        value={value}
+        placeholder={target.suggested != null ? String(target.suggested).replace(".", ",") : "0"}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setValue(e.target.value.replace(/[^\d.,]/g, ""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        className={cn(
+          "h-16 w-full rounded-lg bg-muted px-4 text-right font-price text-3xl font-bold tabular-nums text-foreground outline-none transition focus:bg-secondary focus:shadow-[inset_0_0_0_1px_var(--border)]",
+          touched && err && "text-danger",
+        )}
+      />
+      {touched && err && (
+        <p role="alert" className="text-sm font-medium text-danger">
+          {openPriceErrorText(err, target.min, target.max, fmt)}
+        </p>
+      )}
+      {target.suggested != null && (
+        <button
+          type="button"
+          onClick={() => setValue(String(target.suggested).replace(".", ","))}
+          className="inline-flex h-10 items-center rounded-md bg-fg-6 px-3.5 text-[13px] font-semibold tabular-nums transition-colors hover:bg-fg-10"
+        >
+          Usar sugerido {money(target.suggested)}
+        </button>
+      )}
+      <Keypad lastKey="," onKey={(k) => setValue((v) => applyKey(v, k))} />
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button onClick={submit}>{editing ? "Guardar precio" : "Agregar al carrito"}</Button>
       </div>
     </div>
   );

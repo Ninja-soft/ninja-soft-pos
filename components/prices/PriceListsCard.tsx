@@ -16,15 +16,18 @@ import { PRICE_CHANNELS, type PriceList } from "@/modules/prices/api";
 import { LIST_KINDS, type ProList } from "@/modules/prices/proApi";
 import {
   useApplyDuePrices,
+  usePriceAssignments,
   usePriceProLists,
   usePriceProMutations,
   usePriceSettings,
 } from "@/modules/prices/proHooks";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { describeListRule } from "@/lib/prices/listExplain";
+import { RESOLUTION_ORDER, listUsage } from "@/lib/prices/listUsage";
 import { exportPriceLists } from "@/modules/prices/xlsx";
 import { GatedButton } from "@/components/saas/GatedAction";
 import { ImportWizard } from "@/components/import/ImportWizard";
 import { priceListImportDefinition } from "@/modules/imports/entities";
-import { describeRounding } from "@/lib/prices/rounding";
 import { PriceListEditorModal } from "@/components/prices/PriceListEditorModal";
 import { PriceListFormModal } from "@/components/prices/PriceListFormModal";
 import { BulkUpdateWizard, type WizardMode } from "@/components/prices/BulkUpdateWizard";
@@ -53,6 +56,8 @@ export function PriceListsCard() {
   useApplyDuePrices();
   const { data: settings } = usePriceSettings();
   const { data: lists } = usePriceProLists();
+  // ADR-151: dónde se usa cada lista (canal, POS y asignaciones).
+  const { data: assignments } = usePriceAssignments();
   const m = usePriceProMutations();
   const hasPro = useFeature("listas_precios_pro") !== false && (settings?.pro ?? false);
   const pro = hasPro && settings?.mode === "pro";
@@ -227,6 +232,28 @@ export function PriceListsCard() {
 
         {activeTab === "lists" && (
           <div className="space-y-3">
+            <Disclosure variant="help" title="Qué es una lista de precios y cómo se calcula">
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <p>
+                  Una lista es otra forma de cobrar los mismos productos: mayorista, tarjeta, catálogo. No reemplaza el
+                  precio de venta: lo toma de base y le aplica su regla. Ejemplo: con una lista Mayorista de -10 %, un
+                  producto de $1.000 sale $900. Si a un producto le cargás un precio fijo en la lista, ese manda.
+                </p>
+                <p>
+                  Una lista sólo cambia lo que se cobra si algo la elige. Cuando hay varias, el POS, el catálogo y Mercado
+                  Libre usan el mismo cálculo y eligen en este orden:
+                </p>
+                <ol className="list-decimal space-y-0.5 pl-5">
+                  {RESOLUTION_ORDER.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ol>
+                <p>
+                  El catálogo público usa la lista del canal Catálogo y Mercado Libre la que elegís en la cuenta de ML. Para
+                  cambiar muchos precios juntos usá Actualizar precios o el Editor de precios de Productos.
+                </p>
+              </div>
+            </Disclosure>
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
                 {pro
@@ -250,7 +277,9 @@ export function PriceListsCard() {
             {all.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">Sin listas de precios. Creá la primera.</p>
             )}
-            {all.map((l) => (
+            {all.map((l) => {
+              const usage = listUsage(l, assignments ?? []);
+              return (
               <div
                 key={l.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5 text-sm"
@@ -269,13 +298,17 @@ export function PriceListsCard() {
                     {l.pos_selectable && <Badge tone="neutral">En el POS</Badge>}
                     {l.prices_include_tax === false && <Badge tone="neutral">Sin IVA</Badge>}
                   </div>
-                  {(l.valid_from || l.valid_to || (pro && l.rounding)) && (
+                  <div className="text-xs text-muted-foreground">
+                    {describeListRule(l, all, { hasItem: false, pro: hasPro })}
+                    {usage.where.length > 0 ? ` · Se usa en: ${usage.where.join(", ")}` : ""}
+                  </div>
+                  {(l.valid_from || l.valid_to) && (
                     <div className="text-xs text-muted-foreground">
                       {l.valid_from ? `Desde ${formatWhen(l.valid_from)} ` : ""}
                       {l.valid_to ? `hasta ${formatWhen(l.valid_to)}` : ""}
-                      {pro && l.rounding ? ` · ${describeRounding(l.rounding)}` : ""}
                     </div>
                   )}
+                  {usage.warning && <div className="text-xs font-medium text-warning">{usage.warning}</div>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Switch
@@ -315,7 +348,8 @@ export function PriceListsCard() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -362,7 +396,15 @@ export function PriceListsCard() {
         open={toDelete !== null}
         onOpenChange={(o) => !o && setToDelete(null)}
         title="Eliminar lista de precios"
-        description={toDelete ? `¿Eliminar la lista "${toDelete.name}"? Es una baja lógica.` : undefined}
+        description={
+          toDelete
+            ? `¿Eliminar la lista "${toDelete.name}"? Es una baja lógica.${
+                all.some((x) => x.base_list_id === toDelete.id && x.id !== toDelete.id)
+                  ? " Hay listas que salen de esta: van a calcularse sobre el precio de venta."
+                  : ""
+              }${listUsage(toDelete, assignments ?? []).used ? " Donde se usaba, se pasa a la lista que sigue en el orden." : ""}`
+            : undefined
+        }
         confirmLabel="Eliminar"
         danger
         loading={m.updateList.isPending}

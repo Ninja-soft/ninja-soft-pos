@@ -50,6 +50,10 @@ export interface CartLine {
   clarificationIds?: string[];
   // Aclaración libre del renglón (lote, dirección, N° de muestra, normativa).
   lineNote?: string | null;
+  // ADR-151: precio a definir al cobrar. El cajero lo cargó al agregar la
+  // línea; el servidor lo acepta porque el producto está en modo libre (no por
+  // esta marca) y valida mínimo y máximo. No se reprecia ni se fusiona.
+  openPrice?: { min: number | null; max: number | null; suggested: number | null } | null;
 }
 
 /** ¿El renglón tiene datos de servicio propios? (no se fusiona con otro). */
@@ -121,6 +125,15 @@ interface CartState {
     categoryId?: string | null;
   }) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
+  // ADR-151: producto con precio a definir al cobrar. Siempre línea propia.
+  addOpenPrice: (
+    p: { id: string; name: string; sku: string | null; unit?: string; warrantyMonths?: number; categoryId?: string | null },
+    price: number,
+    range: { min: number | null; max: number | null; suggested: number | null },
+    qty?: number,
+  ) => void;
+  // ADR-151: cambia el precio cargado de una línea de precio libre (sin motivo).
+  setOpenLinePrice: (lineId: string, price: number) => void;
   // Vende un pack (H41): línea por su precio que, al confirmar, acredita las
   // sesiones al cliente (create_sale, extra kind='pack'). Cada pack es su propia
   // línea (no fusiona); cantidad 1.
@@ -170,7 +183,8 @@ export const useCartStore = create<CartState>((set) => ({
       // Línea sin variante: identidad por producto. No fusiona con líneas de
       // variante del mismo producto (esas llevan variantId).
       const existing = state.lines.find(
-        (l) => l.productId === p.id && !l.variantId && l.unit !== "kg" && !l.serial && !lineHasServiceEdits(l),
+        (l) =>
+          l.productId === p.id && !l.variantId && l.unit !== "kg" && !l.serial && !l.openPrice && !lineHasServiceEdits(l),
       );
       if (existing) {
         return {
@@ -319,6 +333,29 @@ export const useCartStore = create<CartState>((set) => ({
         },
       ],
     })),
+  addOpenPrice: (p, price, range, qty = 1) =>
+    set((state) => ({
+      lines: [
+        ...state.lines,
+        {
+          lineId: crypto.randomUUID(),
+          productId: p.id,
+          categoryId: p.categoryId ?? null,
+          name: p.name,
+          sku: p.sku,
+          unitPrice: price,
+          quantity: qty > 0 ? qty : 1,
+          discount: 0,
+          unit: p.unit ?? "un",
+          warrantyMonths: p.warrantyMonths ?? 0,
+          openPrice: range,
+        },
+      ],
+    })),
+  setOpenLinePrice: (lineId, price) =>
+    set((state) => ({
+      lines: state.lines.map((l) => (l.lineId === lineId && l.openPrice ? { ...l, unitPrice: price } : l)),
+    })),
   addPack: (p) =>
     set((state) => ({
       // Pack vendido: ítem libre (sin producto/stock) por su precio, con packId
@@ -382,7 +419,7 @@ export const useCartStore = create<CartState>((set) => ({
   applyServerPrices: (changes) =>
     set((state) => ({
       lines: state.lines.map((l) => {
-        const c = changes.find((x) => x.lineId === l.lineId);
+        const c = l.openPrice ? undefined : changes.find((x) => x.lineId === l.lineId);
         return c ? { ...l, unitPrice: c.to, listPrice: c.to } : l;
       }),
     })),

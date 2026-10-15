@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useFeature } from "@/modules/saas/gating";
 import { useCustomerGroups } from "@/modules/customers/hooks";
 import { useStores } from "@/modules/stock/hooks";
+import { useStoreGroups } from "@/modules/config/hooks";
 import { useProducts } from "@/modules/products/hooks";
 import { PRICE_CHANNELS, type PriceChannel } from "@/modules/prices/api";
 import {
@@ -24,6 +25,7 @@ import {
 import { useListBreaks, usePriceAssignments, usePriceProMutations } from "@/modules/prices/proHooks";
 import { describeRounding, type RoundingRule } from "@/lib/prices/rounding";
 import { marginToMarkup, markupToMargin, type ListCostBasis, type ListKind, type MarkupMode } from "@/lib/prices/resolve";
+import { RESOLUTION_ORDER, channelHelp } from "@/lib/prices/listUsage";
 import {
   Field,
   RoundingPicker,
@@ -40,7 +42,7 @@ import {
 export function PriceListFormModal({
   open,
   onOpenChange,
-  list,
+  list: listProp,
   lists,
   pro,
 }: {
@@ -52,6 +54,13 @@ export function PriceListFormModal({
 }) {
   const { toast } = useToast();
   const m = usePriceProMutations();
+  // ADR-151: al crear, el modal sigue abierto con la lista nueva para elegir
+  // dónde se usa (antes había que cerrar y volver a abrirla para verlo).
+  const [created, setCreated] = useState<ProList | null>(null);
+  useEffect(() => {
+    if (!open) setCreated(null);
+  }, [open]);
+  const list = listProp ?? created;
   const [name, setName] = useState("");
   const [channel, setChannel] = useState<PriceChannel>("custom");
   const [pct, setPct] = useState("");
@@ -72,7 +81,7 @@ export function PriceListFormModal({
   const [includesTax, setIncludesTax] = useState(true);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || created) return;
     setName(list?.name ?? "");
     setChannel((list?.channel as PriceChannel) ?? "custom");
     setPct(list?.adjustment_pct == null ? "" : String(list.adjustment_pct));
@@ -90,7 +99,9 @@ export function PriceListFormModal({
     setTo(toLocalInput(list?.valid_to));
     setPosSelectable(Boolean(list?.pos_selectable));
     setIncludesTax(list?.prices_include_tax !== false);
-  }, [open, list]);
+    // El alta recién creada conserva lo cargado (no se resetea el formulario).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, listProp]);
 
   const taken = new Set(lists.filter((l) => l.channel !== "custom" && l.id !== list?.id).map((l) => l.channel));
   const markupNum = numOrNull(markup);
@@ -141,15 +152,31 @@ export function PriceListFormModal({
   function save() {
     const input = build();
     if (!input) return;
-    const done = {
-      onSuccess: () => {
-        toast({ title: list ? "Lista guardada" : "Lista creada", variant: "success" });
-        onOpenChange(false);
-      },
-      onError: (e: unknown) => toast({ title: friendlyPriceError(e), variant: "error" }),
-    };
-    if (list) m.updateList.mutate({ id: list.id, patch: input }, done);
-    else m.createList.mutate(input, done);
+    const onError = (e: unknown) => toast({ title: friendlyPriceError(e), variant: "error" });
+    if (list) {
+      m.updateList.mutate(
+        { id: list.id, patch: input },
+        {
+          onSuccess: () => {
+            toast({ title: "Lista guardada", variant: "success" });
+            onOpenChange(false);
+          },
+          onError,
+        },
+      );
+    } else {
+      m.createList.mutate(input, {
+        onSuccess: (l) => {
+          setCreated(l);
+          toast({
+            title: "Lista creada",
+            description: "Ahora elegí dónde se usa: si nada la elige, no cambia ningún precio.",
+            variant: "success",
+          });
+        },
+        onError,
+      });
+    }
   }
 
   const parents = lists.filter((l) => l.id !== list?.id);
@@ -173,10 +200,10 @@ export function PriceListFormModal({
     >
       <div className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Nombre" className="sm:col-span-2">
+          <Field label="Nombre" className="sm:col-span-3">
             <input className={fieldCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Mayorista" />
           </Field>
-          <Field label="Canal">
+          <Field label="Canal" hint={channelHelp(channel)} className="sm:col-span-3">
             <select className={fieldCls} value={channel} onChange={(e) => setChannel(e.target.value as PriceChannel)}>
               {PRICE_CHANNELS.map((c) => (
                 <option key={c.value} value={c.value} disabled={taken.has(c.value)}>
@@ -187,6 +214,8 @@ export function PriceListFormModal({
             </select>
           </Field>
         </div>
+
+        <ListExample kind={pro ? kind : "fixed"} pct={numOrNull(pct)} amount={pro ? numOrNull(amount) : null} markup={markupNum} markupMode={markupMode} />
 
         {pro && (
           <Field label="Tipo de lista" hint={LIST_KINDS.find((k) => k.value === kind)?.hint}>
@@ -313,7 +342,14 @@ export function PriceListFormModal({
           <Switch checked={includesTax} onCheckedChange={setIncludesTax} label="Precios con IVA incluido" />
         </div>
 
-        {list && <AssignmentsEditor listId={list.id} />}
+        {list ? (
+          <AssignmentsEditor listId={list.id} />
+        ) : (
+          <Callout tone="neutral">
+            Después de crearla vas a elegir dónde se usa: grupos de clientes, sucursales o el POS. Una lista que nada
+            elige no cambia ningún precio.
+          </Callout>
+        )}
         {list && pro && <BreaksEditor listId={list.id} />}
       </div>
     </Modal>
@@ -324,6 +360,8 @@ function AssignmentsEditor({ listId }: { listId: string }) {
   const { toast } = useToast();
   const { data: groups } = useCustomerGroups();
   const { data: stores } = useStores();
+  // ADR-151: el resolver ya usaba la lista del grupo de sucursales; faltaba elegirla.
+  const { data: storeGroups } = useStoreGroups();
   const { data: assignments } = usePriceAssignments();
   const multi = useFeature("multi_sucursal");
   const m = usePriceProMutations();
@@ -345,16 +383,31 @@ function AssignmentsEditor({ listId }: { listId: string }) {
     ...(multi !== false && (stores?.length ?? 0) > 1
       ? (stores ?? []).map((s: { id: string; name: string }) => ({ scope: "store" as const, id: s.id, name: `Sucursal ${s.name}` }))
       : []),
+    ...(multi !== false
+      ? (storeGroups ?? [])
+          .filter((g) => !g.deleted_at)
+          .map((g) => ({ scope: "store_group" as const, id: g.id, name: `Grupo de sucursales ${g.name}` }))
+      : []),
   ];
-  if (rows.length === 0) return null;
-
   return (
     <section>
       <h3 className="text-sm font-semibold">Dónde se usa</h3>
+      <p className="mb-1 text-xs text-muted-foreground">Cuando hay varias, el POS y el servidor eligen en este orden:</p>
+      <ol className="mb-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
+        {RESOLUTION_ORDER.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ol>
       <p className="mb-2 text-xs text-muted-foreground">
-        Orden: lista elegida en el POS, cliente, grupo de clientes, sucursal, mostrador. Un destino usa una sola lista.
+        Un destino usa una sola lista. A un cliente puntual se la asignás desde su ficha, en Clientes.
       </p>
-      <div className="divide-y divide-border rounded-md border border-border">
+      {rows.length === 0 && (
+        <Callout tone="neutral">
+          No tenés grupos de clientes ni varias sucursales. Para usar esta lista, marcala elegible en el POS o creá un
+          grupo de clientes (Clientes, Grupos).
+        </Callout>
+      )}
+      <div className={rows.length ? "divide-y divide-border rounded-md border border-border" : "hidden"}>
         {rows.map((r) => {
           const a = byTarget.get(`${r.scope}:${r.id}`);
           const mine = a?.price_list_id === listId;
@@ -460,5 +513,54 @@ function BreaksEditor({ listId }: { listId: string }) {
         </Callout>
       )}
     </section>
+  );
+}
+
+// Ejemplo en vivo de cómo calcula la lista un producto de $1.000 (costo $600).
+function ListExample({
+  kind,
+  pct,
+  amount,
+  markup,
+  markupMode,
+}: {
+  kind: ListKind;
+  pct: number | null;
+  amount: number | null;
+  markup: number | null;
+  markupMode: MarkupMode;
+}) {
+  const fmt = (n: number) => `$${n.toLocaleString("es-AR", { maximumFractionDigits: 2 })}`;
+  const adj = (base: number) => {
+    let v = base;
+    if (pct != null) v = v * (1 + pct / 100);
+    if (amount != null) v = v + amount;
+    return Math.max(0, Math.round(v * 100) / 100);
+  };
+  let text: string;
+  if (kind === "cost") {
+    const p =
+      markup == null ? null : markupMode === "margin" ? (markup < 100 ? 600 / (1 - markup / 100) : null) : 600 * (1 + markup / 100);
+    text =
+      p == null
+        ? "Sobre costo: cargá el markup o el margen para ver el ejemplo."
+        : `Producto con costo ${fmt(600)}: la lista lo vende a ${fmt(adj(Math.round(p * 100) / 100))}${
+            pct != null || amount != null ? " (con el ajuste)" : ""
+          }.`;
+  } else if (kind === "derived") {
+    text = `Si la lista madre vende un producto a ${fmt(1000)}, esta lo vende a ${fmt(adj(1000))}.`;
+  } else if (kind === "currency") {
+    text = "En moneda: cargás el precio de cada producto en esa moneda y se pasa a pesos con la cotización del día.";
+  } else {
+    text =
+      pct == null && amount == null
+        ? `Sin ajuste: un producto de ${fmt(1000)} sale ${fmt(1000)}, salvo los que tengan precio fijo en la lista.`
+        : `Un producto que vendés a ${fmt(1000)} sale ${fmt(adj(1000))} con esta lista. Los productos con precio fijo en la lista no cambian.`;
+  }
+  return (
+    <div className="rounded-md bg-muted/60 px-3 py-2.5 text-xs text-muted-foreground">
+      <span className="font-semibold text-foreground">Cómo se calcula. </span>
+      {text}
+    </div>
   );
 }

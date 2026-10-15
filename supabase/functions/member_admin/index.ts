@@ -77,6 +77,35 @@ Deno.serve(async (req: Request) => {
     .eq("user_id", user.id)
     .eq("status", "active")
     .maybeSingle();
+  // Mi perfil: cualquier miembro activo edita SU nombre y SU foto (no hace
+  // falta team.manage). Se había perdido al redesplegar (14/10): el modal
+  // "Mi perfil" fallaba con "No se pudo guardar".
+  if (action === "update_my_profile") {
+    if (!caller) return json({ error: "forbidden" }, 403);
+    const patch: Record<string, unknown> = {};
+    if (body.display_name !== undefined) patch.display_name = clip(body.display_name, 80) || null;
+    if (body.avatar !== undefined) patch.avatar = clip(body.avatar, 600) || null;
+    if (Object.keys(patch).length === 0) return json({ ok: true });
+    const { error: upErr } = await admin
+      .from("tenant_users")
+      .update(patch)
+      .eq("tenant_id", tenantId)
+      .eq("user_id", user.id);
+    if (upErr) {
+      console.error("[member_admin] update_my_profile", upErr.message);
+      return json({ error: "update_failed" }, 500);
+    }
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "member",
+      entity_id: user.id,
+      action: "member_profile_updated",
+      after_data: patch as never,
+    });
+    return json({ ok: true });
+  }
+
   // ADR-138: gestionar personal es la capacidad team.manage (dueño y
   // encargado en los roles de sistema). La jerarquía sigue por nivel.
   if (

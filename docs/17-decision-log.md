@@ -5499,3 +5499,30 @@ La auditoría (doc 45 §2) encontró 28 hallazgos. Los centrales: cinco circuito
 - Dependencias nuevas previstas: `maplibre-gl` (sólo en pantallas con mapa); opcional `signature_pad`.
 - Cuentas para el dueño: OpenRouteService (gratis), contacto para User-Agent, clave de transporte de ARBA de prueba y del piloto, consulta a AGIP, contador del piloto para umbral y códigos de producto. Costo externo cero hasta L5.
 - Pendiente de confirmar: diseño de registro vigente del TXT de ARBA campo por campo, umbral y validez del COT, `token`/`sign` de AGIP y régimen de confirmación de recepción.
+
+## ADR-150: Registro que no pierde datos (alta pendiente en la cuenta), IA en el paso del plan, códigos de invitación con IA y descuento, membresía del negocio activo y puesta en marcha reordenada
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261218100000_registro_onboarding` sin aplicar; Edge `create_tenant` sin desplegar) · **Base:** ADR-120 (códigos de cuenta corriente), ADR-086 (checklist por rubro), ADR-116 (modo de catálogo por rubro), ADR-134 (pie del menú).
+
+### Contexto
+
+Una cuenta nueva de prueba (rubro Servicios) reportó: el rubro elegido no se guardaba, después de confirmar el email se volvían a pedir el nombre del negocio y el nombre, la IA y el plan elegidos se perdían, el pie del menú mostraba el email partido mientras cargaba y una foto nueva "no se tomaba". Causas encontradas:
+
+1. Con confirmación de email, `signUp` no devuelve sesión: el wizard mandaba al login sin crear el negocio y sin guardar nada. Al entrar, el layout mandaba a la ruta vieja `/onboarding`, que pedía otra vez el nombre, ofrecía 6 rubros (sin "Servicios") y no aplicaba plan, IA, código ni datos fiscales. En producción el negocio se creó con `industry = 'otro'` y el rubro se corrigió a mano después.
+2. El pie del menú, "Mi perfil" y unas quince lecturas más hacían `tenant_users` por `user_id` con `limit(1)`, sin filtrar por el negocio activo: con dos membresías podían mostrar datos de otra cuenta. Además el pie no se refrescaba al editar el perfil desde Equipo.
+3. Los códigos de invitación no tenían cómo incluir la IA ni descuento fuera de cuenta corriente, y un código de prueba extendía `tenants.trial_ends_at` pero no el período de la suscripción.
+
+### Decisión
+
+1. **Alta pendiente en `user_metadata.signup`** (negocio, rubro, plan, IA, código, datos fiscales; `modules/auth/pendingSignup.ts`). Sin negocio, `homePath` lleva a `/signup`, que retoma el alta con un resumen y un botón. `create_tenant` la usa de respaldo, guarda `tenant_users.display_name` con el nombre del dueño (avatar de iniciales generado) y la borra al crear el negocio. `/onboarding` queda como redirección.
+2. **Una sola forma de leer "mi membresía":** `lib/tenant/myMembership.ts` filtra por `app_metadata.current_tenant_id`. El pie del menú usa `useMyMembershipProfile` e `invalidateMyProfile` refresca POS e internal al guardar desde "Mi perfil" o Equipo. Mientras carga, sólo spinner. `Avatar` cae a iniciales si la foto no carga.
+3. **Códigos:** `invite_codes.ai_included` + `ai_months` (null = para siempre); descuento también en códigos de prueba (arranca al terminar la prueba). `redeem_invite_code` aplica plan, prueba (también en `subscriptions.current_period_*`), descuento e IA bonificada (`subscription_addons` `granted` con `granted_until`) y audita `addon_granted`. Nunca degrada un addon pago.
+4. **Vencimiento de la IA bonificada:** `expire_granted_addons()` (cron diario `addon-grant-expire`, sin grant a usuarios) la da de baja y avisa al dueño. No se pasa a pago sola: cobrar sin consentimiento y sin actualizar el preapproval de Mercado Pago sería peor.
+5. **Puesta en marcha:** Marca → Ticket → Email → Medios de pago (destacado) → Productos/Servicios → Caja → Primera venta → Equipo → ARCA → salón/agenda → Escuela. Señales nuevas `marca` (logo), `email` (envío configurado) y `pagos` (medio electrónico o cuenta para transferencias) en `onboarding_tenant_signals`. `OnboardingNextStepToasts` (shell, dueño o encargado, fuera del POS) avisa "Listo: X. Lo que sigue: Y" con botón, recordando por negocio lo ya avisado.
+
+### Consecuencias
+
+- Sin tablas ni policies nuevas; los guards de RLS no cambian.
+- Sin la migración aplicada: Medios de pago cae a "Mercado Pago conectado" y Marca y Email quedan pendientes; los códigos con IA no se aplican (la RPC vieja ignora los campos nuevos).
+- **Deuda:** no existe un chat de soporte dentro de la app. El contacto por cuenta corriente desde el registro va por email (`lib/support/contact.ts`, único lugar a cambiar cuando exista el chat).
+- El alta pendiente vive en la metadata del usuario (editable por él mismo): no se confía en ella para nada sensible; el código se valida al canjearlo y el rubro y los fiscales se revalidan en `create_tenant`.

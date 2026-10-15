@@ -12,18 +12,27 @@
 // Lógica pura para testear qué pasos ve cada rubro y plan.
 import { getProfile, profileForVertical, type BusinessProfile } from "@/lib/profiles/businessProfiles";
 
+// Orden de la puesta en marcha (ADR-150): Marca → Ticket → Email → Medios de
+// pago (el paso más importante, destacado) → Productos → Caja → Primera venta →
+// Equipo → Facturación ARCA → pasos del rubro (salón, agenda) → Escuela.
+// "fiscal" y "mp" quedan como señales (las usa el panel interno) pero ya no
+// son pasos: los datos fiscales van dentro de Marca y Mercado Pago dentro de
+// Medios de pago.
 export type ChecklistKey =
-  | "fiscal"
-  | "producto"
-  | "mp"
+  | "marca"
   | "ticket"
+  | "email"
+  | "pagos"
+  | "producto"
   | "caja"
+  | "venta"
   | "equipo"
+  | "arca"
   | "mesas"
   | "agenda"
-  | "arca"
   | "escuela"
-  | "venta";
+  | "fiscal"
+  | "mp";
 
 export type ChecklistStatus = Partial<Record<ChecklistKey, boolean>>;
 
@@ -35,6 +44,8 @@ export interface ChecklistStep {
   href: string;
   /** Artículo de ayuda que explica el paso (content/help). */
   helpId: string | null;
+  /** Paso clave: se muestra destacado aunque no sea el siguiente. */
+  highlight?: boolean;
 }
 
 interface StepDef extends ChecklistStep {
@@ -52,14 +63,44 @@ const hasFlag = (ctx: ChecklistContext, flag: string) => Boolean(ctx.profile?.fl
 const feature = (ctx: ChecklistContext, key: string) => ctx.features[key] !== false;
 const always = () => true;
 
+const isServices = (ctx: ChecklistContext) => ctx.profile?.vertical === "servicios";
+
 const STEP_DEFS: StepDef[] = [
   {
-    key: "fiscal",
-    label: "Datos del negocio",
-    desc: "Razón social, CUIT y condición de IVA para tus comprobantes.",
-    cta: "Completar",
+    key: "marca",
+    label: "Tu marca",
+    desc: "Subí tu logo y completá los datos del negocio: salen en tickets, facturas y el catálogo.",
+    cta: "Subir logo",
     href: "/configuracion?seccion=marca",
     helpId: null,
+    when: always,
+  },
+  {
+    key: "ticket",
+    label: "Diseño de ticket",
+    desc: "Elegí cómo se ve el comprobante que entregás.",
+    cta: "Elegir diseño",
+    href: "/configuracion?seccion=tickets",
+    helpId: null,
+    when: always,
+  },
+  {
+    key: "email",
+    label: "Email de comprobantes",
+    desc: "Elegí desde qué email les llegan a tus clientes los tickets y las facturas.",
+    cta: "Configurar email",
+    href: "/configuracion?seccion=email",
+    helpId: null,
+    when: always,
+  },
+  {
+    key: "pagos",
+    label: "Medios de pago",
+    desc: "Conectá Mercado Pago, tu posnet o tu cuenta para transferencias y cobrá como quieran tus clientes.",
+    cta: "Configurar cobros",
+    href: "/configuracion?seccion=pagos",
+    helpId: "pos-medios-de-pago",
+    highlight: true,
     when: always,
   },
   {
@@ -72,22 +113,41 @@ const STEP_DEFS: StepDef[] = [
     when: always,
   },
   {
-    key: "mp",
-    label: "Medios de pago",
-    desc: "Conectá Mercado Pago y cobrá con QR desde el POS.",
-    cta: "Conectar",
-    href: "/configuracion?seccion=pagos",
-    helpId: "pos-medios-de-pago",
+    key: "caja",
+    label: "Abrí la caja",
+    desc: "Abrí un turno de caja con el efectivo inicial para controlar el día.",
+    cta: "Abrir caja",
+    href: "/caja",
+    helpId: "caja-abrir",
+    when: (ctx) => feature(ctx, "caja"),
+  },
+  {
+    key: "venta",
+    label: "Primera venta",
+    desc: "Cerrá una venta de prueba y mirá cómo sale el comprobante.",
+    cta: "Vender",
+    href: "/pos",
+    helpId: "pos-cobrar-venta",
     when: always,
   },
   {
-    key: "ticket",
-    label: "Diseño de ticket",
-    desc: "Elegí cómo se ve el comprobante que entregás.",
-    cta: "Elegir",
-    href: "/configuracion?seccion=tickets",
-    helpId: null,
+    key: "equipo",
+    label: "Invitá a tu equipo",
+    desc: "Sumá a tu cajero o encargado con su propio usuario y rol.",
+    cta: "Invitar",
+    href: "/dashboard-team",
+    helpId: "usuarios-permisos",
     when: always,
+  },
+  {
+    key: "arca",
+    label: "Facturación ARCA",
+    desc: "Terminá el asistente y pasá a producción para emitir facturas electrónicas.",
+    cta: "Configurar",
+    href: "/configuracion?seccion=facturacion",
+    helpId: "arca-facturacion",
+    // Sólo si el plan la incluye: "AFIP cuando aplique".
+    when: (ctx) => ctx.features.facturacion_afip === true,
   },
   {
     key: "mesas",
@@ -105,25 +165,7 @@ const STEP_DEFS: StepDef[] = [
     cta: "Ir a la agenda",
     href: "/agenda",
     helpId: "agenda-turnos",
-    when: (ctx) => ctx.profile?.vertical === "servicios" && feature(ctx, "agenda"),
-  },
-  {
-    key: "caja",
-    label: "Abrí la caja",
-    desc: "Abrí un turno de caja con el efectivo inicial para controlar el día.",
-    cta: "Abrir caja",
-    href: "/caja",
-    helpId: "caja-abrir",
-    when: (ctx) => feature(ctx, "caja"),
-  },
-  {
-    key: "equipo",
-    label: "Invitá a tu equipo",
-    desc: "Sumá a tu cajero o encargado con su propio usuario y rol.",
-    cta: "Invitar",
-    href: "/dashboard-team",
-    helpId: "usuarios-permisos",
-    when: always,
+    when: (ctx) => isServices(ctx) && feature(ctx, "agenda"),
   },
   {
     key: "escuela",
@@ -134,26 +176,19 @@ const STEP_DEFS: StepDef[] = [
     helpId: null,
     when: (ctx) => feature(ctx, "escuela"),
   },
-  {
-    key: "arca",
-    label: "Facturación ARCA",
-    desc: "Terminá el asistente y pasá a producción para emitir facturas electrónicas.",
-    cta: "Configurar",
-    href: "/configuracion?seccion=facturacion",
-    helpId: "arca-facturacion",
-    // Sólo si el plan la incluye: "AFIP cuando aplique".
-    when: (ctx) => ctx.features.facturacion_afip === true,
-  },
-  {
-    key: "venta",
-    label: "Primera venta",
-    desc: "Cerrá una venta de prueba y dejá todo listo.",
-    cta: "Vender",
-    href: "/pos",
-    helpId: "pos-cobrar-venta",
-    when: always,
-  },
 ];
+
+// Copy por rubro: un estudio o consultora carga servicios, no productos.
+function adaptToProfile(step: ChecklistStep, ctx: ChecklistContext): ChecklistStep {
+  if (step.key === "producto" && isServices(ctx)) {
+    return {
+      ...step,
+      label: "Cargá tus servicios",
+      desc: "Sumá tus honorarios por hora, visita, informe o análisis.",
+    };
+  }
+  return step;
+}
 
 /** Perfil a usar: el aplicado; si no hay, el sugerido por el rubro del alta. */
 export function checklistProfile(appliedKey: string | null | undefined, industry: string | null | undefined) {
@@ -161,7 +196,49 @@ export function checklistProfile(appliedKey: string | null | undefined, industry
 }
 
 export function buildActivationChecklist(ctx: ChecklistContext): ChecklistStep[] {
-  return STEP_DEFS.filter((s) => s.when(ctx)).map(({ when: _when, ...step }) => step);
+  return STEP_DEFS.filter((s) => s.when(ctx)).map(({ when: _when, ...step }) => adaptToProfile(step, ctx));
+}
+
+/**
+ * Estado de los pasos a partir de las señales de la base. Con la migración
+ * 20261218100000 sin aplicar, onboarding_status no trae marca/email/pagos:
+ * Medios de pago cae a "Mercado Pago conectado" y los otros dos quedan
+ * pendientes (nunca se marcan sin un dato real).
+ */
+export function checklistStatusFromSignals(signals: Record<string, unknown>): ChecklistStatus {
+  const b = (k: string) => signals[k] === true;
+  const has = (k: string) => typeof signals[k] === "boolean";
+  return {
+    marca: b("marca"),
+    ticket: b("ticket"),
+    email: b("email"),
+    pagos: has("pagos") ? b("pagos") : b("mp"),
+    producto: b("producto"),
+    caja: b("caja"),
+    venta: b("venta"),
+    equipo: b("equipo"),
+    arca: b("arca"),
+    mesas: b("mesas"),
+    agenda: b("agenda"),
+    escuela: b("escuela"),
+    fiscal: b("fiscal"),
+    mp: b("mp"),
+  };
+}
+
+/** Primer paso pendiente (en el orden de la puesta en marcha) o null. */
+export function nextPendingStep(steps: readonly ChecklistStep[], status: ChecklistStatus): ChecklistStep | null {
+  return steps.find((s) => status[s.key] !== true) ?? null;
+}
+
+/** Pasos que pasaron a completos respecto de los que ya se sabían hechos. */
+export function newlyCompletedSteps(
+  steps: readonly ChecklistStep[],
+  status: ChecklistStatus,
+  knownDone: readonly string[],
+): ChecklistStep[] {
+  const known = new Set(knownDone);
+  return steps.filter((s) => status[s.key] === true && !known.has(s.key));
 }
 
 export function checklistProgress(steps: readonly ChecklistStep[], status: ChecklistStatus) {

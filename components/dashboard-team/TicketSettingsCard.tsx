@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
+import { fetchMyMembership } from "@/lib/tenant/myMembership";
 
 type TicketForm = {
   ticket_width: string;
@@ -44,13 +45,7 @@ export function TicketSettingsCard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
+      const mem = await fetchMyMembership<{ tenant_id: string; role: string }>(supabase, user, "tenant_id, role");
       if (!mem) return null;
       const canManage = ["owner", "manager"].includes(mem.role);
       const empty: TicketForm = {

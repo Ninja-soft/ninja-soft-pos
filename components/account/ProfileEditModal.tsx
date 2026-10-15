@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileModalBody } from "@/components/account/ProfileModalBody";
+import { invalidateMyProfile } from "@/hooks/useMyMembershipProfile";
 
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",
@@ -68,7 +69,7 @@ export function ProfileEditModal({
     },
     onSuccess: () => {
       toast({ title: "Perfil actualizado", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["internal-shell-profile"] });
+      invalidateMyProfile(qc);
       qc.invalidateQueries({ queryKey: ["account-profile"] });
       onOpenChange(false);
     },

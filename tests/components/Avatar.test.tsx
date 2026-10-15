@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { Avatar, AVATAR_PRESETS } from "@/components/ui/Avatar";
 
 describe("Avatar", () => {
@@ -23,6 +23,20 @@ describe("Avatar", () => {
     const { container } = render(<Avatar name="Cajero A" avatar="zzz" />);
     expect(container.querySelector("svg")).toBeNull();
     expect(container.textContent).toBe("CA");
+  });
+
+  it("una foto que no carga cae a las iniciales (nunca imagen rota)", () => {
+    const { container } = render(<Avatar name="Pablo Scalise" avatar="https://x.test/no-existe.webp" />);
+    const img = container.querySelector("img");
+    expect(img).toBeTruthy();
+    fireEvent.error(img!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toBe("PS");
+  });
+
+  it("con un email arma las iniciales de la parte antes del @", () => {
+    const { container } = render(<Avatar name="pablo.scalise@gmail.com" />);
+    expect(container.textContent).toBe("PS");
   });
 
   it("expone un set de presets no vacío", () => {

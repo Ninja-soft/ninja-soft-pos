@@ -43,18 +43,44 @@ export async function redeemInviteCode(
   if (error) {
     return { ok: false, message: inviteErrorMessage(error.message) };
   }
-  const res = (data ?? {}) as { kind?: RedeemResult["kind"]; due_days?: number | null };
+  const res = (data ?? {}) as RedeemPayload;
+  return { ok: true, kind: res.kind, message: redeemMessage(res) };
+}
+
+interface RedeemPayload {
+  kind?: RedeemResult["kind"];
+  trial_days?: number | null;
+  due_days?: number | null;
+  discount_percent?: number | null;
+  ai_included?: boolean | null;
+  ai_months?: number | null;
+}
+
+/** Mensaje del canje con todo lo que el código aplicó (ADR-120 + ADR-150). */
+export function redeemMessage(res: RedeemPayload): string {
+  const parts: string[] = [];
   if (res.kind === "account") {
     // Cuenta corriente (F20-8): sin checkout de Mercado Pago; paga por
     // transferencia contra aviso de cobro.
-    return {
-      ok: true,
-      kind: "account",
-      message:
-        res.due_days != null
-          ? `Código aplicado: pagás por cuenta corriente, con ${res.due_days} días para pagar cada cuota`
-          : "Código aplicado: pagás por cuenta corriente",
-    };
+    parts.push(
+      res.due_days != null
+        ? `pagás por cuenta corriente, con ${res.due_days} días para pagar cada cuota`
+        : "pagás por cuenta corriente",
+    );
+  } else if (res.kind === "lifetime") {
+    parts.push("tenés acceso vitalicio");
+  } else if (res.kind === "trial_days" && res.trial_days) {
+    parts.push(`tenés ${res.trial_days} días de prueba`);
   }
-  return { ok: true, message: "Código aplicado", kind: res.kind };
+  if (res.discount_percent && res.kind !== "lifetime") {
+    parts.push(`${Number(res.discount_percent).toLocaleString("es-AR")} % de descuento`);
+  }
+  if (res.ai_included) {
+    parts.push(
+      res.ai_months
+        ? `Asistente IA bonificado por ${res.ai_months} ${res.ai_months === 1 ? "mes" : "meses"}`
+        : "Asistente IA bonificado",
+    );
+  }
+  return parts.length > 0 ? `Código aplicado: ${parts.join(", ")}` : "Código aplicado";
 }

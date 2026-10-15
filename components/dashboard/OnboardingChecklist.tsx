@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Check,
@@ -22,6 +22,8 @@ import {
   Users,
   GraduationCap,
   FileText,
+  Mail,
+  Palette,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -30,33 +32,30 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
 import { ProfileOnboardingPrompt } from "@/components/profiles/ProfileOnboardingPrompt";
 import { cn } from "@/lib/utils/cn";
-import { useGating } from "@/modules/saas/gating";
-import { useProfileContext } from "@/modules/profiles/hooks";
-import { useOnboardingActivation } from "@/modules/help/hooks";
+import { useOnboardingChecklist } from "@/modules/onboarding/checklist";
 import {
-  buildActivationChecklist,
-  checklistProfile,
   type ChecklistKey,
   type ChecklistStep,
   type ChecklistStatus,
 } from "@/lib/onboarding/activationChecklist";
 
-// Pasos dinámicos por rubro y plan (F15 · H71 · ADR-086): la lista sale de
-// lib/onboarding/activationChecklist.ts con el perfil por rubro (ADR-075).
-type BaseKey = "fiscal" | "mp" | "producto" | "ticket" | "venta";
-
+// Pasos dinámicos por rubro y plan (F15 · H71 · ADR-086 · ADR-150): la lista
+// sale de lib/onboarding/activationChecklist.ts con el perfil por rubro (ADR-075).
 const ICONS: Record<ChecklistKey, React.ElementType> = {
-  fiscal: Store,
-  producto: Package,
-  mp: CreditCard,
+  marca: Palette,
   ticket: Receipt,
+  email: Mail,
+  pagos: CreditCard,
+  producto: Package,
+  caja: Wallet,
+  venta: ShoppingCart,
+  equipo: Users,
+  arca: FileText,
   mesas: Utensils,
   agenda: CalendarDays,
-  caja: Wallet,
-  equipo: Users,
   escuela: GraduationCap,
-  arca: FileText,
-  venta: ShoppingCart,
+  fiscal: Store,
+  mp: CreditCard,
 };
 
 const COLLAPSE_KEY = "onboarding-checklist-collapsed";
@@ -64,6 +63,15 @@ const COLLAPSE_KEY = "onboarding-checklist-collapsed";
 // Foco visible común a los controles propios de la tarjeta.
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card";
+
+// Marca del paso clave (Medios de pago): sin cobros no hay ventas.
+function KeyStepBadge() {
+  return (
+    <span className="inline-flex items-center rounded-md bg-ninja-flame/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-ninja-flameSoft">
+      El más importante
+    </span>
+  );
+}
 
 function pendingCopy(left: number) {
   return left === 1 ? "Te falta 1 paso para dejar todo listo." : `Te faltan ${left} pasos para dejar todo listo.`;
@@ -132,9 +140,11 @@ export function OnboardingChecklistCard({
   const [next, ...rest] = pending;
   // Con muchos pendientes, "Después" muestra los primeros y el resto a pedido.
   const REST_PREVIEW = 3;
-  const restCollapsible = rest.length > REST_PREVIEW + 1;
-  const visibleRest = restCollapsible && !showAllRest ? rest.slice(0, REST_PREVIEW) : rest;
-  const hiddenRest = rest.length - REST_PREVIEW;
+  // El paso clave (Medios de pago) se ve siempre, aunque la lista esté corta.
+  const previewRest = rest.filter((s, i) => i < REST_PREVIEW || s.highlight);
+  const hiddenRest = rest.length - previewRest.length;
+  const restCollapsible = hiddenRest > 1;
+  const visibleRest = restCollapsible && !showAllRest ? previewRest : rest;
   const total = steps.length;
   const NextIcon = next ? ICONS[next.key] : Rocket;
   const nextIndex = next ? steps.indexOf(next) + 1 : 0;
@@ -205,7 +215,10 @@ export function OnboardingChecklistCard({
                   <NextIcon size={20} aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <h3 className="font-display text-lg font-bold leading-snug text-foreground">{next.label}</h3>
+                  <h3 className="flex flex-wrap items-center gap-2 font-display text-lg font-bold leading-snug text-foreground">
+                    {next.label}
+                    {next.highlight && <KeyStepBadge />}
+                  </h3>
                   <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{next.desc}</p>
                 </div>
               </div>
@@ -232,18 +245,29 @@ export function OnboardingChecklistCard({
                 return (
                   <li key={step.key} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:gap-4">
                     <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                          step.highlight ? "bg-ninja-flame/10 text-ninja-flameSoft" : "bg-muted text-muted-foreground",
+                        )}
+                      >
                         <Icon size={16} aria-hidden />
                       </span>
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold leading-snug text-foreground">{step.label}</div>
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold leading-snug text-foreground">
+                          {step.label}
+                          {step.highlight && <KeyStepBadge />}
+                        </div>
                         <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">{step.desc}</p>
                       </div>
                     </div>
                     <Link
                       href={step.href as Route}
                       aria-label={`${step.cta}: ${step.label}`}
-                      className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full shrink-0 gap-1.5 sm:w-auto")}
+                      className={cn(
+                        buttonVariants({ variant: step.highlight ? "primary" : "secondary", size: "sm" }),
+                        "w-full shrink-0 gap-1.5 sm:w-auto",
+                      )}
                     >
                       {step.cta}
                       <ArrowRight size={14} aria-hidden />
@@ -416,56 +440,9 @@ export function OnboardingChecklist() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: ctx } = useQuery({
-    queryKey: ["onboarding-ctx"],
-    queryFn: async (): Promise<{ tenantId: string } | null> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      if (!mem) return null;
-      return { tenantId: mem.tenant_id };
-    },
-  });
-  const tenantId = ctx?.tenantId ?? "";
-
-  const { data: status } = useQuery({
-    queryKey: ["onboarding-status"],
-    enabled: !!tenantId,
-    staleTime: 30_000,
-    queryFn: async (): Promise<Record<BaseKey, boolean>> => {
-      const { data, error } = await supabase.rpc("onboarding_status");
-      if (error) throw error;
-      const r = (data ?? {}) as Partial<Record<BaseKey, boolean>>;
-      return {
-        fiscal: !!r.fiscal,
-        mp: !!r.mp,
-        producto: !!r.producto,
-        ticket: !!r.ticket,
-        venta: !!r.venta,
-      };
-    },
-  });
-
-  const { data: dismissed } = useQuery({
-    queryKey: ["onboarding-dismissed", tenantId],
-    enabled: !!tenantId,
-    queryFn: async (): Promise<boolean> => {
-      const { data } = await supabase
-        .from("pos_settings")
-        .select("onboarding_dismissed")
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-      return Boolean((data as { onboarding_dismissed?: boolean } | null)?.onboarding_dismissed);
-    },
-  });
+  // Pasos por rubro y plan + estado con datos reales (compartido con los avisos
+  // de "qué sigue" del shell, ADR-150).
+  const { tenantId, steps: STEPS, status: merged, dismissed } = useOnboardingChecklist();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -483,18 +460,6 @@ export function OnboardingChecklist() {
     }
   };
 
-  // Señales extra (caja, equipo, salón, agenda, ARCA, Escuela) y pasos según
-  // el perfil por rubro aplicado (o el sugerido por el rubro del alta).
-  // Sin la migración nueva la RPC falla: el checklist sigue con los pasos base.
-  const { data: extra, isFetched: extraFetched } = useOnboardingActivation(!!tenantId);
-  const { tenant, applied } = useProfileContext();
-  const { data: gating } = useGating();
-  const STEPS = buildActivationChecklist({
-    profile: checklistProfile(applied?.profile_key, tenant?.industry),
-    features: gating?.features ?? {},
-  });
-  const merged: ChecklistStatus | null = status && extraFetched && gating ? { ...(extra ?? {}), ...status } : null;
-
   const ready = merged !== null;
   const done = merged ? STEPS.filter((s) => merged[s.key] === true).length : 0;
   const total = STEPS.length;
@@ -511,16 +476,10 @@ export function OnboardingChecklist() {
       wasComplete.current = allDone;
       return;
     }
-    if (!wasComplete.current && allDone) {
-      setCelebrate(true);
-      toast({
-        title: "¡Negocio configurado!",
-        description: "Ya tenés todo listo para vender.",
-        variant: "success",
-      });
-    }
+    // El aviso lo da OnboardingNextStepToasts (shell); acá sólo la tarjeta.
+    if (!wasComplete.current && allDone) setCelebrate(true);
     wasComplete.current = allDone;
-  }, [allDone, ready, toast]);
+  }, [allDone, ready]);
 
   const dismiss = useMutation({
     mutationFn: async () => {
@@ -540,7 +499,7 @@ export function OnboardingChecklist() {
   });
 
   // Sin datos o descartado: no renderiza nada.
-  if (!merged || dismissed) return null;
+  if (!merged || dismissed !== false) return null;
 
   // Estado de logro efímero (una vez completado dentro de la sesión).
   if (allDone) {

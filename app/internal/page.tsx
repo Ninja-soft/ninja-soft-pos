@@ -105,7 +105,14 @@ export default async function InternalHomePage({
   const looseRpc = supabase as unknown as {
     rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
   };
-  const [tenantsRes, addonsRes, catalogRes, discountsRes, paymentsRes, healthRes, eventsRes, exclusionsRes] = await Promise.all([
+  const looseFrom = supabase as unknown as {
+    from: (t: string) => {
+      select: (c: string) => {
+        in: (col: string, v: string[]) => PromiseLike<{ data: unknown; error: unknown }>;
+      };
+    };
+  };
+  const [tenantsRes, addonsRes, catalogRes, discountsRes, paymentsRes, healthRes, eventsRes, exclusionsRes, reversalsRes, legacyRes] = await Promise.all([
     supabase
       .from("tenants")
       .select(
@@ -121,12 +128,18 @@ export default async function InternalHomePage({
       .from("tenant_discounts")
       .select("tenant_id, kind, value, valid_from, valid_until, deleted_at")
       .is("deleted_at", null),
-    supabase.from("billing_records").select("tenant_id, amount, created_at"),
+    // F20-1/F20-2: pagos del ledger (incluye los billing_records migrados) y sus reversas.
+    looseFrom
+      .from("platform_payments")
+      .select("tenant_id, amount_cents, paid_at, status")
+      .in("status", ["approved", "refunded", "partially_refunded", "charged_back", "in_dispute"]),
     supabase.rpc("internal_tenant_health"),
     // F20-0a: cambios de estado desde la auditoría (migración 20261111200000).
     looseRpc.rpc("internal_saas_kpi_events", { p_since: previous.start.toISOString() }),
     // F20-1: negocios de prueba, del staff, lifetime y exentos (migración 20261113100100).
     looseRpc.rpc("internal_billing_exclusions"),
+    looseFrom.from("platform_ledger").select("tenant_id, amount_cents, effective_date").in("kind", ["refund", "payment_reversal"]),
+    supabase.from("billing_records").select("tenant_id, amount, created_at"),
   ]);
 
   const tenants = (tenantsRes.data ?? []) as unknown as TenantRaw[];
@@ -161,11 +174,27 @@ export default async function InternalHomePage({
   for (const d of (discountsRes.data ?? []) as unknown as DiscountRow[]) {
     discountsBy.set(d.tenant_id, [...(discountsBy.get(d.tenant_id) ?? []), d]);
   }
-  const payments: PaymentRow[] = ((paymentsRes.data ?? []) as {
-    tenant_id: string;
-    amount: number;
-    created_at: string;
-  }[]).map((p) => ({ tenant_id: p.tenant_id, amount: Number(p.amount), at: p.created_at }));
+  // Pagos del ledger; sin la migración de cobranza, los billing_records de antes.
+  const ledgerOk = !paymentsRes.error && !reversalsRes.error;
+  const payments: PaymentRow[] = ledgerOk
+    ? ((paymentsRes.data ?? []) as { tenant_id: string; amount_cents: number; paid_at: string }[]).map((p) => ({
+        tenant_id: p.tenant_id,
+        amount: Number(p.amount_cents) / 100,
+        at: p.paid_at,
+      }))
+    : ((legacyRes.data ?? []) as { tenant_id: string; amount: number; created_at: string }[]).map((p) => ({
+        tenant_id: p.tenant_id,
+        amount: Number(p.amount),
+        at: p.created_at,
+      }));
+  // Reintegros y contracargos: restan en el cobrado del período (no afectan la conversión).
+  const reversals: PaymentRow[] = ledgerOk
+    ? ((reversalsRes.data ?? []) as { tenant_id: string; amount_cents: number; effective_date: string }[]).map((r) => ({
+        tenant_id: r.tenant_id,
+        amount: -Number(r.amount_cents) / 100,
+        at: `${r.effective_date}T15:00:00Z`,
+      }))
+    : [];
   const events = eventsRes.error ? null : ((eventsRes.data ?? null) as KpiEvents | null);
   const changes = events?.status_changes ?? [];
   const rejected = events?.rejected_debits ?? [];
@@ -217,8 +246,8 @@ export default async function InternalHomePage({
   const paidTrend = events ? trend(stockEnd.paidAccounts, stockStart.paidAccounts) : null;
   const arpaEnd = stockEnd.paidAccounts > 0 ? stockEnd.mrr / stockEnd.paidAccounts : null;
   const arpaStart = stockStart.paidAccounts > 0 ? stockStart.mrr / stockStart.paidAccounts : null;
-  const cobrado = collected(payments, current, excludedIds);
-  const cobradoPrev = collected(payments, previous, excludedIds);
+  const cobrado = collected([...payments, ...reversals], current, excludedIds);
+  const cobradoPrev = collected([...payments, ...reversals], previous, excludedIds);
 
   // ── Clientes ─────────────────────────────────────────────────────────────
   const trials = trialsSummary(accounts, now);
@@ -318,7 +347,8 @@ export default async function InternalHomePage({
             value={formatCompactArs(cobrado)}
             exact={formatExactArs(cobrado)}
             definition={KPI_DEFINITIONS.collected}
-            sub="Bruto, según pagos registrados"
+            sub={ledgerOk ? "Sin reintegros ni contracargos" : "Bruto, según pagos registrados"}
+            href="/internal/cobranza?vista=metricas"
             trendPct={trend(cobrado, cobradoPrev)}
             trendLabel={vsLabel}
           />

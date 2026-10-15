@@ -4,7 +4,8 @@
 // Funciones puras sobre los datos de hoy (subscriptions, plans, addons,
 // descuentos, billing_records y la auditoría de cambios de estado que trae
 // internal_saas_kpi_events). Sin Supabase: se testean en
-// tests/unit/saasKpis.test.ts. La versión con snapshots llega en F20-2.
+// tests/unit/saasKpis.test.ts. La versión con snapshots diarios (movimiento de
+// MRR, NRR, cobranza) está en lib/billing/kpis.ts (F20-2, ADR-126).
 //
 // Definiciones (resumen; el texto completo vive en KPI_DEFINITIONS):
 //   · Cuenta paga: suscripción active o past_due, no excluida y con MRR > 0.
@@ -380,7 +381,7 @@ export function newTenants(accounts: KpiAccount[], p: Period): number {
   }).length;
 }
 
-/** Cobrado (bruto) en el período según billing_records. */
+/** Cobrado en el período: suma de pagos (y reversas con importe negativo). */
 export function collected(payments: PaymentRow[], p: Period, excluded: Set<string> = new Set()): number {
   return payments.reduce((acc, pay) => {
     if (excluded.has(pay.tenant_id)) return acc;
@@ -510,13 +511,13 @@ export const KPI_DEFINITIONS = {
   mrr: "Ingreso recurrente mensual de las cuentas pagas: precio del plan normalizado a mes (anual / 12) más addons comprados vigentes, menos descuentos vigentes. No incluye trials, suspendidas, canceladas, cuentas lifetime o exentas, negocios de prueba ni negocios cuyo dueño es del staff.",
   arr: "Run-rate anual: MRR × 12. No es lo facturado en el año.",
   mrrAtRisk: "Suma del MRR de las cuentas pagas con el pago vencido o con el último débito de Mercado Pago rechazado (30 días).",
-  collected: "Pagos registrados en el período (billing_records), en bruto. El neto de comisiones y las reversas llegan con el ledger de cobranza (F20-1).",
+  collected: "Pagos aprobados del período en la cuenta corriente de la plataforma, por fecha de pago, menos reintegros y contracargos. El neto de comisiones, por mes, está en Cobranzas › Métricas.",
   paidAccounts: "Suscripciones activas o con pago vencido, con MRR mayor a 0 y sin exclusiones.",
   arpa: "Ingreso promedio por cuenta paga: MRR / cuentas pagas.",
   trials: "Negocios en período de prueba. Entre paréntesis, los que vencen en los próximos 7 días.",
   conversion: "Trials cuyo fin de prueba cayó en el período y pagaron por primera vez antes de los 7 días siguientes, sobre todos los trials que terminaron en el período. Con menos de 5 casos se muestra n/d.",
   churn: "Cuentas pagas al inicio del período que al cierre están canceladas o suspendidas hace más de 30 días, sobre las pagas al inicio. Se reconstruye desde la auditoría de cambios de estado, no desde la fecha de modificación.",
   newTenants: "Negocios creados en el período, sin los de prueba, los del staff ni los dados de baja.",
-  collectionRisk: "Negocios con el pago vencido, suspendidos por falta de pago o con el último débito rechazado (30 días). Las promesas de pago y el saldo vencido se suman con el ledger (F20-1).",
+  collectionRisk: "Negocios con el pago vencido, suspendidos por falta de pago o con el último débito rechazado (30 días). Las promesas de pago se suman con F20-9; la deuda vencida por antigüedad está en Cobranzas.",
   usageRisk: "Cuentas pagas o trials con puntaje de salud menor a 60 (logins, ventas y usuarios activos), más los trials sin ventas después de 7 días (riesgo de conversión).",
 } as const;

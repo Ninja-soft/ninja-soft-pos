@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowDownRight, ArrowUpRight, ChevronRight, Minus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { InfoHint } from "@/components/ui/InfoHint";
+import { NoData } from "@/components/ui/NoData";
 import { formatPct } from "@/lib/internal/saasKpis";
 
 // Tarjeta de KPI del dashboard interno (spec docs/40 §15.1): título, valor
@@ -22,6 +23,7 @@ export function KpiTile({
   trendLabel = "vs. período anterior",
   href,
   tone = "default",
+  noData = false,
 }: {
   label: string;
   /** null = sin datos suficientes ("n/d"). */
@@ -35,6 +37,8 @@ export function KpiTile({
   trendLabel?: string;
   href?: string;
   tone?: "default" | "warning" | "danger";
+  /** Sin datos para calcular: muestra <NoData/> en lugar del valor. */
+  noData?: boolean;
 }) {
   const hasTrend = trendPct !== undefined && trendPct !== null;
   const dir = !hasTrend || trendPct === 0 ? "flat" : trendPct! > 0 ? "up" : "down";
@@ -55,7 +59,11 @@ export function KpiTile({
         </InfoHint>
       </div>
 
-      {value === null ? (
+      {noData ? (
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <NoData /> Sin datos
+        </p>
+      ) : value === null ? (
         <p className="mt-2 text-lg font-semibold text-muted-foreground">n/d</p>
       ) : (
         <p

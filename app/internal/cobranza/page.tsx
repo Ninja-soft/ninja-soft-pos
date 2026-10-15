@@ -13,9 +13,10 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarClock, ChevronRight, CircleAlert, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, Users, Wallet } from "lucide-react";
+import { CalendarClock, ChartColumnStacked, ChevronRight, CircleAlert, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, Users, Wallet } from "lucide-react";
 import { Segmented } from "@/components/ui/Segmented";
 import { TransferInbox } from "@/components/internal/billing/TransferInbox";
+import { BillingKpisView } from "@/components/internal/billing/BillingKpisView";
 import {
   CollectionConfigSkeleton,
   CollectionSettingsCard,
@@ -37,8 +38,8 @@ import { useBillingAccess, useBillingOverview } from "@/modules/billing/ledger";
 
 const tenantHref = (id: string) => `/internal/tenants/${id}?tab=cuenta` as Route;
 
-type Vista = "resumen" | "pagos" | "config";
-const isVista = (v: string | null): v is Vista => v === "resumen" || v === "pagos" || v === "config";
+type Vista = "resumen" | "metricas" | "pagos" | "config";
+const isVista = (v: string | null): v is Vista => v === "resumen" || v === "metricas" || v === "pagos" || v === "config";
 
 export default function InternalCobranzaPage() {
   const router = useRouter();
@@ -54,7 +55,7 @@ export default function InternalCobranzaPage() {
     router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false });
   };
   const { data: ov, isLoading, error } = useBillingOverview();
-  const { data: access } = useBillingAccess();
+  const { data: access, isError: accessError } = useBillingAccess();
   const { data: coll, isLoading: collLoading, error: collError } = useCollection(null);
   const pendingCount = coll?.pending_reports.length ?? 0;
   const rows = (ov?.tenants ?? []).filter((t) => !t.exclusion && (t.balance_cents !== 0 || t.upcoming_cents > 0));
@@ -77,6 +78,7 @@ export default function InternalCobranzaPage() {
           className="flex-nowrap"
           options={[
             { value: "resumen", label: "Resumen", icon: <LayoutGrid size={15} /> },
+            { value: "metricas", label: "Métricas", icon: <ChartColumnStacked size={15} /> },
             {
               value: "pagos",
               label: pendingCount > 0 ? `Pagos a verificar (${pendingCount})` : "Pagos a verificar",
@@ -86,6 +88,8 @@ export default function InternalCobranzaPage() {
           ]}
         />
       </div>
+
+      {vista === "metricas" && <BillingKpisView canView={access ? Boolean(access.can_operate) : accessError ? false : undefined} />}
 
       {vista === "pagos" && (
         <section className="mt-6" aria-labelledby="cob-pagos">

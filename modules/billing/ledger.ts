@@ -9,6 +9,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import type { BillingKpisData } from "@/lib/billing/kpis";
 
 type RpcClient = {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
@@ -229,6 +230,17 @@ export function useBillingOverview() {
   return useQuery({
     queryKey: ["billing-overview"],
     queryFn: () => call<BillingOverview>("internal_billing_overview"),
+    retry: false,
+  });
+}
+
+/** F20-2 (ADR-126): insumos de los KPIs de MRR y cobranza (Cobranzas, admin o super_admin). */
+export function useBillingKpis(months = 12, enabled = true) {
+  return useQuery({
+    queryKey: ["billing-kpis", months],
+    queryFn: () => call<BillingKpisData>("internal_billing_kpis", { p_months: months }),
+    enabled,
+    staleTime: 60_000,
     retry: false,
   });
 }

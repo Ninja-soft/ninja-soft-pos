@@ -38,7 +38,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        className={cn(buttonVariants({ variant, size }), className)}
+        // Con loading se ve sólo el spinner y el texto: el ícono propio del
+        // botón (svg hijo directo) se oculta mientras carga.
+        className={cn(buttonVariants({ variant, size }), loading && "[&>svg]:hidden", className)}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
         {...props}

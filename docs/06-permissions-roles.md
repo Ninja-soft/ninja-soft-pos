@@ -24,6 +24,47 @@ Los roles viven en la tabla `tenant_users.role`. Un usuario puede tener distinto
 
 > **Regla.** Un tenant siempre tiene al menos un `owner`. No se puede dejar un tenant sin owner.
 
+## 2b. Capacidades, roles de sistema y roles a medida (ADR-138)
+
+`tenant_users.role` sigue siendo el **nivel base** (owner, manager, cashier, viewer): lo usan las guardas que todavía son por rol y decide la jerarquía (quién gestiona a quién). Encima, cada persona tiene un **rol con capacidades** (`tenant_users.role_id`; null = el rol de sistema de su nivel) y, opcionalmente, **permisos puntuales** (`permission_user_overrides`: conceder o quitar una capacidad).
+
+- **Catálogo:** `lib/permissions/capabilities.ts` es la fuente única (clave, módulo, etiqueta, descripción, nivel Ver / Operar / Administrar, riesgo, dependencias, nivel base mínimo y si la hace cumplir la base). La migración `20261204100100_permisos_capacidades` lo siembra en `permission_capabilities`; `tests/unit/permissionsCatalog.test.ts` falla si se separan.
+- **Roles de sistema** (no se borran, en todo plan): Dueño (todo, siempre), Encargado, Cajero, Solo lectura, **Vendedor** (nivel Cajero: atiende y arma pedidos, no abre caja, no cobra ni anula) y **Auditor** (nivel Solo lectura: ve todo, incluso costos y auditoría). Los cuatro primeros reproducen 1 a 1 lo que la base hacía por rol (equivalencia probada sobre PGlite: misma matriz antes y después, también con personal suspendido y con rol pisado por sucursal).
+- **Roles a medida** (feature `roles_permisos`, Business+): se crean de cero o duplicando uno de sistema, con nombre, color e ícono; se borran reasignando a otro rol. Sin la feature (o con el rol borrado) cada persona vuelve al rol de sistema de su nivel y los permisos puntuales no cuentan.
+- **Por sucursal:** la asignación vigente de `staff_branch_assignments` puede llevar su propio rol (`role` + `role_id`): Encargado en una sucursal y Cajero en otra.
+- **Efectivas:** rol (de la sucursal o del negocio) + concedidas − quitadas, sólo las que permite el nivel base (`min_base`; lo del dueño nunca) y sólo si están todas sus dependencias. Misma regla en SQL (`capabilities_for`) y en TypeScript (`resolveCapabilities`).
+- **En la base:** `has_capability('x')` (negocio), `has_capability_at('x', sucursal)`, `member_has_capability(negocio, 'x')` (triggers) y `user_has_capability(negocio, usuario, 'x')` (Edge, service_role). En policies siempre `(select has_capability('x'))` (initplan). Caché por transacción en `ninja.caps` (la limpian las escrituras en tablas de permisos, `tenant_users` y asignaciones).
+
+| Capacidad | Dónde se hace cumplir |
+|---|---|
+| `sales.create`, `sales.void`, `sales.return`, `cash.open`, `cash.close`, `cash.movements` | `trg_role_write_guard` también dentro de RPC (`create_sale`, `void_sale`, `return_sale*`, `open_cash_shift`, cierre, ingresos y retiros) |
+| `sales.void.past_days` | `void_sale`, con el rol de la sucursal de la venta (día de Argentina) |
+| `products.edit`, `products.price`, `stock.adjust` | `trg_role_write_guard` por REST (precio y costo pide `products.price`; sólo el stock, `stock.adjust`) y `adjust_store_stock` |
+| `customers.create`, `customers.edit`, `customers.delete` | `trg_role_write_guard` (modo clientes) |
+| `prices.manage`, `purchases.manage`, `treasury.manage`, `taxes.manage`, `accounting.manage` | `price_can_write` / `price_pro_can_write`, `purchase_can_write`, `treasury_can_write`, `tax_can_write` (+ tablas de impuestos), `acc_assert` |
+| `reports.costs` | `_margin_assert` (márgenes y alertas de margen) |
+| `stock.count` | `_cycle_assert` (conteos cíclicos) |
+| `config.edit` | policies de escritura de `pos_settings` |
+| `audit.view` | policy `audit_logs_role_scope` (`has_active_capability`, personal operativo como `is_tenant_manager`) |
+| `team.manage` | Edges `member_admin` e `invite_user` |
+| `integrations.manage` | `trg_role_write_guard` en `shipping_connections` y `payment_fee_rules` |
+| `*.view`, `stock.adjust.approve` | Organizan la pantalla (los datos los lee cualquier miembro por su sucursal, ADR-045); la aprobación de ajustes la usa Inventario |
+
+Lo que no tiene capacidad propia (otras tablas `manage`, `is_tenant_manager()`, RPC con `member_role_in`) sigue por nivel base. Por eso las capacidades de nivel Encargado (`purchases.manage`, `team.manage`, `config.edit`, etc.) sólo se conceden a roles con nivel base Encargado.
+
+**Editor (Panel del dueño › Equipo › Roles y permisos, `/dashboard-team/permisos`, migración `20261204100200_roles_personalizados`):**
+
+| Acción | Dueño | Con `team.manage` (Encargado) | Resto |
+|---|---|---|---|
+| Ver roles, matriz y comparar | ✅ | ✅ | ✅ (sólo sus permisos en Personas) |
+| Crear, editar, duplicar roles propios (`permission_role_save`, `_duplicate`) | ✅ con `roles_permisos` | ❌ | ❌ |
+| Borrar un rol propio reasignando (`permission_role_delete`) | ✅ (también sin la feature) | ❌ | ❌ |
+| Asignar rol (`permission_assign_role`) | Todos menos Dueño | Sólo a cajeros y solo lectura, roles de esos niveles y sin permisos que él no tenga | ❌ |
+| Rol por sucursal (`permission_branch_role_set`, asignación vigente, `multi_sucursal`) | ✅ | Igual que asignar | ❌ |
+| Permisos puntuales (`permission_override_set`) | ✅ con `roles_permisos`, nunca al dueño ni lo del dueño | ❌ | ❌ |
+
+Nadie se cambia a sí mismo. Roles de sistema en todo plan; propios con la feature. Todo queda en `audit_logs` (`permission_role_created`, `_updated` con lo sumado y lo quitado, `_deleted`, `permission_role_assigned`, `permission_branch_role_set`, `permission_override_set`).
+
 ## 3. Roles internos NinjaSoft
 
 Definidos por la combinación `is_internal = true` + `internal_level` en `app_metadata` y espejo `users.internal_level`.
@@ -248,6 +289,8 @@ Pendiente (no lo hace cumplir la base): edición de clientes acotada a datos de 
 
 ## 6. Convención de nombres de permisos
 
+**Vigente (ADR-138):** capacidades `<módulo>.<acción>` en minúscula (`sales.void`, `sales.void.past_days`, `stock.adjust.approve`), catálogo en `lib/permissions/capabilities.ts` y tabla `permission_capabilities`. Una capacidad nueva se suma en el catálogo, se regenera el seed (`buildSeedSql()`, en una migración nueva) y se hace cumplir con `has_capability` en la base. Lo que sigue es el diseño original, histórico:
+
 Formato: `<recurso>:<acción>`. Lista canónica vive en `lib/permissions/permissions.ts`:
 
 ```typescript
@@ -342,6 +385,8 @@ Para envolver UI condicional:
 
 ## 9. Cambios de permisos
 
+**Vigente (ADR-138):** el catálogo y los roles de sistema son código versionado (sembrado en la base); los roles a medida, las asignaciones y los permisos puntuales son datos por negocio, sólo por RPC y auditados. Lo que sigue es el diseño original, histórico:
+
 Los permisos asociados a roles son **definiciones de código**, no datos en BD. Esto es intencional: mantiene la matriz versionada y trazable.
 
 Para overrides puntuales por tenant (ej. un cliente que necesita que sus managers también puedan eliminar usuarios), usar feature flags + lógica explícita en `can()`.
@@ -366,10 +411,11 @@ F11 agrega roles configurables por tenant para comercios con separación de sal�
 
 Reglas:
 
-- [ ] Los roles de sistema se pueden editar pero no borrar.
-- [ ] El tenant puede crear roles propios con permisos granulares.
-- [ ] Cada cambio de permiso queda en `audit_logs`.
-- [ ] Las Edge Functions revalidan permisos; no alcanza con ocultar botones.
+- [x] Los roles de sistema no se borran ni se editan (se duplican). *(ADR-138)*
+- [x] El tenant puede crear roles propios con permisos granulares. *(ADR-138, feature `roles_permisos`)*
+- [x] Cada cambio de permiso queda en `audit_logs`. *(ADR-138)*
+- [x] Las Edge Functions revalidan permisos; no alcanza con ocultar botones. *(`member_admin`, `invite_user` con `user_has_capability`)*
+- [x] Presets: Vendedor (≈ `salesperson_retail`) y Auditor son roles de sistema; `dispatcher`, `cashier_plus` y `retail_manager` se arman como roles propios.
 
 ## 9.1b Alcance por sucursal (F17 · H91, ADR-045)
 

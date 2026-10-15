@@ -33,6 +33,14 @@ export interface InvoicePdfData {
   receptor: { name: string; docType: string | null; docNumber: string | null; ivaCondition: string | null; address: string | null };
   items: Array<{ description: string; qty: number; unitPrice: number; subtotal: number }>;
   notes?: string | null;
+  /** ADR-141: hoja A4 o ticket de 80 mm. */
+  format?: "a4" | "ticket";
+  /** Descuento del cupón (renglón aparte en la hoja). */
+  discount?: number;
+  /** Percepciones discriminadas (nombre e importe). */
+  perceptions?: Array<{ name: string; amount: number }>;
+  /** Comprobante asociado (nota de crédito): "Factura B 00003-00000012". */
+  assoc?: string | null;
 }
 
 const IVA_LABEL: Record<string, string> = {
@@ -94,6 +102,11 @@ function truncate(s: string, max: number) {
 
 /** Arma el PDF. Devuelve los bytes (siempre bastante menos de 1 MB). */
 export function buildInvoicePdf(d: InvoicePdfData): Uint8Array {
+  if (d.format === "ticket") return buildTicketPdf(d);
+  return buildA4Pdf(d);
+}
+
+function buildA4Pdf(d: InvoicePdfData): Uint8Array {
   const W = 595.28;
   const H = 841.89;
   const M = 36;
@@ -157,6 +170,16 @@ export function buildInvoicePdf(d: InvoicePdfData): Uint8Array {
     }
 
     if (pi === chunks.length - 1) {
+      // ADR-141: cupón como renglón de descuento.
+      if (d.discount && d.discount > 0) {
+        y -= 15;
+        p.text(M + 8, y, "Descuento cupón Mercado Libre", 8);
+        p.textR(W - M - 8, y, fmtMoney(-d.discount), 8);
+      }
+      if (d.assoc) {
+        y -= 18;
+        p.text(M + 8, y, `Comprobante asociado: ${truncate(d.assoc, 70)}`, 8);
+      }
       // Totales.
       let ty = 250;
       p.rect(W / 2, ty - 70, W / 2 - M, 78);
@@ -166,13 +189,17 @@ export function buildInvoicePdf(d: InvoicePdfData): Uint8Array {
         p.text(W / 2 + 10, ty - 24, "IVA:", 9);
         p.textR(W - M - 8, ty - 24, fmtMoney(d.doc.iva), 9);
         if (d.doc.otherTaxes > 0) {
-          p.text(W / 2 + 10, ty - 40, "Otros tributos:", 9);
+          p.text(W / 2 + 10, ty - 40, perceptionLabel(d), 9);
           p.textR(W - M - 8, ty - 40, fmtMoney(d.doc.otherTaxes), 9);
         }
       } else if (d.doc.letter === "B" && d.doc.iva > 0) {
         // Régimen de transparencia fiscal al consumidor (Ley 27.743).
         p.text(W / 2 + 10, ty - 8, "IVA contenido:", 8);
         p.textR(W - M - 8, ty - 8, fmtMoney(d.doc.iva), 8);
+        if (d.doc.otherTaxes > 0) {
+          p.text(W / 2 + 10, ty - 24, perceptionLabel(d), 8);
+          p.textR(W - M - 8, ty - 24, fmtMoney(d.doc.otherTaxes), 8);
+        }
       }
       p.text(W / 2 + 10, ty - 60, "Importe total:", 11, true);
       p.textR(W - M - 8, ty - 60, fmtMoney(d.doc.total), 11, true);
@@ -203,7 +230,97 @@ export function buildInvoicePdf(d: InvoicePdfData): Uint8Array {
     pages.push(p);
   });
 
-  // Ensamblado: 1 catálogo, 2 páginas, 3-4 fuentes, después página+contenido.
+  return assemble(pages.map((p) => ({ w: W, h: H, ops: p.ops })));
+}
+
+/** Rótulo de "otros tributos": las percepciones por jurisdicción, si vienen. */
+function perceptionLabel(d: InvoicePdfData): string {
+  const list = (d.perceptions ?? []).filter((x) => x.amount > 0);
+  if (list.length === 0) return "Otros tributos:";
+  return truncate(`Percepciones (${list.map((x) => x.name).join(", ")}):`, 40);
+}
+
+/**
+ * Ticket de 80 mm (ADR-141): los mismos datos fiscales que la hoja A4 en una
+ * columna angosta, con el alto según los renglones.
+ */
+function buildTicketPdf(d: InvoicePdfData): Uint8Array {
+  const W = 226.77;
+  const M = 10;
+  const lines: Array<{ t: string; size?: number; bold?: boolean; right?: string; center?: boolean; gap?: number }> = [];
+  const numero = `${pad(d.doc.ptoVta, 5)}-${pad(d.doc.nro, 8)}`;
+  lines.push({ t: truncate(d.emitter.name, 34), size: 10, bold: true, center: true });
+  lines.push({ t: `CUIT ${d.emitter.cuit ?? ""}`, size: 7, center: true });
+  lines.push({ t: ivaLabel(d.emitter.ivaCondition), size: 7, center: true });
+  if (d.emitter.address) lines.push({ t: truncate(d.emitter.address, 48), size: 7, center: true });
+  if (d.emitter.iibb) lines.push({ t: `IIBB ${d.emitter.iibb}`, size: 7, center: true });
+  if (d.emitter.activityStart) lines.push({ t: `Inicio de actividades ${fmtDate(d.emitter.activityStart)}`, size: 7, center: true });
+  lines.push({ t: `${d.doc.label} ${d.doc.letter}`, size: 10, bold: true, center: true, gap: 6 });
+  lines.push({ t: `COD. ${pad(d.doc.cbteTipo, 3)} · N° ${numero}`, size: 7, center: true });
+  lines.push({ t: `Fecha ${fmtDate(d.doc.fecha)}`, size: 7, center: true });
+  lines.push({ t: truncate(`Cliente: ${d.receptor.name}`, 46), size: 7, gap: 6 });
+  lines.push({
+    t: d.receptor.docNumber ? `${(d.receptor.docType ?? "Doc").toUpperCase()} ${d.receptor.docNumber}` : "Consumidor Final",
+    size: 7,
+  });
+  lines.push({ t: ivaLabel(d.receptor.ivaCondition), size: 7 });
+  if (d.assoc) lines.push({ t: truncate(`Asociado: ${d.assoc}`, 46), size: 7 });
+  let first = true;
+  for (const r of d.items) {
+    lines.push({ t: truncate(r.description, 44), size: 7, gap: first ? 6 : 2 });
+    lines.push({ t: `${fmtQty(r.qty)} x ${fmtMoney(r.unitPrice)}`, size: 7, right: fmtMoney(r.subtotal) });
+    first = false;
+  }
+  if (d.discount && d.discount > 0) lines.push({ t: "Descuento cupón", size: 7, right: fmtMoney(-d.discount) });
+  if (d.doc.letter === "A") {
+    lines.push({ t: "Neto gravado", size: 7, right: fmtMoney(d.doc.netTaxed), gap: 6 });
+    lines.push({ t: "IVA", size: 7, right: fmtMoney(d.doc.iva) });
+  } else if (d.doc.letter === "B" && d.doc.iva > 0) {
+    lines.push({ t: "IVA contenido", size: 7, right: fmtMoney(d.doc.iva), gap: 6 });
+  }
+  if (d.doc.otherTaxes > 0) lines.push({ t: perceptionLabel(d).replace(/:$/, ""), size: 7, right: fmtMoney(d.doc.otherTaxes) });
+  lines.push({ t: "TOTAL", size: 10, bold: true, right: fmtMoney(d.doc.total), gap: 4 });
+  lines.push({ t: `CAE ${d.doc.cae}`, size: 7, gap: 6 });
+  lines.push({ t: `Vto. CAE ${fmtDate(d.doc.caeVto)}`, size: 7 });
+  if (d.notes) lines.push({ t: truncate(d.notes, 46), size: 6 });
+
+  const qrSize = d.doc.qrUrl ? 110 : 0;
+  const textH = lines.reduce((h, l) => h + (l.size ?? 7) + 3 + (l.gap ?? 0), 0);
+  const H = Math.max(200, Math.ceil(textH + qrSize + 3 * M));
+  const p = new Page();
+  p.ops.push("0.6 w 0 0 0 RG 0 0 0 rg");
+  let y = H - M;
+  for (const l of lines) {
+    const size = l.size ?? 7;
+    y -= size + 3 + (l.gap ?? 0);
+    if (l.center) {
+      const w = winAnsi(l.t).length * size * (l.bold ? 0.58 : 0.54);
+      p.text(Math.max(M, (W - w) / 2), y, l.t, size, Boolean(l.bold));
+    } else {
+      p.text(M, y, l.t, size, Boolean(l.bold));
+    }
+    if (l.right) p.textR(W - M, y, l.right, size, Boolean(l.bold));
+  }
+  if (d.doc.qrUrl) {
+    try {
+      const qr = encodeQr(d.doc.qrUrl, "M");
+      const mod = qrSize / qr.size;
+      const x0 = (W - qrSize) / 2;
+      const y0 = y - qrSize - 6;
+      for (let qy = 0; qy < qr.size; qy++) {
+        for (let qx = 0; qx < qr.size; qx++) {
+          if (qr.modules[qy]![qx]) p.rect(x0 + qx * mod, y0 + (qr.size - 1 - qy) * mod, mod + 0.05, mod + 0.05, true);
+        }
+      }
+    } catch {
+      /* sin QR: queda el CAE */
+    }
+  }
+  return assemble([{ w: W, h: H, ops: p.ops }]);
+}
+
+/** Ensamblado: 1 catálogo, 2 páginas, 3-4 fuentes, después página+contenido. */
+function assemble(pages: Array<{ w: number; h: number; ops: string[] }>): Uint8Array {
   const objs: string[] = [];
   const kids: number[] = [];
   objs[1] = "<< /Type /Catalog /Pages 2 0 R >>";
@@ -216,7 +333,7 @@ export function buildInvoicePdf(d: InvoicePdfData): Uint8Array {
     const contentId = n++;
     kids.push(pageId);
     objs[pageId] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`;
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.w} ${p.h}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`;
     objs[contentId] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
   }
   objs[2] = `<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(" ")}] /Count ${kids.length} >>`;

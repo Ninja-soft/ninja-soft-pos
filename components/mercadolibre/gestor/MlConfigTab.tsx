@@ -155,15 +155,16 @@ export function MlConfigTab({
       {section === "publicaciones" && <ListingsSection account={account} canManage={canManage} />}
       {section === "envios" && <ShippingSection account={account} canManage={canManage} />}
       {section === "facturacion" && (
-        <SettingsCard
-          title="Facturación de las ventas"
-          description="Las ventas de Mercado Libre se facturan con ARCA desde el POS. Elegí cuándo y si la factura se sube sola a la venta."
-          icon={FileText}
-          actions={<StatusBadge s={status.facturacion} />}
-        >
-          <AccountConfig account={account} canManage={canManage} sections={["billing"]} saveLabel="Guardar facturación" />
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              Las ventas de Mercado Libre se facturan con ARCA desde el POS. Elegí cuándo, si la factura se sube sola a la venta y las reglas.
+            </p>
+            <StatusBadge s={status.facturacion} />
+          </div>
+          {/* ADR-141: la configuración completa de facturación (base + reglas) vive acá. */}
           <MlBillingExtension account={account} canManage={canManage} />
-        </SettingsCard>
+        </div>
       )}
       {(section === "posventa" || section === "preguntas") &&
         (gestor === undefined ? (

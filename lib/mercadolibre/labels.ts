@@ -78,6 +78,8 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
   uploaded: "Factura subida a ML",
   error: "Factura con problemas",
   not_applicable: "No se factura",
+  hold: "Esperando la percepción",
+  review: "Factura a revisar",
 };
 
 export const LOGISTIC_LABELS: Record<string, string> = {
@@ -101,6 +103,7 @@ export const LISTING_TYPE_LABELS: Record<string, string> = {
 export const INVOICE_MODE_LABELS: Record<string, string> = {
   on_paid: "Al pagarse",
   on_shipped: "Al despacharse",
+  on_delivered: "Al entregarse",
   manual: "A mano",
   none: "No facturar",
 };
@@ -168,6 +171,8 @@ export function invoiceStatusTone(status: string | null | undefined): MlTone {
     case "queued":
       return "info";
     case "pending":
+    case "hold":
+    case "review":
       return "warning";
     default:
       return "neutral";

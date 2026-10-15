@@ -20,6 +20,13 @@ const LOGOS = {
   google: { src: "/images/integrations/google.webp", label: "Google" },
   mercadolibre: { src: "/images/integrations/mercadolibre.webp", label: "Mercado Libre" },
   arca: { src: "/images/integrations/arca.webp", label: "ARCA (ex AFIP)", wide: true },
+  // Apps autenticadoras (Mis PINes): isotipos oficiales sin fondo, en
+  // public/images/authenticators. Se muestran `bare`.
+  google_authenticator: { src: "/images/authenticators/google-authenticator.svg", label: "Google Authenticator" },
+  microsoft_authenticator: { src: "/images/authenticators/microsoft-authenticator.webp", label: "Microsoft Authenticator" },
+  authy: { src: "/images/authenticators/authy.svg", label: "Authy (Twilio)" },
+  onepassword: { src: "/images/authenticators/1password.svg", label: "1Password" },
+  bitwarden: { src: "/images/authenticators/bitwarden.svg", label: "Bitwarden" },
 } as const satisfies Record<
   string,
   { src: string; label: string; bleed?: boolean; wide?: boolean; mono?: string }
@@ -29,6 +36,11 @@ export type IntegrationKey = keyof typeof LOGOS;
 
 export function isIntegrationKey(k: string): k is IntegrationKey {
   return k in LOGOS;
+}
+
+/** Nombre visible de la app (el mismo del tooltip del logo). */
+export function integrationLabel(k: IntegrationKey): string {
+  return LOGOS[k].label;
 }
 
 export function IntegrationLogo({

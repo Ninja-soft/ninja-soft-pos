@@ -212,6 +212,126 @@ const MESSAGES: Array<[RegExp, string]> = [
   [/network|Failed to fetch/, "Sin conexión con el servidor. Probá de nuevo."],
 ];
 
+// ---------------------------------------------------------------------------
+// Causas de /items/validate y POST /items ("codigo: mensaje" crudo de ML) en
+// español claro con la acción a tomar. El código crudo se muestra aparte, en
+// un detalle desplegable.
+// ---------------------------------------------------------------------------
+export interface MlCauseInfo {
+  /** Qué pasa, en español. */
+  message: string;
+  /** Qué hacer. */
+  action: string | null;
+  /** Código de ML (p. ej. shipping.lost_me2_by_catalog). */
+  code: string | null;
+  /** Texto original de ML. */
+  raw: string;
+}
+
+const attrInBrackets = (raw: string) => /\[([A-Z0-9_]+)\]/.exec(raw)?.[1] ?? null;
+
+const CAUSES: Array<{ re: RegExp; message: (raw: string) => string; action: string | null }> = [
+  // Envío
+  {
+    re: /^shipping\.lost_me2_by_(catalog|category)/i,
+    message: () => "Esta categoría no admite Mercado Envíos.",
+    action: "Elegí envío a convenir o con costo fijo.",
+  },
+  {
+    re: /^shipping\.lost_me2_by_user/i,
+    message: () => "Tu cuenta no tiene Mercado Envíos activo.",
+    action: "Activalo en Mercado Libre (Configuración > Envíos) o elegí envío a convenir.",
+  },
+  {
+    re: /^shipping\.lost_me1/i,
+    message: () => "Tu cuenta no tiene Mercado Envíos 1 (envío propio con Mercado Libre).",
+    action: "No hace falta activarlo: elegí envío a convenir o con costo fijo.",
+  },
+  {
+    re: /^shipping\.(lost_custom|custom)/i,
+    message: () => "Mercado Libre no acepta envío con costo fijo para esta publicación.",
+    action: "Elegí envío a convenir.",
+  },
+  {
+    re: /^shipping\..*free_shipping/i,
+    message: () => "El envío gratis no se puede usar con este modo de envío.",
+    action: "Sacá el envío gratis o usá Mercado Envíos.",
+  },
+  {
+    re: /^shipping\..*(dimension|weight)/i,
+    message: () => "Faltan o no sirven las medidas y el peso del paquete.",
+    action: "Revisá las medidas del producto o elegí envío a convenir.",
+  },
+  { re: /^shipping\./i, message: () => "Mercado Libre rechazó la forma de envío.", action: "Probá con envío a convenir." },
+  // Atributos
+  {
+    re: /^delete\.item\.attribute/i,
+    message: (raw) => `El dato "${attrInBrackets(raw) ?? "atributo"}" no corresponde para esta categoría o condición.`,
+    action: "Se saca solo al validar de nuevo.",
+  },
+  {
+    re: /^item\.attributes?\.missing_(conditional_)?required/i,
+    message: (raw) => `Falta un dato obligatorio de la categoría${attrInBrackets(raw) ? ` (${attrInBrackets(raw)})` : ""}.`,
+    action: "Completalo en \"Datos que pide la categoría\".",
+  },
+  {
+    re: /^item\.attributes?\..*(gtin|product_identifier)/i,
+    message: () => "El código de barras (GTIN) no es válido para Mercado Libre.",
+    action: "Revisá el código o elegí el motivo por el que no tiene.",
+  },
+  {
+    re: /^item\.attributes?\./i,
+    message: (raw) => `Un dato de la categoría no es válido${attrInBrackets(raw) ? ` (${attrInBrackets(raw)})` : ""}.`,
+    action: "Revisá los valores elegidos y usá las opciones de la lista cuando las haya.",
+  },
+  // Precio
+  {
+    re: /^item\.price\..*(minimum|min)/i,
+    message: () => "El precio está por debajo del mínimo de la categoría.",
+    action: "Subí el precio.",
+  },
+  { re: /^item\.price\./i, message: () => "El precio no es válido.", action: "Cargá un precio mayor a cero, sin centavos raros." },
+  // Título
+  {
+    re: /^item\.title\..*(length|max|min)/i,
+    message: () => "El título es muy largo o muy corto para la categoría.",
+    action: "Ajustá el largo del título.",
+  },
+  {
+    re: /^item\.title\./i,
+    message: () => "El título no cumple las reglas de Mercado Libre.",
+    action: "Usá producto, marca y modelo. Sin stock, ofertas, envío ni cuotas.",
+  },
+  // Fotos
+  {
+    re: /^item\.pictures?\..*(download|source|invalid|size|resolution)/i,
+    message: () => "Mercado Libre no pudo usar una de las fotos.",
+    action: "Subí fotos JPG o PNG de al menos 500 px por lado en la pestaña Imágenes.",
+  },
+  { re: /^item\.pictures?\./i, message: () => "Hay un problema con las fotos.", action: "Revisá las fotos del producto (entre 1 y 12)." },
+  // Otros frecuentes
+  { re: /^item\.category_id\./i, message: () => "La categoría no es válida o no admite publicaciones.", action: "Elegí otra categoría." },
+  { re: /^item\.listing_type_id\./i, message: () => "Ese tipo de publicación no está disponible.", action: "Elegí Clásica o Premium." },
+  { re: /^item\.available_quantity\./i, message: () => "La cantidad no es válida.", action: "Cargá una cantidad mayor a cero." },
+  { re: /^item\.(condition|attribute\.item_condition)/i, message: () => "La condición no es válida para la categoría.", action: "Elegí otra condición." },
+  {
+    re: /^seller\.|^user\.(unable|restricted|blocked)/i,
+    message: () => "Tu cuenta de Mercado Libre no puede publicar en este momento.",
+    action: "Revisá avisos o deudas pendientes en Mercado Libre.",
+  },
+];
+
+/** Traduce una causa de ML ("codigo: mensaje"). */
+export function mlCauseInfo(raw: string): MlCauseInfo {
+  const text = String(raw ?? "").trim();
+  const code = /^([a-z_][\w.]*\.[\w.]+)/i.exec(text)?.[1] ?? null;
+  const hit = code ? CAUSES.find((c) => c.re.test(code)) : undefined;
+  if (hit) return { message: hit.message(text), action: hit.action, code, raw: text };
+  // Errores ya en español (chequeos del POS) o códigos que no conocemos.
+  const msg = code ? text.slice(code.length).replace(/^\s*:\s*/, "") || text : text;
+  return { message: msg || "Mercado Libre rechazó un dato.", action: null, code, raw: text };
+}
+
 function errorText(e: unknown): string {
   if (!e) return "";
   if (typeof e === "string") return e;

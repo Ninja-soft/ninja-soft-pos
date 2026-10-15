@@ -159,6 +159,10 @@ Las escrituras van sólo por RPC SECURITY DEFINER (UI: `ml_assert` con rol y fea
 - **Automatización de precios**: si ML la tiene activa, el POS no pisa el precio.
 - **Límites**: token bucket por cuenta y familia (stock de UP a 90 RPM, el documentado es 100) y backoff exponencial con jitter ante 429.
 - **No mensajes automáticos**, no se modifica la etiqueta, no se clonan publicaciones.
+- **Atributos condicionales** (`items.ts`): los tags `new_hidden`, `used_hidden` y `refurbished_hidden` de `/categories/{id}/attributes` dicen para qué condición no aplica un atributo (GRADING sólo va en reacondicionados; en MLA1644 el GTIN no va en usados). No se muestran ni se mandan, y la Edge descarta además los ocultos y de solo lectura. Si ML responde `delete.item.attribute.*`, se saca el atributo y se valida otra vez (un solo reintento, avisado).
+- **Modo de envío** (`shipping.ts`): antes de publicar se leen `/users/{id}/shipping_preferences`, `/categories/{id}/shipping_preferences` y `/users/{id}/shipping_modes?category_id=` (la más precisa). Orden: `me2` si vendedor y categoría lo admiten; si no, `not_specified` (a convenir) o `custom` (costos fijos). Nunca `me1`. Envío gratis sólo con `me2`. Si ML igual responde `shipping.lost_me2_*`, se pasa a a convenir y se reintenta una vez. Verificado el 2026-10-15 con la cuenta conectada: MLA1644 (aires) no admite me2; MLA1055 y MLA1652 sí.
+- **Predictor**: se filtran las categorías de prueba de ML (nombre o dominio con "Test").
+- **Errores de validación**: `mlCauseInfo` (`lib/mercadolibre/labels.ts`) traduce los códigos frecuentes (`shipping.*`, `item.attribute(s).*`, `item.price.*`, `item.title.*`, `item.pictures.*`) con la acción a tomar; el código crudo queda en un detalle desplegable.
 
 ### 2.4 Stock y precio
 

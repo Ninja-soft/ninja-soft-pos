@@ -7,7 +7,9 @@
 // factura, promociones, reintegros MP, intents) y delega en TicketModal
 // (ticket, cobros del procesador, email) y ReturnModal / void_sale.
 import { useMemo } from "react";
-import { Ban, CreditCard, Lock, Mail, Receipt, RotateCcw } from "lucide-react";
+import { Ban, CreditCard, Lock, Mail, Receipt, RotateCcw, ShieldCheck } from "lucide-react";
+import { formatDateAr } from "@/lib/warranty/pricing";
+import { todayAr } from "@/lib/catalog/mode";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -91,6 +93,9 @@ type LooseItem = {
   serial: string | null;
   list_price?: number | null;
   promo_discount?: number | null;
+  // ADR-139: garantía extendida enlazada (vencimiento guardado al vender).
+  warranty_for_item_id?: string | null;
+  warranty_expires_on?: string | null;
 };
 
 const toRow = (p: Record<string, unknown>): SalePaymentRow => ({
@@ -127,6 +132,8 @@ export function SaleDetailModal(props: Props) {
 
   const imageOf = new Map((detailQ.data?.items ?? []).map((i) => [i.id, i.image_url]));
   const ret = returnState(items);
+  const coveredName = (it: LooseItem) =>
+    it.warranty_for_item_id ? (items.find((x) => x.id === it.warranty_for_item_id)?.product_name ?? null) : null;
   const status = sale ? saleStatusBadge(sale.status, ret) : null;
   const alerts = saleAlertBadges(disputes.data ?? []);
   const promoRows = (promos.data ?? []).map((p) => ({ label: p.label, amount: Number(p.discount) || 0 }));
@@ -269,6 +276,14 @@ export function SaleDetailModal(props: Props) {
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {disc > 0 && <Badge tone="brand">Descuento {formatCurrency(disc)}</Badge>}
+                        {it.warranty_expires_on && (
+                          <Badge tone={it.warranty_expires_on.slice(0, 10) >= todayAr() ? "success" : "neutral"}>
+                            <ShieldCheck size={12} aria-hidden />
+                            {it.warranty_expires_on.slice(0, 10) >= todayAr() ? "Cubre hasta el " : "Venció el "}
+                            {formatDateAr(it.warranty_expires_on)}
+                            {coveredName(it) ? ` · ${coveredName(it)}` : ""}
+                          </Badge>
+                        )}
                         {returned > 0 && (
                           <Badge tone="warning">
                             {returned >= Number(it.quantity) ? "Devuelto" : `Devueltas ${formatQty(returned)}`}

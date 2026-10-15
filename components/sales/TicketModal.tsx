@@ -44,6 +44,7 @@ import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
 import { InvoicePreview, ticketStyle } from "@/components/invoices/InvoicePreview";
 import { docOptions, invoiceFromTicket } from "@/lib/invoices/fromTicket";
 import { serviceOfItem, serviceOfSale } from "@/lib/invoices/serviceFields";
+import { warrantyOfItem } from "@/lib/warranty/ticket";
 
 export type { DetailTab };
 
@@ -309,6 +310,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
             unit_price: it.unit_price,
             subtotal: it.subtotal,
             ...serviceOfItem(it),
+            ...warrantyOfItem(it),
           })),
           photos.data,
         ),

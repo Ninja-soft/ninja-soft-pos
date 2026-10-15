@@ -110,8 +110,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Un medio de cobro por QR o link conectado (Mercado Pago, MODO, Payway, Getnet, Nave, Pagos360, GO Cuotas, Directo o Mobbex).",
   },
   garantias: {
-    desc: "Gestión de garantías de productos: registro de cobertura, plazos y reclamos de garantía por venta.",
-    impact: "Se ocultan las garantías en el POS y la ficha del producto; no se registran coberturas.",
+    desc: "Garantías extendidas por tipo (+12 meses, +24 meses, protección total) con su % sobre el precio, mínimo, máximo y redondeo, asignadas a todo el catálogo, a rubros y categorías o a productos puntuales. El POS las ofrece en tarjetas con el precio calculado, se venden como línea enlazada al producto y el vencimiento sale en el comprobante y en la ficha del cliente.",
+    impact: "Se ocultan las garantías en el POS y en la configuración; el servidor rechaza vender o configurar garantías extendidas.",
     minPlan: "Business",
   },
   presupuestos: {
@@ -124,6 +124,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, no se guardan pedidos ni hay cola de expedición: el vendedor y la caja vuelven a pasarse el carrito a mano (el servidor lo rechaza).",
     minPlan: "Pro",
     requires: ["pos"],
+  },
+  entregas_remitos: {
+    desc: "Entregas partidas y remitos: vendé desde el POS el stock de otra sucursal o de un depósito habilitado (retira allá o se envía), partí la entrega de una venta (una parte se la lleva ahora, otra la retira en otra sucursal y otra se envía) con estados por entrega en Expedición, y emití remitos de entrega y de envío con numeración propia, bultos, transporte, COT y PDF A4 para imprimir o mandar por email.",
+    impact: "Desactivado, cada venta sale entera del salón de la sucursal que cobra y no se emiten remitos desde el sistema (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["pedidos_despacho", "depositos"],
+    needs: "Vender de otra sucursal pide además el stock por sucursal (Business).",
   },
   cuenta_corriente: {
     desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
@@ -374,7 +381,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Al menos dos sucursales activas.",
   },
   depositos: {
-    desc: "Depósitos internos: dentro de cada sucursal, el salón de ventas y los depósitos que quieras (reserva, devoluciones, merma) con su stock, movimientos internos que quedan en tránsito, recepción parcial con faltantes y sobrantes con motivo, conteo por depósito, reposición del salón sugerida por mínimos e importación desde Excel.",
+    desc: "Depósitos internos: dentro de cada sucursal, el salón de ventas y los depósitos que quieras (reserva, devoluciones, merma) con su stock, qué depósitos se venden y con qué prioridad, qué otras sucursales los pueden vender, movimientos internos que quedan en tránsito, recepción parcial con faltantes y sobrantes con motivo, conteo por depósito, reposición del salón sugerida por mínimos e importación desde Excel.",
     impact: "Desactivado, el stock de cada sucursal es un solo número: no se distingue lo que está en el salón de lo que está en el depósito (el servidor lo rechaza).",
     minPlan: "Pro",
     requires: ["stock"],

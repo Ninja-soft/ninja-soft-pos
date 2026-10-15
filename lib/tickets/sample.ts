@@ -69,6 +69,9 @@ export interface SampleTicketData {
     line_note?: string | null;
     /** ADR-122: tipo del servicio al venderlo (Informe, Visita...). */
     service_type_name?: string | null;
+    /** ADR-139: garantía extendida (vencimiento y condiciones guardados al vender). */
+    warranty_expires_on?: string | null;
+    warranty_terms?: string | null;
     /** ADR-119: foto del producto (data URL precargada) y su versión en monocromo. */
     image_url?: string | null;
     image_mono?: string | null;

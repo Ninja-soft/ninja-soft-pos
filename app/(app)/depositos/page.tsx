@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRightLeft, Archive, Lightbulb, Lock, Pencil, Plus, Search, Warehouse as WarehouseIcon } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Archive,
+  Lightbulb,
+  Lock,
+  Pencil,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Store as StoreIcon,
+  Warehouse as WarehouseIcon,
+} from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -11,7 +22,6 @@ import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { cn } from "@/lib/utils/cn";
@@ -21,19 +31,21 @@ import {
   MOVE_STATUS_LABEL,
   WAREHOUSE_KIND_LABEL,
   groupSuggestionsBySource,
-  qtyIn,
+  isSellable,
   replenishSuggestions,
-  salonStatus,
   sortWarehouses,
   warehouseErrorMessage,
+  warehouseUsedBy,
   type Warehouse,
 } from "@/lib/stock/warehouses";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useCurrentStoreId, useStores } from "@/modules/stock/hooks";
 import {
+  useProductThumbs,
   useSaveSellFromReserve,
   useSellFromReserve,
+  useWarehouseLinks,
   useWarehouseMoves,
   useWarehouseMutations,
   useWarehouseOverview,
@@ -44,6 +56,8 @@ import { fmtDateTime, selectCls } from "@/components/stock/transfers/shared";
 import { WarehouseMoveModal, type MoveInitial } from "@/components/stock/warehouses/WarehouseMoveModal";
 import { WarehouseReceiveModal } from "@/components/stock/warehouses/WarehouseReceiveModal";
 import { WarehouseCountModal, WarehouseFormModal } from "@/components/stock/warehouses/WarehouseFormModal";
+import { WarehouseConfigModal } from "@/components/stock/warehouses/WarehouseConfigModal";
+import { WarehouseStockView } from "@/components/stock/warehouses/WarehouseStockView";
 
 type Tab = "stock" | "open" | "history";
 
@@ -68,7 +82,11 @@ export default function DepositosPage() {
   const [cancelling, setCancelling] = useState<WarehouseMove | null>(null);
   const [count, setCount] = useState<React.ComponentProps<typeof WarehouseCountModal>["target"]>(null);
   const [replenishOpen, setReplenishOpen] = useState(false);
+  const [configuring, setConfiguring] = useState<Warehouse | null>(null);
   const m = useWarehouseMutations();
+  // ADR-136: vender el stock de un depósito desde otras sucursales.
+  const branchStock = useFeature("stock_sucursales");
+  const multiStore = branchStock === true && stores.length > 1;
   // ADR-088: vender de la reserva cuando el salón no alcanza (dueño o encargado).
   const { data: sellFromReserve = false } = useSellFromReserve(canManage);
   const saveSellFromReserve = useSaveSellFromReserve();
@@ -91,6 +109,21 @@ export default function DepositosPage() {
 
   const suggestions = useMemo(() => replenishSuggestions(overview, warehouses), [overview, warehouses]);
   const whName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "Depósito";
+  const storeName = (id: string) => stores.find((s) => s.id === id)?.name;
+  const { data: links } = useWarehouseLinks(ready ? storeId : null);
+  const ownLinks = links?.own ?? [];
+  const incoming = links?.incoming ?? [];
+  const { data: thumbs = {} } = useProductThumbs(overview.map((r) => r.product_id));
+
+  async function setupSalon() {
+    if (!storeId) return;
+    try {
+      const id = await m.setupPrincipal.mutateAsync(storeId);
+      setConfiguring({ id, store_id: storeId, name: "Salón de ventas", code: null, kind: "principal", sort: 0, sellable: true });
+    } catch (e) {
+      toast({ title: "No se pudo preparar el salón", description: warehouseErrorMessage(e), variant: "error" });
+    }
+  }
 
   async function confirmReplenish() {
     const principal = warehouses.find((w) => w.kind === "principal");
@@ -117,7 +150,7 @@ export default function DepositosPage() {
       eyebrow="Catálogo"
       title="Depósitos"
       icon={WarehouseIcon}
-      description="El stock de cada sucursal separado en salón de ventas, reserva, devoluciones y merma. Mové entre depósitos y reponé el salón."
+      description="El stock de cada sucursal separado en salón de ventas, reserva, devoluciones y merma. Elegí qué se vende y desde qué sucursales, mové entre depósitos y reponé el salón."
       actions={
         ready && canManage && warehouses.length > 0 ? (
           <>
@@ -177,6 +210,7 @@ export default function DepositosPage() {
           </select>
         )}
         <Segmented<Tab>
+          scrollOnMobile
           aria-label="Vista"
           value={tab}
           onChange={setTab}
@@ -202,10 +236,10 @@ export default function DepositosPage() {
         {canManage && ready && warehouses.length > 0 && (
           <div className="mt-3 flex items-start justify-between gap-3 rounded-lg bg-muted/40 p-3 text-sm">
             <span>
-              <span className="block font-medium">Vender de la reserva si el salón no alcanza</span>
+              <span className="block font-medium">Vender de los depósitos si el salón no alcanza</span>
               <span className="block text-xs text-muted-foreground">
                 {sellFromReserve
-                  ? "La venta toma lo que falta de la reserva y te avisa para reponer el salón."
+                  ? "La venta toma lo que falta de los depósitos que se venden, por prioridad, y te avisa para reponer el salón."
                   : "Apagado: si el salón no alcanza y no permitís vender sin stock, la venta se frena hasta que repongas."}
               </span>
             </span>
@@ -231,37 +265,76 @@ export default function DepositosPage() {
             icon={WarehouseIcon}
             title="Todavía no separaste el stock"
             description="Creá un depósito (por ejemplo, Reserva). El salón de ventas se crea solo y queda con todo el stock de la sucursal."
+            action={
+              canManage && ready && multiStore ? (
+                <Button size="sm" variant="secondary" onClick={setupSalon} loading={m.setupPrincipal.isPending}>
+                  <StoreIcon size={15} /> Vender el salón desde otras sucursales
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {warehouses.map((w) => (
-              <li key={w.id} className="flex items-center gap-1 rounded-lg bg-muted/50 py-1 pl-3 pr-1 text-sm">
-                <span className="font-medium">{w.name}</span>
-                <span className="text-xs text-muted-foreground">{WAREHOUSE_KIND_LABEL[w.kind]}</span>
-                {canManage && (
-                  <>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Editar ${w.name}`}
-                      onClick={() => setForm({ open: true, warehouse: w })}
-                    >
-                      <Pencil size={14} />
-                    </Button>
-                    <Button size="icon" variant="ghost" aria-label={`Dar de baja ${w.name}`} onClick={() => setArchiving(w)}>
-                      <Archive size={14} />
-                    </Button>
-                  </>
-                )}
-              </li>
-            ))}
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Depósitos">
+            {warehouses.map((w) => {
+              const sellable = isSellable(w);
+              const usedBy = warehouseUsedBy(w, ownLinks, storeName);
+              return (
+                <li key={w.id} className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="truncate font-medium">{w.name}</span>
+                      <span className="text-xs text-muted-foreground">{WAREHOUSE_KIND_LABEL[w.kind]}</span>
+                    </p>
+                    <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Badge tone={sellable ? "success" : "neutral"}>{sellable ? "Se vende" : "No se vende"}</Badge>
+                      {sellable && w.kind !== "principal" && (
+                        <Badge tone="neutral">Prioridad {w.sale_priority ?? 100}</Badge>
+                      )}
+                    </p>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      {usedBy.length > 0 ? `También lo venden: ${usedBy.join(", ")}` : "Sólo esta sucursal"}
+                    </p>
+                  </div>
+                  {canManage && (
+                    <div className="flex shrink-0 items-center">
+                      <Button size="icon" variant="ghost" aria-label={`Configurar ${w.name}`} onClick={() => setConfiguring(w)}>
+                        <SlidersHorizontal size={14} />
+                      </Button>
+                      <Button size="icon" variant="ghost" aria-label={`Editar ${w.name}`} onClick={() => setForm({ open: true, warehouse: w })}>
+                        <Pencil size={14} />
+                      </Button>
+                      <Button size="icon" variant="ghost" aria-label={`Dar de baja ${w.name}`} onClick={() => setArchiving(w)}>
+                        <Archive size={14} />
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
+        )}
+        {incoming.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold">Disponibles desde otras sucursales</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Su stock se ve en el POS de esta sucursal y se vende con retiro o envío desde allá.
+            </p>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {incoming.map((w) => (
+                <li key={w.id} className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs">
+                  <StoreIcon size={13} className="text-muted-foreground" aria-hidden />
+                  <span className="font-medium">{w.store_name}</span>
+                  <span className="text-muted-foreground">· {w.kind === "principal" ? "Salón de ventas" : w.name}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
 
       {tab === "stock" && warehouses.length > 0 && (
         <section className="mt-6">
-          <div className="relative max-w-md">
+          <div className="relative mb-3 max-w-md">
             <Search
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -273,92 +346,17 @@ export default function DepositosPage() {
               className="pl-9"
             />
           </div>
-          <TableWrap className="mt-3">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Producto</th>
-                  {warehouses.map((w) => (
-                    <th key={w.id} className="px-3 py-2 text-right font-medium">
-                      {w.name}
-                    </th>
-                  ))}
-                  <th className="px-3 py-2 text-right font-medium">En tránsito</th>
-                  <th className="px-3 py-2 text-right font-medium">Sucursal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ovLoading ? (
-                  <TableStateRow colSpan={warehouses.length + 3} loading />
-                ) : overview.length === 0 ? (
-                  <TableStateRow colSpan={warehouses.length + 3}>
-                    <span className="text-muted-foreground">Sin stock en esta sucursal.</span>
-                  </TableStateRow>
-                ) : (
-                  overview.map((r) => {
-                    const st = salonStatus(r);
-                    return (
-                      <tr key={`${r.product_id}:${r.variant_id ?? ""}`} className="border-b border-border last:border-0">
-                        <td className="px-3 py-2">
-                          <p className="font-medium">
-                            {r.product_name}
-                            {r.variant_label ? ` (${r.variant_label})` : ""}
-                          </p>
-                          {r.sku && <p className="text-xs text-muted-foreground">{r.sku}</p>}
-                        </td>
-                        {warehouses.map((w) => {
-                          const q = qtyIn(r, w);
-                          const principal = w.kind === "principal";
-                          return (
-                            <td key={w.id} className="px-3 py-2 text-right tabular-nums">
-                              {principal ? (
-                                <span className="inline-flex items-center gap-1.5">
-                                  {st !== "ok" && (
-                                    <Badge tone={st === "negative" ? "danger" : "warning"}>
-                                      {st === "negative" ? "Reponer" : "Bajo mínimo"}
-                                    </Badge>
-                                  )}
-                                  <span className={cn(q < 0 && "text-danger")}>{formatQty(q)}</span>
-                                </span>
-                              ) : canManage ? (
-                                <button
-                                  type="button"
-                                  className="min-h-9 rounded px-2 hover:bg-muted"
-                                  title="Contar"
-                                  onClick={() =>
-                                    setCount({
-                                      warehouse: w,
-                                      productId: r.product_id,
-                                      variantId: r.variant_id,
-                                      name: r.variant_label ? `${r.product_name} (${r.variant_label})` : r.product_name,
-                                      current: q,
-                                    })
-                                  }
-                                >
-                                  {q ? formatQty(q) : "-"}
-                                </button>
-                              ) : q ? (
-                                formatQty(q)
-                              ) : (
-                                "-"
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                          {r.in_transit ? formatQty(r.in_transit) : "-"}
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium tabular-nums">{formatQty(r.store_qty)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </TableWrap>
+          <WarehouseStockView
+            rows={overview}
+            warehouses={warehouses}
+            thumbs={thumbs}
+            loading={ovLoading}
+            canManage={canManage}
+            onCount={setCount}
+          />
           {canManage && others.length > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Tocá la cantidad de un depósito para contarlo. Para productos que todavía no están en la tabla, buscalos.
+              Tocá la cantidad de un depósito para contarlo. Vendible es el salón más los depósitos que se venden. Para productos que todavía no están en la tabla, buscalos.
             </p>
           )}
         </section>
@@ -447,6 +445,15 @@ export default function DepositosPage() {
       />
       <WarehouseReceiveModal move={receiving} onOpenChange={(o) => !o && setReceiving(null)} canClose={canManage} />
       <WarehouseCountModal target={count} onOpenChange={(o) => !o && setCount(null)} />
+      {configuring && (
+        <WarehouseConfigModal
+          warehouse={configuring}
+          linkedStoreIds={ownLinks.filter((l) => l.warehouse_id === configuring.id).map((l) => l.store_id)}
+          stores={stores}
+          multiStore={multiStore}
+          onOpenChange={(o) => !o && setConfiguring(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(archiving)}

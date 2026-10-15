@@ -13,6 +13,7 @@ import { ticketLocationText } from "@/lib/tickets/location";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { formatCurrency } from "@/lib/utils/format";
 import { serviceLineBlocks, unitLabel } from "@/lib/catalog/mode";
+import { warrantyDetailLines } from "@/lib/warranty/ticket";
 import { discriminatesIva, docTypeLabel } from "./legal";
 import type { ResolvedInvoiceStyle } from "./style";
 import type { InvoiceAmountRow, InvoiceClass, InvoiceCopy, InvoiceDoc, InvoiceLetter, InvoiceLine } from "./types";
@@ -100,6 +101,8 @@ export function invoiceFromTicket(data: TicketData, opts: FromTicketOptions = {}
         clarifications: it.line_clarifications,
         note: it.line_note,
       }),
+      // ADR-139: garantía extendida, hasta cuándo cubre y sus condiciones.
+      ...warrantyDetailLines(it),
     ];
     return {
       code: String(i + 1).padStart(3, "0"),

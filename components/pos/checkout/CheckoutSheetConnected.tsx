@@ -8,8 +8,6 @@ import { useProfessionalsForPosStore } from "@/modules/branches/staffHooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
 import { acquirerMerchantNumber, availableAcquirers, rememberKey } from "@/lib/payments/acquirers";
 import { warmEdgeFunctions } from "@/lib/pos/warmEdge";
-import { useWarrantyPlans } from "@/modules/products/hooks";
-import type { WarrantyPlan } from "@/modules/products/api";
 import type { DisplayQr, DisplayTransfer } from "@/lib/pos/customerDisplay";
 import { usePosTransferConfig } from "@/modules/payments/transfer";
 import { useFeature } from "@/modules/saas/gating";
@@ -46,7 +44,6 @@ const PointCheckoutModal = dynamic(
 type Connected = Omit<
   CheckoutSheetProps,
   | "cardPlans"
-  | "warrantyPlans"
   | "professionals"
   | "voucherRequired"
   | "renderElectronic"
@@ -70,7 +67,7 @@ type Connected = Omit<
   offline?: boolean;
 };
 
-// Hoja de cobro con sus datos (planes de cuotas, garantías, vendedores,
+// Hoja de cobro con sus datos (planes de cuotas, vendedores,
 // voucher) y los modales de QR / link / Point de cada proveedor.
 export function CheckoutSheetConnected({
   onQrState,
@@ -104,7 +101,6 @@ export function CheckoutSheetConnected({
     [transferCfg, onTransferState, transferAuto, offline, posBranch.posStoreId, posRegister.data?.id],
   );
   const { data: allPlans } = usePaymentPlans();
-  const { data: wplans } = useWarrantyPlans(true);
   const { data: allProfessionals } = useProfessionals();
   // Sólo los vendedores habilitados en la sucursal del POS (F17 · H91).
   const professionals = useProfessionalsForPosStore(allProfessionals);
@@ -283,7 +279,6 @@ export function CheckoutSheetConnected({
       rememberedAcquirer={remembered}
       onAcquirerUsed={onAcquirerUsed}
       voucherRules={voucherRules}
-      warrantyPlans={(wplans ?? []) as WarrantyPlan[]}
       professionals={professionals ?? []}
       voucherRequired={Boolean(posSettings?.requireCardVoucher)}
       renderElectronic={renderElectronic}

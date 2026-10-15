@@ -875,7 +875,15 @@ Migraciones `20261021100000_features_listas_precios_pro`, `20261021100100_listas
 - [x] `price_bulk_batches` + `price_bulk_lines` (sólo lectura). RPC `price_bulk_preview`, `price_bulk_create`, `price_bulk_decide`, `price_bulk_revert`, `price_schedules_apply_due`, `price_schedule_set`, `price_schedule_cancel`, `price_list_import`; escriben `audit_logs` y el historial con origen `bulk` o `import`.
 - [x] `price_label_queue(store_id, product_id, variant_id?, list_id?, old_price, new_price, source, printed_at, printed_by)`, una pendiente por sucursal y producto; triggers en `products.price`, `product_variants.price_override` y `price_list_items` (listas de mostrador o asignadas a la sucursal). `price_labels_mark_printed(ids)` con acceso a la sucursal.
 
-## 8.17 Extensión F11: pedidos de salón y expedición (H32, ADR-129)
+## 8.17 Extensión F20-9: mora, punitorios y promesas de la cobranza de la plataforma (ADR-128)
+
+Migración `20261124100000_cobranza_mora_punitorios` (sin aplicar; requiere las de ADR-115 y ADR-120). Todo es de plataforma: sin `tenant_id = current_tenant_id()` en las políticas; SELECT sólo staff con `(select internal_scope())` y el negocio lee por RPC.
+
+- [x] Configuración: `platform_interest_policies` (tasa mensual en bp, gracia, `daily_prorata` o `per_month_started`, `cap_bp`, mínimo por mes, ND `on_collection` o `monthly`), `platform_interest_policy_plans(plan_id → policy_id)`, `platform_dunning_ladders` + `platform_dunning_steps(offset_days, action notify|past_due|soft_restrict|suspend|mark_uncollectible, channels, requires_no_promise, min_debt_cents, title, body)` y `platform_holidays(day, name)` editable. `platform_billing_settings` suma interruptores (punitorios apagados por defecto, con débito automático, escalera, promesas del cliente y áreas de la restricción blanda); `tenant_billing_terms` suma `interest_policy_id`, `interest_enabled`, `dunning_ladder_id` y `self_promise_enabled` (null = hereda).
+- [x] Estado de trabajo: `platform_interest_accruals` (por cargo: política congelada, vencimiento efectivo, devengado, liquidado y posteado por mes), `platform_interest_pauses` (`tenant_id` null = pausa global), `platform_collection_status` (estado de cobranza derivado: al día, vencida, en promesa, incobrable; restricción blanda y estado puesto por la escalera).
+- [x] Hechos: punitorios y condonaciones son movimientos de `platform_ledger` (`interest` con clave `int:{cargo}:{mes}:{liquidado}`, `interest_waiver`); `platform_interest_waivers` (aplicada, para aprobar o rechazada), `platform_promises` (una abierta por negocio), `platform_dunning_events` (un paso por negocio, paso y deuda mientras esté abierta) y `platform_fiscal_pending` (ND y NC pendientes de emitir hasta H130).
+- [x] Funciones: `platform_interest_schedule` (cálculo puro, espejo de `lib/billing/interest.ts`), `platform_interest_run` (cron 06:30 ART), `platform_mora_evaluate` / `platform_dunning_run` (cron 09:00 ART, reemplaza a `saas-dunning`), trigger diferido sobre `platform_allocations` que levanta la restricción y la suspensión al pagar lo vencido, `platform_is_business_day` / `platform_next_business_day`.
+## 8.18 Extensión F11: pedidos de salón y expedición (H32, ADR-129)
 
 Migraciones `20261123100000_features_pedidos_despacho` y `20261123100100_pedidos_despacho`.
 

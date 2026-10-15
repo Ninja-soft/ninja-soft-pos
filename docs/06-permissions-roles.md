@@ -50,6 +50,17 @@ Permiso que **se suma al nivel** (tabla `platform_staff_permissions`, no viaja e
 
 Los **topes** (`platform_billing_caps`, por nivel: `cobranzas`, `admin`, `super_admin`) son por operación y por mes calendario por negocio, suman bonificaciones, anulaciones, ajustes a favor y condonaciones de todo el staff, y se validan en el servidor (`platform_assert_forgiveness_cap`). Defaults: $ 50.000 por operación y $ 150.000 por mes para Cobranzas y admin; super_admin sin tope.
 
+**Mora y punitorios (F20-9 · ADR-128):**
+
+| Acción | support | support + Cobranzas | admin | super_admin | Dueño | Encargado | Cajero |
+|---|---|---|---|---|---|---|---|
+| Ver mora, punitorios, promesas y pasos de la escalera | ✅ | ✅ | ✅ | ✅ | Su cuenta (`my_billing_mora`) | Su cuenta | ❌ (sólo la restricción, sin importes) |
+| Condonar o saldar punitorios | ❌ | ✅ hasta el tope | ✅ hasta el tope | ✅ | ❌ | ❌ | ❌ |
+| Aprobar una condonación que superó el tope | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Cargar, ampliar o cancelar una promesa | ❌ | ✅ | ✅ | ✅ | Cargar la suya (`owner_promise_create`, con límites) | ❌ | ❌ |
+| Política, escalera y promesas propias de un negocio; pausar punitorios | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Configuración: políticas, planes, escaleras, feriados, interruptores | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+
 ### 3.1c Participación del staff (implementado, F21 · ADR-121)
 
 | Acción | support | admin | Cobranzas | super_admin | La propia persona |

@@ -25,6 +25,7 @@ import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
 import { AccountStatementCard } from "@/components/dashboard-team/AccountStatementCard";
+import { MoraCard } from "@/components/dashboard-team/MoraCard";
 import { HowToPayCard } from "@/components/dashboard-team/HowToPayCard";
 import {
   MiniStat,
@@ -510,6 +511,13 @@ export default async function DashboardTeamPage() {
       {isOwner && (
         <div id="suscripcion" className="mt-10 scroll-mt-24">
           <SubscriptionCard />
+        </div>
+      )}
+
+      {/* ── Mi suscripción > Pagos atrasados (F20-9): mora, punitorios y promesa de pago ── */}
+      {canManage && (
+        <div id="mora" className="mt-10 scroll-mt-24 empty:hidden">
+          <MoraCard />
         </div>
       )}
 

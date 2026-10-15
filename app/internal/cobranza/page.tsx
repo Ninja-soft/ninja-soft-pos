@@ -8,15 +8,20 @@
 // F20-8 (ADR-120): vista "Pagos a verificar" (transferencias informadas con
 // Ya transferí) y "Cuentas y avisos" (cuentas de cobro de NinjaSoft, email y
 // WhatsApp de comprobantes, avisos de cobro). ?vista=pagos | config.
+//
+// F20-9 (ADR-128): vista "Mora y punitorios" (?vista=mora): negocios en mora
+// con su próximo paso, condonaciones para aprobar, documentos pendientes de
+// H130 y la configuración de punitorios, escalera y feriados.
 // =============================================================================
 
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarClock, ChartColumnStacked, ChevronRight, CircleAlert, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, Users, Wallet } from "lucide-react";
+import { CalendarClock, ChartColumnStacked, ChevronRight, CircleAlert, Gavel, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, Users, Wallet } from "lucide-react";
 import { Segmented } from "@/components/ui/Segmented";
 import { TransferInbox } from "@/components/internal/billing/TransferInbox";
 import { BillingKpisView } from "@/components/internal/billing/BillingKpisView";
+import { MoraOverview } from "@/components/internal/billing/MoraOverview";
 import {
   CollectionConfigSkeleton,
   CollectionSettingsCard,
@@ -38,8 +43,9 @@ import { useBillingAccess, useBillingOverview } from "@/modules/billing/ledger";
 
 const tenantHref = (id: string) => `/internal/tenants/${id}?tab=cuenta` as Route;
 
-type Vista = "resumen" | "metricas" | "pagos" | "config";
-const isVista = (v: string | null): v is Vista => v === "resumen" || v === "metricas" || v === "pagos" || v === "config";
+type Vista = "resumen" | "metricas" | "pagos" | "mora" | "config";
+const isVista = (v: string | null): v is Vista =>
+  v === "resumen" || v === "metricas" || v === "pagos" || v === "mora" || v === "config";
 
 export default function InternalCobranzaPage() {
   const router = useRouter();
@@ -84,10 +90,13 @@ export default function InternalCobranzaPage() {
               label: pendingCount > 0 ? `Pagos a verificar (${pendingCount})` : "Pagos a verificar",
               icon: <Inbox size={15} />,
             },
+            { value: "mora", label: "Mora y punitorios", icon: <Gavel size={15} /> },
             { value: "config", label: "Cuentas y avisos", icon: <Settings2 size={15} /> },
           ]}
         />
       </div>
+
+      {vista === "mora" && <MoraOverview access={access} />}
 
       {vista === "metricas" && <BillingKpisView canView={access ? Boolean(access.can_operate) : accessError ? false : undefined} />}
 

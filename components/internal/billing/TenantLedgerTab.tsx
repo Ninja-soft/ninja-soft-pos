@@ -44,6 +44,7 @@ import {
 } from "@/components/billing/StatementParts";
 import { BonusModal, ChargeModal, RegisterPaymentModal, TermsModal } from "@/components/internal/billing/LedgerModals";
 import { TenantCollectionPanel } from "@/components/internal/billing/TenantCollectionPanel";
+import { TenantMoraPanel } from "@/components/internal/billing/TenantMoraPanel";
 import {
   BILLING_MODE_LABELS,
   BILLING_ROLE_LABELS,
@@ -104,12 +105,38 @@ const ACTION_LABELS: Record<string, string> = {
   platform_transfer_report_cancelled: "Transferencia retirada por el negocio",
   subscription_webhook_ignored: "Aviso de Mercado Pago ignorado (no es la modalidad vigente)",
   invite_code_redeemed: "Código de invitación canjeado",
+  // F20-9 (ADR-128)
+  platform_interest_accrued: "Punitorios devengados",
+  platform_interest_waived: "Punitorios condonados",
+  platform_interest_waiver_requested: "Condonación pedida (supera el tope)",
+  platform_interest_waiver_rejected: "Condonación rechazada",
+  platform_interest_failed: "No se pudieron devengar los punitorios (se reintenta)",
+  platform_interest_paused: "Punitorios pausados",
+  platform_interest_resumed: "Punitorios reanudados",
+  platform_promise_created: "Promesa de pago",
+  platform_promise_kept: "Promesa cumplida",
+  platform_promise_broken: "Promesa incumplida",
+  platform_promise_extended: "Promesa ampliada",
+  platform_promise_cancelled: "Promesa cancelada",
+  platform_dunning_step: "Escalera de mora",
+  platform_dunning_lifted: "Restricciones levantadas",
+  platform_dunning_failed: "Falló la escalera de mora (se reintenta)",
+  platform_fiscal_hook_failed: "No se pudo registrar una ND pendiente",
+  tenant_billing_mora_terms_set: "Condiciones de mora",
 };
 
 function eventDetail(e: TimelineEvent): string | null {
   const d = (e.data ?? {}) as Record<string, unknown>;
   const cents = typeof d.amount_cents === "number" ? d.amount_cents : typeof d.total_cents === "number" ? d.total_cents : null;
+  if (typeof d.step === "string") return cents !== null ? `${d.step} · ${formatCents(cents)}` : d.step;
+  if (e.action === "platform_interest_accrued" && cents !== null && typeof d.month === "string") {
+    return `${formatCents(cents)} en ${d.month.slice(5, 7)}/${d.month.slice(0, 4)}`;
+  }
+  if (cents !== null && typeof d.credit_note_cents === "number" && d.credit_note_cents > 0) {
+    return `${formatCents(cents)} · NC ${formatCents(d.credit_note_cents)} pendiente (H130)`;
+  }
   if (cents !== null) return formatCents(cents);
+  if (typeof d.promised_date === "string" && typeof d.amount_cents !== "number") return `para el ${formatDay(d.promised_date)}`;
   if (typeof d.is_test === "boolean") return d.is_test ? "Marcado de prueba" : "Vuelve a contar como cliente";
   if (typeof d.to_mode === "string") return `a ${BILLING_MODE_LABELS[d.to_mode] ?? d.to_mode}`;
   if (typeof d.billing_mode === "string") return BILLING_MODE_LABELS[d.billing_mode] ?? d.billing_mode;
@@ -242,6 +269,8 @@ export function TenantLedgerTab({ tenantId, tenantName }: { tenantId: string; te
       {s.overdue_cents > 0 && <AgingBar aging={s.aging} />}
 
       <TenantCollectionPanel tenantId={tenantId} tenantName={tenantName} access={access} />
+
+      <TenantMoraPanel tenantId={tenantId} access={access} balanceCents={s.balance_cents} />
 
       <div className="space-y-3">
         <Segmented<View> value={view} onChange={setView} options={VIEWS} iconOnlyOnMobile aria-label="Vista de la cuenta corriente" />

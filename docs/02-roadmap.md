@@ -1470,11 +1470,15 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [x] "Ya transferí" con comprobante, más la bandeja de verificación del staff.
   - [x] Cambio de modalidad en cualquier sentido (cancela el débito de MP o pide el checkout) y códigos de invitación de cuenta corriente.
   - [ ] Pagar el saldo con Checkout Pro (`platform_checkout`): queda para una fase siguiente.
-- [ ] **H135 · F20-9: punitorios, mora y promesas.**
-  - [ ] Políticas de punitorios con tasa, gracia, cálculo diario o por mes empezado, tope y mínimo.
-  - [ ] Condonar o saldar punitorios, y ND al cobrarlos.
-  - [ ] Escalera de mora configurable (reemplaza `saas-dunning`): restricción blanda, promesas de pago y feriados.
-  - [ ] *Criterio:* una deuda vencida a 45 días da el punitorio exacto del simulador; la mitad condonada sale con su NC y queda en el timeline.
+- [ ] **H135 · F20-9: punitorios, mora y promesas.** Código en `feat/h135-mora-punitorios` ([ADR-128](./17-decision-log.md)); migración `20261124100000_cobranza_mora_punitorios` sin aplicar, sin Edges.
+  - [x] Políticas de punitorios con tasa, gracia, cálculo diario o por mes empezado, tope y mínimo, asignables por plan o por negocio y con default; arrancan apagadas (§22 #4) y con un switch para el débito automático (§22 #5). Simulador en Cobranzas › Mora y punitorios con la misma función que el cron.
+  - [x] Devengamiento diario idempotente sobre la deuda vencida del ledger (cron `platform-interest` 06:30 ART): recalcula desde cero y postea sólo la diferencia; pausa por negocio y global, sólo hacia adelante.
+  - [x] Condonar (total o parcial) o saldar punitorios con motivo y tope por nivel; arriba del tope queda para que lo apruebe un super admin.
+  - [ ] ND al cobrarlos y NC por condonación: quedan como documentos internos pendientes (`platform_fiscal_pending`, `pending_h130`) hasta la factura con CAE (H130).
+  - [x] Escalera de mora configurable que reemplaza `saas-dunning` (cron `platform-dunning` 09:00 ART): aviso, pago pendiente, restricción blanda (reportes y configuración, nunca el POS), suspensión e incobrable; promesas de pago del staff y del dueño que frenan la restricción y la suspensión; feriados editables (no se vence ni avanza en día no hábil). Al pagar lo vencido se levanta sola.
+  - [x] Timeline: devengo (agrupado por mes), condonación, promesa y pasos de la escalera en la historia de la cuenta y en `audit_logs`.
+  - [x] *Criterio:* una deuda vencida a 45 días da el punitorio exacto del simulador ($ 3.750 sobre $ 50.000 al 5 %); la mitad condonada queda registrada, con su NC pendiente de H130 cuando ya tenía ND, y en el timeline. Probado en PGlite (110 chequeos, 300 casos al azar SQL = TS), `tests/unit/billingInterest.test.ts`, `tests/unit/billingMora.test.ts`, `tests/components/MoraPanels.test.tsx` y `tests/integration/rls-cobranza-mora.test.ts`.
+  - [ ] Aplicar la migración y decidir tasa y escalera definitivas (§21 #4 y #5).
 - [ ] **H136 · F20-10 y F20-11: conciliación, prorrateo y cobranza 360.**
   - [ ] Conciliación diaria con MP, contracargos y duplicados.
   - [ ] Prorrateo de upgrades, cambios de ciclo y addons.

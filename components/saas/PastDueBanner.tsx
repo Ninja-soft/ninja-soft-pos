@@ -3,6 +3,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, Zap } from "lucide-react";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
+import { useMyRestriction } from "@/modules/billing/mora";
+import { formatDay } from "@/lib/billing/ledger";
 import {
   ACCOUNT_MODE_CHECKOUT_MESSAGE,
   fetchOwnerBillingSummary,
@@ -20,6 +22,9 @@ import { appOrigin } from "@/lib/site";
 
 export function PastDueBanner() {
   const { data } = useAccountStatus();
+  // F20-9 (ADR-128): la suspensión la decide la escalera de mora configurable;
+  // si hay fecha prevista, el aviso la muestra.
+  const { data: restriction } = useMyRestriction(Boolean(data?.isPastDue));
   const { toast } = useToast();
 
   const regularize = useMutation({
@@ -47,19 +52,16 @@ export function PastDueBanner() {
 
   if (!data?.isPastDue) return null;
 
-  const days = data.pastDueDaysLeft;
-  const daysText =
-    days == null
-      ? "Regularizá tu pago para no perder el acceso."
-      : days <= 0
-        ? "Regularizá hoy para no perder el acceso."
-        : `Tenés ${days === 1 ? "1 día" : `${days} días`} para regularizar antes de que se bloquee.`;
+  const suspendOn = restriction?.suspend_on ?? null;
+  const daysText = suspendOn
+    ? `Regularizá antes del ${formatDay(suspendOn)} para no perder el acceso.`
+    : "Regularizá tu pago para no perder el acceso.";
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-transparent bg-amber-500/15 px-4 py-2.5 text-sm text-foreground">
       <AlertTriangle size={16} className="shrink-0 text-warning" />
       <span className="min-w-0 flex-1 font-medium">
-        Tu pago falló. {daysText}
+        Tenés un pago pendiente. {daysText}
       </span>
       <button
         type="button"

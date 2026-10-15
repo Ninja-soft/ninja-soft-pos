@@ -90,6 +90,7 @@ import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
+import { SoftRestrictionGate } from "@/components/saas/SoftRestrictionGate";
 import { ReadOnlyBanner } from "@/components/permissions/RoleGate";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
@@ -799,7 +800,8 @@ export function AppShell({
           <PastDueBanner />
           <BlockingNotificationBanner />
           <ReadOnlyBanner />
-          {children}
+          {/* F20-9: restricción blanda de la escalera de mora (nunca en el POS). */}
+          <SoftRestrictionGate>{children}</SoftRestrictionGate>
         </main>
       </div>
 

@@ -66,6 +66,18 @@ vi.mock("@/modules/mercadolibre/gestorHooks", () => {
   };
 });
 
+// Maestro de motivos (ADR-145): PDD9939 está; los PNR no, y se piden completar.
+const ensure = vi.fn(() => [] as string[]);
+vi.mock("@/modules/mercadolibre/reasonHooks", () => {
+  const rows = [
+    { id: "PDD9939", family: "PDD", title: "Llegó lo que compré en buenas condiciones pero no lo quiero", description: "Reclamo con el producto entregado.", flow: null, alias_of: null, excludable: true, recommended: true, active: true },
+  ];
+  return {
+    useMlClaimReasons: () => ({ data: rows, index: new Map(rows.map((r) => [r.id, r])) }),
+    useEnsureClaimReasons: (_i: unknown, ids: unknown) => ensure(ids as never),
+  };
+});
+
 import { MlMetricsTab } from "@/components/mercadolibre/gestor/MlMetricsTab";
 import { MlPostsaleTab } from "@/components/mercadolibre/gestor/MlPostsaleTab";
 import type { MlAccount } from "@/modules/mercadolibre/hooks";
@@ -88,6 +100,9 @@ describe("MlMetricsTab", () => {
     fireEvent.click(screen.getByText("Mediaciones 1"));
     expect(screen.queryByText(/venta 2000000001/)).toBeNull();
     expect(screen.getByText(/venta 2000000002/)).toBeTruthy();
+    // Título del motivo además del código.
+    expect(screen.getAllByText("Llegó lo que compré en buenas condiciones pero no lo quiero").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\(PDD9939\)/).length).toBeGreaterThan(0);
   });
 });
 
@@ -102,5 +117,12 @@ describe("MlPostsaleTab", () => {
     fireEvent.click(screen.getByText("Abiertos (3)"));
     expect(screen.getByText("Caso 3")).toBeTruthy();
     expect(screen.getByText("Le toca al comprador")).toBeTruthy();
+    // Debajo del título del caso, el motivo del maestro con su código.
+    expect(screen.getAllByText(/Motivo:/).length).toBe(3);
+    expect(screen.getAllByText("Llegó lo que compré en buenas condiciones pero no lo quiero").length).toBe(3);
+    // Se busca por el título del motivo.
+    fireEvent.change(screen.getByPlaceholderText(/Buscar/i), { target: { value: "buenas condiciones" } });
+    expect(screen.getByText("Caso 1")).toBeTruthy();
+    expect(ensure).toHaveBeenCalled();
   });
 });

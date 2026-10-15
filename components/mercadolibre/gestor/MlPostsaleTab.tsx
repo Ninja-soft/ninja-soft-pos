@@ -27,11 +27,13 @@ import {
   STAGE_LABELS,
   URGENCY_TONE,
   dueLabel,
-  reasonLabel,
   urgency,
   type ClaimKind,
 } from "@/lib/mercadolibre/postsale";
 import { attachmentProblem } from "@/supabase/functions/_shared/mercadolibre/claims";
+import { reasonTitleOf } from "@/lib/mercadolibre/claimReasons";
+import { useEnsureClaimReasons, useMlClaimReasons } from "@/modules/mercadolibre/reasonHooks";
+import { MlReasonLabel } from "@/components/mercadolibre/gestor/MlReasonPicker";
 import {
   useMlClaimDetail,
   useMlClaims,
@@ -65,6 +67,8 @@ export function MlPostsaleTab({ account, canManage }: { account: MlAccount; canM
   const { data: claims = [], isLoading } = useMlClaims(account.id, 60);
   const { data: settings } = useMlGestorSettings(account.id);
   const { syncClaims } = useMlGestorMutations();
+  const { index: reasons } = useMlClaimReasons();
+  useEnsureClaimReasons(reasons, claims.map((c) => c.reason_id));
   const [view, setView] = useState<View>("turn");
   const [kind, setKind] = useState<ClaimKind | "">("");
   const [q, setQ] = useState("");
@@ -84,14 +88,21 @@ export function MlPostsaleTab({ account, canManage }: { account: MlAccount; canM
               : true,
       )
       .filter((c) => !kind || c.kind === kind)
-      .filter((c) => !s || String(c.claim_id).includes(s) || String(c.resource_id ?? "").includes(s) || (c.detail_title ?? "").toLowerCase().includes(s))
+      .filter(
+        (c) =>
+          !s ||
+          String(c.claim_id).includes(s) ||
+          String(c.resource_id ?? "").includes(s) ||
+          (c.detail_title ?? "").toLowerCase().includes(s) ||
+          `${c.reason_id ?? ""} ${reasonTitleOf(reasons, c.reason_id)}`.toLowerCase().includes(s),
+      )
       .sort((a, b) => {
         if (a.status !== b.status) return a.status === "opened" ? -1 : 1;
         const da = a.due_at ? Date.parse(a.due_at) : Number.POSITIVE_INFINITY;
         const db = b.due_at ? Date.parse(b.due_at) : Number.POSITIVE_INFINITY;
         return da - db || Date.parse(b.date_created ?? "") - Date.parse(a.date_created ?? "");
       });
-  }, [claims, view, kind, q]);
+  }, [claims, view, kind, q, reasons]);
   const turnCount = claims.filter((c) => c.status === "opened" && (c.action_responsible === "respondent" || !c.action_responsible)).length;
   const openCount = claims.filter((c) => c.status === "opened").length;
 
@@ -182,7 +193,12 @@ export function MlPostsaleTab({ account, canManage }: { account: MlAccount; canM
                     {c.affects_reputation && <Badge tone="danger">Afecta la reputación</Badge>}
                     {c.return_status && <Badge tone="info">Devolución: {RETURN_STATUS_LABELS[c.return_status] ?? c.return_status}</Badge>}
                   </span>
-                  <span className="text-sm font-medium">{c.detail_title || reasonLabel(c.reason_id)}</span>
+                  <span className="text-sm font-medium">{c.detail_title || <MlReasonLabel id={c.reason_id} index={reasons} />}</span>
+                  {c.detail_title && c.reason_id && (
+                    <span className="text-xs text-muted-foreground">
+                      Motivo: <MlReasonLabel id={c.reason_id} index={reasons} />
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground">
                     Reclamo {c.claim_id}
                     {c.resource_id ? ` · venta ${c.resource_id}` : ""}
@@ -211,6 +227,7 @@ function MlClaimDetailModal({ claim, account, canManage, onClose }: { claim: MlC
   const { data, isLoading, error, refetch } = useMlClaimDetail(claim?.id ?? null);
   const { data: pack } = useMlPackMessages(account.id, claim?.pack_key ?? null);
   const m = useMlGestorMutations();
+  const { index: reasons } = useMlClaimReasons();
   const [text, setText] = useState("");
   const [receiver, setReceiver] = useState<"complainant" | "mediator">("complainant");
   const [files, setFiles] = useState<File[]>([]);
@@ -257,7 +274,7 @@ function MlClaimDetailModal({ claim, account, canManage, onClose }: { claim: MlC
 
   return (
     <>
-      <Modal open onOpenChange={(o) => !o && onClose()} title={`${CLAIM_KIND_LABELS[claim.kind]} ${claim.claim_id}`} description={claim.detail_title ?? reasonLabel(claim.reason_id)} className="sm:max-w-3xl">
+      <Modal open onOpenChange={(o) => !o && onClose()} title={`${CLAIM_KIND_LABELS[claim.kind]} ${claim.claim_id}`} description={claim.detail_title ?? reasonTitleOf(reasons, claim.reason_id)} className="sm:max-w-3xl">
         {isLoading ? (
           <SpinnerBlock className="py-12" />
         ) : error ? (
@@ -274,7 +291,7 @@ function MlClaimDetailModal({ claim, account, canManage, onClose }: { claim: MlC
               </p>
               <p>
                 <span className="text-muted-foreground">Motivo: </span>
-                {reasonLabel(claim.reason_id)} {claim.reason_id ? <span className="text-xs text-muted-foreground">({claim.reason_id})</span> : null}
+                <MlReasonLabel id={claim.reason_id} index={reasons} />
               </p>
               {claim.status === "opened" && (
                 <p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -31,6 +31,7 @@ import {
   ClipboardCheck,
   ShoppingBag,
   ShoppingCart,
+  SlidersHorizontal,
   Sun,
   Tag,
   UserCog,
@@ -82,7 +83,19 @@ import {
   BlockingNotificationBanner,
   NotificationBell,
 } from "@/components/notifications/NotificationBell";
-import { useFeature } from "@/modules/saas/gating";
+import { useFeature, useGating } from "@/modules/saas/gating";
+import {
+  HIDDEN_ID,
+  TOP_GROUP,
+  applyVisible,
+  isDefault,
+  mergeLayout,
+  visibleLayout,
+  type MenuDefaults,
+  type MenuLayout,
+} from "@/lib/nav/menuLayout";
+import { useNavMenu } from "@/lib/nav/useNavMenu";
+import type { CustomizerItem } from "@/components/layout/MenuCustomizer";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useCatalogMode } from "@/modules/services/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -119,6 +132,16 @@ const TourHost = dynamic(
 const NudgeHost = dynamic(
   () => import("@/components/onboarding/NudgeHost").then((m) => m.NudgeHost),
   { ssr: false },
+);
+
+// Modo "Personalizar menú" (ADR-134): @dnd-kit viaja sólo en este chunk, que
+// se carga al entrar al modo (el menú se pinta en todas las páginas).
+const MenuCustomizer = dynamic(
+  () => import("@/components/layout/MenuCustomizer").then((m) => m.MenuCustomizer),
+  {
+    ssr: false,
+    loading: () => <p className="px-3 py-2 text-xs text-muted-foreground">Cargando…</p>,
+  },
 );
 
 // Modales del menú de usuario: chunks aparte y montados recién al abrirlos
@@ -228,7 +251,8 @@ type Item = {
   // ADR-116: el nombre sale del modo del catálogo (Productos / Servicios).
   catalogLabel?: boolean;
 };
-type Group = { label: string; items: Item[] };
+// `id` estable: el orden personalizado del usuario se guarda por id (ADR-134).
+type Group = { id: string; label: string; items: Item[] };
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dueño",
@@ -237,15 +261,24 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "Solo lectura",
 };
 
-const NAV: { top: Item[]; groups: Group[] } = {
-  top: [
-    { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
-    { href: "/dashboard-team", label: "Panel del dueño", icon: Building2 },
-    // F15 · H69 (ADR-086): Escuela NinjaSoft, BASE con key `escuela`.
-    { href: "/escuela", label: "Escuela", icon: GraduationCap, feature: "escuela" },
-  ],
+// "Inicio" queda fijo arriba (no entra en el menú personalizable, ADR-134): es
+// la salida segura a la que vuelve el logo. "Vender" es el botón de arriba.
+const HOME: Item = { href: "/dashboard", label: "Inicio", icon: LayoutDashboard };
+
+const NAV: { groups: Group[] } = {
   groups: [
     {
+      // Accesos sin título debajo de Inicio (siempre primero entre los grupos).
+      id: TOP_GROUP,
+      label: "",
+      items: [
+        { href: "/dashboard-team", label: "Panel del dueño", icon: Building2, managersOnly: true },
+        // F15 · H69 (ADR-086): Escuela NinjaSoft, BASE con key `escuela`.
+        { href: "/escuela", label: "Escuela", icon: GraduationCap, feature: "escuela" },
+      ],
+    },
+    {
+      id: "operacion",
       label: "Operación",
       items: [
         { href: "/pos", label: "Punto de venta", icon: ShoppingCart },
@@ -289,6 +322,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
       ],
     },
     {
+      id: "catalogo",
       label: "Catálogo",
       items: [
         // ADR-116: "Servicios" o "Productos y servicios" según el modo del catálogo.
@@ -307,6 +341,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
     {
       // Compras y proveedores (F18 · H101, ADR-050). Con candado si el plan no
       // incluye la feature compras.
+      id: "compras",
       label: "Compras",
       items: [
         { href: "/compras/ordenes", label: "Órdenes de compra", icon: ClipboardList, feature: "compras" },
@@ -324,6 +359,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
     {
       // Contabilidad (F18 · H109, ADR-066): asientos, libros, plan de cuentas,
       // mapeos y cierres. Dueño o encargado; con candado sin la feature.
+      id: "contabilidad",
       label: "Contabilidad",
       items: [
         { href: "/contabilidad", label: "Contabilidad", icon: BookOpenCheck, feature: "contabilidad", managersOnly: true },
@@ -340,6 +376,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
       ],
     },
     {
+      id: "gestion",
       label: "Gestión",
       items: [
         { href: "/clientes", label: "Clientes", icon: Users },
@@ -361,6 +398,72 @@ const NAV: { top: Item[]; groups: Group[] } = {
     },
   ],
 };
+
+// Menú por defecto (ids = href) y búsqueda de ítems para el layout del usuario.
+const MENU_DEFAULTS: MenuDefaults = {
+  groups: NAV.groups.map((g) => ({ id: g.id, items: g.items.map((it) => it.href) })),
+};
+const ITEM_BY_HREF = new Map(NAV.groups.flatMap((g) => g.items.map((it) => [it.href, it] as const)));
+const GROUP_LABELS: Record<string, string> = Object.fromEntries(NAV.groups.map((g) => [g.id, g.label]));
+
+function isActiveHref(pathname: string, href: string) {
+  return pathname === href || (href === "/escuela" && pathname.startsWith("/escuela/"));
+}
+
+// Datos de cada ítem para el modo personalizar (con el candado del plan).
+function customizerItems(
+  l: MenuLayout,
+  withLabel: (it: Item) => Item,
+  features: Record<string, boolean> | undefined,
+): Record<string, CustomizerItem> {
+  const out: Record<string, CustomizerItem> = {};
+  const ids = [...l.groups.flatMap((g) => g.items), ...l.hidden];
+  for (const id of ids) {
+    const raw = ITEM_BY_HREF.get(id);
+    if (!raw) continue;
+    const it = withLabel(raw);
+    out[id] = {
+      id,
+      label: it.label,
+      icon: it.icon,
+      locked: Boolean(it.feature) && Boolean(features) && !(features?.[it.feature!] ?? false),
+    };
+  }
+  return out;
+}
+
+function NavGroup({
+  label,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  count?: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="pt-3">
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition hover:text-foreground"
+      >
+        <span className="flex items-center gap-2">
+          {label}
+          {count !== undefined && (
+            <span className="rounded-md bg-muted px-1.5 text-[10px] tabular-nums tracking-normal">{count}</span>
+          )}
+        </span>
+        <ChevronDown size={14} className={cn("transition", open ? "" : "-rotate-90")} />
+      </button>
+      {open && <div className="mt-1 space-y-1">{children}</div>}
+    </div>
+  );
+}
 
 function NavLink({
   item,
@@ -425,18 +528,27 @@ function NavLink({
   );
 }
 
+// Pie del menú compacto (ADR-134): una fila con avatar chico, nombre y rol; el
+// email va en el tooltip y en el desplegable. El acceso al panel interno es un
+// ícono al lado (sólo staff NinjaSoft).
 function UserMenu({
   email,
   role,
+  isInternal,
+  onCustomize,
   onChangePassword,
   onEditProfile,
   onSignOut,
+  onNavigate,
 }: {
   email: string;
   role: string | null;
+  isInternal: boolean;
+  onCustomize: () => void;
   onChangePassword: () => void;
   onEditProfile: () => void;
   onSignOut: () => void;
+  onNavigate: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
@@ -462,54 +574,75 @@ function UserMenu({
     },
   });
   const name = me?.display_name || email;
+  // Nombre y apellido siempre capitalizados; el email se deja como está.
+  const shown = name === email ? name : capitalizeName(name);
+  const roleLabel = role ? (ROLE_LABELS[role] ?? role) : null;
 
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
-        <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
-          <Avatar name={name} avatar={me?.avatar} size={32} loading={meLoading} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">
-              {/* Nombre y apellido siempre capitalizados; el email se deja como está. */}
-              {name === email ? name : capitalizeName(name)}
+    <div className="flex items-center gap-1">
+      <Dropdown>
+        <DropdownTrigger asChild>
+          <button
+            title={email}
+            aria-label={`Cuenta: ${shown}${roleLabel ? `, ${roleLabel}` : ""}`}
+            className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Avatar name={name} avatar={me?.avatar} size={26} loading={meLoading} />
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              <span className="truncate text-sm font-medium text-foreground">{shown}</span>
+              {roleLabel && (
+                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{roleLabel}</span>
+              )}
             </span>
-            {name !== email && (
-              <span className="block truncate text-xs text-muted-foreground">
-                {email}
+          </button>
+        </DropdownTrigger>
+        <DropdownContent align="start" side="top" className="w-[240px]">
+          <div className="px-3 py-2">
+            <p className="truncate text-sm font-medium text-foreground">{shown}</p>
+            {name !== email && <p className="truncate text-xs text-muted-foreground">{email}</p>}
+            {roleLabel && (
+              <span className="mt-1 inline-block rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {roleLabel}
               </span>
             )}
-            {role && (
-              <span className="mt-0.5 block truncate text-[11px] font-medium text-ninja-flameSoft">
-                {ROLE_LABELS[role] ?? role}
-              </span>
-            )}
-          </span>
-          <ChevronDown size={15} className="shrink-0 text-muted-foreground" />
-        </button>
-      </DropdownTrigger>
-      <DropdownContent align="start" className="w-[232px]">
-        <DropdownLabel>Cuenta</DropdownLabel>
-        <DropdownItem onSelect={onEditProfile}>
-          <UserCog size={15} /> Editar mi perfil
-        </DropdownItem>
-        <DropdownItem
-          onSelect={(e) => {
-            e.preventDefault();
-            toggleTheme();
-          }}
+          </div>
+          <DropdownSeparator />
+          <DropdownItem onSelect={onEditProfile}>
+            <UserCog size={15} /> Editar mi perfil
+          </DropdownItem>
+          <DropdownItem onSelect={onCustomize}>
+            <SlidersHorizontal size={15} /> Personalizar menú
+          </DropdownItem>
+          <DropdownItem
+            onSelect={(e) => {
+              e.preventDefault();
+              toggleTheme();
+            }}
+          >
+            {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            {isDark ? "Modo claro" : "Modo oscuro"}
+          </DropdownItem>
+          <DropdownItem onSelect={onChangePassword}>
+            <KeyRound size={15} /> Cambiar contraseña
+          </DropdownItem>
+          <DropdownSeparator />
+          <DropdownItem onSelect={onSignOut} className="text-destructive">
+            <LogOut size={15} /> Cerrar sesión
+          </DropdownItem>
+        </DropdownContent>
+      </Dropdown>
+      {isInternal && (
+        <Link
+          href="/internal/tenants"
+          onClick={onNavigate}
+          title="Panel NinjaSoft · Modo interno"
+          aria-label="Panel NinjaSoft, modo interno"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-ninja-flameSoft transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {isDark ? <Sun size={15} /> : <Moon size={15} />}
-          {isDark ? "Modo claro" : "Modo oscuro"}
-        </DropdownItem>
-        <DropdownItem onSelect={onChangePassword}>
-          <KeyRound size={15} /> Cambiar contraseña
-        </DropdownItem>
-        <DropdownSeparator />
-        <DropdownItem onSelect={onSignOut} className="text-destructive">
-          <LogOut size={15} /> Cerrar sesión
-        </DropdownItem>
-      </DropdownContent>
-    </Dropdown>
+          <ShieldCheck size={17} aria-hidden />
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -525,12 +658,9 @@ export function AppShell({
   const [drawer, setDrawer] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const [pfOpen, setPfOpen] = useState(false);
-  const [open, setOpen] = useState<Record<string, boolean>>({
-    Operación: true,
-    Catálogo: true,
-    Compras: true,
-    Gestión: true,
-  });
+  // Grupos abiertos por id (todos abiertos salvo "Ocultos", colapsado por defecto).
+  const [open, setOpen] = useState<Record<string, boolean>>({ [HIDDEN_ID]: false });
+  const [customizing, setCustomizing] = useState(false);
 
   // Contexto del usuario: staff NinjaSoft + rol en el tenant (para gatear el menú).
   const { data: shell } = useQuery({
@@ -600,6 +730,26 @@ export function AppShell({
     (!it.requiresMultiStore || (stores?.length ?? 0) > 1) &&
     (!it.managersOnly || canOwnerPanel);
 
+  // Menú personalizado del usuario (ADR-134): orden guardado + menú por
+  // defecto, filtrado por lo que este usuario puede ver en este negocio.
+  const navMenu = useNavMenu();
+  const isVisibleHref = (href: string) => {
+    const it = ITEM_BY_HREF.get(href);
+    return Boolean(it && showItem(it));
+  };
+  const fullLayout = useMemo(() => mergeLayout(MENU_DEFAULTS, navMenu.saved), [navMenu.saved]);
+  const menu = visibleLayout(fullLayout, isVisibleHref);
+  const { data: gating } = useGating();
+  function saveVisible(edited: MenuLayout) {
+    const next = applyVisible(fullLayout, edited, isVisibleHref);
+    if (isDefault(next, MENU_DEFAULTS)) navMenu.reset();
+    else navMenu.setLayout(next);
+  }
+  function finishCustomizing() {
+    setCustomizing(false);
+    navMenu.flush();
+  }
+
   // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
   // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni
   // montamos el shell, mostramos la pantalla de reactivación (de la que solo se
@@ -654,75 +804,78 @@ export function AppShell({
 
       {/* Navegación scrolleable */}
       <div className="slim-scrollbar -mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-        {NAV.top
-          .filter((it) => it.href !== "/dashboard-team" || canOwnerPanel)
-          .map((it) => (
-            <NavLink
-              key={it.href}
-              item={it}
-              active={pathname === it.href || (it.href === "/escuela" && pathname.startsWith("/escuela/"))}
-              onNavigate={() => setDrawer(false)}
-            />
-          ))}
+        {customizing ? (
+          <MenuCustomizer
+            layout={menu}
+            defaults={MENU_DEFAULTS}
+            items={customizerItems(menu, withLabel, gating?.features)}
+            groupLabels={GROUP_LABELS}
+            onChange={saveVisible}
+            onDone={finishCustomizing}
+            onReset={navMenu.reset}
+            canReset={!isDefault(fullLayout, MENU_DEFAULTS)}
+          />
+        ) : (
+          <>
+            <NavLink item={HOME} active={pathname === HOME.href} onNavigate={() => setDrawer(false)} />
 
-        {NAV.groups.map((g) => {
-          const isOpen = open[g.label] ?? true;
-          return (
-            <div key={g.label} className="pt-3">
-              <button
-                onClick={() => setOpen((s) => ({ ...s, [g.label]: !isOpen }))}
-                className="flex w-full items-center justify-between rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition hover:text-foreground"
-              >
-                {g.label}
-                <ChevronDown
-                  size={14}
-                  className={cn("transition", isOpen ? "" : "-rotate-90")}
+            {menu.groups.map((g) => {
+              if (g.items.length === 0) return null;
+              const links = g.items.map((href) => (
+                <NavLink
+                  key={href}
+                  item={withLabel(ITEM_BY_HREF.get(href)!)}
+                  active={isActiveHref(pathname, href)}
+                  onNavigate={() => setDrawer(false)}
                 />
-              </button>
-              {isOpen && (
-                <div className="mt-1 space-y-1">
-                  {g.items.filter(showItem).map((it) => (
-                    <NavLink
-                      key={it.href}
-                      item={withLabel(it)}
-                      active={pathname === it.href}
-                      onNavigate={() => setDrawer(false)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+              ));
+              if (g.id === TOP_GROUP) return <div key={g.id} className="space-y-1">{links}</div>;
+              const isOpen = open[g.id] ?? true;
+              return (
+                <NavGroup
+                  key={g.id}
+                  label={GROUP_LABELS[g.id] ?? g.id}
+                  open={isOpen}
+                  onToggle={() => setOpen((st) => ({ ...st, [g.id]: !isOpen }))}
+                >
+                  {links}
+                </NavGroup>
+              );
+            })}
+
+            {/* Lo que el usuario sacó del menú: colapsado por defecto, al final. */}
+            {menu.hidden.length > 0 && (
+              <NavGroup
+                label="Ocultos"
+                count={menu.hidden.length}
+                open={open[HIDDEN_ID] ?? false}
+                onToggle={() => setOpen((st) => ({ ...st, [HIDDEN_ID]: !(st[HIDDEN_ID] ?? false) }))}
+              >
+                {menu.hidden.map((href) => (
+                  <NavLink
+                    key={href}
+                    item={withLabel(ITEM_BY_HREF.get(href)!)}
+                    active={isActiveHref(pathname, href)}
+                    onNavigate={() => setDrawer(false)}
+                  />
+                ))}
+              </NavGroup>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Pie fijo: panel interno + usuario */}
-      <div className="mt-3 shrink-0 space-y-3 border-t border-border pt-3">
-        {isInternal && (
-          <Link
-            href="/internal/tenants"
-            onClick={() => setDrawer(false)}
-            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
-          >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--pos-solid)] text-white">
-              <ShieldCheck size={16} />
-            </span>
-            <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-sm font-semibold text-foreground">
-                Panel NinjaSoft
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                Modo interno
-              </span>
-            </span>
-          </Link>
-        )}
+      {/* Pie fijo compacto: usuario (+ acceso al panel interno para el staff) */}
+      <div className="mt-2 shrink-0 border-t border-border pt-2">
         <UserMenu
           email={email}
           role={shell?.role ?? null}
+          isInternal={isInternal}
+          onCustomize={() => setCustomizing(true)}
           onChangePassword={() => setPwOpen(true)}
           onEditProfile={() => setPfOpen(true)}
           onSignOut={signOut}
+          onNavigate={() => setDrawer(false)}
         />
       </div>
     </nav>

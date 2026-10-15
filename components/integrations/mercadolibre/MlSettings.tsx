@@ -53,7 +53,7 @@ function when(iso: string | null): string {
   return new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 }
 
-function AccountConfig({ account, canManage }: { account: MlAccount; canManage: boolean }) {
+export function AccountConfig({ account, canManage }: { account: MlAccount; canManage: boolean }) {
   const { toast } = useToast();
   const { saveSettings } = useMlMutations();
   const { data: stores = [] } = useStores();
@@ -63,6 +63,8 @@ function AccountConfig({ account, canManage }: { account: MlAccount; canManage: 
       store_id: account.location?.store_id ?? "",
       warehouse_id: account.location?.warehouse_id ?? "",
       reserve_qty: String(account.location?.reserve_qty ?? 0),
+      reserve_pct: String(account.location?.reserve_pct ?? 0),
+      max_qty: account.location?.max_qty != null ? String(account.location.max_qty) : "",
       stock_sync: account.stock_sync,
       price_sync: account.price_sync,
       price_list_id: account.price_list_id ?? "",
@@ -80,10 +82,14 @@ function AccountConfig({ account, canManage }: { account: MlAccount; canManage: 
   const { data: warehouses = [] } = useWarehouses(f.store_id || null);
 
   const reserve = Number(f.reserve_qty);
+  const reservePct = Number(f.reserve_pct || 0);
+  const maxQty = f.max_qty.trim() === "" ? null : Number(f.max_qty);
   const markup = Number(f.price_markup_pct);
   const rounding = Number(f.price_rounding);
   const valid =
     Number.isFinite(reserve) && reserve >= 0 &&
+    Number.isFinite(reservePct) && reservePct >= 0 && reservePct <= 95 &&
+    (maxQty === null || (Number.isInteger(maxQty) && maxQty >= 0)) &&
     Number.isFinite(markup) && markup >= -90 && markup <= 500 &&
     Number.isFinite(rounding) && rounding >= 0;
   const disabled = !canManage || saveSettings.isPending;
@@ -94,6 +100,8 @@ function AccountConfig({ account, canManage }: { account: MlAccount; canManage: 
       store_id: f.store_id || null,
       warehouse_id: f.warehouse_id || null,
       reserve_qty: reserve,
+      reserve_pct: reservePct,
+      max_qty: maxQty,
       stock_sync: f.stock_sync,
       price_sync: f.price_sync,
       price_list_id: f.price_list_id || null,
@@ -160,6 +168,33 @@ function AccountConfig({ account, canManage }: { account: MlAccount; canManage: 
           aria-label="Reserva de seguridad"
           onChange={(e) => setF({ ...f, reserve_qty: e.target.value })}
         />
+      </SettingRow>
+      <SettingRow
+        label="Stock publicable"
+        description="Además de la reserva: un porcentaje que no se publica y un tope por publicación (vacío = sin tope). Ejemplo: 40 en stock, reserva 2, 10 % y tope 20 publica 20."
+      >
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-80">
+          <Input
+            label="Guardar %"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={95}
+            value={f.reserve_pct}
+            disabled={disabled}
+            onChange={(e) => setF({ ...f, reserve_pct: e.target.value })}
+          />
+          <Input
+            label="Tope por publicación"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            placeholder="Sin tope"
+            value={f.max_qty}
+            disabled={disabled}
+            onChange={(e) => setF({ ...f, max_qty: e.target.value })}
+          />
+        </div>
       </SettingRow>
       <SettingRow label="Sincronizar stock" description="Cada venta, compra o ajuste del POS actualiza la cantidad publicada.">
         <Switch checked={f.stock_sync} disabled={disabled} label="Sincronizar stock" onCheckedChange={(v) => setF({ ...f, stock_sync: v })} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, ExternalLink, Link2, Link2Off, Pause, Play, RefreshCw, Search, Tag } from "lucide-react";
+import { BadgePercent, Download, Eye, ExternalLink, Link2, Link2Off, Pause, Play, RefreshCw, Search, Tag, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -36,10 +36,23 @@ const BULK: Array<{ action: MlItemAction; label: string; icon: typeof Pause }> =
   { action: "refresh", label: "Releer de ML", icon: Download },
 ];
 
-export function MlItemsTab({ accountId }: { accountId: string }) {
+type Sort = "title" | "visits" | "sold" | "health";
+
+export function MlItemsTab({
+  accountId,
+  onQuickPublish,
+  onConfigurePrices,
+}: {
+  accountId: string;
+  /** Abre la publicación rápida (gestor, ADR-132). */
+  onQuickPublish?: () => void;
+  /** Lleva a Configuración > Precios por tipo. */
+  onConfigurePrices?: () => void;
+}) {
   const { toast } = useToast();
   const { data: items = [], isLoading } = useMlItems(accountId);
-  const { itemsAction, unlink, importItems, link } = useMlMutations();
+  const { itemsAction, unlink, importItems, link, visits } = useMlMutations();
+  const [sort, setSort] = useState<Sort>("title");
   const [status, setStatus] = useState("");
   const [listing, setListing] = useState("");
   const [logistic, setLogistic] = useState("");
@@ -54,7 +67,7 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.filter(
+    const list = items.filter(
       (i) =>
         (!status || i.status === status) &&
         (!listing || i.listing_type_id === listing) &&
@@ -62,7 +75,26 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
         (!linked || (linked === "yes" ? i.links.length > 0 : i.links.length === 0)) &&
         (!q || i.title.toLowerCase().includes(q) || i.ml_item_id.toLowerCase().includes(q)),
     );
-  }, [items, status, listing, logistic, linked, search]);
+    const key: Record<Sort, (i: MlItem) => number> = {
+      title: () => 0,
+      visits: (i) => -(i.visits_30d ?? -1),
+      sold: (i) => -(i.sold_quantity ?? 0),
+      health: (i) => Number(i.health ?? 2),
+    };
+    return sort === "title" ? list : [...list].sort((a, b) => key[sort](a) - key[sort](b));
+  }, [items, status, listing, logistic, linked, search, sort]);
+
+  const readVisits = () => {
+    const ids = items.filter((i) => selected.has(i.id)).map((i) => i.ml_item_id).slice(0, 50);
+    if (ids.length === 0) return;
+    visits.mutate(
+      { accountId, itemIds: ids },
+      {
+        onSuccess: (r) => toast({ title: `Visitas de ${r?.count ?? ids.length} publicaciones`, description: "Últimos 30 días.", variant: "success" }),
+        onError: (e) => toast({ title: "No se pudieron leer las visitas", description: mlErrorMessage(e), variant: "error" }),
+      },
+    );
+  };
 
   const allOn = filtered.length > 0 && filtered.every((i) => selected.has(i.id));
   const toggle = (id: string) =>
@@ -115,11 +147,16 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input className="pl-9" placeholder="Buscar por título o MLA" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Buscar publicación" />
         </div>
+        {onQuickPublish && (
+          <Button onClick={onQuickPublish}>
+            <Zap size={15} /> Publicar rápido
+          </Button>
+        )}
         <Button variant="secondary" onClick={runImport} loading={importItems.isPending}>
           <Download size={15} /> Importar publicaciones
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <select className={selectCls} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Estado">
           <option value="">Todos los estados</option>
           {["active", "paused", "closed", "under_review"].map((s) => (
@@ -149,6 +186,12 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
           <option value="yes">Vinculadas</option>
           <option value="no">Sin vincular</option>
         </select>
+        <select className={selectCls} value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Ordenar">
+          <option value="title">Ordenar por título</option>
+          <option value="visits">Más visitas</option>
+          <option value="sold">Más vendidas</option>
+          <option value="health">Menor calidad primero</option>
+        </select>
       </div>
 
       {selected.size > 0 && (
@@ -159,6 +202,9 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
               <b.icon size={15} /> {b.label}
             </Button>
           ))}
+          <Button variant="secondary" size="sm" onClick={readVisits} disabled={visits.isPending} loading={visits.isPending}>
+            <Eye size={15} /> Leer visitas
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
             Limpiar
           </Button>
@@ -168,8 +214,31 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={Tag}
-          title={items.length === 0 ? "Todavía no hay publicaciones" : "No hay publicaciones con esos filtros"}
-          description={items.length === 0 ? "Tocá Importar publicaciones para traer las que ya tenés en Mercado Libre, o publicá desde la ficha de un producto." : undefined}
+          title={items.length === 0 ? "Todavía no hay publicaciones en el POS" : "No hay publicaciones con esos filtros"}
+          description={
+            items.length === 0
+              ? "Publicá productos de tu catálogo en minutos (también en Clásica y Premium a la vez, cada una con su precio), o traé las que ya tenés en Mercado Libre para que el stock y el precio se sincronicen solos."
+              : undefined
+          }
+          action={
+            items.length === 0 ? (
+              <div className="flex flex-wrap justify-center gap-2">
+                {onQuickPublish && (
+                  <Button size="sm" onClick={onQuickPublish}>
+                    <Zap size={15} /> Publicar productos rápido
+                  </Button>
+                )}
+                <Button size="sm" variant="secondary" onClick={runImport} loading={importItems.isPending}>
+                  <Download size={15} /> Importar las que ya tenés
+                </Button>
+                {onConfigurePrices && (
+                  <Button size="sm" variant="ghost" onClick={onConfigurePrices}>
+                    <BadgePercent size={15} /> Configurar precios por tipo
+                  </Button>
+                )}
+              </div>
+            ) : undefined
+          }
         />
       ) : (
         <div className="divide-y divide-border rounded-xl bg-card">
@@ -182,7 +251,7 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
             Elegir todas ({filtered.length})
           </label>
           {filtered.map((i) => (
-            <div key={i.id} className="flex gap-3 px-4 py-3">
+            <div key={i.id} className="flex flex-wrap gap-3 px-4 py-3 sm:flex-nowrap">
               <Checkbox checked={selected.has(i.id)} onCheckedChange={() => toggle(i.id)} aria-label={`Elegir ${i.title}`} className="mt-1" />
               {i.thumbnail ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -190,8 +259,8 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
               ) : (
                 <span className="h-12 w-12 shrink-0 rounded-lg bg-muted" />
               )}
-              <div className="min-w-0 flex-1 space-y-1">
-                <p className="truncate text-sm font-medium">{i.title}</p>
+              <div className="min-w-0 flex-1 basis-[calc(100%-6.5rem)] space-y-1 sm:basis-auto">
+                <p className="line-clamp-2 text-sm font-medium sm:truncate">{i.title}</p>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Badge tone={itemStatusTone(i.status)}>{itemStatusLabel(i.status)}</Badge>
                   {i.listing_type_id && <Badge tone="neutral">{LISTING_TYPE_LABELS[i.listing_type_id] ?? i.listing_type_id}</Badge>}
@@ -202,7 +271,8 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {i.ml_item_id} · {formatCurrency(i.price ?? 0)} · {i.available_quantity ?? 0} disponibles · {i.sold_quantity ?? 0} vendidas
-                  {i.health != null ? ` · calidad ${Math.round(Number(i.health) * 100)}%` : ""}
+                  {i.health != null ? ` · calidad ${Math.round(Number(i.health) * 100)} %` : ""}
+                  {i.visits_30d != null ? ` · ${i.visits_30d} visitas en 30 días` : ""}
                 </p>
                 {i.links.map((l) => (
                   <p key={l.id} className="flex items-center gap-2 text-xs">
@@ -226,7 +296,7 @@ export function MlItemsTab({ accountId }: { accountId: string }) {
                 ))}
                 {i.last_error && <p className="text-xs text-danger">{i.last_error}</p>}
               </div>
-              <div className="flex shrink-0 flex-col gap-1">
+              <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto sm:flex-col sm:items-stretch sm:gap-1">
                 {(i.links.length === 0 || i.has_variations) && (
                   <Button variant="secondary" size="sm" onClick={() => setLinking(i)}>
                     <Link2 size={15} /> Vincular

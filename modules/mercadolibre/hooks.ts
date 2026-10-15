@@ -8,9 +8,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { AttrField, PublishInput } from "@/supabase/functions/_shared/mercadolibre/items";
+import type { CatalogMatch, ListingPriceRow } from "@/supabase/functions/_shared/mercadolibre/listing";
+import type { ListingOverride, ListingRule } from "@/lib/mercadolibre/pricing";
 import type { ShippingInput, ShippingMode, ShippingPlan } from "@/supabase/functions/_shared/mercadolibre/shipping";
 
-export type { AttrField, PublishInput, ShippingInput, ShippingMode, ShippingPlan };
+export type { AttrField, PublishInput, ShippingInput, ShippingMode, ShippingPlan, CatalogMatch, ListingPriceRow };
 
 /** Respuesta de validar o publicar (ml_api). */
 export interface MlPublishResult {
@@ -22,7 +24,10 @@ export interface MlPublishResult {
   shipping?: ShippingPlan;
   applied_shipping?: ShippingInput;
   removed_attributes?: string[];
-  items?: Array<{ ml_item_id: string; permalink: string | null }>;
+  items?: Array<{ ml_item_id: string; permalink: string | null; listing_type_id?: string }>;
+  /** Varios tipos (ADR-132): los que fallaron y los que no tenían precio. */
+  failed?: Array<{ listing_type_id: string; errors: string[] }>;
+  skipped?: Array<{ listing_type_id: string; reason: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,6 +40,8 @@ export interface MlLocationMap {
   store_id: string | null;
   warehouse_id: string | null;
   reserve_qty: number;
+  reserve_pct: number;
+  max_qty: number | null;
   push_enabled: boolean;
 }
 
@@ -91,6 +98,8 @@ export interface MlItem {
   sold_quantity: number | null;
   has_variations: boolean;
   health: number | null;
+  visits_30d: number | null;
+  visits_synced_at: string | null;
   price_source: "pos" | "manual" | "automation";
   last_pushed_at: string | null;
   last_error: string | null;
@@ -167,6 +176,10 @@ export interface MlChannelPreview {
   qty: number | null;
   listing_type: string;
   user_product_seller: boolean;
+  brand: string | null;
+  model: string | null;
+  warranty_months: number | null;
+  listing_prices: ListingPriceRow[];
   pictures: string[];
   variants: Array<{
     variant_id: string;
@@ -185,6 +198,7 @@ export interface MlChannelPreview {
     title: string;
     status: string;
     permalink: string | null;
+    listing_type_id: string | null;
   }>;
 }
 
@@ -248,14 +262,22 @@ const from = (t: string) => createClient().from(t as never);
 
 export const mlApi = {
   accounts: async (): Promise<MlAccount[]> => {
-    const { data, error } = await from("ml_accounts")
-      .select(
-        "id, ml_user_id, nickname, site_id, user_product_seller, status, status_reason, price_list_id, price_markup_pct, " +
-          "price_rounding, price_sync, stock_sync, invoice_mode, upload_invoice, default_listing_type, label_format, " +
-          "connected_at, last_sync_at, last_error, ml_location_map(id, account_id, location_type, store_id, warehouse_id, reserve_qty, push_enabled)",
-      )
+    const cols = (map: string) =>
+      "id, ml_user_id, nickname, site_id, user_product_seller, status, status_reason, price_list_id, price_markup_pct, " +
+      "price_rounding, price_sync, stock_sync, invoice_mode, upload_invoice, default_listing_type, label_format, " +
+      `connected_at, last_sync_at, last_error, ml_location_map(${map})`;
+    let res = await from("ml_accounts")
+      .select(cols("id, account_id, location_type, store_id, warehouse_id, reserve_qty, reserve_pct, max_qty, push_enabled"))
       .is("deleted_at", null)
       .order("connected_at");
+    // Sin la migración del gestor (columna nueva inexistente): las columnas de ADR-104.
+    if (res.error?.code === "42703") {
+      res = await from("ml_accounts")
+        .select(cols("id, account_id, location_type, store_id, warehouse_id, reserve_qty, push_enabled"))
+        .is("deleted_at", null)
+        .order("connected_at");
+    }
+    const { data, error } = res;
     if (error) throw error;
     return ((data ?? []) as unknown as Array<MlAccount & { ml_location_map: MlLocationMap[] }>).map((a) => ({
       ...a,
@@ -264,17 +286,16 @@ export const mlApi = {
   },
 
   items: async (accountId: string): Promise<MlItem[]> => {
-    const { data, error } = await from("ml_items")
-      .select(
-        "id, account_id, ml_item_id, user_product_id, title, category_id, listing_type_id, status, sub_status, logistic_type, " +
-          "shipping_mode, free_shipping, catalog_listing, permalink, thumbnail, price, available_quantity, sold_quantity, " +
-          "has_variations, health, price_source, last_pushed_at, last_error, synced_at, " +
-          "links:ml_item_links(id, product_id, variant_id, ml_variation_id, linked_by, products(name))",
-      )
-      .eq("account_id", accountId)
-      .is("deleted_at", null)
-      .order("title")
-      .limit(1000);
+    const cols = (extra: string) =>
+      "id, account_id, ml_item_id, user_product_id, title, category_id, listing_type_id, status, sub_status, logistic_type, " +
+      "shipping_mode, free_shipping, catalog_listing, permalink, thumbnail, price, available_quantity, sold_quantity, " +
+      `has_variations, health, ${extra}price_source, last_pushed_at, last_error, synced_at, ` +
+      "links:ml_item_links(id, product_id, variant_id, ml_variation_id, linked_by, products(name))";
+    const run = (extra: string) =>
+      from("ml_items").select(cols(extra)).eq("account_id", accountId).is("deleted_at", null).order("title").limit(1000);
+    let res = await run("visits_30d, visits_synced_at, ");
+    if (res.error?.code === "42703") res = await run("");
+    const { data, error } = res;
     if (error) throw error;
     return (data ?? []) as unknown as MlItem[];
   },
@@ -321,7 +342,133 @@ export const mlApi = {
 
   preview: (accountId: string, productId: string) =>
     rpc<MlChannelPreview>("ml_product_channel_preview", { p_account: accountId, p_product: productId }),
+
+  // Gestor (H141 · ADR-132).
+  listingRules: async (accountId: string): Promise<ListingRule[]> => {
+    const { data, error } = await from("ml_listing_rules")
+      .select("listing_type_id, enabled, mode, markup_pct, price_list_id, rounding, min_price, default_on")
+      .eq("account_id", accountId)
+      .order("sort");
+    if (error) throw error;
+    return ((data ?? []) as unknown as ListingRule[]).map((r) => ({
+      ...r,
+      markup_pct: Number(r.markup_pct),
+      rounding: Number(r.rounding),
+      min_price: Number(r.min_price),
+    }));
+  },
+
+  productOverrides: async (accountId: string, productId: string): Promise<ListingOverride[]> => {
+    const { data, error } = await from("ml_product_listing_prices")
+      .select("listing_type_id, mode, markup_pct, price_list_id, fixed_price, min_price")
+      .eq("account_id", accountId)
+      .eq("product_id", productId);
+    if (error) throw error;
+    return (data ?? []) as unknown as ListingOverride[];
+  },
+
+  categoryMemory: async (accountId: string): Promise<MlCategoryMemory[]> => {
+    const { data, error } = await from("ml_category_memory")
+      .select("category_id, category_name, attrs, uses, last_used_at")
+      .eq("account_id", accountId)
+      .order("last_used_at", { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    return (data ?? []) as unknown as MlCategoryMemory[];
+  },
+
+  quickCandidates: (accountId: string, search: string, categoryId: string | null, onlyUnpublished: boolean) =>
+    rpc<MlQuickCandidate[]>("ml_quick_candidates", {
+      p_account: accountId,
+      p_search: search || null,
+      p_category: categoryId,
+      p_only_unpublished: onlyUnpublished,
+      p_limit: 60,
+    }),
 };
+
+export interface MlCategoryMemory {
+  category_id: string;
+  category_name: string;
+  attrs: Record<string, { value_id?: string | null; value_name?: string | null }>;
+  uses: number;
+  last_used_at: string;
+}
+
+export interface MlQuickCandidate {
+  product_id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  brand: string | null;
+  model: string | null;
+  category_name: string | null;
+  price: number | null;
+  has_variants: boolean;
+  is_kit: boolean;
+  image_url: string | null;
+  pictures: number;
+  published_count: number;
+}
+
+export interface MlListingFee {
+  listing_type_id: string;
+  name: string;
+  sale_fee_amount: number;
+  percentage_fee: number;
+  fixed_fee: number;
+}
+
+export function useMlListingRules(accountId: string | null) {
+  return useQuery({
+    queryKey: ["ml", "rules", accountId],
+    queryFn: () => mlApi.listingRules(accountId!),
+    enabled: Boolean(accountId),
+  });
+}
+
+export function useMlProductOverrides(accountId: string | null, productId: string | null) {
+  return useQuery({
+    queryKey: ["ml", "overrides", accountId, productId],
+    queryFn: () => mlApi.productOverrides(accountId!, productId!),
+    enabled: Boolean(accountId && productId),
+  });
+}
+
+export function useMlCategoryMemory(accountId: string | null) {
+  return useQuery({
+    queryKey: ["ml", "category-memory", accountId],
+    queryFn: () => mlApi.categoryMemory(accountId!),
+    enabled: Boolean(accountId),
+  });
+}
+
+/** ¿Llegó alguna notificación por webhook a esta cuenta? (tópicos tildados). */
+export function useMlWebhookSeen(accountId: string | null) {
+  return useQuery({
+    queryKey: ["ml", "webhook-seen", accountId],
+    enabled: Boolean(accountId),
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await from("ml_notifications")
+        .select("id")
+        .eq("account_id", accountId!)
+        .eq("source", "webhook")
+        .limit(1);
+      if (error) return false;
+      return (data ?? []).length > 0;
+    },
+  });
+}
+
+export function useMlQuickCandidates(accountId: string | null, search: string, categoryId: string | null, onlyUnpublished: boolean) {
+  return useQuery({
+    queryKey: ["ml", "quick-candidates", accountId, search, categoryId, onlyUnpublished],
+    queryFn: () => mlApi.quickCandidates(accountId!, search, categoryId, onlyUnpublished),
+    enabled: Boolean(accountId),
+    staleTime: 30_000,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Consultas
@@ -386,6 +533,8 @@ export interface MlSettingsInput {
   upload_invoice?: boolean;
   default_listing_type?: string;
   label_format?: string;
+  reserve_pct?: number;
+  max_qty?: number | null;
 }
 
 export function useMlMutations() {
@@ -456,6 +605,21 @@ export function useMlMutations() {
         ),
       onSuccess: inv,
     }),
+    saveRules: useMutation({
+      mutationFn: (v: { accountId: string; rules: ListingRule[] }) =>
+        rpc<{ ok: boolean }>("ml_listing_rules_save", { p_account: v.accountId, p_rules: v.rules }),
+      onSuccess: inv,
+    }),
+    saveProductListing: useMutation({
+      mutationFn: (v: { accountId: string; productId: string; overrides: ListingOverride[] }) =>
+        rpc<{ ok: boolean }>("ml_product_listing_save", { p_account: v.accountId, p_product: v.productId, p: v.overrides }),
+      onSuccess: inv,
+    }),
+    visits: useMutation({
+      mutationFn: (v: { accountId: string; itemIds: string[] }) =>
+        mlEdge<{ ok: boolean; count: number }>("ml_api", { action: "visits", account_id: v.accountId, item_ids: v.itemIds }),
+      onSuccess: inv,
+    }),
   };
 }
 
@@ -467,11 +631,18 @@ export const mlPublishApi = {
     mlEdge<{ shipping: ShippingPlan }>("ml_api", { action: "shipping_options", account_id: accountId, category_id: categoryId }),
   validate: (accountId: string, input: PublishInput) =>
     mlEdge<MlPublishResult>("ml_api", { action: "validate", account_id: accountId, input }),
-  publish: (accountId: string, productId: string, input: PublishInput) =>
+  publish: (accountId: string, productId: string, input: PublishInput, opts: { listingTypes?: string[]; categoryName?: string } = {}) =>
     mlEdge<MlPublishResult>("ml_api", {
       action: "publish",
       account_id: accountId,
       product_id: productId,
       input,
+      ...(opts.listingTypes?.length ? { listing_types: opts.listingTypes } : {}),
+      ...(opts.categoryName ? { category_name: opts.categoryName } : {}),
     }),
+  quickSuggest: (title: string, gtin: string | null) =>
+    mlEdge<{ suggestions: MlDomainSuggestion[]; catalog: CatalogMatch | null }>("ml_api", { action: "quick_suggest", title, gtin }),
+  listingFees: (categoryId: string, price: number) =>
+    mlEdge<{ fees: MlListingFee[] }>("ml_api", { action: "listing_fees", category_id: categoryId, price }),
 };
+

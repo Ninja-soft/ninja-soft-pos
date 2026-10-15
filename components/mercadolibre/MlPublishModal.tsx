@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
@@ -154,6 +155,8 @@ export function MlPublishModal({
   const [validated, setValidated] = useState(false);
   const [busy, setBusy] = useState<"predict" | "category" | "validate" | "publish" | null>(null);
   const [published, setPublished] = useState<Array<{ ml_item_id: string; permalink: string | null }> | null>(null);
+  // Otros tipos de publicación con el precio de las reglas (ADR-132).
+  const [extraTypes, setExtraTypes] = useState<string[]>([]);
 
   // Prefill desde el POS.
   useEffect(() => {
@@ -177,6 +180,7 @@ export function MlPublishModal({
       setShipPlan(null);
       setValidated(false);
       setPublished(null);
+      setExtraTypes([]);
     }
   }, [open]);
 
@@ -360,7 +364,12 @@ export function MlPublishModal({
     setBusy("publish");
     setErrors([]);
     try {
-      const r = await mlPublishApi.publish(accountId, productId, input);
+      const r = await mlPublishApi.publish(
+        accountId,
+        productId,
+        input,
+        extraTypes.length > 0 ? { listingTypes: [listing, ...extraTypes.filter((t) => t !== listing)], categoryName: cat?.category.name } : { categoryName: cat?.category.name },
+      );
       applyResult(r);
       if (r.ok) {
         setPublished(r.items ?? []);
@@ -536,6 +545,30 @@ export function MlPublishModal({
                   </select>
                 </label>
               </div>
+              {(pv.listing_prices ?? []).some((l) => l.listing_type_id !== listing && typeof l.price === "number" && l.price > 0) && (
+                <div className="space-y-1 rounded-lg bg-muted px-3 py-2">
+                  <p className="text-sm font-medium">También publicar como</p>
+                  {(pv.listing_prices ?? [])
+                    .filter((l) => l.listing_type_id !== listing && typeof l.price === "number" && l.price > 0)
+                    .map((l) => (
+                      <label key={l.listing_type_id} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex items-center gap-2">
+                          <Checkbox
+                            checked={extraTypes.includes(l.listing_type_id)}
+                            onCheckedChange={(v) =>
+                              setExtraTypes((xs) => (v ? [...new Set([...xs, l.listing_type_id])] : xs.filter((x) => x !== l.listing_type_id)))
+                            }
+                          />
+                          {LISTING_TYPE_LABELS[l.listing_type_id] ?? l.listing_type_id}
+                        </span>
+                        <span className="tabular-nums text-muted-foreground">{formatCurrency(Number(l.price))}</span>
+                      </label>
+                    ))}
+                  {extraTypes.length > 0 && (
+                    <p className="text-xs text-muted-foreground">Con varios tipos, el precio de cada uno sale de los precios por tipo de la cuenta.</p>
+                  )}
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-1 text-sm">
                   <span className="font-medium">Condición</span>

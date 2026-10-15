@@ -52,7 +52,7 @@ export const PRODUCT_FIELDS: ImportField[] = [
   },
   { header: "Costo", key: "cost", type: "number", aliases: ["cost"], cellType: "money", help: "Costo de compra (opcional).", transform: nonNegative("El costo") },
   { header: "Categoría", key: "category", type: "text", aliases: ["category", "rubro"], help: "Si no existe, se crea.", width: 18 },
-  { header: "Marca", key: "brand", type: "text", aliases: ["brand"], help: "Si no existe, se crea.", width: 16 },
+  { header: "Marca", key: "brand", type: "text", aliases: ["brand"], help: "Si no existe, se crea. Se guarda en mayúsculas.", width: 16 },
   { header: "IVA %", key: "tax_rate", type: "number", aliases: ["tax_rate", "iva", "alicuota"], help: "Alícuota de IVA en %. Vacío al crear = 21.", options: ["0", "10.5", "21", "27"] },
   { header: "Unidad", key: "unit", type: "text", aliases: ["unit"], help: "un, kg, lt, m... Vacío al crear = un.", options: ["un", "kg", "gr", "lt", "ml", "m"] },
   { header: "Stock", key: "stock", type: "number", aliases: ["stock", "stock inicial"], cellType: "number", help: "Stock inicial (sólo al crear, entra en la sucursal principal). Para cambiar el stock de productos que ya existen usá la importación de stock.", transform: nonNegative("El stock") },
@@ -82,7 +82,7 @@ export const productImportDefinition: ImportDefinition<ParsedProduct> = {
   feature: "productos",
   fields: () => PRODUCT_FIELDS,
   example: () => [
-    { name: "Coca Cola 500ml", barcode: "7790895000990", sku: "COCA500", price: 800, cost: 500, category: "Bebidas", brand: "Coca Cola", tax_rate: "21", unit: "un", stock: 24, stock_min: 6, track_stock: "Sí" },
+    { name: "Coca Cola 500ml", barcode: "7790895000990", sku: "COCA500", price: 800, cost: 500, category: "Bebidas", brand: "COCA COLA", tax_rate: "21", unit: "un", stock: 24, stock_min: 6, track_stock: "Sí" },
   ],
   schema: () => productSchema,
   dedupeKey: "barcode",

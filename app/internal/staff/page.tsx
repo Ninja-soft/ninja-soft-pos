@@ -19,7 +19,7 @@ import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { Switch } from "@/components/ui/Switch";
 import { ReasonDialog } from "@/components/internal/ReasonDialog";
 import { billingErrorMessage } from "@/lib/billing/ledger";
-import { useBillingConfigMutations, useStaffPermissions } from "@/modules/billing/ledger";
+import { useBillingConfigMutations, useStaffPermissions, type StaffBillingPermission } from "@/modules/billing/ledger";
 
 type Level = "support" | "admin" | "super_admin";
 const LEVEL_LABELS: Record<string, string> = {
@@ -44,6 +44,31 @@ type Staff = {
   internal_level: string | null;
 };
 
+// Permisos de cobranza sumables al nivel (ADR-115, ADR-131).
+const PERMISSION_ROWS: { key: StaffBillingPermission; label: string; short: string; grant: string; revoke: string }[] = [
+  {
+    key: "cobranzas",
+    label: "Cobranzas",
+    short: "Gestionar",
+    grant: "va a poder registrar pagos, bonificar, anular cargos dentro del tope, cargar notas y promesas y resolver la conciliación.",
+    revoke: "deja de operar las cuentas corrientes.",
+  },
+  {
+    key: "cobranzas_ver",
+    label: "Cobranzas: sólo ver",
+    short: "Sólo ver",
+    grant: "va a ver la cartera de cobranza, la historia 360 y la conciliación, sin poder operar.",
+    revoke: "deja de ver la cartera y la historia 360.",
+  },
+  {
+    key: "cobranzas_asignar",
+    label: "Cobranzas: asignar cobradores",
+    short: "Asignar cobradores",
+    grant: "va a poder asignar y cambiar el cobrador de cada negocio.",
+    revoke: "deja de asignar cobradores.",
+  },
+];
+
 export default function InternalStaffPage() {
   const supabase = createClient();
   const qc = useQueryClient();
@@ -51,10 +76,10 @@ export default function InternalStaffPage() {
   const [email, setEmail] = useState("");
   const [level, setLevel] = useState<Level>("admin");
   const [removing, setRemoving] = useState<Staff | null>(null);
-  const [cobranzasFor, setCobranzasFor] = useState<{ staff: Staff; enabled: boolean } | null>(null);
+  const [cobranzasFor, setCobranzasFor] = useState<{ staff: Staff; enabled: boolean; permission: StaffBillingPermission } | null>(null);
   const { data: permissions = [] } = useStaffPermissions();
   const { setPermission } = useBillingConfigMutations();
-  const hasCobranzas = (id: string) => permissions.some((p) => p.user_id === id && p.permission === "cobranzas");
+  const hasPerm = (id: string, perm: StaffBillingPermission) => permissions.some((p) => p.user_id === id && p.permission === perm);
 
   const { data: me } = useQuery({
     queryKey: ["my-internal-level"],
@@ -191,7 +216,9 @@ export default function InternalStaffPage() {
               <span>
                 <span className="font-semibold text-foreground">Cobranzas</span> es un permiso que se suma al nivel: una persona de
                 Soporte con Cobranzas ve y opera las cuentas corrientes (registra pagos y bonifica dentro de su tope) sin administrar
-                negocios. Admin y Super admin ya operan cobranzas por su nivel.
+                negocios. Admin y Super admin ya operan cobranzas por su nivel. Dos permisos finos más:{" "}
+                <span className="font-semibold text-foreground">sólo ver</span> (la cartera y la historia 360, sin operar) y{" "}
+                <span className="font-semibold text-foreground">asignar cobradores</span> (reparte la cartera).
               </span>
             </p>
           </CardContent>
@@ -271,16 +298,26 @@ export default function InternalStaffPage() {
                     <td className="px-4 py-3">
                       {s.internal_level === "admin" || s.internal_level === "super_admin" ? (
                         <Badge tone="neutral">Por su nivel</Badge>
-                      ) : isSuper ? (
-                        <Switch
-                          checked={hasCobranzas(s.id)}
-                          onCheckedChange={(v) => setCobranzasFor({ staff: s, enabled: v })}
-                          label={`Permiso Cobranzas para ${name}`}
-                        />
-                      ) : hasCobranzas(s.id) ? (
-                        <Badge tone="success">Sí</Badge>
                       ) : (
-                        <Badge tone="neutral">No</Badge>
+                        <div className="flex flex-col gap-2">
+                          {PERMISSION_ROWS.map((p) =>
+                            isSuper ? (
+                              <div key={p.key} className="flex items-center gap-2">
+                                <Switch
+                                  checked={hasPerm(s.id, p.key)}
+                                  onCheckedChange={(v) => setCobranzasFor({ staff: s, enabled: v, permission: p.key })}
+                                  label={`${p.label} para ${name}`}
+                                />
+                                <span className="text-xs text-muted-foreground">{p.short}</span>
+                              </div>
+                            ) : hasPerm(s.id, p.key) ? (
+                              <Badge key={p.key} tone="success">
+                                {p.short}
+                              </Badge>
+                            ) : null,
+                          )}
+                          {!isSuper && !PERMISSION_ROWS.some((p) => hasPerm(s.id, p.key)) && <Badge tone="neutral">No</Badge>}
+                        </div>
                       )}
                     </td>
                     {isSuper && (
@@ -306,12 +343,18 @@ export default function InternalStaffPage() {
       <ReasonDialog
         open={cobranzasFor !== null}
         onOpenChange={(o) => !o && setCobranzasFor(null)}
-        title={cobranzasFor?.enabled ? "Dar permiso Cobranzas" : "Quitar permiso Cobranzas"}
+        title={
+          cobranzasFor
+            ? `${cobranzasFor.enabled ? "Dar" : "Quitar"} permiso ${PERMISSION_ROWS.find((p) => p.key === cobranzasFor.permission)?.label ?? "Cobranzas"}`
+            : "Permiso de cobranzas"
+        }
         description={
           cobranzasFor
-            ? cobranzasFor.enabled
-              ? `${cobranzasFor.staff.full_name || cobranzasFor.staff.email} va a poder registrar pagos, bonificar y anular cargos dentro del tope de Cobranzas.`
-              : `${cobranzasFor.staff.full_name || cobranzasFor.staff.email} vuelve a ver las cuentas corrientes sólo en modo lectura.`
+            ? `${cobranzasFor.staff.full_name || cobranzasFor.staff.email} ${
+                cobranzasFor.enabled
+                  ? PERMISSION_ROWS.find((p) => p.key === cobranzasFor.permission)?.grant ?? ""
+                  : PERMISSION_ROWS.find((p) => p.key === cobranzasFor.permission)?.revoke ?? ""
+              }`
             : undefined
         }
         confirmLabel={cobranzasFor?.enabled ? "Dar permiso" : "Quitar permiso"}
@@ -319,8 +362,13 @@ export default function InternalStaffPage() {
         onConfirm={async (reason) => {
           if (!cobranzasFor) return;
           try {
-            await setPermission.mutateAsync({ userId: cobranzasFor.staff.id, enabled: cobranzasFor.enabled, reason });
-            toast({ title: cobranzasFor.enabled ? "Permiso Cobranzas otorgado" : "Permiso Cobranzas quitado", variant: "success" });
+            await setPermission.mutateAsync({
+              userId: cobranzasFor.staff.id,
+              enabled: cobranzasFor.enabled,
+              reason,
+              permission: cobranzasFor.permission,
+            });
+            toast({ title: cobranzasFor.enabled ? "Permiso otorgado" : "Permiso quitado", variant: "success" });
             setCobranzasFor(null);
           } catch (e) {
             toast({ title: "No se pudo cambiar el permiso", description: billingErrorMessage(e), variant: "error" });

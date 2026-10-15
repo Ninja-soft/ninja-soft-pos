@@ -13,6 +13,8 @@
 // en tests/unit/billingLedger.test.ts.
 // =============================================================================
 
+import { percentToBp, prorateCents } from "@/lib/billing/proration";
+
 const DAY = 86_400_000;
 
 const num = (v: unknown): number => {
@@ -160,9 +162,10 @@ export function prorationCents(input: ProrationInput): Proration | null {
   const daysTotal = dayNumber(input.periodEnd) - dayNumber(input.periodStart);
   const daysLeft = Math.min(daysTotal, dayNumber(input.periodEnd) - dayNumber(input.today));
   if (daysTotal <= 0 || daysLeft <= 0) return null;
-  const pct = Math.min(100, Math.max(0, num(input.percentOff)));
-  const debitCents = Math.round((num(input.newCycleAmount) * (100 - pct) * daysLeft) / daysTotal);
-  const creditCents = Math.round((num(input.oldCycleAmount) * (100 - pct) * daysLeft) / daysTotal);
+  // Mismo cálculo que platform_prorate_cents (F20-10, lib/billing/proration.ts).
+  const pctBp = percentToBp(Math.min(100, Math.max(0, num(input.percentOff))));
+  const debitCents = prorateCents(Math.round(num(input.newCycleAmount) * 100), pctBp, daysLeft, daysTotal);
+  const creditCents = prorateCents(Math.round(num(input.oldCycleAmount) * 100), pctBp, daysLeft, daysTotal);
   const totalCents = debitCents - creditCents;
   if (totalCents <= 0) return null;
   return { debitCents, creditCents, totalCents, daysLeft, daysTotal };
@@ -445,6 +448,30 @@ export function billingErrorMessage(e: unknown): string {
     invalid_code: "El código va de 4 a 32 letras, números, guiones o guion bajo.",
     plan_not_found: "Ese plan no está disponible.",
     invalid_validity: "La fecha de fin no puede ser anterior a la de inicio.",
+    // F20-10 y F20-11 (ADR-131)
+    quote_changed: "El cálculo cambió desde que lo simulaste. Volvé a simular antes de confirmar.",
+    no_change: "Elegí un plan o un ciclo distinto del actual.",
+    invalid_cycle: "Elegí un ciclo válido (mensual o anual).",
+    invalid_timing: "Elegí cuándo rige el cambio.",
+    request_id_required: "Falta el identificador del pedido. Volvé a intentar.",
+    change_not_found: "No encontramos ese cambio de plan.",
+    change_not_scheduled: "Ese cambio ya no está programado.",
+    recon_running: "Ya hay una conciliación en curso. Esperá unos minutos.",
+    diff_not_found: "No encontramos esa diferencia.",
+    diff_not_open: "Esa diferencia ya fue resuelta.",
+    invalid_action: "Esa acción no existe.",
+    action_not_allowed: "Esa acción no corresponde a este tipo de diferencia.",
+    tenant_required: "Elegí a qué negocio imputar el pago.",
+    mp_payment_unknown: "No tenemos los datos de ese pago de Mercado Pago. Volvé a conciliar.",
+    payment_required: "La diferencia no tiene un pago asociado.",
+    not_collector: "Esa persona no puede ser cobradora (necesita Cobranzas o ser admin).",
+    invalid_tenants: "Elegí entre 1 y 500 negocios.",
+    invalid_body: "La nota tiene que tener entre 3 y 2000 caracteres.",
+    invalid_next_action: "La próxima acción tiene que ser desde hoy y dentro de los 180 días.",
+    note_not_found: "No encontramos esa nota.",
+    note_already_voided: "Esa nota ya estaba anulada.",
+    invalid_settings: "Revisá la ventana (24 a 720 horas) y la tolerancia.",
+    invalid_outcome: "Elegí un resultado válido.",
     "check constraint": "Revisá los datos: hay un valor fuera de rango.",
   };
   // La clave más larga primero: "forbidden_exempt" antes que "forbidden".

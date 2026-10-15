@@ -12,16 +12,22 @@
 // F20-9 (ADR-128): vista "Mora y punitorios" (?vista=mora): negocios en mora
 // con su próximo paso, condonaciones para aprobar, documentos pendientes de
 // H130 y la configuración de punitorios, escalera y feriados.
+//
+// F20-10 y F20-11 (ADR-131): vista "Cartera" (?vista=cartera, cobranza 360 con
+// filtros, cobrador asignado, timeline y export XLSX) y "Conciliación"
+// (?vista=conciliacion, bandeja de diferencias con Mercado Pago).
 // =============================================================================
 
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarClock, ChartColumnStacked, ChevronRight, CircleAlert, Gavel, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, Users, Wallet } from "lucide-react";
+import { CalendarClock, ChartColumnStacked, ChevronRight, CircleAlert, Gavel, GitCompareArrows, Inbox, Landmark, LayoutGrid, PiggyBank, Settings2, UserRoundSearch, Users, Wallet } from "lucide-react";
 import { Segmented } from "@/components/ui/Segmented";
 import { TransferInbox } from "@/components/internal/billing/TransferInbox";
 import { BillingKpisView } from "@/components/internal/billing/BillingKpisView";
 import { MoraOverview } from "@/components/internal/billing/MoraOverview";
+import { CollectionPortfolio } from "@/components/internal/billing/CollectionPortfolio";
+import { ReconInbox } from "@/components/internal/billing/ReconInbox";
 import {
   CollectionConfigSkeleton,
   CollectionSettingsCard,
@@ -43,9 +49,9 @@ import { useBillingAccess, useBillingOverview } from "@/modules/billing/ledger";
 
 const tenantHref = (id: string) => `/internal/tenants/${id}?tab=cuenta` as Route;
 
-type Vista = "resumen" | "metricas" | "pagos" | "mora" | "config";
-const isVista = (v: string | null): v is Vista =>
-  v === "resumen" || v === "metricas" || v === "pagos" || v === "mora" || v === "config";
+type Vista = "resumen" | "cartera" | "metricas" | "pagos" | "mora" | "conciliacion" | "config";
+const VISTAS: readonly Vista[] = ["resumen", "cartera", "metricas", "pagos", "mora", "conciliacion", "config"];
+const isVista = (v: string | null): v is Vista => VISTAS.includes(v as Vista);
 
 export default function InternalCobranzaPage() {
   const router = useRouter();
@@ -82,8 +88,10 @@ export default function InternalCobranzaPage() {
           value={vista}
           onChange={setVista}
           className="max-w-none flex-nowrap"
+          scrollOnMobile
           options={[
             { value: "resumen", label: "Resumen", icon: <LayoutGrid size={15} /> },
+            { value: "cartera", label: "Cartera", icon: <UserRoundSearch size={15} /> },
             { value: "metricas", label: "Métricas", icon: <ChartColumnStacked size={15} /> },
             {
               value: "pagos",
@@ -91,12 +99,17 @@ export default function InternalCobranzaPage() {
               icon: <Inbox size={15} />,
             },
             { value: "mora", label: "Mora y punitorios", icon: <Gavel size={15} /> },
+            { value: "conciliacion", label: "Conciliación", icon: <GitCompareArrows size={15} /> },
             { value: "config", label: "Cuentas y avisos", icon: <Settings2 size={15} /> },
           ]}
         />
       </div>
 
       {vista === "mora" && <MoraOverview access={access} />}
+
+      {vista === "cartera" && <CollectionPortfolio access={access} />}
+
+      {vista === "conciliacion" && <ReconInbox access={access} />}
 
       {vista === "metricas" && <BillingKpisView canView={access ? Boolean(access.can_operate) : accessError ? false : undefined} />}
 

@@ -1479,10 +1479,13 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [x] Timeline: devengo (agrupado por mes), condonación, promesa y pasos de la escalera en la historia de la cuenta y en `audit_logs`.
   - [x] *Criterio:* una deuda vencida a 45 días da el punitorio exacto del simulador ($ 3.750 sobre $ 50.000 al 5 %); la mitad condonada queda registrada, con su NC pendiente de H130 cuando ya tenía ND, y en el timeline. Probado en PGlite (110 chequeos, 300 casos al azar SQL = TS), `tests/unit/billingInterest.test.ts`, `tests/unit/billingMora.test.ts`, `tests/components/MoraPanels.test.tsx` y `tests/integration/rls-cobranza-mora.test.ts`.
   - [ ] Aplicar la migración y decidir tasa y escalera definitivas (§21 #4 y #5).
-- [ ] **H136 · F20-10 y F20-11: conciliación, prorrateo y cobranza 360.**
-  - [ ] Conciliación diaria con MP, contracargos y duplicados.
-  - [ ] Prorrateo de upgrades, cambios de ciclo y addons.
-  - [ ] Timeline unificado, lista de cobranza con cobrador asignado, permisos finos y export XLSX.
+- [ ] **H136 · F20-10 y F20-11: conciliación, prorrateo y cobranza 360.** Código en `feat/h136-cobranza-360` ([ADR-131](./17-decision-log.md)); migración `20261126100000_cobranza_360` sin aplicar y Edge nueva `platform_mp_reconcile` sin desplegar.
+  - [x] Conciliación diaria con MP (cron `platform-mp-reconcile` 04:00 ART, sólo GET a la cuenta de NinjaSoft): faltantes, duplicados, montos distintos, contracargos, reintegros y estados; bandeja Cobranzas › **Conciliación** con imputar, dejar a cuenta, registrar reintegro (total o parcial) o contracargo, aceptar o ignorar. Sin credenciales corre degradada (sólo duplicados locales) y lo avisa. Completa la comisión y el neto de MP en los pagos.
+  - [x] Prorrateo de upgrades y downgrades, cambios de ciclo (mensual a anual desde hoy con crédito; anual a mensual al fin del período) y addons a mitad de período, sobre el núcleo único `platform_prorate_cents` (el de F20-1 pasa a usarlo, mismo importe y clave). Simulador en la ficha del negocio antes de confirmar; cambios programados con cron `platform-plan-changes`.
+  - [x] Cobranza 360: Cobranzas › **Cartera** con filtros (aging, monto, escalera, promesa, cobrador), cobrador asignado, notas de gestión con próxima acción, timeline unificado por negocio y export XLSX; permisos finos sobre Cobranzas (sólo ver, asignar, gestionar).
+  - [x] *Criterio:* probado en PGlite (98 chequeos: 300 casos SQL = TS del prorrateo y 120 del núcleo, trigger de F20-1 con el mismo importe, addons, simulador y confirmación con `quote_changed`, downgrade con tope, programados, cambio de ciclo, conciliación con cierre automático, contracargo, reintegro parcial e imputación, cartera, timeline y RLS), `tests/unit/billingProration.test.ts`, `tests/unit/billingReconcile.test.ts`, `tests/unit/collection360.test.ts` y `tests/integration/rls-cobranza-360.test.ts`.
+  - [ ] Aplicar la migración, desplegar `platform_mp_reconcile` y revisar la primera corrida contra la cuenta real.
+  - [ ] Revalidación mensual del padrón (§13.2 `platform-padron-refresh`): queda para cuando exista el certificado de la plataforma.
 
 ### F21 · Participación del staff y gastos
 

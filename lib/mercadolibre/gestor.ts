@@ -1,7 +1,7 @@
 // Gestor de Mercado Libre (H141 · ADR-132): secciones y puesta en marcha.
 // PURO: lo usan la pantalla, los estados vacíos y los tests.
 
-export type GestorSection = "items" | "orders" | "questions" | "shipments" | "full" | "postsale" | "boards" | "metrics" | "config";
+export type GestorSection = "items" | "orders" | "billing" | "questions" | "shipments" | "full" | "postsale" | "boards" | "metrics" | "config";
 
 export interface SectionInfo {
   key: GestorSection;
@@ -23,6 +23,12 @@ export const GESTOR_SECTIONS: SectionInfo[] = [
     key: "orders",
     label: "Ventas",
     summary: "Las ventas de Mercado Libre entran solas al POS con su comisión, descuentan stock y se facturan como elijas.",
+    feature: null,
+  },
+  {
+    key: "billing",
+    label: "Facturación",
+    summary: "Ventas por facturar, esperando la percepción, a revisar y facturadas: elegí qué factura sale y cuál se sube a Mercado Libre, y facturá en lote.",
     feature: null,
   },
   {
@@ -112,7 +118,7 @@ export function setupSteps(i: SetupInput): SetupStep[] {
     {
       key: "invoice",
       label: "Facturación de las ventas",
-      hint: "Al pagarse, al despacharse, a mano o sin factura.",
+      hint: "Al pagarse, al despacharse, al entregarse, a mano por lote o sin factura.",
       done: i.invoiceConfirmed || (i.invoiceMode !== "manual" && i.invoiceMode !== ""),
     },
     {

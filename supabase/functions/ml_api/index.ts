@@ -36,6 +36,12 @@
 //                                                  en el servidor (reglas)
 //   visits {account_id, item_ids[]}                visitas de 30 días (de a 1 por
 //                                                  GET, hasta 50)
+//
+// Vincular (ADR-141):
+//   link_context {account_id, item_row_id}         fotos, marca, GTIN, SKU y
+//                                                  variaciones de la publicación
+//                                                  (sólo GET) para sugerir el
+//                                                  producto del POS
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { readJsonLimited } from "../_shared/requestGuard.ts";
@@ -45,6 +51,7 @@ import {
   buildItemBodies,
   filterCategorySuggestions,
   itemIdentifiers,
+  linkContext,
   suggestLinks,
   type ItemBody,
   type PublishInput,
@@ -518,6 +525,23 @@ Deno.serve(async (req: Request) => {
         if (!/^\d{5,22}$/.test(id)) return json({ error: "invalid_order" }, 400);
         const r = await ingestOrder(deps, account.id, id);
         return json({ ok: true, ...r });
+      }
+      case "link_context": {
+        const rowId = String(b.item_row_id ?? "");
+        if (!UUID_RE.test(rowId)) return json({ error: "invalid_item" }, 400);
+        const { data: row } = await admin
+          .from("ml_items")
+          .select("ml_item_id")
+          .eq("id", rowId)
+          .eq("account_id", account.id)
+          .eq("tenant_id", tenantId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (!row) return json({ error: "item_not_found" }, 404);
+        const item = await client.get<MlItem>(`/items/${encodeURIComponent((row as { ml_item_id: string }).ml_item_id)}`, {
+          include_attributes: "all",
+        });
+        return json({ ok: true, ...linkContext(item) });
       }
       case "refresh_item": {
         const id = String(b.ml_item_id ?? "");

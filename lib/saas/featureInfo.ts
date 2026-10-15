@@ -646,6 +646,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["mercadolibre"],
     needs: "Publicaciones de Mercado Libre con Full activo y vinculadas a tus productos. El envío a Full se crea en Mercado Libre (su API no lo permite desde otro sistema) y se registra su número.",
   },
+  mercadolibre_facturacion: {
+    desc: "Facturación de Mercado Libre con reglas: cupones como descuento o repartidos en los precios, el envío que pagó el comprador como renglón (nunca el gratis, Full ni el a convenir), control de lo cobrado contra la factura, datos fiscales del comprador con el padrón de ARCA, factura A, B o C elegida por venta dentro de lo que acepta ARCA, punto de venta propio de la cuenta, concepto y PDF A4 o ticket. Facturar al pagarse, al despacharse, al entregarse o a mano por lote desde una bandeja (por facturar, esperando la percepción, a revisar, con error y facturadas). Percepciones de Ingresos Brutos por jurisdicción con reglas (padrón, alícuota fija, % de la base, mínimos, acumulado o destino) cobradas por link de pago de Mercado Pago antes de la factura A, o factura B o sin percibir según el envío. Qué comprobante se sube a la venta (y volver a subirlo), notas de crédito por cancelación o reintegro.",
+    impact: "Desactivado, las ventas de Mercado Libre se facturan con la letra automática y sin reglas (al pagarse, al despacharse o a mano) y el servidor rechaza la bandeja, la elección por venta y las percepciones; lo ya emitido se sigue viendo.",
+    minPlan: "Pro",
+    requires: ["mercadolibre", "facturacion_afip"],
+    needs: "Facturación electrónica de ARCA activa; para percepciones, el plan con percepciones y retenciones, el padrón de IIBB importado y Mercado Pago conectado para el link de pago.",
+  },
   integracion_nubceo: {
     desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
     impact: "Desactivado, no se mandan ventas a NubCeo ni se importan asientos (el servidor lo rechaza); lo ya enviado se puede seguir mirando.",

@@ -221,6 +221,13 @@ export interface CheckoutSheetProps {
   pause?: SheetPauseOptions | null;
   /** Comprobante de la venta y "Cambiar tipo" (ADR-133). Lo provee CheckoutSheetConnected. */
   fiscalSlot?: React.ReactNode;
+  /** Entrega de la venta (ADR-146): bloque plegable debajo del cliente. */
+  deliverySlot?: React.ReactNode;
+  /**
+   * Costo de envío de la entrega (ADR-146). Ya viene sumado en `base` (va
+   * como renglón de la venta, antes del redondeo); acá sólo se muestra.
+   */
+  shippingFee?: number;
   /** Estado de la hoja a restaurar al abrir (venta pausada que se retoma). */
   restore?: CheckoutSnapshot | null;
   /** El POS llama acá para pausar con el atajo de teclado. */
@@ -288,6 +295,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     prepaid = null,
     pause = null,
     fiscalSlot = null,
+    deliverySlot = null,
+    shippingFee = 0,
     restore = null,
     pauseRef,
     clearRef,
@@ -1131,6 +1140,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const hasBreakdown =
     deliveryFee > 0 ||
+    shippingFee > 0 ||
     warranty > 0 ||
     totals.surcharges > 0 ||
     promoExtra > 0 ||
@@ -1140,6 +1150,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const breakdown = hasBreakdown ? (
     <dl className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
       {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
+      {shippingFee > 0 && <Row label="Envío a domicilio" value={`+${money(shippingFee)}`} />}
       {warranty > 0 && <Row label={`Garantía ${wpick?.option.label ?? ""}`} value={`+${money(warranty)}`} />}
       {totals.surcharges > 0 && <Row label="Recargos" value={`+${money(totals.surcharges)}`} />}
       {promoExtra > 0 && (
@@ -1761,6 +1772,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           <div className="pr-10">{totalBlock}</div>
           {breakdown}
           {fiscalSlot}
+          {deliverySlot}
           {paidList}
           <div className="mb-2 mt-5">{heading}</div>
           {picker("list", {
@@ -1779,6 +1791,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             <div className="pr-10 md:pr-0">{totalBlock}</div>
             {breakdown}
           {fiscalSlot}
+          {deliverySlot}
             {showEditor && active && (
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
@@ -1907,6 +1920,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             <div className="pr-10 md:pr-8">{totalBlock}</div>
             {breakdown}
           {fiscalSlot}
+          {deliverySlot}
             {paidList}
             {editorCard}
             {extras}

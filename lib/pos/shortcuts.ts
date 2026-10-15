@@ -40,7 +40,7 @@ export const POS_SHORTCUTS: PosShortcut[] = [
     label: "Buscar producto",
     hint: "Lleva el cursor a la búsqueda y selecciona el texto.",
   },
-  { action: "customer", keys: ["F4"], label: "Elegir cliente" },
+  { action: "customer", keys: ["F4"], label: "Elegir cliente", hint: "También desde la hoja de cobro." },
   {
     action: "pending",
     keys: ["F8"],

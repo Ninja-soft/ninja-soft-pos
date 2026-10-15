@@ -18,7 +18,8 @@ import { parseIntegration } from "@/lib/payments/terminal/config";
 import { INTEGRATED_CARD_TENDER_ID, integratedCardTender, normalizeTenderId } from "@/lib/pos/tenders";
 import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
 import { CheckoutSheet, type CheckoutSheetProps } from "./CheckoutSheet";
-import { CheckoutLetter } from "./CheckoutLetter";
+import { CheckoutLetter, type CheckoutLetterState } from "./CheckoutLetter";
+import { CheckoutCustomerBlock, type CheckoutCustomerActions } from "./CheckoutCustomerBlock";
 import type { AccountPayRequest, ElectronicRequest, TerminalChargeRequest } from "./types";
 
 // Cobros electrónicos: los modales existentes de cada proveedor, en su chunk.
@@ -65,6 +66,11 @@ type Connected = Omit<
    * automática de transferencias.
    */
   offline?: boolean;
+  /**
+   * Bloque "Cliente" de la hoja (ADR-146): elegir, crear o quitar el cliente
+   * sin salir del cobro. Sin esto, sólo la letra del comprobante.
+   */
+  customerBlock?: CheckoutCustomerActions | null;
 };
 
 // Hoja de cobro con sus datos (planes de cuotas, vendedores,
@@ -74,8 +80,11 @@ export function CheckoutSheetConnected({
   onTransferState,
   customerId = null,
   offline = false,
+  customerBlock = null,
   ...props
 }: Connected) {
+  // Letra vigente (la muestra el bloque Cliente cerrado).
+  const [letterState, setLetterState] = useState<CheckoutLetterState | null>(null);
   // Cuentas de transferencia de la caja (herencia por sucursal y caja).
   const transferCfg = usePosTransferConfig();
   // Detección automática de transferencias de Mercado Pago (ADR-061).
@@ -269,7 +278,21 @@ export function CheckoutSheetConnected({
   return (
     <CheckoutSheet
       {...props}
-      fiscalSlot={<CheckoutLetter open={props.open} customerId={customerId} offline={offline} />}
+      fiscalSlot={
+        customerBlock ? (
+          <CheckoutCustomerBlock
+            {...customerBlock}
+            open={props.open}
+            offline={offline}
+            letterState={letterState}
+            letter={
+              <CheckoutLetter open={props.open} customerId={customerId} offline={offline} embedded onState={setLetterState} />
+            }
+          />
+        ) : (
+          <CheckoutLetter open={props.open} customerId={customerId} offline={offline} />
+        )
+      }
       tenders={tenders}
       initialTenderId={initialTenderId}
       renderTerminal={renderTerminal}

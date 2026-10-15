@@ -1,75 +1,54 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { FileText, Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
-import { createClient } from "@/lib/supabase/client";
 import { letterCheckMessage, letterOptions, overrideRiskText } from "@/lib/billing/cbteOptions";
 import { inferLetter } from "@/lib/tax/comprobante";
 import { isValidCuit } from "@/lib/tax/catalog";
-import { verificationLabel, type FiscalVerification } from "@/lib/customers/padron";
+import { verificationLabel } from "@/lib/customers/padron";
+import { useCheckoutCustomerFiscal } from "@/modules/customers/checkoutFiscal";
 import { useFeature } from "@/modules/saas/gating";
 import { useTaxSettings } from "@/modules/tax/hooks";
 import { padronApi } from "@/modules/padron/api";
-
-type CustomerFiscal = {
-  id: string;
-  iva_condition: string | null;
-  document_type: string | null;
-  document_number: string | null;
-  fiscal_verification?: FiscalVerification;
-  fiscal_verified_at?: string | null;
-};
-
-type LooseFrom = {
-  from: (t: string) => {
-    select: (c: string) => {
-      eq: (c: string, v: string) => { maybeSingle: () => PromiseLike<{ data: unknown; error: { message: string } | null }> };
-    };
-  };
-};
-
-async function fetchCustomerFiscal(id: string): Promise<CustomerFiscal | null> {
-  const sb = createClient() as unknown as LooseFrom;
-  const full = await sb
-    .from("customers")
-    .select("id, iva_condition, document_type, document_number, fiscal_verification, fiscal_verified_at")
-    .eq("id", id)
-    .maybeSingle();
-  if (!full.error) return (full.data as CustomerFiscal | null) ?? null;
-  // Sin la migración de ADR-133 las columnas nuevas no existen.
-  const basic = await sb.from("customers").select("id, iva_condition, document_type, document_number").eq("id", id).maybeSingle();
-  return (basic.data as CustomerFiscal | null) ?? null;
-}
 
 // Comprobante de la venta en la hoja de cobro (ADR-133): la letra que
 // corresponde (inferLetter) y "Cambiar tipo" con SÓLO los tipos que ARCA
 // acepta para este negocio y este cliente. Forzar un tipo distinto pide
 // confirmación con el riesgo y lo registra el servidor
 // (sale_letter_override_set), que lo vuelve a validar al crear la venta.
+export interface CheckoutLetterState {
+  /** Letra con la que sale la venta (la sugerida o la elegida a mano). */
+  letter: string;
+  suggested: string;
+  forced: boolean;
+  /** Por qué ARCA no acepta la sugerida (p. ej. falta el CUIT). */
+  problem: string | null;
+}
+
 export function CheckoutLetter({
   open,
   customerId,
   offline = false,
+  embedded = false,
+  onState,
 }: {
   open: boolean;
   customerId: string | null;
   offline?: boolean;
+  /** Dentro del bloque Cliente (ADR-146): sin fondo propio. */
+  embedded?: boolean;
+  /** Avisa la letra vigente (el bloque Cliente la muestra cerrado). */
+  onState?: (s: CheckoutLetterState | null) => void;
 }) {
   const { toast } = useToast();
   const arca = useFeature("facturacion_afip");
   const tax = useTaxSettings(open);
-  const cust = useQuery({
-    queryKey: ["checkout-customer-fiscal", customerId],
-    queryFn: () => fetchCustomerFiscal(customerId!),
-    enabled: open && Boolean(customerId),
-    staleTime: 30_000,
-  });
+  const cust = useCheckoutCustomerFiscal(customerId, open);
   const [forced, setForced] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -94,10 +73,20 @@ export function CheckoutLetter({
   const suggested = inferLetter(emitter, receptor, { issuesM });
   const options = useMemo(() => letterOptions(emitter, receptor, { hasCuit, issuesM }), [emitter, receptor, hasCuit, issuesM]);
 
-  if (arca !== true || !emitter || !suggested) return null;
+  const visible = arca === true && Boolean(emitter) && Boolean(suggested);
   const letter = forced ?? suggested;
-  const alternatives = options.filter((o) => o.allowed && o.letter !== suggested).length;
   const suggestedProblem = options.find((o) => o.letter === suggested && !o.allowed);
+  const problem = suggestedProblem?.reason ?? null;
+
+  // El bloque Cliente muestra la letra vigente en su línea cerrada.
+  const onStateRef = useRef(onState);
+  onStateRef.current = onState;
+  useEffect(() => {
+    onStateRef.current?.(visible && letter && suggested ? { letter, suggested, forced: Boolean(forced), problem } : null);
+  }, [visible, letter, suggested, forced, problem]);
+
+  if (!visible || !suggested || !letter) return null;
+  const alternatives = options.filter((o) => o.allowed && o.letter !== suggested).length;
   const verified = verificationLabel(c?.fiscal_verification ?? null, c?.fiscal_verified_at);
 
   async function choose(l: string, why: string | null) {
@@ -118,7 +107,7 @@ export function CheckoutLetter({
   }
 
   return (
-    <div className="mt-3 rounded-lg bg-fg-4 px-3 py-2 text-[13px]">
+    <div className={cn("text-[13px]", embedded ? "rounded-lg bg-fg-4 px-3 py-2" : "mt-3 rounded-lg bg-fg-4 px-3 py-2")}>
       {/* Fila 1: la letra (nunca se parte) y sus marcas, que bajan de línea si
           no entran; las acciones quedan chicas a la derecha de la misma fila. */}
       <div className="flex items-start gap-2">
@@ -160,7 +149,7 @@ export function CheckoutLetter({
           </div>
         )}
       </div>
-      {suggestedProblem && <p className="mt-1.5 text-xs text-warning">{suggestedProblem.reason}</p>}
+      {suggestedProblem && !embedded && <p className="mt-1.5 text-xs text-warning">{suggestedProblem.reason}</p>}
 
       <Modal open={pickerOpen} onOpenChange={setPickerOpen} title="Tipo de comprobante">
         <div className="space-y-3">

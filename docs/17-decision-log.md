@@ -5332,6 +5332,34 @@ El dueño factura las ventas de Mercado Libre a gran escala en ANDESMAR (MeliOmn
 
 ---
 
+## ADR-146: Cliente y entrega dentro de la hoja de cobro (alta con ARCA, retiro en otra sucursal, envío con costo y reparto) sobre el mismo plan de ADR-136
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/cobro-cliente-envio`; migración `20261215100000_cobro_envio_costo` sin aplicar) · **Base:** ADR-133 (alta rápida con padrón de ARCA, `CheckoutLetter`), ADR-136 (entregas partidas, `pos_sale_create_fulfilled`, remitos con COT), ADR-129 (expedición y tipos de entrega), ADR-100 (atajos del POS).
+
+### Contexto
+
+Pedido del dueño sobre la hoja de cobro "¿Cómo paga?": "quiero poder manejar la creación de cliente desde acá, y el envío como te dije antes". Antes: crear clientes desde la venta con el CUIT verificado en ARCA y la factura que corresponde, y entregas (retiro ahora, retiro en otra sucursal, envío a domicilio, partir la entrega, remito con COT). Todo eso existía pero fuera del cobro (cliente en el carrito, reparto en la barra de entregas).
+
+### Decisión
+
+1. **Bloque Cliente** (columna derecha, arriba del medio de pago, plegable como "Propina, garantía y vendedor"). Cerrado: una línea con el cliente (o Consumidor final), su condición corta y la letra vigente ("Factura A", "a mano" si se forzó). Abierto: documento, verificado en ARCA, Elegir cliente (el buscador del carrito, también con **F4** desde la hoja), Nuevo cliente (el alta rápida de ADR-133 con Verificar en ARCA) y Quitar. La letra (`CheckoutLetter`) vive adentro y queda montada aunque el bloque esté cerrado (su elección a mano no se pierde); avisa la letra con `onState`. Factura A o M sugerida sin CUIT válido: aviso, el bloque se abre solo y ofrece cargar el CUIT en la ficha. Sin cliente y emisor que discrimina IVA: "¿Te pide factura a nombre de una empresa?". Los datos fiscales salen de una sola consulta compartida (`modules/customers/checkoutFiscal.ts`, ahora con el domicilio).
+2. **Bloque Entrega** (debajo del cliente). Por defecto "Se lo lleva ahora" (sin plan: la venta va por `create_sale` como siempre). Atajos sobre el **mismo plan** de ADR-136: **Retira en otra sucursal** (selector con las sucursales que tienen todo, de `warehouse_sources`; con retiro cruzado lo que falta sale de acá; quién retira por defecto es el cliente), **Envío a domicilio** (todo desde el salón de esta sucursal, domicilio del cliente precargado y editable, costo opcional) y **Repartir entrega** (abre el `FulfillmentModal` existente). Resumen en una línea ("2 se lleva ahora · 1 envío a Calle 12"). Si falta un dato (domicilio, quién retira, stock), el cobro no sale y lo dice. Después de cobrar, el aviso de entregas ofrece **Hacer remito** en cada envío (ADR-136, con COT).
+3. **Costo de envío como renglón.** `pos_sale_create_fulfilled` acepta `p_plan.shipping_fee`: exige al menos una entrega por envío (`shipping_fee_requires_envio`), lo valida (`invalid_shipping_fee`) y agrega a la venta el renglón **"Envío"** sin producto. Para `create_sale` lo declara como recargo (extra `surcharge` con el mismo monto), así no pasa por el permiso ni el tope de la venta libre. El POS lo suma a la base del cobro (antes del redondeo, igual que el servidor) y a la vista previa de percepciones. Queda en la auditoría `sale_delivery_split`. `create_sale` no cambia.
+4. **Plan y features.** No hay key nueva: el bloque Entrega existe con `entregas_remitos` (OPTIONAL, ADR-136) y retiro y envío además con `pedidos_despacho` y la configuración de pedidos; apagados se muestran con candado y el motivo. El servidor sigue gateando en `pos_sale_create_fulfilled` (`entregas_remitos`, `pedidos_despacho`, `stock_sucursales`, `depositos`). El bloque Cliente es BASE (clientes); la letra, `facturacion_afip`.
+5. **Sin cambios si no se toca nada.** Los dos bloques arrancan cerrados, el efectivo sigue a un toque y la venta sin entrega elegida va por `create_sale` igual que antes. Con una entrega elegida, la venta no se pausa ni se deja en espera (el plan no viaja con esas copias).
+
+### Alternativas descartadas
+
+- **Envío como ítem libre del carrito:** choca con el permiso y el tope de la venta libre y lo podría mandar cualquiera; el renglón lo arma el servidor sólo si hay un envío.
+- **Recrear `create_sale` con un extra `shipping`:** 1.500 líneas para un caso que se resuelve en la función que ya orquesta las entregas.
+- **Duplicar los bloques en la columna de medios en el celular:** montaba dos veces la letra (con su elección a mano); en el celular los bloques aparecen al elegir el medio, arriba del editor.
+
+### Consecuencias
+
+- Deploy: `20261215100000_cobro_envio_costo` después de `20261202100100_depositos_venta_entregas`. Parte de la definición vigente en producción. Sin la migración, el POS funciona igual salvo el costo de envío: el servidor viejo lo ignora, la venta sale sin el renglón Envío y lo cobrado de más queda como pago de más (**aplicar la migración antes del deploy del front**).
+- Riesgos: un cupón porcentual o una promo por monto mínimo calculan en el servidor con el renglón Envío incluido (el POS no lo suma a esas bases); el servidor acepta pagar de más, pero conviene revisar con un caso real. El envío va a la alícuota general del negocio.
+- Tests: `tests/unit/cobroClienteEnvio.test.ts` (atajos de reparto, resumen, costo en criollo, errores y contrato de la migración) y `tests/components/CobroClienteEnvio.test.tsx` (elegir o crear el cliente recalcula la letra, aviso de CUIT, envío con domicilio precargado y costo, retiro en la sucursal con stock, candados de plan).
+- Deuda: envío desde otra sucursal o depósito con el atajo (hoy por Repartir), costo de envío dentro del reparto completo, cotización automática del envío (ADR-103).
 ## ADR-145: Configuración de la facturación de Mercado Libre por pasos con vista previa, mensaje al facturar y leyenda con plantillas activas por defecto, y sucursal y depósito por tipo de envío (H142)
 
 **Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261213100000_ml_facturacion_config_ux` sin aplicar; Edges `ml_worker` y `ml_facturacion` modificadas, sin desplegar; sin mensajes ni facturas reales en las pruebas) · **Hito:** H142 · **Base:** ADR-141 (facturación de ML), ADR-142 (Full), ADR-104, ADR-136 (depósitos). **Numeración:** si otra rama abierta tomó la 145, renumerar al mergear.

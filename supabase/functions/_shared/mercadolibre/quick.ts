@@ -183,7 +183,9 @@ export function localRowState(p: QuickProduct, row: QuickRow | null, fields: Att
   if (row.title.trim().length < 3) problems.push("El título es muy corto.");
   if (row.title.trim().length > row.maxTitleLength) problems.push(`El título supera ${row.maxTitleLength} caracteres.`);
   if (p.pictures.length === 0) problems.push("Falta una foto en la ficha del producto.");
-  if (!(row.gtin ?? "").trim() && !row.emptyGtinReason) problems.push("Falta el código de barras o el motivo.");
+  const gtin = (row.gtin ?? "").trim();
+  if (!gtin && !row.emptyGtinReason) problems.push("Falta el código de barras o el motivo.");
+  if (gtin && !isValidGtin(gtin)) problems.push("El código de barras no es válido: revisá los dígitos o borralo y elegí el motivo.");
   for (const f of missingRequired(fields, row.attrs)) problems.push(`Falta ${f.name}.`);
   return { state: problems.length ? "needs_input" : "ready", problems };
 }

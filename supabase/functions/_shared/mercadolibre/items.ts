@@ -203,6 +203,12 @@ export interface PublishInput {
   warranty?: { type: string; time: string } | null;
   variants?: PublishVariant[];
   maxTitleLength?: number;
+  /**
+   * Producto del catálogo de ML que coincide por GTIN. Sólo sirve para
+   * precompletar y avisar: el POS publica siempre como publicación propia
+   * (nunca manda `catalog_listing`), que no exige Mercado Envíos.
+   */
+  catalogProductId?: string | null;
 }
 
 export interface ItemBody {
@@ -431,9 +437,30 @@ export function validationCauses(body: unknown, fallback: string[] = []): { erro
     if (String(o.type ?? "").toLowerCase() === "warning") warnings.push(text);
     else errors.push(text);
   }
-  // Un 400 sin errores marcados: los avisos son lo que lo rechazó.
-  if (errors.length === 0) return { errors: warnings.length > 0 ? warnings : fallback, warnings: [] };
+  // /items/validate responde 400 aunque sólo haya avisos (leído el 15/10/2026
+  // con la cuenta real: un vino con todo bien da 400 con un único
+  // `shipping.lost_me1_by_user` de tipo warning). Los avisos no frenan la
+  // publicación; sólo un 400 sin ninguna causa usa el fallback como error.
+  if (errors.length === 0 && warnings.length === 0) return { errors: fallback, warnings: [] };
   return { errors, warnings };
+}
+
+const FORBIDDEN_TITLE = /\b(stock|oferta|ofertas|envio gratis|envío gratis|cuotas)\b/gi;
+
+/**
+ * Título que ML acepta: sin palabras prohibidas y cortado en una palabra al
+ * largo de la categoría. `changed` dice si hubo que tocarlo.
+ */
+export function fitTitle(title: string, max = 60): { title: string; changed: boolean } {
+  const orig = (title ?? "").replace(/\s+/g, " ").trim();
+  let t = orig.replace(FORBIDDEN_TITLE, "").replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").trim();
+  if (t.length > max) {
+    const cut = t.slice(0, max);
+    // Si el corte cae justo al final de una palabra, la palabra entra entera.
+    const sp = t[max] === " " ? max : cut.lastIndexOf(" ");
+    t = (sp > max * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,.;:\-/]+$/, "").trim();
+  }
+  return { title: t, changed: t !== orig };
 }
 
 /** ¿Tiene la automatización de precios de ML activa? (tag del ítem). */

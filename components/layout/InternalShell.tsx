@@ -182,21 +182,22 @@ export function InternalShell({
         })}
       </div>
 
-      {/* Pie compacto (igual que el del POS, ADR-134): una fila con avatar,
-          nombre y nivel; Mis PINes y Volver al POS como íconos al lado. */}
-      <div className="mt-3 flex shrink-0 items-center gap-1 border-t border-border pt-3">
+      {/* Pie compacto (igual que el del POS, ADR-134): avatar, nombre completo
+          arriba (hasta 2 líneas) y nivel abajo; Mis PINes y Volver al POS como
+          íconos al lado, centrados en vertical. */}
+      <div className="mt-3 flex shrink-0 items-center gap-0.5 border-t border-border pt-3">
         <Dropdown>
           <DropdownTrigger asChild>
             <button
               title={email}
-              className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Avatar name={name} avatar={me?.avatar_url} size={26} loading={meLoading} />
-              <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                <span className="truncate text-sm font-medium text-foreground">
+              <Avatar name={name} avatar={me?.avatar_url} size={28} loading={meLoading} />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="line-clamp-2 break-words text-sm font-medium leading-tight text-foreground">
                   {name === email ? name : capitalizeName(name)}
                 </span>
-                <span className="shrink-0 text-[11px] font-medium text-ninja-flameSoft">
+                <span className="truncate text-[11px] font-medium leading-tight text-ninja-flameSoft">
                   {level ? LEVEL_LABELS[level] ?? level : "Staff"}
                 </span>
               </span>
@@ -231,7 +232,7 @@ export function InternalShell({
           onClick={() => setDrawer(false)}
           title="Volver al POS"
           aria-label="Volver al POS"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-ninja-flameSoft transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="grid h-10 w-9 shrink-0 place-items-center rounded-lg text-ninja-flameSoft transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Store size={17} aria-hidden />
         </Link>

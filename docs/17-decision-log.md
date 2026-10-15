@@ -5168,3 +5168,39 @@ El dueño pidió sumar Ualá Bis y hacer todas las integraciones posibles. Relev
 - Inferido, a confirmar con credenciales de stage: unidad del monto en las respuestas, si hay devolución parcial y si `PROCESSED` puede volver atrás.
 - Pendiente: autenticación por link (requiere alta de NinjaSoft como integración comercial de Ualá), datos de la tarjeta y comisión real en el detalle del pago (`payment_provider_data`) y liquidaciones por API.
 - Tests: `tests/unit/ualabis.test.ts` (montos, estados, decisión, webhook, devolución, cliente con fetch simulado), `tests/unit/ualabisUi.test.ts` (catálogo, tenders, logos, feature), `tests/components/UalaBisRefundAction.test.tsx` y `tests/integration/rls-ualabis.test.ts` (gating, número de operación, RLS de devoluciones, día AR y guardarraíles en 0).
+
+
+---
+
+## ADR-144: Publicar en Mercado Libre "antibalas": los avisos de /items/validate no frenan, el envío sale del estado real de la cuenta y la configuración va por secciones
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (sin migración; Edge `ml_api` modificada, sin desplegar) · **Base:** ADR-104 (Mercado Libre MVP), ADR-132 (gestor y publicación rápida). **Numeración:** si otra rama abierta tomó la 136, renumerar al mergear.
+
+### Contexto
+
+El dueño publicaba con "Publicación rápida" un horno Whirlpool WOB71AS (MLA10063 Hornos, "En el catálogo de ML", Clásica) y ML devolvía `shipping.lost_me1_by_user` y `shipping.lost_me2_by_intersected_logistics`. Lecturas reales del 15/10/2026 con la cuenta conectada (sólo GET y `POST /items/validate`, nunca se publicó):
+
+- `GET /users/me`: `status.mercadoenvios = "not_accepted"`. `GET /users/{id}/shipping_preferences`: modos `custom`, `not_specified`, `me2`, logística me2 `drop_off` activa, `me2_enablers: []`, `mandatory_settings.mode = me2`.
+- `GET /categories/MLA10063/shipping_preferences`: me2 sólo con `self_service` (Flex). Correo contra Flex: sin intersección.
+- `POST /items/validate` responde **400 aunque sólo haya causas `type: warning`**: un vino con todo bien da 400 con un único `shipping.lost_me1_by_user`; los 40 productos de prueba dan 400 con me2, a convenir o costo fijo. ADR-132 trataba "400 sin errores = los avisos lo rechazaron", así que con esta cuenta nada validaba nunca.
+- Con cualquier modo pedido, ML devuelve los mismos avisos de envío (decide el envío con las preferencias de la cuenta) y suma `item.shipping.mandatory_free_shipping` o `shipping.free_shipping.cost_exceeded` según el precio.
+- Avisos que sí importan: `moderations.seller.not_authorized` (Licores) llega como warning.
+- `GET /users/{id}/available_listing_types?category_id=` dice qué tipos puede usar la cuenta (Gratuita con cupo 10). `GET /users/{id}/shipping_modes?category_id=` da 404.
+
+### Decisión
+
+1. **Los avisos no frenan.** `validationCauses` devuelve `errors: []` cuando sólo hay avisos; un 400 sin causas usa el fallback como error. Excepción: `moderations.*`, `seller.not_authorized|restricted|blocked` e `item.category_id.restricted` se promueven a error (`promoteBlockingWarnings`).
+2. **Envío con el estado real.** `chooseShippingPlan` suma `me` (users/me) y las logísticas de me2: Mercado Envíos sólo si ML no lo rechazó, `status.mercadoenvios = accepted`, el vendedor lo lista con alguna logística activa, la categoría lo admite y hay intersección de logísticas (con `default` como comodín). Devuelve `me2Blocker` (`rejected`, `not_accepted`, `user`, `logistics`, `category`) y el porqué en español. users/me y preferencias se memorizan 5 min por cuenta y lo de la categoría 30 min, por isolate (`TtlCache`).
+3. **Una sola función** `_shared/mercadolibre/publish.ts` (`validateForPublish` + `postItemWithFixes`) para el modal individual y la publicación rápida: sanea atributos, ajusta el título (largo de la categoría leído de `/categories/{id}`, palabras prohibidas) avisando, elige el envío, chequea el tipo de publicación disponible, valida y **reintenta una vez** si ML pide sacar atributos o pierde el modo pedido (`shipping.lost_*`, como error o como aviso). `POST /items` tiene el mismo reintento único; si sigue fallando, `me_activation` lleva el link y el camino para activar Mercado Envíos. Un tipo no disponible se saltea en la publicación en varios tipos (`skipped: unavailable`).
+4. **Catálogo:** el POS nunca manda `catalog_listing`; con la cuenta sin Mercado Envíos se avisa que sale como publicación propia (el catálogo sólo precompleta).
+5. **Errores en español** (`mlCauseInfo(raw, names)`): precio mínimo con el monto, GTIN inválido con el código, foto requerida por el tipo, faltantes por nombre (la Edge manda `attribute_names`), logística faltante, envío gratis obligatorio, moderación, tipo no disponible. `visibleWarnings` saca el ruido (me1 y la pérdida de me2 cuando ya no se usa).
+6. **Fila de publicación rápida** (`MlQuickRow`): grilla de columnas fijas igual en todas las filas, etiquetas `h-5` y controles `h-10`; lo que falta en otra grilla; mensajes debajo a todo el ancho; una columna en mobile. Verificado con Playwright (misma altura y mismo `top` en las 5 columnas de cada fila, mismas columnas entre filas, sin scroll horizontal) en 4 temas y 390 px.
+7. **Configuración por secciones** (`MlConfigTab` con `Segmented scrollOnMobile`, `?cfg=` en la URL): Cuenta, Publicaciones y precios, Envíos (acción nueva `account_shipping` de `ml_api`, sólo GETs), Facturación (lo de hoy + `MlBillingExtension`, punto de extensión para `feat/ml-facturacion-pro`), Posventa y Preguntas. Estado por sección puro (`lib/mercadolibre/configSections.ts`). `AccountConfig` acepta `sections` y guarda sólo esos campos (`ml_account_settings_save` ya acepta parciales); la puesta en marcha lleva a la sección exacta.
+
+### Consecuencias
+
+- Sin migración. Edge `ml_api` modificada (sin desplegar); `ml_worker` y `ml_gestor` no cambian (pasan `deno check`).
+- Riesgo: que un aviso que hoy no conocemos sí frene en `POST /items`. Queda cubierto por el reintento único y el mensaje con la acción; si aparece, sumarlo a `BLOCKING_WARNING`.
+- Con `mandatory_settings.mode = me2`, ML puede forzar Mercado Envíos con envío gratis aunque se pida a convenir (lo avisa con `mandatory_free_shipping`). Es decisión de ML; la fila lo muestra.
+- El retiro en persona por defecto de la publicación rápida no se agregó (haría falta una columna nueva en `ml_accounts`): se elige en la publicación completa.
+- Tests: `tests/unit/mlPublicarAntibalas.test.ts` (respuestas reales) y ajustes en `tests/unit/mlPublishShipping.test.ts`.

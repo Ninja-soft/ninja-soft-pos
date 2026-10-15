@@ -27,7 +27,7 @@ export function PinQuickAccess() {
         onClick={() => setOpen(true)}
         title="Mis PINes"
         aria-label="Abrir Mis PINes"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="grid h-10 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <KeyRound size={17} aria-hidden />
       </button>

@@ -150,7 +150,7 @@ export function OrderSettingsCard() {
                   checked={c.immediate_via_dispatch}
                   disabled={!canEdit || !c.delivery_types.inmediato.enabled}
                   onCheckedChange={(v) => setC({ ...c, immediate_via_dispatch: v })}
-                  label="Retira ahora pasa por expedición"
+                  label="Se lo lleva ahora pasa por expedición"
                 />
               </label>
             )}

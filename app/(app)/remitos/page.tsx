@@ -4,6 +4,7 @@
 // una venta por su número (las entregas de Expedición se emiten desde su
 // tarjeta), detalle con PDF, impresión, email, COT y anulación.
 
+import { LogisticsNav } from "@/components/logistics/LogisticsNav";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -92,6 +93,7 @@ export default function RemitosPage() {
     return (
       <PageContainer>
         {header}
+        <LogisticsNav className="mt-4" />
         <div className="mt-8 rounded-lg bg-muted/40 p-8 text-center">
           <Lock className="mx-auto text-ninja-flameSoft" size={28} />
           <p className="mt-3 font-semibold">Los remitos no están incluidos en tu plan</p>
@@ -110,6 +112,7 @@ export default function RemitosPage() {
   return (
     <PageContainer>
       {header}
+      <LogisticsNav className="mt-4" />
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         {stores.length > 1 && (
           <select aria-label="Sucursal" className={cn(selectCls, "h-10 sm:max-w-[14rem]")} value={storeId ?? ""} onChange={(e) => setStoreId(e.target.value)}>

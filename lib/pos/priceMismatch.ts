@@ -52,6 +52,8 @@ export interface RepriceableLine {
   priceOverride?: boolean;
   giftPromoId?: string | null;
   packCreditId?: string | null;
+  /** ADR-151: precio a definir al cobrar: lo decide el servidor por el producto. */
+  openPrice?: unknown;
 }
 
 export interface RepriceChange {
@@ -68,7 +70,7 @@ export interface RepriceChange {
 export function repriceChanges(lines: RepriceableLine[], mismatches: PriceMismatch[]): RepriceChange[] {
   const out: RepriceChange[] = [];
   for (const l of lines) {
-    if (!l.productId || l.priceOverride || l.giftPromoId || l.packCreditId) continue;
+    if (!l.productId || l.priceOverride || l.giftPromoId || l.packCreditId || l.openPrice) continue;
     const m = mismatches.find(
       (x) => x.productId === l.productId && (x.variantId ?? null) === (l.variantId ?? null),
     );

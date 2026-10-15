@@ -12,10 +12,20 @@ export interface PickInput {
   has_variants?: boolean;
   warranty_months?: number;
   categoryId?: string | null;
+  // ADR-151: precio a definir al cobrar (el POS lo pide al agregarlo).
+  price_mode?: string | null;
+  open_price_min?: number | null;
+  open_price_max?: number | null;
+  is_service?: boolean;
 }
 
 export function toPick(p: Product): PickInput {
+  const x = p as Product & { is_service?: boolean | null };
   return {
+    price_mode: p.price_mode ?? null,
+    open_price_min: p.open_price_min ?? null,
+    open_price_max: p.open_price_max ?? null,
+    is_service: Boolean(x.is_service),
     id: p.id,
     name: p.name,
     sku: p.sku,

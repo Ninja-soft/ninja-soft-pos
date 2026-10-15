@@ -39,11 +39,11 @@ test.describe("Pedidos de salón y expedición (H32)", () => {
     await ensureShiftOpen(page);
     await addToCart(page, PRODUCT);
 
-    // Vendedor: Pedido → retira ahora.
+    // Vendedor: Pedido → se lo lleva ahora (ADR-149: un solo nombre).
     await page.getByRole("button", { name: /^Pedido$/ }).click();
     const modal = dialog(page, /Guardar como pedido/);
     await expect(modal).toBeVisible();
-    const inmediato = modal.getByRole("radio", { name: "Retira ahora" });
+    const inmediato = modal.getByRole("radio", { name: "Se lo lleva ahora" });
     if (await inmediato.isVisible().catch(() => false)) await inmediato.click();
     await modal.getByRole("button", { name: /Guardar pedido/ }).click();
     const saved = dialog(page, /Pedido N° \d+ guardado/);
@@ -63,9 +63,10 @@ test.describe("Pedidos de salón y expedición (H32)", () => {
 
     // Expedición: armar, listo y entregar.
     await gotoClean(page, "/expedicion");
-    const card = page.locator("li", { hasText: PRODUCT }).first();
-    await card.getByRole("button", { name: "Empezar a armar" }).click();
-    await card.getByRole("button", { name: "Marcar listo" }).click();
+    // ADR-149 (L0): pestañas Pendientes, Armando, Listos, En camino y Entregados.
+    await page.locator("li", { hasText: PRODUCT }).first().getByRole("button", { name: "Empezar a armar" }).click();
+    await page.getByRole("radio", { name: /Armando/ }).click();
+    await page.locator("li", { hasText: PRODUCT }).first().getByRole("button", { name: "Marcar listo" }).click();
     await page.getByRole("radio", { name: /Listos/ }).click();
     await page.locator("li", { hasText: PRODUCT }).first().getByRole("button", { name: "Entregar" }).click();
     const deliver = dialog(page, /Entregar N°/);

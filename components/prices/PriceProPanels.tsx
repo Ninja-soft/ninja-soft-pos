@@ -51,6 +51,8 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
   const names = new Map(lists.map((l) => [l.id, l.name]));
 
   function describe(b: BulkBatch): string {
+    // ADR-151: lote del editor rápido (precios, costos y listas por producto).
+    if (b.engine === 3) return `Editor de precios · ${b.line_count} cambios`;
     if (b.engine === 2) {
       const how =
         b.mode === "fx"
@@ -92,6 +94,7 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
             <div className="flex items-center gap-2">
               <Badge tone={STATUS[b.status].tone}>{STATUS[b.status].label}</Badge>
               {b.origin === "auto" && <Badge tone="info">Automático</Badge>}
+              {b.origin === "editor" && <Badge tone="neutral">Editor</Badge>}
               <span className="truncate">{describe(b)}</span>
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
@@ -127,7 +130,7 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
                 </Button>
               </>
             )}
-            {b.engine === 2 && (
+            {(b.engine === 2 || b.engine === 3) && (
               <Button size="sm" variant="ghost" onClick={() => setDetail(b)}>
                 <Eye size={14} /> Ver
               </Button>
@@ -144,7 +147,7 @@ export function PriceBatchesPanel({ lists, isOwner }: { lists: ProList[]; isOwne
         open={undo !== null}
         onOpenChange={(o) => !o && setUndo(null)}
         title="Deshacer el cambio"
-        description="Vuelven al precio (y al costo en dólares) anterior los productos que nadie cambió después. Lo programado se cancela."
+        description="Vuelven al precio (y al costo) anterior los productos que nadie cambió después. Un precio fijo que el cambio creó en una lista se borra y vuelve la regla. Lo programado se cancela."
         confirmLabel="Deshacer"
         loading={m.bulkRevert.isPending}
         onConfirm={() =>

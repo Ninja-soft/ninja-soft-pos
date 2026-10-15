@@ -110,9 +110,14 @@ export interface Dispatch {
   sale_store_id?: string | null;
   /** ADR-136: renglones de esta entrega (venta partida); sin ellos, toda la venta. */
   items?: DispatchPartItem[];
+  /** ADR-149 (A6): cuándo se despachó y el último estado del envío con logística. */
+  shipped_at?: string | null;
+  shipment_status?: string | null;
 }
 
 export interface DispatchPartItem {
+  product_id?: string;
+  variant_id?: string | null;
   product_name: string;
   variant_label: string | null;
   qty: number;
@@ -127,8 +132,36 @@ const DISPATCH_COLS =
   "arrived_at, delivered_at, delivered_to, cancel_reason, created_at, " +
   "sale:sales(number, total, items:sale_items(product_name, quantity, returned_qty, unit_label))";
 // ADR-136: partes y renglones por entrega. Sin la migración, se reintenta sin ellos.
-const DISPATCH_COLS_PARTS = `${DISPATCH_COLS}, part, parts_total, sale_store_id, items:dispatch_items(product_name, variant_label, qty, unit, source_store_id, source_warehouse_id)`;
+const DISPATCH_COLS_PARTS = `${DISPATCH_COLS}, part, parts_total, sale_store_id, items:dispatch_items(product_id, variant_id, product_name, variant_label, qty, unit, source_store_id, source_warehouse_id)`;
 const MISSING_PART_COLS = /part|sale_store_id|dispatch_items|relationship/;
+// ADR-149 (L0): despacho y estado del envío. Sin la migración, se reintenta sin ellos.
+const DISPATCH_COLS_L0 = `${DISPATCH_COLS_PARTS}, shipped_at, shipment_status`;
+const MISSING_L0_COLS = /shipped_at|shipment_status/;
+
+/** Lo que falta entregar de una venta (dispatch_sale_pending, ADR-149). */
+export interface SalePending {
+  sale_id: string;
+  number: number;
+  status: string;
+  store_id: string;
+  items: { product_id: string; variant_id: string | null; name: string; sold: number; in_dispatches: number; returned: number; pending: number }[];
+}
+
+/** Entrega de una venta, para el detalle de la venta (ADR-149, R18). */
+export interface SaleDelivery {
+  id: string;
+  number: number;
+  part: number;
+  parts_total: number;
+  delivery_type: DeliveryType;
+  status: DispatchStatus;
+  ship_address: string | null;
+  pickup_name: string | null;
+  tracking: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  remito: { id: string; label: string } | null;
+}
 
 export interface CreateOrderInput {
   id: string;
@@ -232,11 +265,13 @@ export const ordersApi = {
             : `store_id.eq.${opts.storeId},fulfillment_store_id.eq.${opts.storeId}`,
         );
       }
+      // ADR-149 (A6): lo despachado sigue abierto (En camino) hasta que se entrega.
       return opts.open
-        ? q.in("status", ["pendiente", "armando", "listo", "en_transito"])
-        : q.in("status", ["entregado", "despachado", "cancelado"]);
+        ? q.in("status", ["pendiente", "armando", "listo", "en_transito", "despachado"])
+        : q.in("status", ["entregado", "cancelado"]);
     };
-    let { data, error } = await run(DISPATCH_COLS_PARTS, true);
+    let { data, error } = await run(DISPATCH_COLS_L0, true);
+    if (error && MISSING_L0_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_PARTS, true));
     if (error && MISSING_PART_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS, false));
     if (error) throw error;
     return ((data ?? []) as unknown as Dispatch[]).map((d) => ({
@@ -254,13 +289,11 @@ export const ordersApi = {
       p_delivered_to: deliveredTo,
       p_override_reason: overrideReason,
     }),
-  dispatchShip: (id: string, tracking: string | null) =>
-    rpc<void>("dispatch_ship", { p_id: id, p_tracking: tracking, p_shipment_id: null }),
+  // ADR-149 (A5): con el envío de ESTA entrega; sin él, el servidor no adivina.
+  dispatchShip: (id: string, tracking: string | null, shipmentId: string | null = null) =>
+    rpc<void>("dispatch_ship", { p_id: id, p_tracking: tracking, p_shipment_id: shipmentId }),
   dispatchCancel: (id: string, reason: string) => rpc<void>("dispatch_cancel", { p_id: id, p_reason: reason }),
-  dispatchForSale: async (
-    saleNumber: number,
-    delivery: { delivery_type: DeliveryType; fulfillment_store_id: string | null; pickup_name: string | null; ship_address: string | null },
-  ) => {
+  saleIdByNumber: async (saleNumber: number): Promise<string> => {
     const { data, error } = await createClient()
       .from("sales")
       .select("id")
@@ -268,9 +301,52 @@ export const ordersApi = {
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new Error("sale_not_found");
-    return rpc<{ id: string; number: number; pickup_code: string | null }>("dispatch_create_for_sale", {
-      p_sale_id: (data as { id: string }).id,
+    return (data as { id: string }).id;
+  },
+  /** ADR-149 (A1): lo que falta entregar de la venta. */
+  salePending: (saleId: string) => rpc<SalePending>("dispatch_sale_pending", { p_sale_id: saleId }),
+  dispatchForSale: async (
+    saleNumber: number,
+    delivery: {
+      delivery_type: DeliveryType;
+      fulfillment_store_id: string | null;
+      pickup_name: string | null;
+      ship_address: string | null;
+      /** ADR-149 (A1): qué productos y cuántos; sin esto, todo lo pendiente. */
+      items?: { product_id: string; variant_id: string | null; qty: number }[];
+    },
+  ) => {
+    const saleId = await ordersApi.saleIdByNumber(saleNumber);
+    return rpc<{ id: string; number: number; part?: number; pickup_code: string | null }>("dispatch_create_for_sale", {
+      p_sale_id: saleId,
       p_delivery: delivery,
+    });
+  },
+
+  /** ADR-149 (R18): entregas de una venta y sus remitos, para el detalle de la venta. */
+  saleDeliveries: async (saleId: string): Promise<SaleDelivery[]> => {
+    const db = createClient();
+    const [d, r] = await Promise.all([
+      db
+        .from("dispatches" as never)
+        .select("id, number, part, parts_total, delivery_type, status, ship_address, pickup_name, tracking, delivered_at, created_at")
+        .eq("sale_id", saleId)
+        .is("deleted_at", null)
+        .order("part"),
+      db
+        .from("remitos" as never)
+        .select("id, dispatch_id, pto_vta, number, status")
+        .eq("sale_id", saleId)
+        .is("deleted_at", null),
+    ]);
+    if (d.error) {
+      if (/dispatches|does not exist|schema cache|part/i.test(d.error.message)) return [];
+      throw d.error;
+    }
+    const remitos = r.error ? [] : ((r.data ?? []) as unknown as { id: string; dispatch_id: string | null; pto_vta: number; number: number; status: string }[]);
+    return ((d.data ?? []) as unknown as Omit<SaleDelivery, "remito">[]).map((x) => {
+      const rm = remitos.find((m) => m.dispatch_id === x.id && m.status === "emitido");
+      return { ...x, remito: rm ? { id: rm.id, label: `${String(rm.pto_vta).padStart(4, "0")}-${String(rm.number).padStart(8, "0")}` } : null };
     });
   },
 

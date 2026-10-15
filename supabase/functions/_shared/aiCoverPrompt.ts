@@ -113,7 +113,7 @@ export const BASE_PROMPT_MAX = 1500;
 
 /** Reglas fijas del final (no se pueden pisar desde el prompt base). */
 export const COVER_RULES =
-  "Square 1:1 composition. Absolutely no text, no letters, no numbers, no words, no watermarks and no logos anywhere in the image. Single clear subject, professional and friendly, suitable as a product thumbnail.";
+  "Square 1:1 composition. The subject fills about 85 to 90 percent of the frame, tightly framed and centered, with only a thin even margin of background around it (no large empty space). High resolution, sharp focus, crisp clean edges and fine detail. Absolutely no text, no letters, no numbers, no words, no watermarks and no logos anywhere in the image. Single clear subject, professional and friendly, suitable as a product thumbnail.";
 
 export interface CoverPromptInput {
   name: string;

@@ -301,18 +301,6 @@ export function buildPlan(
   };
 }
 
-/** "2 se lleva ahora · 3 retira en Norte" (resumen corto para la barra del POS). */
-export function planSummary(groups: DeliveryGroup[], storeName: (id: string) => string): string {
-  return groups
-    .map((g) => {
-      const units = fmt(round3(g.allocations.reduce((t, a) => t + a.qty, 0)));
-      if (g.mode === "ahora") return `${units} se lleva ahora`;
-      if (g.mode === "envio") return `${units} por envío desde ${storeName(g.originStoreId)}`;
-      return `${units} retira en ${storeName(g.fulfillmentStoreId)}`;
-    })
-    .join(" · ");
-}
-
 // ── Entrega desde la hoja de cobro (ADR-146) ─────────────────────────────────
 // Atajos sobre el mismo reparto: todo retira en otra sucursal o todo va por
 // envío. "Repartir" sigue abriendo el reparto completo (FulfillmentModal).

@@ -23,6 +23,8 @@ import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflin
 export function saleErrorTitle(msg: string): string {
   // F18 · H100 (ADR-056): precio autoritativo y venta libre.
   if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
+  // ADR-151: precio a definir al cobrar fuera del mínimo o el máximo del producto.
+  if (msg.includes("open_price_out_of_range")) return "Un precio libre está fuera del mínimo o el máximo: tocá la línea y corregilo";
   // ADR-116: período del servicio y vencimiento del pago.
   if (msg.includes("service_period_invalid")) return "Revisá el período del servicio: termina antes de empezar o la fecha no es válida";
   if (msg.includes("service_due_invalid")) return "El vencimiento del pago no puede ser anterior a hoy";

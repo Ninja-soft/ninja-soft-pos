@@ -21,6 +21,7 @@ import {
   type QuoteChoice,
   type ShipmentForm,
 } from "@/lib/shipping/form";
+import { shipmentFormFromDispatch, splitAddress, type DispatchShipmentSource } from "@/lib/shipping/fromDispatch";
 import { shippingApi, type PickupPointView, type Shipment } from "@/modules/shipping/api";
 import { useShippingMutations, useShippingProviders } from "@/modules/shipping/hooks";
 import type { Branch } from "@/modules/branches/logic";
@@ -30,6 +31,9 @@ import type { Branch } from "@/modules/branches/logic";
 // elegir (y la sucursal de retiro si el servicio es a sucursal) y crear. La
 // clave de idempotencia es por apertura del formulario: un doble clic o un
 // reintento no crea dos envíos.
+// ADR-149 (A11 y A12): desde una entrega de Expedición llega todo precargado
+// (dirección de ENTREGA, destinatario, contenido y valor) y el envío nace
+// enganchado a esa entrega.
 
 type Source = "pos_sale" | "order" | "manual";
 
@@ -37,6 +41,7 @@ const emptyForm = (storeId: string): ShipmentForm => ({
   store_id: storeId,
   source: "manual",
   sale_id: null,
+  dispatch_id: null,
   order_ref: "",
   service_type: "door",
   recipient: { name: "", document: "", email: "", phone: "" },
@@ -53,12 +58,15 @@ export function ShipmentFormModal({
   stores,
   defaultStoreId,
   onCreated,
+  fromDispatch = null,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   stores: Branch[];
   defaultStoreId: string | null;
   onCreated: (s: Shipment) => void;
+  /** ADR-149: entrega de Expedición de la que sale el envío. */
+  fromDispatch?: DispatchShipmentSource | null;
 }) {
   const { toast } = useToast();
   const m = useShippingMutations();
@@ -80,11 +88,16 @@ export function ShipmentFormModal({
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setForm(emptyForm(defaultStoreId ?? stores[0]?.id ?? ""));
+      const base = emptyForm(defaultStoreId ?? stores[0]?.id ?? "");
+      setForm(fromDispatch ? shipmentFormFromDispatch(fromDispatch, base) : base);
       setStep(1);
       setIdemKey(newIdempotencyKey());
-      setSaleNumber("");
-      setSaleLabel(null);
+      setSaleNumber(fromDispatch?.saleNumber != null ? String(fromDispatch.saleNumber) : "");
+      setSaleLabel(
+        fromDispatch
+          ? `Entrega N° ${fromDispatch.dispatchNumber}${fromDispatch.saleNumber != null ? ` · Venta #${fromDispatch.saleNumber}` : ""}`
+          : null,
+      );
       setErrors([]);
       setQuotes(null);
       setChoice(null);
@@ -111,6 +124,9 @@ export function ShipmentFormModal({
         return;
       }
       setSaleLabel(`Venta #${sale.number} · ${formatCurrency(sale.total)}`);
+      // A12: la dirección de entrega que se cargó al cobrar; si no hay, la del cliente.
+      const shipTo = (await shippingApi.saleShipAddress(sale.id)) ?? sale.customer?.address ?? null;
+      const addr = splitAddress(shipTo);
       setForm((f) => ({
         ...f,
         sale_id: sale.id,
@@ -124,7 +140,19 @@ export function ShipmentFormModal({
               document: sale.customer.document_number ?? "",
             }
           : f.recipient,
-        destination: sale.customer?.address && !f.destination.street ? { ...f.destination, street: sale.customer.address } : f.destination,
+        destination:
+          shipTo && !f.destination.street
+            ? {
+                ...f.destination,
+                street: addr.street,
+                number: addr.number,
+                floor: addr.floor,
+                apartment: addr.apartment,
+                city: addr.city,
+                province: addr.province,
+                postal_code: addr.postal_code || f.destination.postal_code,
+              }
+            : f.destination,
       }));
     } catch (e) {
       toast({ title: shippingErrorMessage(e), variant: "error" });
@@ -275,13 +303,21 @@ export function ShipmentFormModal({
                 options={stores.map((s) => ({ value: s.id, label: s.name }))}
               />
             )}
-            <div>
-              <p className="mb-2 text-sm font-medium text-muted-foreground">Origen</p>
-              <Segmented<Source> value={form.source} onChange={(v) => set("source", v)} size="sm" options={sourceOpts} />
-            </div>
+            {!fromDispatch && (
+              <div>
+                <p className="mb-2 text-sm font-medium text-muted-foreground">Origen</p>
+                <Segmented<Source> value={form.source} onChange={(v) => set("source", v)} size="sm" options={sourceOpts} />
+              </div>
+            )}
           </div>
 
-          {form.source === "pos_sale" && (
+          {fromDispatch && (
+            <Callout tone="info">
+              {saleLabel}: precargamos la dirección de entrega, el cliente y lo que lleva. Revisá el código postal y los bultos.
+            </Callout>
+          )}
+
+          {form.source === "pos_sale" && !fromDispatch && (
             <div className="flex items-end gap-2">
               <Input
                 label="Número de venta"

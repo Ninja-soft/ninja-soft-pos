@@ -22,8 +22,9 @@ export type ExpiryAction = "release" | "cancel";
 
 export const DELIVERY_TYPES: DeliveryType[] = ["inmediato", "retiro", "envio"];
 
+// ADR-149 (A24): un solo nombre para lo que el cliente se lleva en el momento.
 export const DELIVERY_TYPE_LABEL: Record<DeliveryType, string> = {
-  inmediato: "Retira ahora",
+  inmediato: "Se lo lleva ahora",
   retiro: "Retira después",
   envio: "Envío a domicilio",
 };
@@ -52,7 +53,8 @@ export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {
   cancelado: "Cancelado",
 };
 
-export const DISPATCH_FINAL: DispatchStatus[] = ["entregado", "despachado", "cancelado"];
+/** Estados cerrados. "despachado" no lo es (ADR-149, A6): sigue en la calle hasta que se entrega. */
+export const DISPATCH_FINAL: DispatchStatus[] = ["entregado", "cancelado"];
 
 // ── Configuración (pos_settings.order_config) ───────────────────────────────
 
@@ -153,6 +155,8 @@ export function dispatchCanMove(
   arrived: boolean,
 ): boolean {
   if (DISPATCH_FINAL.includes(from)) return false;
+  // ADR-149: lo despachado (cadete propio o logística) se marca entregado.
+  if (from === "despachado") return to === "entregado" && type === "envio";
   if (to === "cancelado") return true;
   switch (from) {
     case "pendiente":
@@ -178,6 +182,10 @@ export interface DispatchLike {
   store_id: string;
   fulfillment_store_id: string;
   arrived_at: string | null;
+  /** ADR-136: sucursal que vendió (puede no estar en lecturas viejas). */
+  sale_store_id?: string | null;
+  /** ADR-149: envío con logística enganchado (lo cierra la logística). */
+  shipment_id?: string | null;
 }
 
 export type DispatchAction = "armando" | "listo" | "en_transito" | "recibir" | "entregar" | "despachar";
@@ -196,6 +204,9 @@ export function primaryDispatchAction(d: DispatchLike): DispatchAction | null {
     case "listo":
       if (cross && !arrived) return "en_transito";
       return d.delivery_type === "envio" ? "despachar" : "entregar";
+    case "despachado":
+      // Con logística, la entrega la confirma el seguimiento; con cadete, a mano.
+      return d.shipment_id ? null : "entregar";
     default:
       return null;
   }
@@ -210,12 +221,98 @@ export const DISPATCH_ACTION_LABEL: Record<DispatchAction, string> = {
   despachar: "Marcar despachado",
 };
 
-/** ¿Lo ve como "para hacer" la sucursal elegida? (la que vende o la que entrega). */
+/**
+ * ¿La ve la sucursal elegida? La que arma, la que entrega y (ADR-149, A4) la
+ * que vendió, que también la opera. Una entrega cruzada que ya llegó es de la
+ * sucursal de entrega (y de la que vendió).
+ */
 export function dispatchIsForStore(d: DispatchLike, storeId: string | null): boolean {
   if (!storeId) return true;
+  if (d.sale_store_id === storeId) return true;
   if (d.status === "en_transito") return d.fulfillment_store_id === storeId || d.store_id === storeId;
   if (d.fulfillment_store_id !== d.store_id && d.arrived_at) return d.fulfillment_store_id === storeId;
   return d.store_id === storeId || d.fulfillment_store_id === storeId;
+}
+
+// ── Pestañas de Expedición (ADR-149, L0) ────────────────────────────────────
+
+export type ExpeditionTab = "pendientes" | "armando" | "listos" | "en_camino" | "entregados";
+
+export const EXPEDITION_TABS: { value: ExpeditionTab; label: string }[] = [
+  { value: "pendientes", label: "Pendientes" },
+  { value: "armando", label: "Armando" },
+  { value: "listos", label: "Listos" },
+  { value: "en_camino", label: "En camino" },
+  { value: "entregados", label: "Entregados" },
+];
+
+/** Pestaña de cada estado. "Despachado" va a En camino hasta que se entrega. */
+export function dispatchTab(status: DispatchStatus): ExpeditionTab {
+  switch (status) {
+    case "pendiente":
+      return "pendientes";
+    case "armando":
+      return "armando";
+    case "listo":
+      return "listos";
+    case "en_transito":
+    case "despachado":
+      return "en_camino";
+    default:
+      return "entregados";
+  }
+}
+
+export type DeliveryFilter = "todos" | "retiro" | "envio";
+
+export interface ExpeditionFilter {
+  tab: ExpeditionTab;
+  storeId: string | null;
+  mode: DeliveryFilter;
+  /** En Entregados, mostrar también lo que se llevó en el momento. */
+  showImmediate: boolean;
+}
+
+/**
+ * Lo que muestra cada pestaña: por estado, sucursal y modo. En Entregados las
+ * partes "se lo lleva ahora" de las ventas repartidas se ocultan salvo que se
+ * pidan (A25), y la sucursal filtra igual que en las demás.
+ */
+export function expeditionList<T extends DispatchLike>(all: T[], f: ExpeditionFilter): T[] {
+  return all.filter((d) => {
+    if (dispatchTab(d.status) !== f.tab) return false;
+    if (!dispatchIsForStore(d, f.storeId)) return false;
+    if (f.mode !== "todos" && d.delivery_type !== f.mode) return false;
+    if (f.tab === "entregados" && d.delivery_type === "inmediato" && !f.showImmediate) return false;
+    return true;
+  });
+}
+
+/** Cantidad por pestaña abierta (para los números de las pestañas). */
+export function expeditionCounts(all: DispatchLike[], storeId: string | null, mode: DeliveryFilter): Record<ExpeditionTab, number> {
+  const c: Record<ExpeditionTab, number> = { pendientes: 0, armando: 0, listos: 0, en_camino: 0, entregados: 0 };
+  for (const d of all) {
+    if (!dispatchIsForStore(d, storeId)) continue;
+    if (mode !== "todos" && d.delivery_type !== mode) continue;
+    c[dispatchTab(d.status)]++;
+  }
+  return c;
+}
+
+// ── Modo de entrega de la venta (ADR-149, R18) ──────────────────────────────
+
+export type FulfillmentMode = "en_mostrador" | "retiro" | "envio" | "logistica" | "mixto";
+
+export const FULFILLMENT_MODE_LABEL: Record<FulfillmentMode, string> = {
+  en_mostrador: "Se lo llevó",
+  retiro: "Retira en tienda",
+  envio: "Envío a domicilio",
+  logistica: "Envío con logística",
+  mixto: "Entrega mixta",
+};
+
+export function fulfillmentModeOf(v: unknown): FulfillmentMode | null {
+  return v === "en_mostrador" || v === "retiro" || v === "envio" || v === "logistica" || v === "mixto" ? v : null;
 }
 
 // ── Pedido ──────────────────────────────────────────────────────────────────
@@ -333,6 +430,10 @@ const ERRORS: [RegExp, string][] = [
   [/sale_wrong_store/, "La venta tiene que ser de la sucursal del pedido."],
   [/sale_already_used/, "Esa venta ya está enlazada a otro pedido."],
   [/sale_already_dispatched/, "Esa venta ya está en expedición."],
+  [/nothing_pending/, "De esa venta ya no queda nada por entregar."],
+  [/delivery_qty_mismatch/, "Pediste más de lo que falta entregar."],
+  [/too_many_deliveries/, "Esa venta ya tiene demasiadas entregas."],
+  [/shipment_in_use/, "Ese envío ya está enganchado a otra entrega."],
   [/sale_not_completed/, "Esa venta está anulada."],
   [/sale_not_found/, "No encontramos esa venta."],
   [/dispatch_not_found/, "No encontramos la entrega."],

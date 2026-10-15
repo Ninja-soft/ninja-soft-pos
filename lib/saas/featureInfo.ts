@@ -483,6 +483,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, no se pueden cargar costos nuevos en dólares ni actualizar por dólar; las reglas automáticas dejan de correr. Los productos que ya estaban en dólares conservan su costo en pesos.",
     minPlan: "Pro",
   },
+  precio_libre: {
+    desc: "Precio a definir al cobrar: un producto o servicio puede no tener precio fijo. El POS pide el precio (u honorarios) cada vez que se agrega, con teclado numérico, el sugerido y un mínimo y un máximo opcionales. El servidor acepta el precio informado sólo dentro de esos límites y lo deja auditado con el sugerido.",
+    impact: "Desactivado, no se pueden pasar productos a precio libre y los que ya estaban se cobran por su precio de venta (el modo se conserva).",
+    minPlan: "Start",
+  },
+  editor_precios: {
+    desc: "Editor rápido de precios dentro de Productos: una planilla para cambiar costo, precio de venta, margen y precios por lista con teclado (Enter, Tab y flechas), filtros por categoría, marca, proveedor, sin precio y margen bajo, edición masiva por %, monto, valor, margen o markup con redondeo, deshacer y guardado en lote con vista previa, alertas, auditoría y vuelta atrás.",
+    impact: "Desactivado, los precios se cambian desde la ficha de cada producto o con Actualizar precios. Las columnas por lista necesitan Listas de precios.",
+    minPlan: "Start",
+  },
   catalogo_publico: {
     desc: "Catálogo web público: una vitrina online del comercio con sus productos y precios, compartible por link.",
     impact: "Desactivado, no se publica el catálogo web del negocio.",

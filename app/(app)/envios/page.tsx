@@ -1,5 +1,6 @@
 "use client";
 
+import { LogisticsNav } from "@/components/logistics/LogisticsNav";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Lock, PackageOpen, Plus, Printer, Settings2, Truck } from "lucide-react";
@@ -127,6 +128,7 @@ export default function EnviosPage() {
     return (
       <PageContainer>
         {header}
+        <LogisticsNav className="mt-4" />
         <div className="mt-8 rounded-lg bg-muted/40 p-8 text-center">
           <Lock className="mx-auto text-ninja-flameSoft" size={28} />
           <p className="mt-3 font-semibold">Envíos no está incluido en tu plan</p>
@@ -145,6 +147,7 @@ export default function EnviosPage() {
   return (
     <PageContainer>
       {header}
+      <LogisticsNav className="mt-4" />
 
       <div className="mt-6 flex flex-col gap-3">
         <Segmented<Group>

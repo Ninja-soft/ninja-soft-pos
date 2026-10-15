@@ -36,6 +36,8 @@ export interface BillingNormalized {
   ivaCondition: IvaCondition;
   taxpayerRaw: string | null;
   address: string | null;
+  /** Provincia de facturación (jurisdicción de IIBB, ADR-141). */
+  state?: string | null;
 }
 
 const clean = (s: unknown): string => (typeof s === "string" ? s.trim().replace(/\s+/g, " ") : "");
@@ -98,6 +100,7 @@ export function normalizeBilling(
       ivaCondition: receptorIva(taxpayer, docType),
       taxpayerRaw: taxpayer,
       address: a ? joinAddress([[a.street_name, a.street_number].map(clean).join(" "), a.city_name, a.state?.name, a.zip_code]) : null,
+      state: clean(a?.state?.name) || null,
     };
   }
   const lb = (raw as MlBillingInfoLegacy).billing_info;
@@ -119,6 +122,7 @@ export function normalizeBilling(
         info.get("STATE_NAME"),
         info.get("ZIP_CODE"),
       ]),
+      state: info.get("STATE_NAME") || null,
     };
   }
   return null;
@@ -155,6 +159,10 @@ export interface PackOrder {
   shipment_id: string | null;
   sale_fee_total: number;
   lines: PackLine[];
+  /** Pagos (ADR-141): cupón y envío para armar y controlar la factura. */
+  payments: Array<{ id: string; status: string; transaction_amount: number; coupon_amount: number; shipping_cost: number }>;
+  coupon_amount: number;
+  shipping_paid: number;
 }
 
 export interface ShipmentNormalized {
@@ -206,6 +214,14 @@ export function orderToPackOrder(o: MlOrder): PackOrder {
     unit_price: money(it.unit_price),
     sale_fee: money(it.sale_fee),
   }));
+  const payments = (o.payments ?? []).slice(0, 20).map((p) => ({
+    id: String(p.id),
+    status: clean(p.status) || "unknown",
+    transaction_amount: money(p.transaction_amount ?? 0),
+    coupon_amount: money(p.coupon_amount ?? 0),
+    shipping_cost: money(p.shipping_cost ?? 0),
+  }));
+  const approved = payments.filter((p) => p.status === "approved");
   return {
     ml_order_id: String(o.id),
     status: clean(o.status) || "unknown",
@@ -224,6 +240,9 @@ export function orderToPackOrder(o: MlOrder): PackOrder {
     // sale_fee viene por unidad: comisión total = fee x cantidad.
     sale_fee_total: money(lines.reduce((s, l) => s + l.sale_fee * l.quantity, 0)),
     lines,
+    payments,
+    coupon_amount: money(approved.reduce((s, p) => s + p.coupon_amount, 0)),
+    shipping_paid: money(approved.reduce((s, p) => s + p.shipping_cost, 0)),
   };
 }
 

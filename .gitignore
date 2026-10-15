@@ -56,3 +56,4 @@ supabase/.env
 
 # Brainstorming visual companion
 .superpowers/
+deno.lock

@@ -255,7 +255,7 @@ export function MlItemsTab({
               <Checkbox checked={selected.has(i.id)} onCheckedChange={() => toggle(i.id)} aria-label={`Elegir ${i.title}`} className="mt-1" />
               {i.thumbnail ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={i.thumbnail} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                <img src={i.thumbnail.replace(/^http:\/\//i, "https://")} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
               ) : (
                 <span className="h-12 w-12 shrink-0 rounded-lg bg-muted" />
               )}

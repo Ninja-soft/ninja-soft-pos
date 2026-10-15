@@ -33,6 +33,16 @@ import type {
   MlUserProductStock,
 } from "./types.ts";
 import { buildInvoicePdf, type InvoicePdfData } from "./invoicePdf.ts";
+import {
+  buildInvoicePlan,
+  planSettingsFrom,
+  type IibbEntry,
+  type MlInvoicePlan,
+  type PlanEmitter,
+  type PlanInput,
+  type PlanPadron,
+} from "./invoicePlan.ts";
+import type { PackPayload } from "./orders.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<any>;
@@ -100,7 +110,8 @@ export function itemPayload(item: MlItem, stockMode: StockMode | null = null): R
     catalog_listing: Boolean(item.catalog_listing),
     catalog_product_id: item.catalog_product_id ?? null,
     permalink: item.permalink ?? null,
-    thumbnail: item.secure_thumbnail ?? item.thumbnail ?? null,
+    // Siempre https: la app corre en https y el navegador bloquea http (contenido mixto).
+    thumbnail: (item.secure_thumbnail ?? item.thumbnail ?? null)?.replace(/^http:\/\//i, "https://") ?? null,
     currency: item.currency_id ?? "ARS",
     price: item.price ?? null,
     available_quantity: item.available_quantity ?? null,
@@ -142,8 +153,8 @@ async function fetchBilling(client: MlClient, order: MlOrder): Promise<BillingNo
   }
 }
 
-/** GET de la orden, del carrito completo, facturación y envío -> ml_ingest_pack. */
-export async function ingestOrder(deps: WorkerDeps, accountId: string, orderId: string): Promise<Record<string, unknown>> {
+/** GET de la orden, del carrito completo, facturación y envío (sólo lecturas). */
+export async function fetchPack(deps: WorkerDeps, accountId: string, orderId: string): Promise<PackPayload> {
   const client = deps.client(accountId);
   const first = await client.get<MlOrder>(`/orders/${encodeURIComponent(orderId)}`);
   let orders: MlOrder[] = [first];
@@ -166,9 +177,97 @@ export async function ingestOrder(deps: WorkerDeps, accountId: string, orderId: 
       if (!(e instanceof MlApiError) || e.code !== "not_found") throw e;
     }
   }
-  const payload = buildPackPayload(orders, shipment, billing);
-  const res = await deps.rpc("ml_ingest_pack", { p_account: accountId, p: payload });
-  if (shipment) await deps.rpc("ml_shipment_upsert", { p_account: accountId, p: shipment });
+  return buildPackPayload(orders, shipment, billing);
+}
+
+/** Lo que devuelve ml_billing_context (ADR-141). */
+export interface BillingContext {
+  enabled: boolean;
+  settings: Record<string, unknown> | null;
+  emitter: PlanEmitter;
+  padron: PlanPadron | null;
+  iibb: IibbEntry[];
+  iibb_loaded: string[];
+  line_rates: Array<{ ml_item_id: string; ml_variation_id: string | null; rate: number }>;
+  today: string;
+}
+
+/** Entrada del armado de la factura desde el carrito y el contexto del servidor. PURO. */
+export function planInputFromPack(p: PackPayload, ctx: BillingContext): PlanInput {
+  const rates = ctx.line_rates ?? [];
+  const rateOf = (item: string, variation: string | null) =>
+    rates.find((r) => r.ml_item_id === item && (r.ml_variation_id ?? null) === (variation ?? null))?.rate ??
+    rates.find((r) => r.ml_item_id === item)?.rate ??
+    null;
+  return {
+    orders: p.orders.map((o) => ({
+      ml_order_id: o.ml_order_id,
+      status: o.status,
+      total_amount: o.total_amount,
+      payments: o.payments ?? [],
+      lines: o.lines.map((l) => ({
+        ml_order_id: l.ml_order_id,
+        ml_item_id: l.ml_item_id,
+        ml_variation_id: l.ml_variation_id,
+        title: l.title,
+        seller_sku: l.seller_sku,
+        quantity: l.quantity,
+        unit_price: l.unit_price,
+        iva_rate: rateOf(l.ml_item_id, l.ml_variation_id),
+      })),
+    })),
+    shipment: p.shipment
+      ? { mode: p.shipment.mode, logistic_type: p.shipment.logistic_type, cost: p.shipment.cost, state: p.shipment.state }
+      : null,
+    billing: p.billing
+      ? {
+          docType: p.billing.docType,
+          docNumber: p.billing.docNumber,
+          name: p.billing.name,
+          ivaCondition: p.billing.ivaCondition,
+          address: p.billing.address,
+          state: p.billing.state ?? null,
+        }
+      : null,
+    padron: ctx.padron,
+    iibb: ctx.iibb ?? [],
+    iibb_loaded: ctx.iibb_loaded ?? [],
+    emitter: ctx.emitter,
+    settings: planSettingsFrom(ctx.settings),
+    today: ctx.today,
+  };
+}
+
+/**
+ * Factura del carrito con las reglas de la cuenta (ADR-141). null si la cuenta
+ * no tiene la facturación pro, si el carrito no está pagado o si algo falla:
+ * la venta entra igual, como antes.
+ */
+export async function planForPack(deps: WorkerDeps, accountId: string, p: PackPayload): Promise<MlInvoicePlan | null> {
+  if (!p.orders.every((o) => o.status === "paid")) return null;
+  try {
+    const cuit = p.billing && (p.billing.docType === "cuit" || p.billing.docType === "cuil") ? p.billing.docNumber : null;
+    const ctx = (await deps.rpc("ml_billing_context", {
+      p_account: accountId,
+      p: {
+        cuit,
+        lines: p.orders.flatMap((o) => o.lines.map((l) => ({ ml_item_id: l.ml_item_id, ml_variation_id: l.ml_variation_id }))),
+      },
+    })) as BillingContext | null;
+    if (!ctx?.enabled) return null;
+    return buildInvoicePlan(planInputFromPack(p, ctx));
+  } catch (e) {
+    deps.log?.("ml_invoice_plan_failed", { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+/** GET de la orden, del carrito completo, facturación y envío -> ml_ingest_pack. */
+export async function ingestOrder(deps: WorkerDeps, accountId: string, orderId: string): Promise<Record<string, unknown>> {
+  const payload = await fetchPack(deps, accountId, orderId);
+  const invoice = await planForPack(deps, accountId, payload);
+  const res = await deps.rpc("ml_ingest_pack", { p_account: accountId, p: invoice ? { ...payload, invoice } : payload });
+  if (payload.shipment) await deps.rpc("ml_shipment_upsert", { p_account: accountId, p: payload.shipment });
   return (res ?? {}) as Record<string, unknown>;
 }
 
@@ -339,7 +438,7 @@ async function runAnswer(deps: WorkerDeps, job: JobRow): Promise<Outcome> {
   }
 }
 
-async function runInvoiceUpload(deps: WorkerDeps, job: JobRow, fetchForm: (accountId: string, path: string, form: FormData) => Promise<unknown>): Promise<Outcome> {
+async function runInvoiceUpload(deps: JobDeps, job: JobRow): Promise<Outcome> {
   const docId = String(job.payload.fiscal_document_id ?? "");
   const pack = String(job.payload.pack_key ?? job.ref ?? "");
   const data = (await deps.rpc("ml_invoice_pdf_data", { p_doc: docId })) as InvoicePdfData | null;
@@ -349,18 +448,34 @@ async function runInvoiceUpload(deps: WorkerDeps, job: JobRow, fetchForm: (accou
     await deps.rpc("ml_invoice_uploaded", { p_account: job.account_id, p_pack: pack, p_doc: docId, p_ok: false, p_error: "El PDF supera 1 MB" });
     return { status: "done", note: "pdf_too_large" };
   }
+  // ADR-141: "Volver a subir" reemplaza el documento que ya tenía la venta en ML.
+  const replace = String(job.payload.replace_ml_id ?? "");
+  if (replace && deps.deleteDoc) {
+    try {
+      await deps.deleteDoc(job.account_id, `/packs/${encodeURIComponent(pack)}/fiscal_documents/${encodeURIComponent(replace)}`);
+    } catch (e) {
+      if (!(e instanceof MlApiError) || e.code !== "not_found") throw e;
+    }
+  }
   const form = new FormData();
-  const name = `factura-${data.doc.letter}-${String(data.doc.ptoVta).padStart(5, "0")}-${String(data.doc.nro).padStart(8, "0")}.pdf`;
+  const prefix = /cr[eé]dito/i.test(data.doc.label) ? "nota-credito" : "factura";
+  const name = `${prefix}-${data.doc.letter}-${String(data.doc.ptoVta).padStart(5, "0")}-${String(data.doc.nro).padStart(8, "0")}.pdf`;
   form.append("fiscal_document", new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), name);
   try {
-    const res = (await fetchForm(job.account_id, `/packs/${encodeURIComponent(pack)}/fiscal_documents`, form)) as { ids?: string[] } | null;
+    const res = (await deps.postForm(job.account_id, `/packs/${encodeURIComponent(pack)}/fiscal_documents`, form)) as { ids?: string[] } | null;
     await deps.rpc("ml_invoice_uploaded", {
       p_account: job.account_id, p_pack: pack, p_doc: docId, p_ok: true, p_ml_id: (res?.ids ?? [])[0] ?? null,
     });
     return { status: "done" };
   } catch (e) {
-    if (e instanceof MlApiError && !e.retryable) {
-      await deps.rpc("ml_invoice_uploaded", { p_account: job.account_id, p_pack: pack, p_doc: docId, p_ok: false, p_error: e.message });
+    // ML ya tiene un documento de ese tipo en la venta: no se reintenta a ciegas.
+    const dup = e instanceof MlApiError && /already|exist|limit/i.test(e.message);
+    if (e instanceof MlApiError && (!e.retryable || dup || job.attempts >= job.max_attempts)) {
+      await deps.rpc("ml_invoice_uploaded", {
+        p_account: job.account_id, p_pack: pack, p_doc: docId, p_ok: false,
+        p_error: dup ? "Mercado Libre ya tiene un documento de ese tipo en la venta: usá Volver a subir para reemplazarlo." : e.message,
+      });
+      if (dup) return { status: "done", note: "already_uploaded" };
     }
     throw e;
   }
@@ -369,6 +484,8 @@ async function runInvoiceUpload(deps: WorkerDeps, job: JobRow, fetchForm: (accou
 export interface JobDeps extends WorkerDeps {
   /** POST multipart (la subida del PDF). */
   postForm(accountId: string, path: string, form: FormData): Promise<unknown>;
+  /** DELETE de un documento fiscal ya subido (reemplazo, ADR-141). */
+  deleteDoc?(accountId: string, path: string): Promise<unknown>;
 }
 
 export async function processJob(deps: JobDeps, job: JobRow): Promise<Outcome> {
@@ -386,7 +503,7 @@ export async function processJob(deps: JobDeps, job: JobRow): Promise<Outcome> {
       case "answer_question":
         return await runAnswer(deps, job);
       case "invoice_upload":
-        return await runInvoiceUpload(deps, job, deps.postForm);
+        return await runInvoiceUpload(deps, job);
       case "claim_refresh": {
         const r = await refreshClaim(deps, job.account_id, String(job.ref ?? ""));
         return r.status === "done" ? { status: "done" } : { status: "ignored", note: r.note };

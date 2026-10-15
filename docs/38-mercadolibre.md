@@ -177,6 +177,7 @@ Las escrituras van sólo por RPC SECURITY DEFINER (UI: `ml_assert` con rol y fea
 - Fraude (`fraud_risk_detected`): no se crea la venta y no se imprime etiqueta.
 - Cancelación: revierte el stock y anula la venta (si estaba facturada, ARCA emite la NC). Carrito con órdenes canceladas y otras no: queda "a revisar".
 - Facturación por cuenta: al pagarse, al despacharse, a mano (botón Facturar) o no facturar. Tipo de comprobante: CUIT -> A, DNI -> B para un emisor RI; monotributo emite C.
+- Con la feature `mercadolibre_facturacion` (ADR-141): cupones, envío, padrón de ARCA, elección por venta, al entregarse, bandeja en lote, percepciones por link de pago y qué se sube a ML. Ver [`43-mercadolibre-facturacion.md`](./43-mercadolibre-facturacion.md).
 
 ### 2.6 Errores que ve el usuario
 

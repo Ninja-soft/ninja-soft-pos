@@ -147,21 +147,22 @@ function KpiCard({
       <div className={cn(EYEBROW, "flex items-center gap-1.5")}>
         <Icon size={13} aria-hidden /> {label}
       </div>
-      <div className="mt-2 flex items-baseline gap-2">
+      <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         {value === null ? (
           <span className="h-7 w-24 animate-pulse rounded bg-muted" aria-hidden />
         ) : (
-          <span className={cn(KPI, "text-xl sm:text-2xl")}>{value}</span>
+          <span className={cn(KPI, "min-w-0 truncate text-xl sm:text-2xl")}>{value}</span>
         )}
         {delta != null && (
           <span
             className={cn(
-              "inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums",
+              "inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-xs font-semibold tabular-nums",
               delta >= 0 ? "text-success" : "text-danger",
             )}
           >
             {delta >= 0 ? <TrendingUp size={12} aria-hidden /> : <TrendingDown size={12} aria-hidden />}
-            {Math.abs(delta).toLocaleString("es-AR", { maximumFractionDigits: 0 })} %
+            {/* Contra un ayer casi vacío el % se dispara: más de 999 % se muestra acotado. */}
+            {Math.abs(delta) > 999 ? "+999" : Math.abs(delta).toLocaleString("es-AR", { maximumFractionDigits: 0 })} %
           </span>
         )}
       </div>

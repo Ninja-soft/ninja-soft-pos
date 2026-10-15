@@ -87,7 +87,17 @@ export interface MlOrder {
   buyer: { id: MlId; nickname?: string; first_name?: string; last_name?: string; billing_info?: { id?: string | null } | null };
   seller?: { id: MlId };
   order_items: MlOrderItem[];
-  payments?: Array<{ id: MlId; status: string; transaction_amount?: number; shipping_cost?: number; total_paid_amount?: number }>;
+  payments?: Array<{
+    id: MlId;
+    status: string;
+    transaction_amount?: number;
+    shipping_cost?: number;
+    total_paid_amount?: number;
+    /** Cupón aplicado al pago (la "contraparte" que no pagó el comprador, ADR-141). */
+    coupon_amount?: number;
+    coupon_id?: MlId | null;
+  }>;
+  coupon?: { id?: MlId | null; amount?: number } | null;
   shipping?: { id?: MlId | null } | null;
   cancel_detail?: { group?: string; code?: string; description?: string; requested_by?: string; date?: string } | null;
   fulfilled?: boolean | null;

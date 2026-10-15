@@ -76,6 +76,8 @@ Deno.serve(async (req: Request) => {
       return c;
     },
     postForm: (id: string, path: string, form: FormData) => postFormAs(admin, cfg.config, id, path, form),
+    // ADR-141: reemplazo de un documento fiscal ya subido ("Volver a subir").
+    deleteDoc: (id: string, path: string) => accountClient(admin, cfg.config, id).request<unknown>("DELETE", path),
   };
   const out: Record<string, unknown> = { mode: body.mode ?? "cron" };
 

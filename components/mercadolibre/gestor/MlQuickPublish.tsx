@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Package, ScanBarcode, Search, Sparkles, Truck } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -30,6 +31,7 @@ import {
 import {
   mlApi,
   mlPublishApi,
+  refreshMlSoon,
   useMlAccountShipping,
   useMlCategoryMemory,
   useMlQuickCandidates,
@@ -353,6 +355,7 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
     }
   };
 
+  const qc = useQueryClient();
   const runAll = async (publish: boolean) => {
     const targets = rows.filter((r) => eligible(r, ["ready", "valid", "error"]) && localRowState(previewProduct(r), r, r.fields).state === "ready");
     if (targets.length === 0) return;
@@ -362,6 +365,7 @@ export function MlQuickPublish({ open, onOpenChange, account }: { open: boolean;
       if (ok && publish) await publishRow(r);
     });
     setBusy(null);
+    if (publish) refreshMlSoon(qc);
   };
 
   const counts = useMemo(() => {

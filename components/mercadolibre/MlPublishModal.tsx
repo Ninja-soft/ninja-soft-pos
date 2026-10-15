@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ExternalLink, Info, Plus, Sparkles, Trash2, Truck } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -27,6 +28,7 @@ import {
 } from "@/supabase/functions/_shared/mercadolibre/shipping";
 import {
   mlPublishApi,
+  refreshMlSoon,
   useMlChannelPreview,
   type AttrField,
   type MlAccount,
@@ -105,6 +107,7 @@ export function MlPublishModal({
   accounts: MlAccount[];
 }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const active = accounts.filter((a) => a.status === "active");
   const [accountId, setAccountId] = useState<string | null>(active[0]?.id ?? null);
   const account = active.find((a) => a.id === accountId) ?? null;
@@ -361,6 +364,7 @@ export function MlPublishModal({
       applyResult(r);
       if (r.ok) {
         setPublished(r.items ?? []);
+        refreshMlSoon(qc);
         toast({ title: "Publicado en Mercado Libre", variant: "success" });
       } else {
         setValidated(false);

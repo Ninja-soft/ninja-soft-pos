@@ -621,6 +621,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["mercadolibre"],
     needs: "Una cuenta de Mercado Libre conectada.",
   },
+  mercadolibre_full: {
+    desc: "Mercado Libre Full bajo control: cada cuenta tiene un depósito virtual Mercado Libre Full con el stock real de Full sincronizado cada 15 minutos (disponible, no disponible por motivo: dañado, perdido, retiro, control o transferencia, y en camino), que no se vende en el mostrador ni se mezcla con tu stock propio; las ventas que despacha Full descuentan de Full, no de tus sucursales. Envíos a Full desde una sucursal o depósito con validación de productos habilitados y de stock, el número del envío de Mercado Libre, tránsito y conciliación de lo recibido (recibido, dañado, faltante perdido o que vuelve, con motivo y auditoría). Etiquetas por unidad con el código de inventario de ML en Code 128 y de bulto, en rollo de 50 x 25 mm o en hoja A4. Cobertura en días con las ventas de 30 días, alertas de quiebre, cuánto conviene mandar y los cargos de Full de tu facturación de ML.",
+    impact: "Desactivado, el stock de Full no se sincroniza ni se arman envíos a Full desde el sistema (el servidor lo rechaza); las ventas por Full igual entran y nunca descuentan tu stock propio.",
+    minPlan: "Business",
+    requires: ["mercadolibre"],
+    needs: "Publicaciones de Mercado Libre con Full activo y vinculadas a tus productos. El envío a Full se crea en Mercado Libre (su API no lo permite desde otro sistema) y se registra su número.",
+  },
   integracion_nubceo: {
     desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
     impact: "Desactivado, no se mandan ventas a NubCeo ni se importan asientos (el servidor lo rechaza); lo ya enviado se puede seguir mirando.",

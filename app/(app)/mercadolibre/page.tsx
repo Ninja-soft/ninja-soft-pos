@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Columns3, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Zap } from "lucide-react";
+import { Columns3, Gauge, Handshake, LifeBuoy, Lock, MessageCircleQuestion, Plug, Receipt, Settings2, Tag, Truck, Warehouse, Zap } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonVariants } from "@/components/ui/Button";
@@ -32,12 +32,14 @@ import { MlMetricsTab } from "@/components/mercadolibre/gestor/MlMetricsTab";
 import { MlPostsaleTab } from "@/components/mercadolibre/gestor/MlPostsaleTab";
 import { MlBoardsTab } from "@/components/mercadolibre/gestor/MlBoardsTab";
 import { MlGestorConfig } from "@/components/mercadolibre/gestor/MlGestorConfig";
+import { MlFullTab } from "@/components/mercadolibre/full/MlFullTab";
 
 const ICONS: Partial<Record<GestorSection, typeof Tag>> = {
   items: Tag,
   orders: Receipt,
   questions: MessageCircleQuestion,
   shipments: Truck,
+  full: Warehouse,
   postsale: LifeBuoy,
   boards: Columns3,
   metrics: Gauge,
@@ -187,6 +189,8 @@ function MercadoLibreGestor() {
             {account && tab === "orders" && <MlOrdersTab accountId={account.id} />}
             {account && tab === "questions" && <MlQuestionsTab accountId={account.id} />}
             {account && tab === "shipments" && <MlShipmentsTab key={account.id} account={account} />}
+            {/* Full (ADR-142): depósito virtual, envíos a Full y etiquetas; la pestaña maneja su gating. */}
+            {account && tab === "full" && <MlFullTab key={account.id} account={account} canManage={canManage} />}
             {account && sectionInfo(tab).feature === "mercadolibre_gestor" && gestor === false && (
               <Callout
                 tone="brand"

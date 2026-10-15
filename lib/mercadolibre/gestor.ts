@@ -1,7 +1,7 @@
 // Gestor de Mercado Libre (H141 · ADR-132): secciones y puesta en marcha.
 // PURO: lo usan la pantalla, los estados vacíos y los tests.
 
-export type GestorSection = "items" | "orders" | "questions" | "shipments" | "postsale" | "boards" | "metrics" | "config";
+export type GestorSection = "items" | "orders" | "questions" | "shipments" | "full" | "postsale" | "boards" | "metrics" | "config";
 
 export interface SectionInfo {
   key: GestorSection;
@@ -9,7 +9,7 @@ export interface SectionInfo {
   /** Qué se hace ahí, en una línea. */
   summary: string;
   /** Feature que la habilita además de `mercadolibre` (null = sólo la base). */
-  feature: "mercadolibre_gestor" | null;
+  feature: "mercadolibre_gestor" | "mercadolibre_full" | null;
 }
 
 export const GESTOR_SECTIONS: SectionInfo[] = [
@@ -36,6 +36,12 @@ export const GESTOR_SECTIONS: SectionInfo[] = [
     label: "Envíos",
     summary: "Estado de cada envío e impresión de etiquetas en PDF o para la Zebra.",
     feature: null,
+  },
+  {
+    key: "full",
+    label: "Full",
+    summary: "Tu stock en Mercado Libre Full, envíos a Full con sus etiquetas, cobertura en días y alertas de quiebre.",
+    feature: "mercadolibre_full",
   },
   {
     key: "postsale",

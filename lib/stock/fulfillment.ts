@@ -83,6 +83,11 @@ export interface FulfillmentRules {
 }
 
 export interface PlanPayload {
+  /**
+   * Costo de envío (ADR-146): pos_sale_create_fulfilled lo agrega como renglón
+   * "Envío" de la venta. Sólo con al menos una entrega por envío.
+   */
+  shipping_fee?: number;
   deliveries: {
     mode: FulfillmentMode;
     fulfillment_store_id: string | null;
@@ -308,6 +313,143 @@ export function planSummary(groups: DeliveryGroup[], storeName: (id: string) => 
     .join(" · ");
 }
 
+// ── Entrega desde la hoja de cobro (ADR-146) ─────────────────────────────────
+// Atajos sobre el mismo reparto: todo retira en otra sucursal o todo va por
+// envío. "Repartir" sigue abriendo el reparto completo (FulfillmentModal).
+
+export type DeliveryChoice =
+  | { kind: "ahora" }
+  | { kind: "retiro"; storeId: string; pickupName: string }
+  | { kind: "envio"; address: string; fee: number }
+  | { kind: "split" };
+
+export interface PickupStoreOption {
+  storeId: string;
+  storeName: string;
+  /** Alcanza todo lo que se lleva (con su stock o trayéndolo de acá). */
+  complete: boolean;
+  /** Productos que no alcanzan en esa sucursal. */
+  missing: string[];
+}
+
+/** Reparto "todo retira en la sucursal X": su stock primero y, si se permite, lo que falte sale de acá. */
+export function retiroAllocations(
+  lines: FulfillmentLine[],
+  sources: FulfillmentSource[],
+  storeId: string,
+  pickupStoreId: string,
+  crossBranch: boolean,
+): { allocations: Allocation[]; missing: string[] } {
+  const out: Allocation[] = [];
+  const missing: string[] = [];
+  const here = (key: string, qty: number, mode: FulfillmentMode): Allocation => ({
+    id: newId(),
+    key,
+    qty,
+    sourceStoreId: storeId,
+    sourceWarehouseId: null,
+    mode,
+    fulfillmentStoreId: mode === "retiro" ? pickupStoreId : null,
+  });
+  for (const line of lines) {
+    if (line.localOnly) {
+      // Combos y lo que no controla stock sólo salen del salón propio.
+      if (crossBranch) out.push(here(line.key, line.quantity, "retiro"));
+      else missing.push(line.name);
+      continue;
+    }
+    let need = line.quantity;
+    const there = sourcesFor(sources, line).filter((s) => s.store_id === pickupStoreId);
+    for (const s of there) {
+      if (need <= 0) break;
+      const avail = Math.max(Number(s.available) || 0, 0);
+      if (avail <= 0) continue;
+      const qty = round3(Math.min(need, avail));
+      need = round3(need - qty);
+      out.push({
+        id: newId(),
+        key: line.key,
+        qty,
+        sourceStoreId: s.store_id,
+        sourceWarehouseId: s.warehouse_id,
+        mode: "retiro",
+        fulfillmentStoreId: pickupStoreId,
+      });
+    }
+    if (need > 0) {
+      if (crossBranch) out.push(here(line.key, need, "retiro"));
+      else missing.push(line.name);
+    }
+  }
+  return { allocations: out, missing };
+}
+
+/** Otras sucursales donde se puede retirar todo: las que tienen stock y, si se permite, todas. */
+export function pickupStoreOptions(
+  lines: FulfillmentLine[],
+  sources: FulfillmentSource[],
+  storeId: string,
+  stores: { id: string; name: string }[],
+  crossBranch: boolean,
+): PickupStoreOption[] {
+  const names = new Map<string, string>();
+  for (const s of sources) if (s.store_id !== storeId) names.set(s.store_id, s.store_name);
+  if (crossBranch) for (const s of stores) if (s.id !== storeId && !names.has(s.id)) names.set(s.id, s.name);
+  return [...names.entries()]
+    .map(([id, name]) => {
+      const { missing } = retiroAllocations(lines, sources, storeId, id, crossBranch);
+      return { storeId: id, storeName: name, complete: missing.length === 0, missing };
+    })
+    .sort((a, b) => Number(b.complete) - Number(a.complete) || a.storeName.localeCompare(b.storeName, "es"));
+}
+
+/** Reparto "todo por envío" desde el salón de esta sucursal. */
+export function envioAllocations(lines: FulfillmentLine[], storeId: string): Allocation[] {
+  return lines.map((l) => ({
+    id: newId(),
+    key: l.key,
+    qty: l.quantity,
+    sourceStoreId: storeId,
+    sourceWarehouseId: null,
+    mode: "envio" as const,
+    fulfillmentStoreId: null,
+  }));
+}
+
+/** Clave de la entrega por envío desde una sucursal (para cargar el domicilio). */
+export function envioGroupKey(storeId: string): string {
+  return `envio|${storeId}|${storeId}`;
+}
+
+/** Costo de envío válido (0 = sin costo). */
+export function shippingFeeOf(raw: string | number | null | undefined): number {
+  let s = typeof raw === "number" ? String(raw) : String(raw ?? "").replace(/[$\s]/g, "");
+  // "1.500,50" y "1.500" (miles con punto) o "1500.5" (punto decimal).
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+
+/** "2 se lleva ahora · 1 envío a Calle 12 · 3 retira en Norte" (una línea, hoja de cobro). */
+export function deliverySummary(
+  groups: DeliveryGroup[],
+  storeName: (id: string) => string,
+  info: Record<string, DeliveryInfo> = {},
+): string {
+  return groups
+    .map((g) => {
+      const units = fmt(round3(g.allocations.reduce((t, a) => t + a.qty, 0)));
+      if (g.mode === "ahora") return `${units} se lleva ahora`;
+      if (g.mode === "envio") {
+        const addr = info[g.groupKey]?.shipAddress?.trim();
+        return addr ? `${units} envío a ${addr}` : `${units} por envío desde ${storeName(g.originStoreId)}`;
+      }
+      return `${units} retira en ${storeName(g.fulfillmentStoreId)}`;
+    })
+    .join(" · ");
+}
+
 /** "Norte · Depósito" o "Salón de ventas" (origen en el selector). */
 export function sourceLabel(s: Pick<FulfillmentSource, "store_name" | "warehouse_name" | "own_store" | "kind">): string {
   if (s.own_store) return s.kind === "principal" ? "Salón de ventas" : s.warehouse_name;
@@ -340,6 +482,8 @@ const ERROR_MESSAGES: [RegExp, string][] = [
   [/insufficient_source_stock/, "No alcanza el stock en el origen elegido. Actualizá y volvé a repartir."],
   [/kit_cross_store/, "Los combos y lo que no controla stock salen del salón de esta sucursal."],
   [/ship_address_required/, "Cargá el domicilio de cada envío."],
+  [/shipping_fee_requires_envio/, "El costo de envío va con una entrega por envío."],
+  [/invalid_shipping_fee/, "Revisá el costo de envío."],
   [/pickup_name_required/, "Cargá quién retira (o elegí un cliente)."],
   [/cross_branch_not_allowed/, "Retirar en otra sucursal que la de origen está apagado en Configuración."],
   [/delivery_type_disabled/, "Ese tipo de entrega está apagado en Configuración."],

@@ -3,7 +3,7 @@
 // Barra de entregas del carrito (ADR-136) y aviso de las entregas abiertas
 // después de cobrar (con el código de retiro, que se ve una sola vez).
 
-import { PackageCheck, Truck } from "lucide-react";
+import { FileText, PackageCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
 import { Modal } from "@/components/ui/Modal";
@@ -33,10 +33,13 @@ export function DeliveriesDoneModal({
   done,
   storeName,
   onClose,
+  onRemito,
 }: {
   done: { saleNumber: number; list: NonNullable<CreateSaleResult["deliveries"]> } | null;
   storeName: (id: string) => string;
   onClose: () => void;
+  /** ADR-146: hacer el remito de un envío recién cobrado (con COT si hace falta). */
+  onRemito?: (d: NonNullable<CreateSaleResult["deliveries"]>[number], saleNumber: number) => void;
 }) {
   if (!done) return null;
   const pending = done.list.filter((d) => d.mode !== "ahora");
@@ -75,6 +78,11 @@ export function DeliveriesDoneModal({
             </span>
             {d.pickup_code && (
               <span className="font-mono text-xl font-bold tracking-[0.2em] tabular-nums">{d.pickup_code}</span>
+            )}
+            {d.mode === "envio" && onRemito && (
+              <Button size="sm" variant="secondary" className="shrink-0" onClick={() => onRemito(d, done.saleNumber)}>
+                <FileText size={14} aria-hidden /> Hacer remito
+              </Button>
             )}
           </li>
         ))}

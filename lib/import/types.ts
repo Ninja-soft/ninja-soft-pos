@@ -17,7 +17,8 @@ export type ImportEntityKey =
   | "warranty_plans"
   | "return_reasons"
   | "warehouses"
-  | "warehouse_stock";
+  | "warehouse_stock"
+  | "stock_adjustments";
 
 /** Columna importable: spec de parseo + datos para la plantilla. */
 export interface ImportField extends ImportColumn {
@@ -39,6 +40,8 @@ export interface ImportContext {
   priceLists?: string[];
   /** Nombres de las sucursales (para la lista desplegable). */
   stores?: string[];
+  /** Nombres de los depósitos (para la lista desplegable). */
+  warehouses?: string[];
 }
 
 /** Columna del preview: cómo mostrar un dato de la fila. */
@@ -81,6 +84,16 @@ export interface ImportDefinition<R = Record<string, unknown>> {
   toPayload?: (row: R) => Record<string, unknown>;
   /** Query keys de TanStack Query a invalidar después de aplicar. */
   invalidate: string[][];
+  /**
+   * Cómo se llama cada resultado en esta entidad (p. ej. en ajustes de stock
+   * "create" es "Va a aprobación"). Lo que falte usa el texto genérico.
+   */
+  actionLabels?: Partial<Record<ImportAction, string>>;
+  /**
+   * Texto de la confirmación (paso 3) con los conteos: `done` = ya aplicado
+   * (con los conteos que devolvió el servidor).
+   */
+  confirmText?: (counts: ImportCounts, done: boolean) => string;
 }
 
 /** Qué pasa con una fila. */

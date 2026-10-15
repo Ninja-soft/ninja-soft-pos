@@ -296,8 +296,10 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         // Depósitos internos de la sucursal (F11 · H33, ADR-085).
         { href: "/depositos", label: "Depósitos", icon: Warehouse, feature: "depositos" },
-        // Inventario PRO (F14 · H64, ADR-092): conteo cíclico ABC y garantías por serie.
-        { href: "/inventario", label: "Inventario PRO", icon: ClipboardCheck, feature: "conteo_ciclico" },
+        // Inventario (F14 · H64, ADR-092 y ADR-137): stock con foto, ajustes con
+        // motivo y aprobación (BASE + aprobacion_ajustes), conteos, movimientos,
+        // valuación y series. Las partes Pro llevan su candado adentro.
+        { href: "/inventario", label: "Inventario", icon: ClipboardCheck },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         // Mercado Libre (H87 · ADR-104): publicaciones, ventas, preguntas y envíos.
         { href: "/mercadolibre", label: "Mercado Libre", icon: Handshake, feature: "mercadolibre", managersOnly: true },

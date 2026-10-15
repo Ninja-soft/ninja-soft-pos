@@ -11,6 +11,7 @@ import {
   warrantyImportDefinition,
 } from "./entities";
 import { warehouseImportDefinition, warehouseStockImportDefinition } from "./warehouses";
+import { stockAdjustmentImportDefinition } from "./stockAdjustments";
 
 // El motor trabaja con filas genéricas; cada definición tipa las suyas.
 type AnyDefinition = ImportDefinition<never>;
@@ -25,6 +26,7 @@ export const IMPORT_DEFINITIONS: AnyDefinition[] = [
   returnReasonImportDefinition,
   warehouseImportDefinition,
   warehouseStockImportDefinition,
+  stockAdjustmentImportDefinition,
 ] as unknown as AnyDefinition[];
 
 export function importDefinition(entity: ImportEntityKey): ImportDefinition<Record<string, unknown>> {

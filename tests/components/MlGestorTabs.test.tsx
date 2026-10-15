@@ -74,7 +74,7 @@ vi.mock("@/modules/mercadolibre/reasonHooks", () => {
   ];
   return {
     useMlClaimReasons: () => ({ data: rows, index: new Map(rows.map((r) => [r.id, r])) }),
-    useEnsureClaimReasons: (_i: unknown, ids: unknown) => ensure(ids as never),
+    useEnsureClaimReasons: (_i: unknown, ids: unknown) => (ensure as unknown as (x: unknown) => unknown)(ids),
   };
 });
 

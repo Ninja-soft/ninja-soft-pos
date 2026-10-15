@@ -125,7 +125,7 @@ describe("fillReasons (acción reasons_fill)", () => {
     expect(res.unknown).toEqual(["PDD1234"]);
     expect(res.pending).toEqual([]);
     expect(d.get.mock.calls.map((c) => c[0])).toEqual(["PDD9946", "PDD9945", "PNR3430", "PDD1234"]);
-    const saved = d.save.mock.calls[0]![0] as Array<{ id: string; title: string; alias_of: string | null }>;
+    const saved = (d.save.mock.calls[0] as unknown as unknown[])[0] as Array<{ id: string; title: string; alias_of: string | null }>;
     expect(saved.find((r) => r.id === "PDD9946")?.title).toBe("El producto está dañado: llegó bien");
     expect(saved.find((r) => r.id === "PNR3430")?.alias_of).toBe("PNR9502");
   });

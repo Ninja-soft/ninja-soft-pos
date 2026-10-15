@@ -176,13 +176,21 @@ Deno.serve(async (req: Request) => {
     const intentId = (intent as { id: string }).id;
 
     const appUrl = (Deno.env.get("APP_URL") ?? "https://pos.soft.ninja").replace(/\/+$/, "");
+    // Marca del negocio para la pantalla de regreso (dato público: nombre y logo).
+    const { data: br } = await admin.from("tenant_branding").select("trade_name, logo_url").eq("tenant_id", tenantId).maybeSingle();
+    const { data: tn } = await admin.from("tenants").select("name").eq("id", tenantId).maybeSingle();
+    const shopName = String((br as { trade_name?: string } | null)?.trade_name || (tn as { name?: string } | null)?.name || "").trim().slice(0, 80);
+    const shopLogo = String((br as { logo_url?: string } | null)?.logo_url ?? "").trim();
+    const brandQs =
+      (shopName ? `&n=${encodeURIComponent(shopName)}` : "") +
+      (/^https:\/\//.test(shopLogo) && shopLogo.length < 600 ? `&l=${encodeURIComponent(shopLogo)}` : "");
     const input = {
       amount,
       description,
       // Regreso del cliente a una página real de la app: las Edge Functions
       // sirven HTML como texto plano (se veía el código de la página).
-      callbackSuccess: `${appUrl}/pagar/listo?estado=ok&medio=ualabis`,
-      callbackFail: `${appUrl}/pagar/listo?estado=error&medio=ualabis`,
+      callbackSuccess: `${appUrl}/pagar/listo?estado=ok&medio=ualabis${brandQs}`,
+      callbackFail: `${appUrl}/pagar/listo?estado=error&medio=ualabis${brandQs}`,
       notificationUrl: `${hooks}?intent=${intentId}`,
       externalReference: intentId,
     };

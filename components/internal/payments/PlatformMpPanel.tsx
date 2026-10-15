@@ -83,7 +83,7 @@ function useCopy() {
   };
 }
 
-function Dot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
+export function Dot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
   return (
     <span
       aria-hidden
@@ -98,7 +98,7 @@ function Dot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
   );
 }
 
-function Block({
+export function Block({
   step,
   icon: Icon,
   title,
@@ -130,7 +130,7 @@ function Block({
   );
 }
 
-function CopyField({ label, value, hint }: { label: string; value: string; hint?: React.ReactNode }) {
+export function CopyField({ label, value, hint }: { label: string; value: string; hint?: React.ReactNode }) {
   const copy = useCopy();
   return (
     <div className="min-w-0">
@@ -148,7 +148,7 @@ function CopyField({ label, value, hint }: { label: string; value: string; hint?
   );
 }
 
-function SecretRow({
+export function SecretRow({
   label,
   configured,
   hint,

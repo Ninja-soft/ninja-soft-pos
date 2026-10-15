@@ -4610,3 +4610,39 @@ Sin key nueva: todo es parte de `presupuestos` (OPTIONAL, Pro+). El gating real 
 - Edge nueva `send_quote_email` (sin desplegar; `verify_jwt=true`). `_shared/mailer.ts` cambia de forma compatible (campos opcionales): `send_email`, `send_password_recovery` y `process_pending_emails` no necesitan redeploy, pero toman el cambio en su próximo deploy. `APP_URL` (opcional, default `https://pos.soft.ninja`) arma el link del botón.
 - Deuda: el reporte por emisor es consolidado (los presupuestos casi nunca tienen sucursal); el reenvío de un fallido es manual desde el diálogo (sin reintento automático).
 - Tests: `tests/unit/quoteEmail.test.tsx` (plantilla en espejo, reglas de email, destinatarios, plantilla editable, sin vencimiento, emisor y contratos de la migración y la Edge) y casos nuevos en `tests/integration/rls-presupuestos.test.ts`.
+
+---
+
+## ADR-126: La app de Mercado Libre se configura desde el panel interno (platform_secrets.ml_app) con prioridad sobre los secrets de Edge, que quedan como compatibilidad
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (sin migración; Edges sin desplegar) · **Base:** ADR-104 (Mercado Libre MVP), H15 / F20-0b (Pagos de plataforma, `set_platform_secret`, `platform_secrets`), ADR-069 (dominio propio de webhooks).
+
+### Contexto
+
+El dueño pidió "sumá a internal la configuración de la app de Mercado Libre como Pagos de plataforma". Hasta ahora la app de ML se configuraba sólo con secrets de las Edge Functions (`ML_CLIENT_ID`, `ML_CLIENT_SECRET`, `ML_REDIRECT_URI` / `APP_URL`), leídos de forma síncrona por `readMlConfig(env)`. Cambiar o rotar la clave pedía acceso a Supabase, y no había un lugar donde ver si la app estaba bien configurada, qué URLs pegar en DevCenter ni cuántos negocios la usan. En producción están cargados `ML_CLIENT_ID`, `ML_CLIENT_SECRET` y `ML_REDIRECT_URI` como secrets de Edge y tienen que seguir funcionando.
+
+### Decisión
+
+1. **Sección propia en el panel interno: "Mercado Libre (app)"** (`/internal/mercadolibre`, ítem "Mercado Libre" junto a Pagos en la navegación). No va dentro de Pagos: Pagos es cobro de suscripciones con Mercado Pago, y ML es una integración de canal de venta con su propia app en DevCenter. Mismo lenguaje visual y mismos bloques que Pagos de plataforma (se exportan `Block`, `CopyField`, `SecretRow` y `Dot` de `PlatformMpPanel`). Logo oficial de ML (`IntegrationLogo` sin baldosa).
+2. **Guardado por la misma Edge `set_platform_secret`**, nueva key `ml_app` con `client_id`, `client_secret` (secreta: write-only, sólo "guardada" y los últimos 4) y `redirect_uri`. Mismo permiso (staff con `app_metadata.is_internal`) y misma auditoría (`platform_secret_set` / `platform_secret_tested`, más `platform_secret_cleared` para "Borrar lo cargado acá"), sin valores. Validación de formato en la Edge (barrera real) y en la UI (aviso), con `validateMlAppField`.
+3. **Prioridad de orígenes en un helper puro** (`resolveMlConfig({ db, env })` en `_shared/mercadolibre/config.ts`): si `platform_secrets.ml_app` tiene App ID y clave válidos rige ese origen (la Redirect URI, si falta ahí, sale del env); si no, rigen los secrets de Edge completos. **Nunca se mezcla** el id de un origen con la clave del otro. `readMlConfig(env)` queda como atajo sólo-env.
+4. **Lectura async con service_role en las Edges ML** (`mlConfig(admin)` en `runtime.ts`): `ml_oauth_start`, `ml_oauth_callback`, `ml_api` y `ml_worker` leen una vez por invocación (memo por invocación con `createMlConfigLoader`). `ml_webhook` usa el mismo loader con memo de **60 s por isolate**: ML exige responder en menos de 500 ms y no conviene sumar una lectura a cada aviso. Si la base falla se resuelve con el env y el error no se cachea. `ml_worker` valida los `missed_feeds` con el App ID efectivo (antes leía el env).
+5. **Probar conexión sin tocar cuentas de clientes:** `POST /oauth/token` con `client_credentials`; si ML lo acepta, con ese token de app se lee `GET /applications/{id}` (nombre, redirect y URL de notificaciones registradas, para avisar si no coinciden). Si no, un `refresh_token` inventado: `invalid_grant` = par correcto, `invalid_client` = par incorrecto (`classifyMlTokenProbe`, puro).
+6. **URL de notificaciones con el dominio propio** `https://hooks.soft.ninja/ml` (`lib/hooks.ts` ya lo enruta a `ml_webhook`), con la URL directa de la Edge como alternativa. Tópicos recomendados en `lib/mercadolibre/appSetup.ts` (los del MVP coinciden con `MVP_TOPICS`).
+7. **Resumen de uso calculado en la Edge** (service_role): negocios y cuentas activas, cuentas que piden reconectar, notificaciones de 24 h, errores y las últimas 8. Así no hace falta abrir `ml_accounts` ni `ml_notifications` al staff por RLS.
+8. **`platform_secrets` sigue sin policies** (RLS deny + `revoke all` a anon y authenticated, `20260608400000_security_hardening`): sólo service_role la lee. No se agregó ninguna policy ni `is_internal()`.
+
+### Alternativas descartadas
+
+- **Sub-sección dentro de Pagos de plataforma:** mezcla cobro de suscripciones con una integración de canal; la página de Pagos ya es larga.
+- **Mezclar campos por origen** (id del panel, clave del env): un par de apps distintas no autentica y el error sería difícil de diagnosticar.
+- **Cache por isolate en todas las Edges:** un cambio en el panel tardaría en verse en el OAuth; sólo el webhook lo necesita por su presupuesto de tiempo.
+- **Policies de lectura para staff en `ml_accounts` / `ml_notifications`:** más superficie RLS para un resumen que la Edge ya puede calcular.
+
+### Consecuencias
+
+- Sin migración. Edges a desplegar: `set_platform_secret`, `ml_oauth_start`, `ml_oauth_callback`, `ml_webhook`, `ml_worker`, `ml_api`. Hasta desplegarlas, la sección muestra error de lectura (la Edge vieja rechaza la key `ml_app`) y la app sigue con los secrets de Edge.
+- Con los secrets de Edge actuales y nada cargado en el panel, el comportamiento en producción no cambia (sección en "Configurada con secrets de Edge").
+- Riesgo: una clave mal cargada en el panel (pero con formato válido) pisa a la del env que funcionaba. Mitigación: "Probar conexión" y "Borrar lo cargado acá" (vuelve al env).
+- `ml_webhook` puede tardar hasta 60 s en ver un App ID nuevo.
+- Tests: `tests/unit/mlAppConfig.test.ts` (prioridad de orígenes, validación, loader, sondeo, estado) y `tests/components/MlAppPanel.test.tsx`.

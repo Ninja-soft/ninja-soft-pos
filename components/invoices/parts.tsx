@@ -332,24 +332,18 @@ export function LetterBox({
         <span
           data-legal="codigo"
           style={{
-            fontSize: size < 50 ? 7 : Math.max(8, size * 0.13),
+            // Siempre en una línea ("COD. 006"): en cajas chicas baja la letra.
+            fontSize: size < 50 ? Math.max(5.5, size * 0.13) : Math.max(8, size * 0.13),
             marginTop: 3,
-            letterSpacing: 0.4,
+            letterSpacing: size < 50 ? 0 : 0.4,
             opacity: 0.85,
             textAlign: "center",
             lineHeight: 1.1,
+            whiteSpace: "nowrap",
             ...NUM,
           }}
         >
-          {size < 50 ? (
-            <>
-              COD.
-              <br />
-              {doc.cbteCode}
-            </>
-          ) : (
-            `COD. ${doc.cbteCode}`
-          )}
+          {`COD. ${doc.cbteCode}`}
         </span>
       ) : (
         <span

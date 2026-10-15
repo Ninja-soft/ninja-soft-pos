@@ -176,6 +176,8 @@ export function usePosSale(ctx: {
   offline?: Pick<OfflinePos, "isOffline" | "saveSale" | "markServerDown"> | null;
   /** La venta quedó guardada sin conexión (ticket provisorio). */
   onOfflineSuccess?: (r: { entry: OfflineQueueEntry; change: number; hadCash: boolean }) => void;
+  /** H32 (ADR-129): el origen (pedido) resuelve el error y avisa él (true = ya avisó). */
+  onError?: (msg: string) => boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -285,6 +287,7 @@ export function usePosSale(ctx: {
       // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
       if (handlePriceMismatch(e, ctx.lines)) return;
       const msg = e instanceof Error ? e.message : "";
+      if (ctx.onError?.(msg)) return;
       // Promos que cambiaron (alta, baja, tope de usos): se vuelven a leer.
       if (msg.includes("promo_")) void qc.invalidateQueries({ queryKey: ["promotions"] });
       const title = saleErrorTitle(msg);

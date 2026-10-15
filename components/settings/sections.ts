@@ -29,6 +29,7 @@ import {
   Utensils,
   Wallet,
   Wrench,
+  ClipboardList,
   FileSignature,
   Sparkles,
 } from "lucide-react";
@@ -76,6 +77,7 @@ export type SettingsSectionKey =
   | "facturacion"
   | "datos-facturacion"
   | "presupuestos"
+  | "pedidos"
   | "imagenes-ia";
 
 export type SettingsSectionDef = {
@@ -385,6 +387,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "presupuestos",
         keywords: "presupuesto cotizacion cotizar validez condiciones firma aceptacion numeracion",
       },
+      // H32 (ADR-129): pedidos de salón y expedición (OPTIONAL Pro+).
+      {
+        key: "pedidos",
+        label: "Pedidos y expedición",
+        title: "Pedidos de salón y expedición",
+        description: "Minutos de reserva del stock, qué pasa al vencer y los tipos de entrega (también en otra sucursal).",
+        icon: ClipboardList,
+        feature: "pedidos_despacho",
+        keywords: "pedido salon vendedor caja reserva stock minutos vencer expedicion despacho entrega retiro sucursal envio domicilio codigo",
+      },
       {
         key: "facturacion",
         label: "Facturación electrónica",
@@ -552,6 +564,8 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   iva: "impuestos",
   presupuesto: "presupuestos",
   cotizaciones: "presupuestos",
+  expedicion: "pedidos",
+  despacho: "pedidos",
   ia: "imagenes-ia",
   "portadas-ia": "imagenes-ia",
   percepciones: "impuestos",

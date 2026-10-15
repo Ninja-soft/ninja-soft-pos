@@ -233,6 +233,11 @@ const QuoteSettingsCard = dynamic(
   () => import("@/components/quotes/QuoteSettingsCard").then((m) => m.QuoteSettingsCard),
   { loading },
 );
+// H32 (ADR-129): pedidos de salón y expedición.
+const OrderSettingsCard = dynamic(
+  () => import("@/components/orders/OrderSettingsCard").then((m) => m.OrderSettingsCard),
+  { loading },
+);
 const AiImageSettingsCard = dynamic(
   () => import("@/components/ai/AiImageSettingsCard").then((m) => m.AiImageSettingsCard),
   { loading },
@@ -473,6 +478,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <BillingProfileSettings />;
     case "presupuestos":
       return <QuoteSettingsCard />;
+    case "pedidos":
+      return <OrderSettingsCard />;
     case "imagenes-ia":
       return <AiImageSettingsCard />;
   }

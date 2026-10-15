@@ -449,6 +449,22 @@ Reglas:
 - [x] Alcance insuficiente, credencial revocada o rotada y plan sin `api_publica` se rechazan en la base.
 - [x] Cada lote queda en `audit_logs` con el id de la credencial (`entity_type = 'api_client'`); las filas tocadas, por los triggers de cada tabla.
 
+## 9.5 Pedidos de salón y expedición (H32, ADR-129)
+
+| Acción | Dueño | Encargado | Cajero | Solo lectura |
+|---|---|---|---|---|
+| Armar un pedido (vendedor) | ✓ | ✓ | ✓ | ✗ |
+| Levantar y cobrar un pedido (en la sucursal del pedido) | ✓ | ✓ | ✓ | ✗ |
+| Levantar o anular un pedido que tiene otra caja | ✓ | ✓ | ✗ | ✗ |
+| Anular un pedido abierto (con motivo) | ✓ | ✓ | ✓ | ✗ |
+| Armar, marcar listo, enviar y recibir en expedición | ✓ | ✓ | ✓ | ✗ |
+| Entregar con código o a nombre | ✓ | ✓ | ✓ | ✗ |
+| Entregar sin código (con motivo) | ✓ | ✓ | ✗ | ✗ |
+| Cancelar una entrega | ✓ | ✓ | ✗ | ✗ |
+| Configurar pedidos (minutos, al vencer, tipos, cross-branch) | ✓ | ✗ | ✗ | ✗ |
+
+Todo con la feature `pedidos_despacho` y acceso a la sucursal (la del pedido o la de entrega; recibir y entregar en otra sucursal es de quien tiene acceso a esa). Lo garantiza la base: RPC SECURITY DEFINER con `_order_assert` / `_dispatch_lock` y `role_write_guard` 'operate'.
+
 ## 10. Anti-patrones
 
 ❌ Hardcodear el chequeo del rol en lugar de usar `can()`:

@@ -3,7 +3,8 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bike, CalendarDays, FileSignature, Hourglass, PackageCheck, Pause, Utensils } from "lucide-react";
+import type { Route } from "next";
+import { Bike, CalendarDays, ClipboardList, FileSignature, Hourglass, PackageCheck, Pause, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -109,7 +110,15 @@ import { usePosPause } from "@/modules/pos/screen/usePosPause";
 import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import { SaleActions } from "@/components/pos/screen/SaleActions";
 import { PausedSalesBar } from "@/components/paused-sales/PausedSalesBar";
-import type { PausedSale } from "@/modules/paused-sales/logic";
+import type { PausedCart, PausedSale } from "@/modules/paused-sales/logic";
+import { buildPausedCart } from "@/modules/paused-sales/logic";
+// H32 (ADR-129): pedidos de salón (vendedor arma, caja cobra) y disponible sin lo reservado.
+import { useOrderOrigin } from "@/modules/orders/useOrderOrigin";
+import { useReservedStock, useSaleOrders } from "@/modules/orders/hooks";
+import { OrdersBar } from "@/components/orders/OrdersBar";
+import { DELIVERY_TYPE_LABEL, availableStock, reservationLabel } from "@/lib/orders/logic";
+import { useProfessionals } from "@/modules/pos/hooks";
+import { useProfessionalsForPosStore } from "@/modules/branches/staffHooks";
 import { usePendingChargesWatcher } from "@/components/pending-charges/usePendingChargesWatcher";
 import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
 import { pendingChargesApi, cancelAtProvider } from "@/modules/pending-charges/api";
@@ -177,6 +186,8 @@ const SwitchSaleDialog = dynamic(() => loadPausedDialogs().then((m) => m.SwitchS
 const PausedSalesPanel = dynamic(() => loadPausedPanel().then((m) => m.PausedSalesPanel), { ssr: false });
 // ADR-122: "Presupuesto" junto a Cobrar (chunk aparte, se baja al abrirlo).
 const QuoteFromCartModal = dynamic(() => import("@/components/quotes/QuoteFromCartModal").then((m) => m.QuoteFromCartModal), { ssr: false });
+// H32 (ADR-129): "Pedido" junto a Pausar (chunk aparte, se baja al abrirlo).
+const OrderFromCartModal = dynamic(() => import("@/components/orders/OrderFromCartModal").then((m) => m.OrderFromCartModal), { ssr: false });
 const PosShortcutsHelp = dynamic(() => loadShortcutsHelp().then((m) => m.PosShortcutsHelp), { ssr: false });
 // Cobros en espera (ADR-048): la pestaña se abre como hoja dentro del POS.
 const PendingChargesPanel = dynamic(
@@ -405,6 +416,10 @@ function PosPageInner() {
   // ADR-122: presupuestos (OPTIONAL Pro+; la base lo exige en quote_save).
   const quoteGate = useFeatureGate("presupuestos", "Presupuestos");
   const [quoteOpen, setQuoteOpen] = useState(false);
+  // H32 (ADR-129): pedidos de salón (OPTIONAL Pro+; la base lo exige en sale_order_create).
+  const orderGate = useFeatureGate("pedidos_despacho", "Pedidos de salón");
+  const ordersFeature = useFeature("pedidos_despacho");
+  const [orderOpen, setOrderOpen] = useState(false);
   const { data: posSettings, isFetched: posSettingsFetched } = usePosSettings();
   const offerWarranty = posSettings?.offerWarranty ?? true;
   // La oferta de garantía sólo aparece con algo en el carrito: los planes se
@@ -647,6 +662,15 @@ function PosPageInner() {
   const origins = usePosOrigins({ setCustomer, priceFor });
   // ADR-122: cobro de un presupuesto (/pos?quote=<id>).
   const quoteOrigin = useQuoteOrigin({ setCustomer });
+  // H32 (ADR-129): cobro de un pedido de salón (/pos?order=<id>). El carrito se
+  // carga con la misma función que retoma una venta pausada (se asigna abajo).
+  const applyCartRef = useRef<(c: PausedCart) => void>(() => undefined);
+  const resetSaleRef = useRef<() => void>(() => undefined);
+  const orderOrigin = useOrderOrigin({
+    applyCart: (c) => applyCartRef.current(c),
+    resetSale: () => resetSaleRef.current(),
+    offline: offline.isOffline,
+  });
   // Lista con la que se vende (misma regla que el servidor): la usan las promos por lista.
   const appliedList = useMemo(() => {
     const w = priceResolver.world;
@@ -701,8 +725,27 @@ function PosPageInner() {
   );
   const branchStock = usePosBranchStock(stockIds);
   const allowNegativeStock = posSettings?.allowNegativeStock ?? true;
+  // H32 (ADR-129): lo reservado vigente (pedidos de salón y reservas) no se
+  // muestra como disponible. Con stock por sucursal, lo de ESTA sucursal; si
+  // no, lo reservado en todo el negocio contra el total.
+  // Se pide con pedidos_despacho (la RPC llega con su migración); sin ella el
+  // servidor igual bloquea vender lo reservado (ADR-096).
+  const reservedStock = useReservedStock(branchStock.enabled ? branchStock.storeId : null, ordersFeature === true);
   const shownProducts = useMemo(() => {
-    if (!branchStock.loaded || !branchStock.storeId || !products) return products;
+    if (!products) return products;
+    const reservedOf = (id: string) => reservedStock.byProduct.get(id) ?? 0;
+    const withReserved = <T extends { id: string; stock: number; track_stock: boolean; stockHint?: string | null }>(p: T): T => {
+      const r = reservedOf(p.id);
+      if (!p.track_stock || r <= 0) return p;
+      return {
+        ...p,
+        stock: availableStock(p.stock, r),
+        stockHint: `${p.stockHint ? `${p.stockHint} · ` : ""}Reservado: ${formatQty(r)}`,
+      };
+    };
+    if (!branchStock.loaded || !branchStock.storeId) {
+      return reservedStock.byProduct.size > 0 ? products.map((p) => withReserved(p)) : products;
+    }
     const storeId = branchStock.storeId;
     return products.map((p) => {
       if (!p.track_stock) return p;
@@ -710,18 +753,23 @@ function PosPageInner() {
         otherBranchesStock(branchStock.rows, p.id, storeId, branchStock.names),
         (n) => formatQty(n),
       );
-      return {
+      return withReserved({
         ...p,
         stock: branchStock.qtyByProduct.get(p.id) ?? 0,
         stockHint: others ? `En otras sucursales: ${others}` : "Sin stock en otras sucursales",
-      };
+      });
     });
-  }, [products, branchStock.loaded, branchStock.storeId, branchStock.rows, branchStock.qtyByProduct, branchStock.names]);
+  }, [products, branchStock.loaded, branchStock.storeId, branchStock.rows, branchStock.qtyByProduct, branchStock.names, reservedStock.byProduct]);
 
   function branchStockGate(productId: string, variantId: string | null, adding: number): boolean {
     const storeId = branchStock.storeId;
     if (!branchStock.loaded || !storeId || !trackedSeen.current.has(productId)) return true;
-    const have = branchQty(branchStock.rows, storeId, productId, variantId);
+    // H32: sin lo reservado por otros (al cobrar un pedido o un retiro, su
+    // propia reserva no cuenta: lo valida el servidor).
+    const ownReservation = Boolean(orderOrigin.reservationId || origins.reservationId);
+    const have =
+      branchQty(branchStock.rows, storeId, productId, variantId) -
+      (ownReservation ? 0 : (reservedStock.byProduct.get(productId) ?? 0));
     const inCart = useCartStore
       .getState()
       .lines.filter((l) => l.productId === productId && (variantId === null || (l.variantId ?? null) === variantId))
@@ -1042,7 +1090,9 @@ function PosPageInner() {
             ? PARK_BLOCK_COPY.appointment
             : origins.reservationId
               ? "Los retiros de reservas se cobran en el momento."
-              : null;
+              : orderOrigin.active
+                ? "Los pedidos de salón se cobran en el momento."
+                : null;
   const parker = usePosPark({
     lines,
     discountTotal,
@@ -1108,7 +1158,7 @@ function PosPageInner() {
     tableOrderId: origins.tableOrderId,
     deliveryOrderId: origins.deliveryOrderId,
     appointmentId: origins.appointmentId,
-    reservationId: origins.reservationId,
+    reservationId: origins.reservationId ?? orderOrigin.reservationId,
     salePromo: pricing.salePromo,
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
     // ADR-116: sólo con servicios en el carrito.
@@ -1136,6 +1186,7 @@ function PosPageInner() {
       pricing.clearCoupon();
       origins.afterSale();
       quoteOrigin.afterSale(saleId);
+      orderOrigin.afterSale(saleId);
       // ADR-106: si era una venta pausada retomada, queda completada.
       pauseRef.current.onSaleDone(saleId);
       flashPaidScreen(change);
@@ -1151,10 +1202,13 @@ function PosPageInner() {
       pricing.clearCoupon();
       origins.afterSale();
       quoteOrigin.afterSale(null);
+      orderOrigin.afterSale(null);
       pauseRef.current.onSaleDone(null);
       flashPaidScreen(change);
       setOfflineTicket(entry);
     },
+    // H32: la reserva del pedido venció o el carrito ya no la cubre.
+    onError: (msg) => orderOrigin.onSaleError(msg),
   });
 
   // Packs (H41): saldo restante por crédito descontando las líneas que ya lo cubren.
@@ -1355,7 +1409,9 @@ function PosPageInner() {
         ? "El cobro de un turno no se pausa: salí y cobralo desde la agenda cuando vuelva."
         : origins.reservationId
           ? "El retiro de una reserva no se pausa: la reserva sigue guardada."
-          : editingCharge
+          : orderOrigin.active
+            ? "Un pedido no se pausa: salí sin cobrar y vuelve a la lista de pedidos."
+            : editingCharge
             ? "Estás editando un cobro en espera: actualizalo o salí sin cambios."
             : null;
   const pauser = usePosPause({
@@ -1423,6 +1479,58 @@ function PosPageInner() {
     openCheckout: () => startCheckoutRef.current(),
   });
   pauseRef.current = pauser;
+  // H32: el pedido se carga y se limpia igual que una venta pausada.
+  applyCartRef.current = (c) => {
+    useCartStore.setState({ lines: c.lines, discountTotal: c.discountTotal });
+    setCustomer(c.customer);
+    setOfferedWarrantyId(c.offeredWarrantyId);
+    usePricingContext.getState().setList(c.pricing.listId);
+    usePricingContext.getState().setTerm(c.pricing.termId);
+    pricing.clearCoupon();
+    if (c.couponCode) {
+      pricing.setCouponInput(c.couponCode);
+      setAutoCoupon(c.couponCode);
+    }
+  };
+  resetSaleRef.current = () => {
+    setCheckoutOpen(false);
+    clear();
+    setCustomer(null);
+    setOfferedWarrantyId("");
+    pricing.clearCoupon();
+    setAutoCoupon(null);
+    resetPricingContext();
+  };
+  // Motivo por el que el carrito no se guarda como pedido (tiene su propio origen).
+  const orderBlockedReason =
+    origins.tableOrderId || origins.deliveryOrderId
+      ? "Las mesas y el delivery se cobran desde su pantalla."
+      : origins.appointmentId
+        ? "El cobro de un turno no se guarda como pedido."
+        : origins.reservationId
+          ? "El retiro de una reserva ya tiene su reserva."
+          : quoteOrigin.active
+            ? "Estás cobrando un presupuesto."
+            : orderOrigin.active
+              ? "Ya estás cobrando un pedido."
+              : editingCharge
+                ? "Estás editando un cobro en espera."
+                : null;
+  const posStoreForOrders = register?.store_id ?? null;
+  const { data: openOrders } = useSaleOrders(
+    posStoreForOrders,
+    true,
+    ordersFeature === true && Boolean(posStoreForOrders) && !offline.isOffline,
+  );
+  const { data: allSellers } = useProfessionals();
+  const orderSellers = useProfessionalsForPosStore(allSellers);
+  function takeOrder(o: { id: string }) {
+    if (useCartStore.getState().lines.length > 0) {
+      toast({ title: "Pausá o limpiá la venta en curso para cobrar un pedido", variant: "info" });
+      return;
+    }
+    router.push(`/pos?order=${o.id}` as Route);
+  }
   useEffect(() => {
     if (!autoCoupon || pricing.couponInput.trim() !== autoCoupon) return;
     setAutoCoupon(null);
@@ -1517,6 +1625,14 @@ function PosPageInner() {
           pauseBlocked={pauseBlockedReason}
           onPause={() => void pauser.pause()}
           onClear={() => pauser.requestClear()}
+          // H32 (ADR-129): el vendedor deja el carrito como pedido para la caja.
+          onOrder={
+            preset === "caja_rapida" || ordersFeature === undefined
+              ? undefined
+              : () => orderGate.run(() => setOrderOpen(true))
+          }
+          orderLocked={orderGate.locked}
+          orderBlocked={orderBlockedReason ?? (offline.isOffline ? "Sin conexión no se guardan pedidos." : null)}
           compact={preset === "caja_rapida"}
         />
       }
@@ -1570,6 +1686,23 @@ function PosPageInner() {
         onResume={(x) => void pauser.resume(x)}
         onOpenAll={() => setPausedOpen(true)}
       />
+      {/* H32 (ADR-129): pedidos de salón esperando caja, a un toque de cobrarlos. */}
+      {ordersFeature === true && hasShift && (
+        <OrdersBar
+          list={(openOrders ?? []).filter((o) => o.id !== orderOrigin.order?.id)}
+          currentUserId={currentUserId}
+          onTake={takeOrder}
+        />
+      )}
+      {orderOrigin.order && (
+        <ModeBanner
+          icon={<ClipboardList size={18} />}
+          title={`Cobrando el pedido N° ${orderOrigin.order.number}`}
+          text={`${orderOrigin.order.seller_name ? `Vendedor: ${orderOrigin.order.seller_name}. ` : ""}${DELIVERY_TYPE_LABEL[orderOrigin.order.delivery_type]}. ${orderOrigin.order.reservation_active ? reservationLabel(orderOrigin.order) : orderOrigin.order.reservation_id ? "La reserva venció: se cobra si hay stock" : "Sin reserva de stock"}. Al cobrar, pasa a expedición.`}
+          exitLabel="Salir sin cobrar"
+          onExit={orderOrigin.exit}
+        />
+      )}
       {pauser.resumed && (
         <ModeBanner
           tone="info"
@@ -1846,6 +1979,33 @@ function PosPageInner() {
 
       {discountGate.modal}
       {quoteGate.modal}
+      {orderGate.modal}
+      {orderOpen && (
+        <OrderFromCartModal
+          open={orderOpen}
+          onOpenChange={setOrderOpen}
+          storeId={register?.store_id ?? null}
+          stores={branchCtx.all.filter((b) => !b.deleted_at).map((b) => ({ id: b.id, name: b.short_name || b.name }))}
+          cart={() =>
+            buildPausedCart({
+              lines: useCartStore.getState().lines,
+              discountTotal: useCartStore.getState().discountTotal,
+              couponCode: pricing.appliedCoupon?.code ?? (pricing.couponInput.trim() || null),
+              customer,
+              offeredWarrantyId,
+              pricing: { listId: usePricingContext.getState().listId, termId: usePricingContext.getState().termId },
+              notes: null,
+            })
+          }
+          lines={lines}
+          total={total}
+          itemCount={itemCount}
+          customer={customer}
+          sellers={(orderSellers ?? []).map((p) => ({ id: p.id, name: p.name, user_id: p.user_id }))}
+          currentUserId={currentUserId}
+          onSaved={() => resetSaleRef.current()}
+        />
+      )}
       {quoteOpen && (
         <QuoteFromCartModal
           open={quoteOpen}
@@ -1997,7 +2157,7 @@ function PosPageInner() {
             onPause: (snap, live) => void pauser.pause(snap, live),
             onClear: (snap) => pauser.requestClear(snap),
           }}
-          restore={pauser.checkoutRestore}
+          restore={pauser.checkoutRestore ?? orderOrigin.checkoutRestore}
           pauseRef={sheetPauseRef}
           clearRef={sheetClearRef}
           park={{

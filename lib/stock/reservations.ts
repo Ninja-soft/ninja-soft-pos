@@ -40,7 +40,8 @@ export interface StockReservation {
   number: number;
   store_id: string;
   origin_store_id: string | null;
-  channel: ReservationChannel;
+  /** 'pedido': la creó un pedido de salón (H32, ADR-129); no se elige a mano. */
+  channel: ReservationChannel | "pedido";
   customer_id: string | null;
   customer_name: string;
   customer_phone: string | null;

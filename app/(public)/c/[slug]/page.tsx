@@ -23,6 +23,8 @@ type Catalog = {
     price: number;
     image_url: string | null;
     category: string | null;
+    /** ADR-129: stock − reservado vigente; null = no controla stock. Sin la migración, no viene. */
+    available?: number | null;
   }[];
 };
 
@@ -122,6 +124,11 @@ export default async function PublicCatalogPage({
                   >
                     {formatCurrency(p.price)}
                   </div>
+                  {p.available != null && Number(p.available) <= 0 && (
+                    <span className="mt-1.5 inline-flex rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-500">
+                      Sin stock
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Bot, Gift, Puzzle, Settings2, Sparkles, Store, TriangleAlert } from "lucide-react";
+import { Bot, FileCheck2, Gift, Puzzle, Settings2, Sparkles, Store, TriangleAlert } from "lucide-react";
 import { AiConfigCard } from "@/components/internal/AiConfigCard";
+import { ArcaPlatformCard } from "@/components/internal/ArcaPlatformCard";
+import { ArcaPadronCard } from "@/components/internal/ArcaPadronCard";
 import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -114,6 +116,7 @@ function AddonCardSkeleton() {
 }
 
 export default function InternalAddonsPage() {
+  const [arcaOpen, setArcaOpen] = useState(false);
   const { data: addons = [], isLoading, isError, refetch } = useAddonCatalog();
   const [configKey, setConfigKey] = useState<string | null>(null);
   const config = configKey ? CONFIGURABLE[configKey] : null;
@@ -191,6 +194,54 @@ export default function InternalAddonsPage() {
           </Link>
         </div>
       </section>
+
+      {/* Servicios que NinjaSoft brinda a todos los negocios con su propia
+          configuración (no se contratan): hoy, el certificado de ARCA para el
+          padrón de CUITs (ADR-133). También está en Plataforma › ARCA. */}
+      <section className="mt-10">
+        <SectionHeader
+          title="Servicios de la plataforma"
+          icon={Settings2}
+          description="Los usan todos los negocios sin contratarlos. Se configuran una sola vez desde acá."
+        />
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card className="flex flex-col gap-3 p-5">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted">
+                <FileCheck2 size={18} aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-foreground">Certificado y padrón de ARCA</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  El certificado de NinjaSoft con el que todos los negocios consultan CUITs en ARCA: datos del cliente,
+                  condición frente al IVA y qué factura emitirle. Muestra cuándo vence.
+                </p>
+              </div>
+            </div>
+            <div className="mt-auto flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setArcaOpen(true)}>
+                <Settings2 size={14} aria-hidden /> Configurar
+              </Button>
+              <Link href="/internal/arca" className="inline-flex h-8 items-center px-2 text-sm text-ninja-flameSoft hover:underline">
+                Ir a ARCA
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </section>
+
+      <Modal
+        open={arcaOpen}
+        onOpenChange={setArcaOpen}
+        title="Certificado y padrón de ARCA"
+        description="Cargá el certificado de NinjaSoft y activá el padrón para que todos los negocios verifiquen CUITs."
+        className="sm:max-w-3xl"
+      >
+        <div className="space-y-6">
+          <ArcaPlatformCard />
+          <ArcaPadronCard />
+        </div>
+      </Modal>
 
       <Modal
         open={config !== null}

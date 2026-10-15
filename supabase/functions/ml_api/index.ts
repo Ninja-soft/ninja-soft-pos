@@ -21,6 +21,16 @@
 //   labels {account_id, shipment_ids[], format}    etiquetas ME2 (PDF o ZPL, de a 50)
 //   sync_account {account_id}                      órdenes recientes ya
 //   refresh_order {account_id, ml_order_id}        relee una orden y la ingresa
+//
+// Gestor (H141 · ADR-132):
+//   quick_suggest {title, gtin}                    dominio sugerido + producto de
+//                                                  catálogo de ML por GTIN
+//   listing_fees {category_id, price}              comisión de ML por tipo
+//   publish {..., listing_types[]}                 publica en varios tipos con el
+//                                                  precio de cada tipo calculado
+//                                                  en el servidor (reglas)
+//   visits {account_id, item_ids[]}                visitas de 30 días (de a 1 por
+//                                                  GET, hasta 50)
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { readJsonLimited } from "../_shared/requestGuard.ts";
@@ -55,9 +65,19 @@ import { syntheticOrderNotification } from "../_shared/mercadolibre/notification
 import type { MlCategoryAttribute, MlDomainSuggestion, MlItem, MlItemSearch, MlOrderSearch } from "../_shared/mercadolibre/types.ts";
 import { ML_SITE } from "../_shared/mercadolibre/config.ts";
 import { accountClient, adminClient, cors, json, mlConfig, rpcOf } from "../_shared/mercadolibre/runtime.ts";
+import { isValidGtin, memoryAttrs } from "../_shared/mercadolibre/quick.ts";
+import {
+  catalogMatch,
+  feesByType,
+  inputForListing,
+  pickListingTypes,
+  type ListingPriceRow,
+  type MlListingPrice,
+  type MlProductSearch,
+} from "../_shared/mercadolibre/listing.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MANAGE = new Set(["validate", "publish", "import_items", "sync_account", "refresh_order"]);
+const MANAGE = new Set(["validate", "publish", "import_items", "sync_account", "refresh_order", "visits"]);
 const CATEGORY_RE = /^[A-Z]{3}\d{1,12}$/;
 
 /**
@@ -256,30 +276,127 @@ Deno.serve(async (req: Request) => {
         if (!UUID_RE.test(productId)) return json({ error: "invalid_product" }, 400);
         const { data: prod } = await admin.from("products").select("id").eq("id", productId).eq("tenant_id", tenantId).maybeSingle();
         if (!prod) return json({ error: "product_not_found" }, 404);
-        const created: Array<{ ml_item_id: string; permalink: string | null }> = [];
-        for (const it of bodies) {
-          const item = await client.post<MlItem>("/items", it.body);
-          if (input.description && input.description.trim()) {
-            await client.post(`/items/${item.id}/description`, { plain_text: input.description.trim().slice(0, 50_000) }).catch(() => undefined);
+        // Varios tipos (ADR-132): un ítem por tipo con el precio que calcula el
+        // servidor con las reglas, sobre el input ya saneado y validado; sin
+        // listing_types, los cuerpos validados tal cual (ADR-104).
+        let plans: Array<{ listing: string; bodies: ItemBody[]; input: PublishInput }> = [{ listing: input.listingTypeId, bodies, input }];
+        const skipped: Array<{ listing_type_id: string; reason: string }> = [];
+        if (Array.isArray(b.listing_types) && b.listing_types.length > 0) {
+          const prices = (await rpc("ml_listing_prices_for", { p_account: account.id, p_product: productId })) as ListingPriceRow[];
+          plans = [];
+          for (const t of pickListingTypes(b.listing_types, input.listingTypeId)) {
+            const inp = inputForListing(input, t, prices ?? []);
+            if (inp) plans.push({ listing: t, input: inp, bodies: buildItemBodies(inp, attrs) });
+            else skipped.push({ listing_type_id: t, reason: "no_price_or_skipped" });
           }
-          // Vínculos: UP = uno por ítem (variante); clásico = uno por variación.
-          let links: Array<{ variant_id: string | null; ml_variation_id: string | null }>;
-          if (it.variantKey || !(input.variants ?? []).length) {
-            links = [{ variant_id: it.variantKey, ml_variation_id: null }];
-          } else {
-            const vars = item.variations ?? [];
-            links = (input.variants ?? []).map((v, i) => ({ variant_id: v.key, ml_variation_id: vars[i] ? String(vars[i]!.id) : null }));
+          if (plans.length === 0) {
+            return json({ ok: false, errors: ["Ningún tipo de publicación tiene precio para este producto."], skipped, ...meta });
           }
-          await rpc("ml_publish_register", {
-            p_account: account.id,
-            p_user: user.id,
-            p_item: itemPayload(item),
-            p_product: productId,
-            p_links: links,
-          });
-          created.push({ ml_item_id: item.id, permalink: item.permalink ?? null });
         }
-        return json({ ok: true, items: created, ...meta });
+
+        const created: Array<{ ml_item_id: string; permalink: string | null; listing_type_id: string }> = [];
+        const failed: Array<{ listing_type_id: string; errors: string[] }> = [];
+        for (const plan of plans) {
+          try {
+            for (const it of plan.bodies) {
+              const item = await client.post<MlItem>("/items", it.body);
+              if (plan.input.description && plan.input.description.trim()) {
+                await client
+                  .post(`/items/${item.id}/description`, { plain_text: plan.input.description.trim().slice(0, 50_000) })
+                  .catch(() => undefined);
+              }
+              // Vínculos: UP = uno por ítem (variante); clásico = uno por variación.
+              let links: Array<{ variant_id: string | null; ml_variation_id: string | null }>;
+              if (it.variantKey || !(plan.input.variants ?? []).length) {
+                links = [{ variant_id: it.variantKey, ml_variation_id: null }];
+              } else {
+                const vars = item.variations ?? [];
+                links = (plan.input.variants ?? []).map((v, i) => ({ variant_id: v.key, ml_variation_id: vars[i] ? String(vars[i]!.id) : null }));
+              }
+              await rpc("ml_publish_register", {
+                p_account: account.id,
+                p_user: user.id,
+                p_item: itemPayload(item),
+                p_product: productId,
+                p_links: links,
+              });
+              created.push({ ml_item_id: item.id, permalink: item.permalink ?? null, listing_type_id: plan.listing });
+            }
+          } catch (e) {
+            if (e instanceof MlApiError && !e.retryable) {
+              const c = validationCauses(e.body, e.causes.length ? e.causes : [e.message]);
+              failed.push({ listing_type_id: plan.listing, errors: (c.errors.length ? c.errors : [e.message]).slice(0, 10) });
+            } else throw e;
+          }
+        }
+        if (created.length > 0) {
+          // Memoria de la categoría para la próxima publicación rápida.
+          await rpc("ml_category_memory_touch", {
+            p_account: account.id,
+            p_category: input.categoryId,
+            p_name: String(b.category_name ?? ""),
+            p_attrs: memoryAttrs(input.attributes ?? {}),
+          }).catch(() => undefined);
+        }
+        if (created.length === 0) {
+          return json({ ok: false, errors: failed.flatMap((f) => f.errors).slice(0, 30), failed, skipped, ...meta });
+        }
+        return json({ ok: true, items: created, failed, skipped, ...meta });
+      }
+      case "quick_suggest": {
+        const title = String(b.title ?? "").trim().slice(0, 120);
+        const gtin = String(b.gtin ?? "").trim();
+        const [raw, catalog] = await Promise.all([
+          title.length >= 3
+            ? client.get<MlDomainSuggestion[]>(`/sites/${ML_SITE}/domain_discovery/search`, { q: title, limit: 8 })
+            : Promise.resolve([] as MlDomainSuggestion[]),
+          isValidGtin(gtin)
+            ? client
+                .get<MlProductSearch>("/products/search", { status: "active", site_id: ML_SITE, product_identifier: gtin })
+                .then((r) => catalogMatch(r, gtin))
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        let list = filterCategorySuggestions(raw, 4);
+        // Producto de catálogo con dominio: su nombre ubica mejor la categoría.
+        if (catalog?.name && catalog.domain_id && !list.some((s) => s.domain_id === catalog.domain_id)) {
+          const byName = await client
+            .get<MlDomainSuggestion[]>(`/sites/${ML_SITE}/domain_discovery/search`, { q: catalog.name.slice(0, 120), limit: 4 })
+            .catch(() => [] as MlDomainSuggestion[]);
+          list = filterCategorySuggestions([...byName.filter((s) => s.domain_id === catalog.domain_id), ...list], 4);
+        }
+        return json({ suggestions: list, catalog });
+      }
+      case "listing_fees": {
+        const cat = String(b.category_id ?? "");
+        const price = Number(b.price);
+        if (!CATEGORY_RE.test(cat) || !(price > 0)) return json({ error: "invalid_input" }, 400);
+        const rows = await client.get<MlListingPrice[]>(`/sites/${ML_SITE}/listing_prices`, { price: Math.round(price * 100) / 100, category_id: cat });
+        return json({ fees: feesByType(rows) });
+      }
+      case "visits": {
+        const ids = (Array.isArray(b.item_ids) ? b.item_ids : []).map(String).filter((s) => /^[A-Z]{3}\d{4,16}$/.test(s)).slice(0, 50);
+        if (ids.length === 0) return json({ error: "no_items" }, 400);
+        const to = new Date();
+        const from = new Date(to.getTime() - 30 * 86400_000);
+        const day = (d: Date) => d.toISOString().slice(0, 10);
+        const out: Array<{ ml_item_id: string; visits: number }> = [];
+        // /items/visits acepta un solo id por llamada.
+        for (const id of ids) {
+          try {
+            const r = await client.get<Array<{ item_id: string; total_visits: number }>>("/items/visits", {
+              ids: id,
+              date_from: day(from),
+              date_to: day(to),
+            });
+            const v = (r ?? []).find((x) => x.item_id === id);
+            out.push({ ml_item_id: id, visits: Math.max(0, Math.floor(Number(v?.total_visits ?? 0))) });
+          } catch (e) {
+            if (e instanceof MlApiError && e.code === "rate_limited") break;
+          }
+        }
+        await rpc("ml_items_visits_save", { p_account: account.id, p: out });
+        return json({ ok: true, count: out.length });
       }
       case "import_items": {
         // Hasta 500 publicaciones por corrida (scan); multiget de a 20.

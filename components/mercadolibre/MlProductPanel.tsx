@@ -10,6 +10,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { itemStatusLabel, itemStatusTone } from "@/lib/mercadolibre/labels";
 import { useMlAccounts, useMlChannelPreview } from "@/modules/mercadolibre/hooks";
 import { MlPublishModal } from "./MlPublishModal";
+import { MlProductListingPrices } from "./gestor/MlProductListingPrices";
 
 // Ficha del producto > Más > Mercado Libre (ADR-104): publicaciones vinculadas
 // a este producto en la primera cuenta activa, precio del canal y stock
@@ -65,6 +66,9 @@ export function MlProductPanel({ productId, canManage }: { productId: string; ca
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">Este producto todavía no tiene publicación vinculada.</p>
+      )}
+      {pv && first && (pv.listing_prices ?? []).length > 0 && (
+        <MlProductListingPrices accountId={first.id} productId={productId} preview={pv} canManage={canManage} />
       )}
       <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
         <Upload size={15} /> Publicar en Mercado Libre

@@ -252,6 +252,9 @@ export interface InviteCode {
   discount_months: number | null;
   billing_cycle: "monthly" | "yearly" | null;
   notes: string | null;
+  /** ADR-154: Asistente IA bonificado al canjear (meses; null = para siempre). */
+  ai_included?: boolean;
+  ai_months?: number | null;
 }
 
 export interface InviteCodeInput {
@@ -267,6 +270,8 @@ export interface InviteCodeInput {
   discount_months?: number | null;
   billing_cycle?: "monthly" | "yearly" | null;
   notes?: string | null;
+  ai_included?: boolean;
+  ai_months?: number | null;
 }
 
 export interface GrantAccessInput {

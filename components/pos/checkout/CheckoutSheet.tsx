@@ -225,6 +225,12 @@ export interface CheckoutSheetProps {
   prepaid?: { amount: number; label: string } | null;
   /** Pausar la venta (y Limpiar) desde la hoja (ADR-106). */
   pause?: SheetPauseOptions | null;
+  /**
+   * Pestaña "Ítems": las líneas de la venta para corregir cantidad, precio o
+   * quitar, y el comentario por renglón que sale en el comprobante. Va antes
+   * del cliente; el total (`base`) llega ya recalculado.
+   */
+  itemsSlot?: React.ReactNode;
   /** Comprobante de la venta y "Cambiar tipo" (ADR-133). Lo provee CheckoutSheetConnected. */
   fiscalSlot?: React.ReactNode;
   /** Entrega de la venta (ADR-146): bloque plegable debajo del cliente. */
@@ -300,6 +306,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     taxPreview = null,
     prepaid = null,
     pause = null,
+    itemsSlot = null,
     fiscalSlot = null,
     deliverySlot = null,
     shippingFee = 0,
@@ -1776,6 +1783,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-6 md:pt-6">
           <div className="pr-10">{totalBlock}</div>
           {breakdown}
+          {itemsSlot}
           {fiscalSlot}
           {deliverySlot}
           {paidList}
@@ -1795,6 +1803,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           <section className="px-4 pb-4 pt-3 md:slim-scrollbar md:overflow-y-auto md:px-6 md:pt-6">
             <div className="pr-10 md:pr-0">{totalBlock}</div>
             {breakdown}
+          {itemsSlot}
           {fiscalSlot}
           {deliverySlot}
             {showEditor && active && (
@@ -1924,6 +1933,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             </button>
             <div className="pr-10 md:pr-8">{totalBlock}</div>
             {breakdown}
+          {itemsSlot}
           {fiscalSlot}
           {deliverySlot}
             {paidList}

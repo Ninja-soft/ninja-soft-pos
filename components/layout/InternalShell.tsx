@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
+import { fetchMyMembership } from "@/lib/tenant/myMembership";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
@@ -54,7 +55,6 @@ const ProfileEditModal = dynamic(
 );
 import { PinQuickAccess } from "@/components/security/PinQuickAccess";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
-import { onlyActiveTenant } from "@/lib/tenant/scope";
 import {
   Dropdown,
   DropdownContent,
@@ -118,20 +118,16 @@ export function InternalShell({
       // Cuenta (users) con fallback a la foto/nombre de membresía (POS).
       const [acc, mem] = await Promise.all([
         supabase.from("users").select("full_name, avatar_url").eq("id", user.id).maybeSingle(),
-        onlyActiveTenant(
-          supabase
-            .from("tenant_users")
-            .select("display_name, avatar")
-            .eq("user_id", user.id)
-            .eq("status", "active"),
+        // Membresía del negocio ACTIVO (con dos membresías no vale cualquiera).
+        fetchMyMembership<{ display_name: string | null; avatar: string | null }>(
+          supabase,
           user,
-        )
-          .limit(1)
-          .maybeSingle(),
+          "display_name, avatar",
+        ),
       ]);
       return {
-        full_name: acc.data?.full_name ?? mem.data?.display_name ?? null,
-        avatar_url: acc.data?.avatar_url ?? mem.data?.avatar ?? null,
+        full_name: acc.data?.full_name ?? mem?.display_name ?? null,
+        avatar_url: acc.data?.avatar_url ?? mem?.avatar ?? null,
       };
     },
   });
@@ -196,15 +192,23 @@ export function InternalShell({
               title={email}
               className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
+              {/* Mientras carga el perfil, sólo el spinner: nada de email partido. */}
               <Avatar name={name} avatar={me?.avatar_url} size={28} loading={meLoading} />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="line-clamp-2 break-words text-sm font-medium leading-tight text-foreground">
-                  {name === email ? name : capitalizeName(name)}
+              {!meLoading && (
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span
+                    className={cn(
+                      "text-sm font-medium leading-tight text-foreground",
+                      name === email ? "truncate" : "line-clamp-2 break-words",
+                    )}
+                  >
+                    {name === email ? name : capitalizeName(name)}
+                  </span>
+                  <span className="truncate text-[11px] font-medium leading-tight text-ninja-flameSoft">
+                    {level ? LEVEL_LABELS[level] ?? level : "Staff"}
+                  </span>
                 </span>
-                <span className="truncate text-[11px] font-medium leading-tight text-ninja-flameSoft">
-                  {level ? LEVEL_LABELS[level] ?? level : "Staff"}
-                </span>
-              </span>
+              )}
             </button>
           </DropdownTrigger>
           <DropdownContent align="start" side="top" className="w-[232px]">

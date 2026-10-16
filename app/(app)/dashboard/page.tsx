@@ -237,7 +237,7 @@ export default async function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Link href="/onboarding" className={buttonVariants()}>
+                <Link href="/signup" className={buttonVariants()}>
                   Crear mi negocio
                 </Link>
               </CardContent>

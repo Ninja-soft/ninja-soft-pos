@@ -123,7 +123,7 @@ export default async function DashboardTeamPage() {
             title="Todavía no tenés un negocio"
             description="Creá uno para administrar tu equipo, tu suscripción y la configuración."
             action={
-              <Link href="/onboarding" className={buttonVariants({ size: "sm" })}>
+              <Link href="/signup" className={buttonVariants({ size: "sm" })}>
                 Crear mi negocio
               </Link>
             }

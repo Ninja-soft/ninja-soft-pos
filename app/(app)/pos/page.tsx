@@ -206,6 +206,11 @@ const CheckoutDeliveryBlock = dynamic(
   () => import("@/components/pos/checkout/CheckoutDeliveryBlock").then((m) => m.CheckoutDeliveryBlock),
   { ssr: false },
 );
+// Pestaña "Ítems" de la hoja de cobro (cantidad, precio y comentario por renglón).
+const CheckoutItemsBlock = dynamic(
+  () => import("@/components/pos/checkout/CheckoutItemsBlock").then((m) => m.CheckoutItemsBlock),
+  { ssr: false },
+);
 const RemitoIssueModal = dynamic(() => import("@/components/remitos/RemitoIssueModal").then((m) => m.RemitoIssueModal), { ssr: false });
 const RemitoDetailModal = dynamic(() => import("@/components/remitos/RemitoDetailModal").then((m) => m.RemitoDetailModal), { ssr: false });
 const PosShortcutsHelp = dynamic(() => loadShortcutsHelp().then((m) => m.PosShortcutsHelp), { ssr: false });
@@ -914,6 +919,20 @@ function PosPageInner() {
     }
     return map;
   }, [allProducts, topProducts]);
+  // Foto de cada línea para la pestaña "Ítems" de la hoja de cobro (lo que ya
+  // está cargado en el POS; sin foto, ícono).
+  const productImages = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of [...(allProducts ?? []), ...(topProducts ?? []), ...(quickKeyProducts ?? [])]) {
+      const url = (p as { image_url?: string | null }).image_url;
+      if (url) map.set(p.id, url);
+    }
+    return map;
+  }, [allProducts, topProducts, quickKeyProducts]);
+  const imageForLine = useCallback(
+    (l: CartLine) => (l.productId ? productImages.get(l.productId) ?? null : null),
+    [productImages],
+  );
   const fLines = useMemo(
     () =>
       fulfillEnabled
@@ -2383,6 +2402,20 @@ function PosPageInner() {
             },
             onClear: () => setCustomer(null),
           }}
+          itemsSlot={
+            <CheckoutItemsBlock
+              open={checkoutOpen}
+              lines={lines}
+              imageFor={imageForLine}
+              promoByLine={pricing.promoByLine}
+              onQty={setQuantity}
+              onRemove={removeLine}
+              onEditPrice={openPriceEdit}
+              onNote={(lineId, note) => setLineService(lineId, { lineNote: note })}
+              isServiceLine={servicesOn ? isServiceLine : undefined}
+              onEditService={servicesOn ? setServiceLineId : undefined}
+            />
+          }
           deliverySlot={
             fulfillEnabled && fLines.length > 0 && posStoreId ? (
               <CheckoutDeliveryBlock

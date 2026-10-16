@@ -38,6 +38,6 @@ describe("homePath", () => {
     expect(homePath({ isInternal: true, hasTenant: false })).toBe("/internal/tenants");
   });
   it("usuario sin negocio termina el alta", () => {
-    expect(homePath({ isInternal: false, hasTenant: false })).toBe("/onboarding");
+    expect(homePath({ isInternal: false, hasTenant: false })).toBe("/signup");
   });
 });

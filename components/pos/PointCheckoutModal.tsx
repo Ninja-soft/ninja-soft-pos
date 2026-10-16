@@ -402,6 +402,12 @@ export function PointCheckoutModal({
                 ? "Esa terminal no está en tu cuenta. Elegí otra o revisá la conexión."
                 : msg === "payment_method_disabled_in_store"
                   ? `${brand} está apagado en esta sucursal o caja (Configuración → Medios de pago).`
+                  : msg === "device_switched_to_pdv"
+                    ? "El lector estaba en modo normal y ya lo pasamos a modo PDV. Apagalo y prendelo (Mercado Pago lo pide para tomar el modo) y tocá Reintentar."
+                  : msg === "device_not_pdv"
+                    ? "El lector está en modo normal y tiene que estar en modo PDV para recibir cobros del POS. Pedile al dueño o encargado que lo cambie (o desde la app de Mercado Pago: Point › Configuración › Modo de uso › PDV) y reinicialo."
+                  : msg === "device_not_found"
+                    ? "Ese lector no aparece en la cuenta de Mercado Pago conectada. Revisá que esté vinculado a la misma cuenta (app de Mercado Pago › Point)."
                   : msg.startsWith("terminal_")
                     ? "Esa terminal no está disponible para esta sucursal. Revisala en Configuración → Terminales."
                 : !noPdv && preset !== "reader"

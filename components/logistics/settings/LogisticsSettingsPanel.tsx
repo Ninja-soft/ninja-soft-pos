@@ -19,6 +19,7 @@ import { useToast } from "@/components/ui/Toast";
 import { SettingRow, SettingsCard } from "@/components/settings/Settings";
 import { RemitoSettingsCard } from "@/components/remitos/RemitoSettingsCard";
 import { OriginsCard } from "@/components/logistics/settings/OriginsCard";
+import { TrackingSettingsCard } from "@/components/logistics/settings/TrackingSettingsCard";
 import { selectCls } from "@/components/stock/transfers/shared";
 import {
   DEFAULT_LOGISTICS_SETTINGS,
@@ -36,7 +37,7 @@ import {
 import { useCan, useLogisticsMutations, useLogisticsSettings } from "@/modules/logistics/api";
 import { useFeature } from "@/modules/saas/gating";
 
-type Tab = "remitos" | "entrega" | "origenes" | "flota";
+type Tab = "remitos" | "entrega" | "origenes" | "seguimiento" | "flota";
 
 const COPY_NAMES = ["Original", "Duplicado", "Triplicado"];
 
@@ -163,6 +164,7 @@ export function LogisticsSettingsPanel() {
           { value: "remitos", label: "Remitos" },
           { value: "entrega", label: "Entrega en la calle" },
           { value: "origenes", label: "Orígenes" },
+          { value: "seguimiento", label: "Seguimiento" },
           { value: "flota", label: "Flota y equipo" },
         ]}
       />
@@ -302,6 +304,13 @@ export function LogisticsSettingsPanel() {
           <OriginsCard />
         ) : (
           <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">Los orígenes del reparto llegan con el reparto propio (plan Pro o superior).</p>
+        ))}
+
+      {tab === "seguimiento" &&
+        (reparto ? (
+          <TrackingSettingsCard canEdit={canEdit} />
+        ) : (
+          <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">El seguimiento del camión llega con el reparto propio (plan Pro o superior).</p>
         ))}
 
       {tab === "flota" && (

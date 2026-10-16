@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { DeliverSheet, type DeliverResult } from "@/components/reparto/DeliverSheet";
+import { TrackingBanner } from "@/components/reparto/TrackingBanner";
 import { FailSheet, type FailResult } from "@/components/reparto/FailSheet";
 import { cn } from "@/lib/utils/cn";
 import { remitoNumberLabel } from "@/lib/remitos/logic";
@@ -45,6 +46,7 @@ import {
 } from "@/lib/logistics/logic";
 import { applyPending, pendingLabel, routeMediaPath, type QueuedAction, type QueuedMedia } from "@/lib/logistics/offline";
 import { currentPosition, currentTenantId, deviceId, newId, useActionQueue, useDriverRoute, useMyRoutes } from "@/modules/logistics/reparto";
+import { useRouteTracking } from "@/modules/logistics/tracking";
 import type { RouteDetail, RouteStop } from "@/modules/logistics/api";
 import { createClient } from "@/lib/supabase/client";
 
@@ -528,6 +530,12 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
 export function RepartoApp({ name }: { name: string | null }) {
   const q = useActionQueue();
   const [routeId, setRouteId] = useState<string | null>(null);
+  // ADR-164: seguimiento de la hoja en curso (también si salió sin señal).
+  const mine = useMyRoutes();
+  const activeId =
+    mine.data?.data.find((r) => r.status === "en_curso")?.id ?? q.items.find((a) => a.kind === "start" && !a.failed)?.routeId ?? null;
+  const closing = q.items.some((a) => a.kind === "close" && a.routeId === activeId && !a.failed);
+  const tracking = useRouteTracking(activeId, Boolean(activeId) && !closing);
   return (
     <div className="mx-auto min-h-dvh w-full max-w-xl bg-background">
       <header className="sticky top-0 z-10 bg-background">
@@ -538,6 +546,7 @@ export function RepartoApp({ name }: { name: string | null }) {
           <span className="truncate text-sm text-muted-foreground">{name}</span>
         </div>
         <StatusBar q={q} />
+        <TrackingBanner t={tracking} />
       </header>
       <FailedActions q={q} />
       {routeId ? <RouteScreen routeId={routeId} q={q} onBack={() => setRouteId(null)} /> : <MyRoutesScreen onOpen={setRouteId} />}

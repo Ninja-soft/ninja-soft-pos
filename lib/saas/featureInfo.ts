@@ -131,7 +131,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   reparto_propio: {
-    desc: "Reparto propio: cargá tus camiones y motos con fotos, capacidad y vencimientos (seguro, VTV, SENASA), armá hojas de ruta por camión con las paradas ordenadas por cercanía, imprimí la hoja y la planilla de carga, y emití los remitos con copias y modelo. El repartidor entra con su propio rol (no ve ventas, caja ni clientes) a una app en el celular que funciona sin señal: sale, marca llegué, entregado con firma en pantalla, foto y foto del remito firmado, o no se pudo entregar con el motivo, y todo queda con la ubicación del momento.",
+    desc: "Reparto propio: cargá tus camiones y motos con fotos, capacidad y vencimientos (seguro, VTV, SENASA), armá hojas de ruta por camión con las paradas ordenadas por cercanía, imprimí la hoja y la planilla de carga, y emití los remitos con copias y modelo. El repartidor entra con su propio rol (no ve ventas, caja ni clientes) a una app en el celular que funciona sin señal: sale, marca llegué, entregado con firma en pantalla, foto y foto del remito firmado, o no se pudo entregar con el motivo, y todo queda con la ubicación del momento. Planificá el reparto del día entre varios camiones por zona y capacidad en segundos, y seguí cada camión en el mapa en vivo con la llegada estimada a cada parada, las entregas hechas con su firma y su foto, y un aviso si se desvía de la ruta.",
     impact: "Desactivado, no hay flota, hojas de ruta ni app del repartidor: los envíos propios se entregan a mano desde Expedición (el servidor lo rechaza).",
     minPlan: "Pro",
     requires: ["pedidos_despacho"],

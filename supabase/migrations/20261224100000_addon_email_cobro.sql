@@ -453,9 +453,17 @@ begin
   select coalesce(new.monthly_price_ars, pa.monthly_price_ars, 0), coalesce(pa.label, new.addon_key)
     into v_price, v_label
     from (select 1) x left join plan_addons pa on pa.key = new.addon_key;
-  select platform_period_date(s.current_period_start) into v_start from subscriptions s where s.tenant_id = new.tenant_id;
-  perform platform_addon_proration_charge(new.tenant_id, new.addon_key, v_label, v_price,
-                                          'addon:' || new.id::text || ':' || coalesce(v_start::text, 'none'));
+  -- Un error del prorrateo nunca impide activar el complemento (como ADR-131):
+  -- queda en la auditoría y la conciliación lo levanta.
+  begin
+    select platform_period_date(s.current_period_start) into v_start from subscriptions s where s.tenant_id = new.tenant_id;
+    perform platform_addon_proration_charge(new.tenant_id, new.addon_key, v_label, v_price,
+                                            'addon:' || new.id::text || ':' || coalesce(v_start::text, 'none'));
+  exception when others then
+    insert into audit_logs (tenant_id, actor_user_id, entity_type, entity_id, action, after_data)
+    values (new.tenant_id, null, 'subscription_addons', new.id, 'platform_proration_failed',
+            jsonb_build_object('error', sqlerrm, 'sqlstate', sqlstate, 'addon', new.addon_key));
+  end;
   return null;
 end;
 $$;
@@ -549,10 +557,15 @@ begin
          cancel_at_period_end = false,
          current_period_start = excluded.current_period_start,
          current_period_end = excluded.current_period_end,
-         source = case when subscription_addons.source = 'granted'
+         -- Una bonificación vencida (granted + cancelled) no revive gratis: el
+         -- dueño que la reactiva la compra (si no, expire_granted_addons la
+         -- vuelve a cancelar al día siguiente y nunca la puede comprar).
+         source = case when subscription_addons.source = 'granted' and subscription_addons.status = 'active'
                        then 'granted' else 'purchased' end,
-         monthly_price_ars = case when subscription_addons.source = 'granted'
-                                  then null else excluded.monthly_price_ars end;
+         monthly_price_ars = case when subscription_addons.source = 'granted' and subscription_addons.status = 'active'
+                                  then null else excluded.monthly_price_ars end,
+         granted_until = case when subscription_addons.source = 'granted' and subscription_addons.status = 'active'
+                              then subscription_addons.granted_until else null end;
 
   insert into notifications (target_tenant_id, target_role, type, severity, title, body, requires_ack)
   values (v_tid, 'owner', 'plan', 'info',

@@ -242,7 +242,39 @@ Deno.serve(async (req: Request) => {
       await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
       // 409 típico: el lector no está en modo PDV o tiene un cobro abierto.
       // 400 missing_installments_cost / cuotas no habilitadas por MP.
-      return json({ error: "mp_error", detail }, 502);
+      // Diagnóstico: se consulta el modo real del lector. Si no está en PDV y
+      // quien cobra es dueño o encargado, se lo pasa a PDV en el acto (MP pide
+      // reiniciar el lector para que tome el modo). Todo queda auditado con el
+      // detalle de MP (antes se perdía).
+      let mode: string | null = null;
+      let switched = false;
+      try {
+        const lr = await fetch(`${MP_API}/terminals/v1/list?limit=50`, { headers: mpHeaders(cred.token) });
+        if (lr.ok) mode = mapTerminals(await lr.json()).find((d) => d.id === deviceId)?.operating_mode ?? "NOT_FOUND";
+      } catch {
+        mode = null;
+      }
+      if (mode && mode !== "PDV" && mode !== "NOT_FOUND" && canManage) {
+        const sr = await fetch(`${MP_API}/terminals/v1/setup`, {
+          method: "PATCH",
+          headers: mpHeaders(cred.token),
+          body: JSON.stringify({ terminals: [{ id: deviceId, operating_mode: "PDV" }] }),
+        }).catch(() => null);
+        switched = !!sr?.ok;
+      }
+      await admin.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: user.id,
+        entity_type: "mp_payment_intents",
+        entity_id: intent.id,
+        action: "mp_point_create_failed",
+        after_data: { device_id: deviceId, http_status: r.status, mp_detail: detail, operating_mode: mode, switched_to_pdv: switched },
+      });
+      if (mode === "NOT_FOUND") return json({ error: "device_not_found", detail }, 409);
+      if (mode && mode !== "PDV") {
+        return json({ error: switched ? "device_switched_to_pdv" : "device_not_pdv", operating_mode: mode, detail }, 409);
+      }
+      return json({ error: "mp_error", http_status: r.status, detail }, 502);
     }
     const order = (await r.json()) as { id?: string };
     if (!order.id) {

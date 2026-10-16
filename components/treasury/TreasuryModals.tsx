@@ -7,7 +7,7 @@
 // cartera y acciones sobre un cheque (depositar, marcar debitado, rechazar).
 
 import { useEffect, useState } from "react";
-import { BookOpenCheck, Link2, Paperclip } from "lucide-react";
+import { BookOpenCheck, Landmark, Link2, Paperclip } from "lucide-react";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,15 @@ import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { isValidCuit } from "@/lib/purchases/suppliers";
 import { actionLabel, type ChequeStatus } from "@/lib/treasury/cheques";
-import { WALLET_PROVIDERS, canLinkTransfers, isSystemKind, treasuryErrorMessage } from "@/lib/treasury/accounts";
+import {
+  ACCOUNT_CURRENCIES,
+  SETTLEMENT_PROVIDERS,
+  WALLET_PROVIDERS,
+  canLinkTransfers,
+  isSystemKind,
+  providerLabel,
+  treasuryErrorMessage,
+} from "@/lib/treasury/accounts";
 import { useStores } from "@/modules/stock/hooks";
 import { useTransferAccounts } from "@/modules/payments/transfer";
 import { useAccAccounts, useAccSettings, useAccountingAccess } from "@/modules/accounting/hooks";
@@ -89,12 +97,14 @@ export function AccountFormModal({
     opening_balance: "",
     opening_date: today(),
     notes: "",
+    currency: "ARS",
   });
 
   useEffect(() => {
     if (!open) return;
     const k = account?.kind;
     setF({
+      currency: account?.currency ?? "ARS",
       kind: k === "cash" || k === "wallet" ? k : "bank",
       provider_key: account?.provider_key ?? "mercadopago",
       name: account?.name ?? "",
@@ -136,7 +146,7 @@ export function AccountFormModal({
           account_number: f.kind === "bank" ? f.account_number : null,
           cbu: withBankData ? cbu : null,
           alias: withBankData ? f.alias.trim() : null,
-          currency: account?.currency ?? "ARS",
+          currency: openingLocked ? (account?.currency ?? "ARS") : f.currency,
           opening_balance: parseNum(f.opening_balance),
           opening_date: f.opening_date,
           is_active: account?.is_active ?? true,
@@ -255,7 +265,21 @@ export function AccountFormModal({
                 ))}
               </select>
             </FormField>
-            <FormField label="Saldo inicial">
+            <FormField label="Moneda">
+              <select
+                className={cn(selectCls, "h-10")}
+                value={f.currency}
+                disabled={openingLocked}
+                onChange={(e) => setF((p) => ({ ...p, currency: e.target.value }))}
+              >
+                {ACCOUNT_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code} className="bg-popover text-popover-foreground">
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label={f.currency === "ARS" ? "Saldo inicial" : `Saldo inicial (${f.currency})`}>
               <input
                 inputMode="decimal"
                 className={cn(inputCls, "text-right")}
@@ -279,7 +303,9 @@ export function AccountFormModal({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground sm:col-span-2">
-                Con la contabilidad activada, el saldo inicial arma su asiento de apertura en esa fecha.
+                Con la contabilidad activada, el saldo inicial arma su asiento de apertura en esa fecha
+                {f.currency !== "ARS" ? ", pasado a pesos con la cotización del día" : ""}. La moneda queda fija cuando la
+                cuenta tiene movimientos.
               </p>
             )}
             <FormField label="Notas (opcional)" className="sm:col-span-2">
@@ -288,6 +314,7 @@ export function AccountFormModal({
           </div>
           <ErrorList errors={errors} />
           {account && canLinkTransfers(account.kind) && <TransferLinks account={account} position={position} />}
+          {account && canLinkTransfers(account.kind) && <SettlementLinks account={account} />}
           {account && <LedgerLink account={account} position={position} />}
         </div>
       )}
@@ -361,6 +388,67 @@ function TransferLinks({ account, position }: { account: TreasuryAccount; positi
             );
           })}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// Procesadores que acreditan acá (H151): cada liquidación conciliada suma el
+// neto en esta cuenta con la fecha de acreditación, y el asiento va a su cuenta
+// contable. La billetera ya recibe lo de su propio procesador.
+function SettlementLinks({ account }: { account: TreasuryAccount }) {
+  const { toast } = useToast();
+  const m = useTreasuryMutations();
+  const [sel, setSel] = useState<string[]>(account.settlement_providers);
+  useEffect(() => setSel(account.settlement_providers), [account.settlement_providers]);
+  const own = account.kind === "wallet" ? account.provider_key : null;
+  const options = SETTLEMENT_PROVIDERS.filter((p) => p.key !== own);
+  const dirty = [...sel].sort().join(",") !== [...account.settlement_providers].sort().join(",");
+
+  async function save() {
+    try {
+      const n = await m.setSettlementProviders.mutateAsync({ accountId: account.id, providers: sel });
+      toast({
+        title: "Listo",
+        description: n > 0 ? `Entraron ${n} movimientos de liquidaciones ya conciliadas.` : "Las próximas liquidaciones entran solas acá.",
+        variant: "success",
+      });
+    } catch (e) {
+      toast({ title: "No se pudo guardar", description: treasuryErrorMessage(e), variant: "error" });
+    }
+  }
+
+  if (account.currency !== "ARS") return null;
+  return (
+    <div className="space-y-2 rounded-md bg-muted/40 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Landmark size={14} /> Liquidaciones que se acreditan acá
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {own
+          ? `Lo que liquida ${providerLabel(own)} ya entra acá. Sumá otros procesadores si también te depositan en esta billetera.`
+          : "Tildá los procesadores que te depositan en esta cuenta (por ejemplo Payway o Fiserv). Cada liquidación conciliada suma el neto acá con su fecha de acreditación."}
+      </p>
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+        {options.map((p) => (
+          <label key={p.key} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={sel.includes(p.key)}
+              onCheckedChange={(v) =>
+                setSel((s) => (v === true ? [...new Set([...s, p.key])] : s.filter((x) => x !== p.key)))
+              }
+              aria-label={p.label}
+            />
+            {p.label}
+          </label>
+        ))}
+      </div>
+      {dirty && (
+        <div className="flex justify-end">
+          <Button size="sm" loading={m.setSettlementProviders.isPending} onClick={() => void save()}>
+            Guardar procesadores
+          </Button>
+        </div>
       )}
     </div>
   );

@@ -10,7 +10,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { SearchField } from "@/components/ui/SearchField";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { formatCurrency } from "@/lib/utils/format";
-import { ENTRY_KIND_LABEL, EVENT_LABEL, SOURCE_LABEL, sourceLabel } from "@/lib/accounting/sources";
+import { ENTRY_KIND_LABEL, SOURCE_LABEL, eventLabel, sourceLabel } from "@/lib/accounting/sources";
 import { AccountSelect, AccountingFrame, RangeFields, currentMonthRange, fmtDate, selectCls } from "@/components/accounting/shared";
 import { EntryDetailModal, ManualEntryModal } from "@/components/accounting/EntryModals";
 import { useAccAccounts, useAccEntries } from "@/modules/accounting/hooks";
@@ -164,7 +164,7 @@ function EntriesList() {
                 </td>
                 <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
                   {sourceLabel(e.source_type)}
-                  {e.source_event && e.source_type ? ` · ${EVENT_LABEL[e.source_event] ?? e.source_event}` : ""}
+                  {e.source_event && e.source_type ? ` · ${eventLabel(e.source_event)}` : ""}
                 </td>
                 <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatCurrency(e.total)}</td>
               </tr>

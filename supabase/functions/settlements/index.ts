@@ -42,7 +42,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { mpSettlementLine, type SettlementLineInput } from "../_shared/processorData.ts";
-import { type MatchLine, type PosCandidate, matchChanged, matchSettlement } from "../_shared/settlementMatch.ts";
+import {
+  type MatchLine,
+  type PosCandidate,
+  fileCandidateAllowed,
+  fileCandidateRule,
+  matchChanged,
+  matchSettlement,
+} from "../_shared/settlementMatch.ts";
 import { type DisputeSyncResult, disputesEnabled, scanRecentPayments, syncDisputes } from "../_shared/disputesSync.ts";
 
 const cors = {
@@ -69,6 +76,10 @@ const INTENT_PROVIDERS: Record<string, string[]> = {
   getnet: ["getnet", "getnet_point"],
   fiserv: ["fiserv_point"],
   gocuotas: ["gocuotas"],
+  // ADR-162 (T21): cobros por intent de Ualá Bis, MODO y Directo.
+  ualabis: ["ualabis"],
+  modo: ["modo"],
+  directo: ["directo"],
 };
 
 function safeEqual(a: string, b: string): boolean {
@@ -398,21 +409,23 @@ async function loadCandidates(admin: Admin, tenantId: string, provider: string, 
     }
   }
 
-  // 3) Adquirentes de tarjeta (archivo): cobros con tarjeta del período cuyo
-  //    cupón no diga otro adquirente.
-  if (provider !== "mercadopago" && provider !== "gocuotas") {
+  // 3) Por archivo: tarjetas con débito y crédito cuyo cupón no diga otro
+  //    adquirente; Ualá Bis, MODO, Transferencias y Directo sólo con su propio
+  //    medio (T21, ADR-162: nunca contra un cobro con tarjeta por monto y día).
+  const rule = fileCandidateRule(provider);
+  if (rule) {
     const { data: pays } = await admin
       .from("payments")
       .select(PAY_COLS)
       .eq("tenant_id", tenantId)
-      .in("method", ["debit", "credit"])
+      .in("method", rule.methods)
       .gte("created_at", lo)
       .lte("created_at", hi)
       .limit(20000);
     for (const p of (pays ?? []) as PayRow[]) {
       if (seenPayments.has(p.id)) continue;
       const acq = vstr(p.card_voucher, "adquirente");
-      if (acq && acq !== provider && provider !== "otro") continue;
+      if (!fileCandidateAllowed(rule, p.method, acq)) continue;
       if (p.reference && UUID_RE.test(p.reference)) continue; // de un intent de otro proveedor
       seenPayments.add(p.id);
       out.push({

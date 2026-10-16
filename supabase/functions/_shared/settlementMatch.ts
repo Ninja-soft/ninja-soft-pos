@@ -310,3 +310,52 @@ export function matchChanged(prev: MatchLine, m: LineMatch): boolean {
     Math.abs(Number(prev.diff_amount ?? 0) - m.diff_amount) > 0.004
   );
 }
+
+// ── Candidatos por archivo (T21, ADR-162) ───────────────────────────────────
+
+export interface FileCandidateRule {
+  /** Medios del POS que puede liquidar el proveedor. */
+  methods: string[];
+  /** Adquirente que tiene que decir el cupón (null = cualquiera o ninguno). */
+  adquirente: string | null;
+  /** true: el cupón TIENE que decir ese adquirente (QR interoperable de MODO). */
+  strict: boolean;
+}
+
+/**
+ * Qué cobros del POS puede liquidar un proveedor que llega por archivo. Las
+ * tarjetas (Payway, Getnet, Fiserv, Nave, otro adquirente) cruzan sólo con
+ * débito y crédito cuyo cupón no diga otro adquirente; Ualá Bis, MODO,
+ * Transferencias y Directo cruzan sólo con su propio medio, así una línea de
+ * Ualá nunca se empareja con un cobro con tarjeta por monto y día.
+ * null = el proveedor no concilia por archivo contra cobros sueltos
+ * (Mercado Pago por API, GO Cuotas por intents).
+ */
+export function fileCandidateRule(provider: string): FileCandidateRule | null {
+  switch (provider) {
+    case "mercadopago":
+    case "gocuotas":
+      return null;
+    case "ualabis":
+      return { methods: ["ualabis"], adquirente: null, strict: false };
+    case "modo":
+      return { methods: ["qr", "debit", "credit"], adquirente: "modo", strict: true };
+    case "transfer":
+      return { methods: ["transfer"], adquirente: null, strict: false };
+    case "directo":
+      return { methods: ["directo"], adquirente: null, strict: false };
+    case "otro":
+      return { methods: ["debit", "credit"], adquirente: null, strict: false };
+    default:
+      return { methods: ["debit", "credit"], adquirente: provider, strict: false };
+  }
+}
+
+/** ¿Este cobro del POS puede ser de ese proveedor? (medio y adquirente del cupón). */
+export function fileCandidateAllowed(rule: FileCandidateRule, method: string, adquirente: string | null): boolean {
+  if (!rule.methods.includes(method)) return false;
+  const acq = adquirente ? adquirente.trim().toLowerCase() : null;
+  if (rule.strict) return acq === rule.adquirente;
+  if (rule.adquirente && acq && acq !== rule.adquirente) return false;
+  return true;
+}

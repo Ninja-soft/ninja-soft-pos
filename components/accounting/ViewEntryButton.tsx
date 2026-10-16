@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { formatCurrency } from "@/lib/utils/format";
-import { EVENT_LABEL } from "@/lib/accounting/sources";
+import { eventLabel } from "@/lib/accounting/sources";
 import { useAccountingAccess, useEntriesForSource } from "@/modules/accounting/hooks";
 import type { AccEntry } from "@/modules/accounting/api";
 import { EntryDetailModal } from "./EntryModals";
@@ -84,7 +84,7 @@ function EntryLookup({ sourceType, sourceId, onClose }: { sourceType: string; so
               >
                 <span className="min-w-0">
                   <span className="block font-medium">
-                    N° {e.official_number ?? e.number} · {EVENT_LABEL[e.source_event ?? ""] ?? "Asiento"}
+                    N° {e.official_number ?? e.number} · {eventLabel(e.source_event)}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {fmtDate(e.entry_date)} · {e.description}

@@ -6,7 +6,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Activity, BookOpenCheck, Lock, RefreshCcw, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Activity, BookOpenCheck, ListTree, Lock, RefreshCcw, SlidersHorizontal } from "lucide-react";
+import { fmtDate } from "@/components/purchases/shared";
+import { useAccountingAccess } from "@/modules/accounting/hooks";
+import { useSettlementSourceInfo } from "@/modules/accounting/settlementSource";
+import { NubceoAccounts, NubceoReconciliationSummary } from "./NubceoAccounts";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -18,14 +23,18 @@ import { NubceoLedger } from "@/components/integrations/nubceo/NubceoLedger";
 import { useNubceoAccess, useNubceoConfig } from "@/modules/integrations/nubceo/hooks";
 import { nubceoErrorMessage } from "@/modules/integrations/nubceo/api";
 
-type Tab = "envios" | "asientos";
+type Tab = "envios" | "asientos" | "cuentas";
 
 export function NubceoView() {
   const access = useNubceoAccess();
   const cfg = useNubceoConfig();
-  const [tab, setTab] = useState<Tab>("envios");
+  const params = useSearchParams();
+  const [tab, setTab] = useState<Tab>(params.get("vista") === "cuentas" ? "cuentas" : "envios");
   const config = cfg.data;
   const configured = Boolean(config?.settings);
+  const accounting = useAccountingAccess();
+  const { data: source } = useSettlementSourceInfo(accounting.enabled);
+  const canWrite = Boolean(config?.feature) && access.enabled !== false;
 
   return (
     <PageContainer>
@@ -54,20 +63,35 @@ export function NubceoView() {
         ) : (
           <>
             <Callout tone="neutral" title="Cómo se usa con la contabilidad">
-              Hoy NinjaPOS arma los asientos de cada liquidación con su propia conciliación. Los asientos que devuelve
-              NubCeo se ven acá como control: no entran al Diario, así nada se cuenta dos veces.
+              {source?.source === "nubceo" ? (
+                <>
+                  NubCeo arma los asientos de tus liquidaciones{source.from ? ` desde el ${fmtDate(source.from)}` : ""}:
+                  los que devuelve entran al Diario traducidos con las equivalencias de la pestaña Cuentas. La
+                  conciliación propia sigue tildando cobros y moviendo la plata en Tesorería, pero no arma asientos.
+                </>
+              ) : (
+                <>
+                  NinjaPOS arma los asientos de cada liquidación con su propia conciliación. Los asientos que devuelve
+                  NubCeo se ven acá como control: no entran al Diario, así nada se cuenta dos veces. Podés cambiarlo en
+                  Contabilidad, Mapeos, Procesadores.
+                </>
+              )}
             </Callout>
+            <NubceoReconciliationSummary canWrite={canWrite} />
             <Segmented
               value={tab}
               onChange={setTab}
               aria-label="Sección"
+              scrollOnMobile
               options={[
                 { value: "envios", label: "Envíos", icon: <Activity size={15} /> },
                 { value: "asientos", label: "Asientos que devolvió", icon: <BookOpenCheck size={15} /> },
+                { value: "cuentas", label: "Cuentas", icon: <ListTree size={15} /> },
               ]}
             />
-            {tab === "envios" && <NubceoMonitor config={config} canWrite={config.feature && access.enabled !== false} />}
-            {tab === "asientos" && <NubceoLedger config={config} canWrite={config.feature && access.enabled !== false} />}
+            {tab === "envios" && <NubceoMonitor config={config} canWrite={canWrite} />}
+            {tab === "asientos" && <NubceoLedger config={config} canWrite={canWrite} />}
+            {tab === "cuentas" && <NubceoAccounts canWrite={canWrite && accounting.enabled} />}
           </>
         )}
       </div>

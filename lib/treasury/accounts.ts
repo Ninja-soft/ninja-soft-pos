@@ -3,7 +3,9 @@
 // Cuentas de dinero unificadas (F23 · H150, ADR-158). Lógica PURA: tipos de
 // cuenta, procesadores, grupos de la pantalla Posición, origen de cada
 // movimiento (etiqueta, "Ver origen" y documento del asiento) y mensajes de
-// error de las RPC de Tesorería.
+// error de las RPC de Tesorería. F23 · H151 (ADR-162): procesadores que
+// acreditan en cada banco o billetera y los movimientos con origen nuevos
+// (liquidación, contracargo, retiro del cajón, cobro de cuenta corriente).
 
 import { purchaseErrorMessage } from "@/lib/purchases/orders";
 
@@ -28,6 +30,30 @@ export const POSITION_GROUPS: Array<{ kind: TreasuryKind; title: string; hint: s
     title: "A acreditar",
     hint: "Lo que cobraste con tarjeta, QR o billeteras y el procesador todavía no te depositó. Es un estimado de los últimos 180 días.",
   },
+];
+
+/**
+ * Procesadores que pueden acreditar en un banco o billetera (H151). La
+ * billetera ya recibe lo de su propio procesador; un banco elige los suyos
+ * (Payway, Fiserv, Getnet, Nave...).
+ */
+export const SETTLEMENT_PROVIDERS: Array<{ key: string; label: string }> = [
+  { key: "payway", label: "Payway" },
+  { key: "fiserv", label: "Fiserv / Clover" },
+  { key: "getnet", label: "Getnet" },
+  { key: "nave", label: "Nave" },
+  { key: "mercadopago", label: "Mercado Pago" },
+  { key: "ualabis", label: "Ualá Bis" },
+  { key: "modo", label: "MODO" },
+  { key: "directo", label: "Directo" },
+  { key: "gocuotas", label: "GO Cuotas" },
+];
+
+/** Monedas que se pueden elegir al crear una cuenta (queda fija cuando tiene movimientos). */
+export const ACCOUNT_CURRENCIES: Array<{ code: string; label: string }> = [
+  { code: "ARS", label: "Pesos (ARS)" },
+  { code: "USD", label: "Dólares (USD)" },
+  { code: "EUR", label: "Euros (EUR)" },
 ];
 
 /** Billeteras que se pueden elegir al crear una cuenta (provider_key). */
@@ -109,7 +135,16 @@ export interface MovementOriginLike {
   sale_id?: string | null;
 }
 
-export type OriginKind = "manual" | "venta" | "orden_pago" | "cheque" | "transferencia";
+export type OriginKind =
+  | "manual"
+  | "venta"
+  | "orden_pago"
+  | "cheque"
+  | "transferencia"
+  | "liquidacion"
+  | "contracargo"
+  | "caja_pos"
+  | "cuenta_corriente";
 
 export const ORIGIN_LABEL: Record<OriginKind, string> = {
   manual: "Carga manual",
@@ -117,10 +152,18 @@ export const ORIGIN_LABEL: Record<OriginKind, string> = {
   orden_pago: "Orden de pago",
   cheque: "Cheque",
   transferencia: "Entre cuentas",
+  liquidacion: "Liquidación",
+  contracargo: "Contracargo",
+  caja_pos: "Caja del POS",
+  cuenta_corriente: "Cuenta corriente",
 };
 
 export function movementOrigin(m: MovementOriginLike): OriginKind {
   if (m.type === "sale_collection" || m.type === "sale_collection_void") return "venta";
+  if (m.type === "settlement_credit" || m.type === "settlement_credit_void") return "liquidacion";
+  if (m.type === "processor_debit" || m.type === "processor_debit_void") return "contracargo";
+  if (m.type === "cash_drop" || m.type === "cash_fund") return "caja_pos";
+  if (m.type === "cc_collection" || m.type === "cc_collection_void") return "cuenta_corriente";
   if (m.type === "supplier_payment" || m.type === "supplier_payment_void" || m.reference_type === "supplier_payment") return "orden_pago";
   if (m.cheque_id || m.type.startsWith("cheque_")) return "cheque";
   if (m.type === "transfer_in" || m.type === "transfer_out") return "transferencia";
@@ -136,6 +179,13 @@ export function movementOriginHref(m: MovementOriginLike): string | null {
       return "/compras/facturas";
     case "cheque":
       return "/tesoreria/cheques";
+    case "liquidacion":
+    case "contracargo":
+      return "/tesoreria/conciliacion";
+    case "caja_pos":
+      return "/caja";
+    case "cuenta_corriente":
+      return "/clientes";
     default:
       return null;
   }
@@ -156,6 +206,18 @@ const TREASURY_ERRORS: Array<[RegExp, string]> = [
   [/feature_not_in_plan: contabilidad/, "Contabilidad no está incluida en tu plan."],
   [/feature_not_in_plan: tesoreria/, "Tesorería no está incluida en tu plan."],
   [/movement_not_manual/, "Este movimiento lo generó un documento: se corrige desde la venta, la orden de pago o el cheque."],
+  [/cash_destination_invalid/, "Elegí una caja fuerte o un banco en pesos, activo y con la fecha de apertura cumplida."],
+  [/cash_destination_not_allowed/, "El destino sólo se elige en ingresos y retiros manuales de la caja."],
+  [/invalid_providers/, "Revisá los procesadores elegidos."],
+  [/line_not_amount_diff/, "Sólo se acepta la diferencia de una línea vinculada con diferencia de monto."],
+  [/reason_required/, "Escribí el motivo (al menos 3 letras)."],
+  [/feature_not_in_plan: conciliacion_bancaria/, "La conciliación bancaria no está incluida en tu plan."],
+  [/amount_mismatch/, "El movimiento y el renglón del extracto tienen que tener el mismo importe."],
+  [/movement_already_linked/, "Ese movimiento ya está vinculado a otro renglón del extracto."],
+  [/line_already_matched/, "Ese renglón ya está vinculado. Desvinculalo primero."],
+  [/line_not_pending/, "Ese renglón ya no está pendiente."],
+  [/invalid_lines/, "El extracto tiene renglones sin fecha o sin importe válidos, o más de 5.000 renglones."],
+  [/import_not_found/, "No encontramos ese extracto."],
   [/close_zero_needs_confirmation/, "Confirmá el cierre con $0 contados y escribí el motivo."],
   [/Could not find the function|PGRST202|does not exist/i, "Falta actualizar la base para usar esta función. Probá en unos minutos."],
 ];

@@ -271,10 +271,19 @@ describe("checklist de activación por rubro (H71)", () => {
   const keys = (profile: string | null, features: Record<string, boolean> = all) =>
     buildActivationChecklist({ profile: getProfile(profile), features }).map((s) => s.key);
 
-  it("pasos base siempre, primera venta al final", () => {
-    const k = keys("kiosco");
-    expect(k).toEqual(expect.arrayContaining(["fiscal", "producto", "mp", "ticket", "caja", "equipo", "venta"]));
-    expect(k.at(-1)).toBe("venta");
+  it("pasos base en el orden de la puesta en marcha (ADR-154)", () => {
+    expect(keys("kiosco")).toEqual([
+      "marca",
+      "ticket",
+      "email",
+      "pagos",
+      "producto",
+      "caja",
+      "venta",
+      "equipo",
+      "arca",
+      "escuela",
+    ]);
   });
 
   it("gastronomía suma el salón; servicios la agenda; kiosco ninguno", () => {

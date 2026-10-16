@@ -9,6 +9,9 @@
 //   5. Encola los emails de alta (account_registered + trial_started) en
 //      system_emails usando las plantillas de system_email_templates. El envío
 //      real lo hace process_pending_emails (cron cada 5 min, por Resend/failover).
+// ADR-154: si el body no trae nombre, rubro o fiscales, usa el alta pendiente
+// que el registro guardó en user_metadata.signup (confirmación de email) y la
+// borra al terminar; la membresía del dueño nace con su nombre (display_name).
 // El frontend debe refrescar la sesión para que el JWT tome el nuevo tenant.
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
@@ -133,25 +136,42 @@ Deno.serve(async (req: Request) => {
     return json({ error: "invalid_json" }, 400);
   }
 
-  const name = (body.name ?? "").trim();
-  const industry = INDUSTRIES.includes(body.industry ?? "")
+  // Alta pendiente que el registro guardó en user_metadata.signup antes de la
+  // confirmación de email (modules/auth/pendingSignup.ts). Es respaldo: manda
+  // lo que llega en el body; si falta (rubro, nombre o fiscales), se usa lo que
+  // el dueño ya había cargado en vez de caer a "otro" (bug: el rubro elegido
+  // no se guardaba).
+  const pending = (user.user_metadata?.signup ?? {}) as Record<string, unknown>;
+  const pendingStr = (k: string) => (typeof pending[k] === "string" ? (pending[k] as string) : "");
+
+  const name = ((body.name ?? "").trim() || pendingStr("business_name").trim());
+  const rawIndustry = INDUSTRIES.includes(body.industry ?? "")
     ? body.industry!
-    : "otro";
+    : pendingStr("industry");
+  const industry = INDUSTRIES.includes(rawIndustry) ? rawIndustry : "otro";
   if (name.length < 2 || name.length > 120) {
     return json({ error: "invalid_name" }, 400);
   }
 
   // Datos fiscales (opcionales). Se persisten en tenant_branding tras crear el
   // tenant. Validamos acá para no escribir basura con service_role.
-  const cuitRaw = (body.cuit ?? "").replace(/\D/g, "");
+  const cuitRaw = (body.cuit ?? pendingStr("cuit")).replace(/\D/g, "");
   const cuit = cuitRaw.length === 11 ? cuitRaw : null;
   if (cuitRaw.length > 0 && cuit === null) {
     return json({ error: "invalid_cuit" }, 400);
   }
-  const legalName = (body.legal_name ?? "").trim().slice(0, 200) || null;
-  const ivaCondition = IVA_CONDITIONS.includes(body.iva_condition ?? "")
-    ? body.iva_condition!
-    : null;
+  const legalName = (body.legal_name ?? pendingStr("legal_name")).trim().slice(0, 200) || null;
+  const ivaRaw = body.iva_condition ?? pendingStr("iva_condition");
+  const ivaCondition = IVA_CONDITIONS.includes(ivaRaw) ? ivaRaw : null;
+
+  // Nombre del dueño para su membresía: así el menú muestra "Nombre Apellido"
+  // con un avatar de iniciales generado (no el email) desde el primer ingreso.
+  const ownerName =
+    (typeof user.user_metadata?.full_name === "string" &&
+      user.user_metadata.full_name.trim()) ||
+    (typeof user.user_metadata?.name === "string" &&
+      user.user_metadata.name.trim()) ||
+    "";
   const hasFiscal = cuit !== null || legalName !== null || ivaCondition !== null;
 
   const admin = createClient(url, serviceKey, {
@@ -208,6 +228,8 @@ Deno.serve(async (req: Request) => {
     role: "owner",
     status: "active",
     joined_at: new Date().toISOString(),
+    // Sin foto: el front genera el avatar con las iniciales de este nombre.
+    display_name: ownerName ? ownerName.slice(0, 80) : null,
   });
 
   // 3b. Sucursal + caja por defecto (docs/08 §8).
@@ -249,12 +271,16 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // 4. JWT: tenant activo.
+  // 4. JWT: tenant activo. El alta pendiente ya se usó: se borra para que no
+  //    se retome dos veces (el wizard la consulta al entrar sin negocio).
   await admin.auth.admin.updateUserById(user.id, {
     app_metadata: {
       ...(user.app_metadata ?? {}),
       current_tenant_id: tenant.id,
     },
+    ...(user.user_metadata?.signup
+      ? { user_metadata: { ...(user.user_metadata ?? {}), signup: null } }
+      : {}),
   });
 
   // 5. Auditoria.
@@ -269,18 +295,12 @@ Deno.serve(async (req: Request) => {
 
   // 6. Emails de alta (account_registered + trial_started). Best-effort: si
   // fallan, el alta igual responde OK. Los envía process_pending_emails (cron).
-  const ownerName =
-    (typeof user.user_metadata?.full_name === "string" &&
-      user.user_metadata.full_name.trim()) ||
-    (typeof user.user_metadata?.name === "string" &&
-      user.user_metadata.name.trim()) ||
-    (user.email ? user.email.split("@")[0] : "") ||
-    "";
+  const greetName = ownerName || (user.email ? user.email.split("@")[0] : "") || "";
   const recipient = (user.email ?? "").trim().toLowerCase();
   const venceLabel = new Date(trialEnds).toLocaleDateString("es-AR");
   await enqueueSystemEmail(admin, tenant.id, recipient, "account_registered", {
     negocio: name,
-    nombre: ownerName,
+    nombre: greetName,
   });
   await enqueueSystemEmail(admin, tenant.id, recipient, "trial_started", {
     negocio: name,

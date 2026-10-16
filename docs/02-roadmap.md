@@ -1547,8 +1547,8 @@ Objetivo: que todo lo que sale hacia un cliente o una sucursal sea **una entrega
   - [ ] *Criterio:* cobrar un envío a un cliente nuevo con dirección autocompletada en menos de 45 s en 390 px; el servidor rechaza envío sin cliente; 0 pedidos a Nominatim por tipeo.
 - [x] **H145 · L2: flota, hojas de ruta y app del repartidor.** (ADR-161: migración `20261230100000_logistica_l2_flota` sin aplicar, sin Edges) Vehículos con fotos (bucket privado `logistics-media`), repartidores, orígenes, hojas de ruta con paradas y orden por cercanía, eventos con geo, foto, firma y foto del remito firmado, motivos configurables, Configuración › Logística, capacidades `logistics.*`, rol de sistema **Repartidor** (venta y caja ya pedían `sales.create` y `cash.open` en `role_write_guard`; ahora además sin sucursales ni clientes por RLS), plantilla Expedicionista, remitos con copias y modelos (A4, medio A4, ticket 80 mm, preimpreso), hoja de ruta imprimible con planilla de carga, app `/reparto` con cola offline. Feature `reparto_propio` (Pro+). Quedan para después: remito de transferencia en el mismo sistema, punto de venta del remito configurable, override por sucursal de la configuración y el service worker para abrir `/reparto` sin señal (hoy sigue andando sin señal si ya estaba abierta).
   - [ ] *Criterio:* reparto real de 10 paradas en el piloto con evidencia en cada entrega; 3 entregas en modo avión se sincronizan sin duplicar; un Repartidor no puede vender ni ver clientes fuera de su hoja (test de RLS).
-- [ ] **H146 · L3: mapa, optimización, varios camiones y seguimiento.** Planificar reparto por localidad y capacidad entre camiones (ORS y heurística), seguimiento con envío en lote, mapa en vivo con polling, desvíos de ruta y detalle de cada entrega en el mapa.
-  - [ ] *Criterio:* 40 entregas en 3 camiones planificadas en menos de 10 s (ORS) o 2 s (heurística); posición con menos de 60 s de atraso; aviso de desvío a 600 m por 5 minutos.
+- [x] **H146 · L3: mapa, optimización, varios camiones y seguimiento.** (ADR-164: migración `20270102100000_logistica_l3_mapa` y Edge `routing` sin aplicar) Planificar reparto por localidad y capacidad entre camiones (heurística local por defecto; OpenRouteService opcional con `ORS_API_KEY`), `route_plan_confirm` crea todas las hojas con recorrido, km, duración y llegada por parada; seguimiento desde `/reparto` con `route_positions` en lote (idempotente, cola sin señal, batería y precisión, aviso al repartidor, Wake Lock), `route_positions_last`, mapa en vivo con polling cada 15 s, desvío de 600 m por 5 minutos (`route_alerts` y notificación), ETA, paradas salteadas, detalle de cada entrega en el mapa, Configuración › Logística › Seguimiento y retención con `pg_cron` (90 días). Mapa con Leaflet + tiles de OSM (como L1). Sin `reparto_optimizado`: todo con `reparto_propio`. Quedan para después: peso de productos para `capacity_kg`, ventanas horarias, arrastrar en el mapa, trazar por calles una hoja armada a mano y `logistics.track` como `server` en el catálogo.
+  - [ ] *Criterio:* 40 entregas en 3 camiones planificadas en menos de 10 s (ORS) o 2 s (heurística); posición con menos de 60 s de atraso; aviso de desvío a 600 m por 5 minutos. *Heurística: 40 en 3 camiones en milisegundos (test); desvío a 600 m por 5 minutos verificado en el dry-run. Falta la prueba en la calle con el piloto (atraso de la posición) y ORS con la clave cargada.*
 - [ ] **H147 · L4: COT automático.** Web service de ARBA (y CABA con `token`/`sign` de AGIP) al salir la hoja, reintentos, bloqueo configurable, TXT descargable y carga manual de respaldo.
   - [ ] *Criterio:* en el ambiente de prueba de ARBA, 5 remitos devuelven 5 COT impresos; un error de datos vuelve legible sin bloquear a los otros; reenviar no duplica.
 - [ ] **H148 · L5: expedición robusta.** Escaneo al armar, cargar y entregar; entrega parcial por producto; rotura a merma con foto; reprogramación con entrega hija; pedir stock a otra sucursal con transferencia enlazada; pestaña Con problemas.
@@ -1766,10 +1766,10 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
-| **F22** | 4/14 | 0 | 10 | 29% | 29% |
+| **F22** | 5/14 | 0 | 9 | 36% | 36% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 674/1204 | 309 | 221 | 56% | 69% |
+| **Total** | 675/1204 | 309 | 220 | 56% | 69% |
 <!-- roadmap-progress:end -->
 
 ---

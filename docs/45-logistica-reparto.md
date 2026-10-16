@@ -293,6 +293,7 @@ Una fila por ítem y etapa (`carga`, `entrega`): `qty_expected`, `qty_scanned`, 
 
 - `route_positions`: `route_id`, `recorded_at`, `lat`, `lng`, `accuracy_m`, `speed`, `heading`, `battery` (si el navegador la da). Índice `(route_id, recorded_at)`. Retención: 90 días con borrado por `pg_cron` (posiciones), los eventos se conservan.
 - `route_positions_last`: una fila por hoja en curso (upsert), para que el mapa en vivo lea una tabla chica.
+- **Hecho en L3 (ADR-164):** `route_positions` con id del teléfono (idempotente), `user_id`, batería y carga; `route_positions_last` con el estado del desvío; `route_alerts` para los desvíos; escritura sólo por `route_positions_push`; retención configurable (7 a 365 días, 90 por defecto) con `route_positions_purge` y `pg_cron`.
 - Sin PostGIS en L2. En L3 se instala PostGIS (gratis en Supabase) para zonas por polígono y distancia a la ruta planificada; si se decide no instalarlo, el cálculo se hace con haversine en SQL y punto en polígono en TS.
 
 ### 4.11 Remitos
@@ -648,6 +649,8 @@ Sin funciones nuevas grandes; deja la base sana.
 
 ### L3 · Mapa, optimización, varios camiones y seguimiento (H146)
 
+> **Hecho (ADR-164).** Diferencias con este plan: mapa con Leaflet + tiles de OSM (el de L1), no MapLibre; sin PostGIS (distancia plana local al recorrido, `_path_distance_m`); sin `reparto_optimizado`: la heurística reparte entre camiones dentro de `reparto_propio` y ORS es opcional (sólo con `ORS_API_KEY`); el desvío vive en `route_alerts` (no como evento de `delivery_events`) y la configuración del seguimiento en `route_tracking_settings` (no en `logistics_settings`) para no chocar con L5; sin zonas por polígono (siguen por localidad); los bultos salen de las cantidades de cada entrega porque los productos no tienen peso; ajuste a mano con subir, bajar y pasar a otro camión (sin arrastrar en el mapa).
+
 - PostGIS (o haversine) para zonas por polígono y desvíos; `route_plans`, `route_positions`, `route_positions_last`.
 - Edge `routing` (ORS Directions, Matrix y Optimization) con cupo por negocio y caída a la heurística local.
 - Pantalla **Planificar reparto**: agrupar por localidad, repartir entre camiones por capacidad, ajustar arrastrando.
@@ -687,7 +690,7 @@ Sin funciones nuevas grandes; deja la base sana.
 | Edge | Fase | Qué hace | Secrets |
 |---|---|---|---|
 | `geo` (nueva) | L1 | suggest, normalize, reverse con caché, rate limit e interruptores | `GEO_CONTACT_EMAIL`, `GEOREF_TOKEN` (opcional) |
-| `routing` (nueva) | L3 | directions, matrix, optimize con cupo y respaldo | `ORS_API_KEY`, `ROUTING_SELFHOST_URL` (L6) |
+| `routing` (nueva, ADR-164) | L3 | status, optimize (VROOM) y directions con cupo por negocio (`geo_usage`), turno global (`geo_providers` `ors`) y caída a la heurística local; verify_jwt = true | `ORS_API_KEY` (opcional), `ROUTING_SELFHOST_URL` (L6) |
 | `cot` (nueva) | L4 | armar TXT, enviar a ARBA, parsear, reintentar | ninguno global; credenciales por negocio en `logistics_secrets` |
 | `shipping` (existe) | L0 | crear envío desde una entrega con la dirección estructurada | los actuales |
 | `send_receipt_email` (existe) | L2 | remito con copias y foto firmada | los actuales |

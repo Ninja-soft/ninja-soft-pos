@@ -238,8 +238,9 @@ const OrderSettingsCard = dynamic(
   () => import("@/components/orders/OrderSettingsCard").then((m) => m.OrderSettingsCard),
   { loading },
 );
-const RemitoSettingsCard = dynamic(
-  () => import("@/components/remitos/RemitoSettingsCard").then((m) => m.RemitoSettingsCard),
+// ADR-161: Configuración › Logística (remitos, entrega en la calle, orígenes).
+const LogisticsSettingsPanel = dynamic(
+  () => import("@/components/logistics/settings/LogisticsSettingsPanel").then((m) => m.LogisticsSettingsPanel),
   { loading },
 );
 const AiImageSettingsCard = dynamic(
@@ -483,13 +484,10 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "presupuestos":
       return <QuoteSettingsCard />;
     case "pedidos":
-      return (
-        <div className="space-y-6">
-          <OrderSettingsCard />
-          {/* ADR-136: remitos y aviso de COT (con entregas_remitos). */}
-          <RemitoSettingsCard />
-        </div>
-      );
+      // Los remitos y su COT pasaron a Logística (ADR-161).
+      return <OrderSettingsCard />;
+    case "logistica":
+      return <LogisticsSettingsPanel />;
     case "imagenes-ia":
       return <AiImageSettingsCard />;
   }

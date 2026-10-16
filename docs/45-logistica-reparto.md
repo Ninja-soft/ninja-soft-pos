@@ -1,6 +1,6 @@
 # 45 · Logística y reparto: auditoría y plan de integración
 
-> **Estado:** L0 (H143) hecho en código, sin aplicar (2026-10-15, ver ADR-149 § L0); L1 a L6 propuestas. Salvo L0, nada de esto está construido todavía fuera de lo que la §2 marca como "existe". Decisión: [ADR-149](./17-decision-log.md). Hitos: F22 en [`02-roadmap.md`](./02-roadmap.md) (H143 a H149).
+> **Estado:** L0 (H143) hecho en código, sin aplicar (2026-10-15, ver ADR-149 § L0); L1 (H144, ADR-157) y L2 (H145, ADR-161) hechos en código, sin aplicar; L3 a L6 propuestas. Lo que no dice "hecho" no está construido todavía fuera de lo que la §2 marca como "existe". Decisión: [ADR-149](./17-decision-log.md). Hitos: F22 en [`02-roadmap.md`](./02-roadmap.md) (H143 a H149).
 >
 > **Para quién:** producto, backend, frontend, QA y el dueño (la §13 dice qué tiene que conseguir él).
 
@@ -634,6 +634,8 @@ Sin funciones nuevas grandes; deja la base sana.
 - **Criterio**: en un celular de 390 px, cobrar un envío a un cliente nuevo con dirección autocompletada en menos de 45 s; el servidor rechaza un envío sin cliente; 0 pedidos a Nominatim por tipeo (sólo inversa); tests de la Edge con fetch falso y de la caché.
 
 ### L2 · Flota, hojas de ruta y app del repartidor (H145)
+
+> **Hecho (ADR-161).** Diferencias con este plan: las entregas no suman estados (salir = `despachado`, no entregado = vuelve a `listo` con `delivery_attempts` y `last_failure_reason`); el Repartidor queda aislado cortando `user_allowed_store_ids()` y con una policy restrictiva en las tablas de clientes; `remito_config` y `order_config` se quedan en `pos_settings` (la pantalla las junta) y no hay override por sucursal todavía; sin `route_plans` ni `dispatch_item_checks` (L3 y L5); remito de transferencia y punto de venta configurable quedan pendientes; la app sigue andando sin señal si ya estaba abierta (el service worker con alcance `/reparto` queda para después).
 
 - `vehicles`, `vehicle_photos`, `driver_profiles`, `logistics_origins`, `delivery_routes`, `route_stops`, `route_stop_dispatches`, `delivery_events`, bucket `logistics-media`, `logistics_settings` y `logistics_store_settings` (migrando `order_config` y `remito_config`).
 - Capacidades `logistics.*`, rol de sistema **Repartidor** y plantilla Expedicionista; guardas en el layout; RPC de venta y caja con capacidad (prerequisito del rol).

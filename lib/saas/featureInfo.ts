@@ -694,6 +694,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Se gestiona como add-on: se contrata aparte y no se incluye marcándolo en el plan.",
     minPlan: "Add-on",
   },
+  // ADR-156: complemento (plan_addons 'email_ninjasoft'), no es feature de
+  // plan: no figura en la tabla features ni en la matriz del editor de planes.
+  email_ninjasoft: {
+    desc: "Email con dominio NinjaSoft: los comprobantes, presupuestos y avisos del negocio salen desde una casilla @soft.ninja con respuesta al email del negocio, sin configurar servidores ni claves. Se contrata por escalón (emails por mes) y se suma a la suscripción.",
+    impact: "Se gestiona como add-on: se contrata aparte desde Configuración › Email del negocio y no se incluye marcándolo en el plan.",
+    minPlan: "Add-on",
+  },
   notificaciones: {
     desc: "Notificaciones in-app: avisos dentro del sistema (cobros, vencimientos, novedades) para el equipo del negocio.",
     impact: "Desactivado, el negocio no recibe avisos internos dentro de la app.",

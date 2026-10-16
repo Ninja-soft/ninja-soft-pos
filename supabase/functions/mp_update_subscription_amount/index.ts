@@ -17,13 +17,23 @@
 //
 // Quién: staff (tenant_id en el body) o el DUEÑO del tenant (su current_tenant_id,
 // verificado owner activo). Idéntico modelo de auth que mp_subscription_checkout.
+//
+// ADR-156: el monto ya no es el total de HOY sino el del PRÓXIMO DÉBITO
+// (platform_mp_expected_amount: período que arranca en la fecha del cobro con
+// las bajas, pruebas, escalones y descuentos de ese día, más los ajustes
+// abiertos como el prorrateo de un complemento). Lo sincronizado queda en
+// subscriptions.mp_amount_synced. Modo cron (X-Cron-Secret, body
+// { mode: "cron" }, pg_cron platform-mp-amount-sync 08:30 ART): recorre
+// platform_mp_amount_targets() y corrige los montos que difieren. Deploy:
+// verify_jwt = true (el cron manda el anon key como Bearer).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { platformMpToken, syncPreapprovalAmount } from "../_shared/mpSubscriptionSync.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-ninja-scope",
+    "authorization, x-client-info, apikey, content-type, x-ninja-scope, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (b: unknown, s = 200) =>
@@ -39,6 +49,25 @@ Deno.serve(async (req: Request) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  // Modo cron: corrige todos los montos que difieren del esperado.
+  const cronSecret = req.headers.get("X-Cron-Secret") ?? "";
+  if (cronSecret) {
+    const cronAdmin = createClient(url, serviceKey, { auth: { persistSession: false } });
+    const { data: sec } = await cronAdmin.from("platform_secrets").select("secrets").eq("key", "internal_cron").maybeSingle();
+    const token = String(((sec?.secrets ?? {}) as { token?: string }).token ?? "");
+    if (!token || cronSecret !== token) return json({ error: "forbidden" }, 403);
+    const { data: targets, error: tErr } = await cronAdmin.rpc("platform_mp_amount_targets", { p_limit: 200 });
+    if (tErr) return json({ error: "targets_failed", detail: tErr.message }, 500);
+    const accessToken = await platformMpToken(cronAdmin);
+    if (!accessToken) return json({ ok: false, reason: "platform_not_configured" });
+    const results: { tenant_id: string; ok: boolean; reason?: string; amount?: number }[] = [];
+    for (const t of (targets ?? []) as { tenant_id: string }[]) {
+      const r = await syncPreapprovalAmount(cronAdmin, t.tenant_id, { actorId: null, via: "cron", accessToken });
+      results.push({ tenant_id: t.tenant_id, ok: r.ok, reason: r.reason, amount: r.amount });
+    }
+    return json({ ok: true, checked: results.length, synced: results.filter((r) => r.ok).length, results });
+  }
 
   const userClient = createClient(url, anonKey, {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
@@ -108,78 +137,17 @@ Deno.serve(async (req: Request) => {
     if (!mem || mem.role !== "owner") return json({ error: "forbidden" }, 403);
   }
 
-  // Suscripción + preapproval id.
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("id, mp_preapproval_id")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (!sub) return json({ error: "no_subscription" }, 400);
-
-  // Total canónico (plan + addons facturables).
-  const { data: billing } = await admin.rpc("subscription_billing_total", {
-    p_tenant: tenantId,
+  const r = await syncPreapprovalAmount(admin, tenantId, {
+    actorId: user.id,
+    via: isInternal ? "staff" : "owner",
+    force: true,
   });
-  const amount = Number((billing as { total?: number } | null)?.total);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return json({ error: "invalid_amount" }, 400);
+  if (r.ok) return json({ ok: true, amount: r.amount, preapproval_id: r.preapproval_id });
+  if (r.reason === "mp_error" || r.reason === "mp_unreachable") {
+    return json({ error: "mp_error", detail: r.detail ?? "" }, 502);
   }
-
-  const preId = (sub.mp_preapproval_id ?? "").trim();
-  if (!preId) {
-    // Sin suscripción MP creada todavía: nada que sincronizar.
-    return json({ ok: false, reason: "no_preapproval", amount });
-  }
-
-  const { data: plat } = await admin
-    .from("platform_secrets")
-    .select("secrets")
-    .eq("key", "mercadopago")
-    .maybeSingle();
-  const accessToken = (plat?.secrets as { access_token?: string } | null)
-    ?.access_token;
-  if (!accessToken) return json({ error: "platform_not_configured" }, 400);
-
-  // PUT del nuevo monto al preapproval (update en vivo, sin recrear).
-  const res = await fetch(`https://api.mercadopago.com/preapproval/${preId}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      auto_recurring: {
-        transaction_amount: Math.round(amount * 100) / 100,
-        currency_id: "ARS",
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const detail = await res.text();
-    await admin.from("audit_logs").insert({
-      tenant_id: tenantId,
-      actor_user_id: user.id,
-      entity_type: "subscriptions",
-      entity_id: sub.id,
-      action: "subscription_amount_sync_failed",
-      after_data: { preapproval_id: preId, amount, detail: detail.slice(0, 300) },
-    });
-    return json({ error: "mp_error", detail: detail.slice(0, 400) }, 502);
-  }
-
-  await admin.from("audit_logs").insert({
-    tenant_id: tenantId,
-    actor_user_id: user.id,
-    entity_type: "subscriptions",
-    entity_id: sub.id,
-    action: "subscription_amount_synced",
-    after_data: {
-      preapproval_id: preId,
-      amount,
-      via: isInternal ? "staff" : "owner",
-    },
-  });
-
-  return json({ ok: true, amount, preapproval_id: preId });
+  if (r.reason === "platform_not_configured") return json({ error: "platform_not_configured" }, 400);
+  // Sin débito automático (prueba sin autorizar, cuenta corriente, exento) o
+  // monto 0: nada que sincronizar; el panel lo explica con `reason`.
+  return json({ ok: false, reason: r.reason, amount: r.amount });
 });

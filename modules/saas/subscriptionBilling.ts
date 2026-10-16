@@ -20,6 +20,8 @@ export interface BillingBreakdown {
   plan_amount: number;
   addons_amount: number;
   addons_monthly: number;
+  /** Descuentos vigentes (ADR-115): el total ya los resta. */
+  discount_amount?: number;
   total: number;
 }
 

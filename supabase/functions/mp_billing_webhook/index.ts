@@ -47,10 +47,23 @@
 // ausente se descarta con 401 y queda en Salud de webhooks. Sin clave cargada
 // se mantiene el comportamiento anterior (se re-consulta el recurso en MP).
 // Cada notificación queda en webhook_events (withWebhookLog, ADR-070).
+//
+// ADR-156 (C2): la AUTORIZACIÓN del preapproval NO es un cobro. Antes se
+// acreditaba el monto del preapproval al autorizarse y después se volvía a
+// acreditar el primer authorized_payment (dos billing_records, dos pagos en la
+// cuenta corriente y el período corrido dos meses por un solo débito). Ahora
+// la autorización sólo guarda el preapproval y su estado
+// (subscriptions.mp_preapproval_status) y busca en MP los cobros ya
+// procesados de ese preapproval, que se acreditan con la MISMA clave que su
+// notificación (authpay:{id}): un pago nunca entra dos veces. Después de
+// acreditar un cobro se recalcula el monto del próximo débito (vuelve al
+// normal si este cobró un ajuste, H2).
 // =============================================================================
 import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { withWebhookLog } from "../_shared/webhookLog.ts";
 import { verifyMpSignature } from "../_shared/mpSignature.ts";
+import { authorizedPaymentKey } from "../_shared/billing/mpAmount.ts";
+import { syncPreapprovalAmount } from "../_shared/mpSubscriptionSync.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
 // preapproval.status -> subscriptions.status
@@ -253,8 +266,8 @@ Deno.serve(withWebhookLog("mercadopago_billing", "mp_billing_webhook", async (re
       // event_key ÚNICO por evento de cobro: el id del authorized_payment (o el
       // id del pago si vino). NUNCA el preapproval id pelado (estable entre
       // ciclos → colisión que mataría los cobros siguientes).
-      const eventId = String(ap.payment?.id ?? ap.id ?? dataId);
-      const eventKey = `authpay:${eventId}`;
+      const eventKey = authorizedPaymentKey(ap) ?? `authpay:${dataId}`;
+      const eventId = eventKey.slice("authpay:".length);
       const amount = Number(
         ap.transaction_amount ??
           amountFromPlan(sub.billing_cycle as string | null, sub.plans as PlanRel),
@@ -358,45 +371,112 @@ Deno.serve(withWebhookLog("mercadopago_billing", "mp_billing_webhook", async (re
     }
 
     if (newStatus === "active") {
-      // Autorización INICIAL del preapproval (alta / reactivación al pagar la
-      // primera cuota desde el checkout). Las RENOVACIONES ya no llegan por acá
-      // sino por authorized_payment, pero este evento sigue siendo el que activa
-      // la cuenta la primera vez. Acreditamos con el MISMO helper idempotente.
-      // event_key marcado como 'authorized' del preapproval: es estable para
-      // ESTE evento de autorización (MP no reemite "authorized" en cada ciclo),
-      // y distinto de los authpay:* de las renovaciones.
-      const eventKey = `preapproval_authorized:${pre.id ?? dataId}`;
-      const months = monthsFor(sub.billing_cycle as string | null);
-      const amount = Number(
-        pre.auto_recurring?.transaction_amount ??
-          amountFromPlan(sub.billing_cycle as string | null, sub.plans as PlanRel),
-      );
-      // Aseguramos el preapproval_id antes de acreditar (el match pudo ser por
-      // external_reference y la fila aún no tener el id guardado).
+      // Autorización del preapproval (alta, pase a MP, reactivación). NO es un
+      // cobro: guardamos el preapproval y su estado; la plata entra por
+      // subscription_authorized_payment (rama 2) o por la búsqueda de abajo.
+      const preId = pre.id ?? dataId;
+      const { data: prevRow } = await admin
+        .from("subscriptions")
+        .select("mp_preapproval_status")
+        .eq("id", sub.id)
+        .maybeSingle();
+      const firstAuthorization = (prevRow as { mp_preapproval_status?: string | null } | null)?.mp_preapproval_status !== "authorized";
       await admin
         .from("subscriptions")
-        .update({ mp_preapproval_id: pre.id ?? dataId })
+        .update({ mp_preapproval_id: preId, mp_preapproval_status: "authorized" })
         .eq("id", sub.id);
+      await admin.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: null,
+        entity_type: "subscriptions",
+        entity_id: sub.id,
+        action: "subscription_preapproval_authorized",
+        after_data: {
+          preapproval_id: preId,
+          amount: pre.auto_recurring?.transaction_amount ?? null,
+          prev_status: prevStatus,
+          first: firstAuthorization,
+        },
+      });
+      if (firstAuthorization) {
+        await admin.from("notifications").insert({
+          target_tenant_id: tenantId,
+          target_role: "owner",
+          type: "billing",
+          severity: "success",
+          title: "Autorizaste el débito automático",
+          body:
+            prevStatus === "trial"
+              ? "Listo. Mercado Pago te va a cobrar recién cuando termine tu prueba gratis. Te avisamos cuando se acredite."
+              : "Listo. Te avisamos apenas Mercado Pago acredite el cobro.",
+          requires_ack: false,
+        });
+      }
 
-      await creditApprovedPayment(admin, {
-        sub,
-        preapprovalId: pre.id ?? dataId,
-        eventKey,
-        topic: topic || "subscription_preapproval",
-        months,
-        amount,
-        receiptRef: pre.id ?? dataId,
-        mpStatus: pre.status ?? "authorized",
-        kind: "preapproval_authorized",
+      // Cobros ya procesados de este preapproval (p. ej. el primero, si MP lo
+      // procesó antes de avisar la autorización). Misma clave que la rama 2.
+      try {
+        const sr = await fetch(
+          `https://api.mercadopago.com/authorized_payments/search?preapproval_id=${encodeURIComponent(preId)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        if (sr.ok) {
+          const found = (await sr.json()) as { results?: AuthorizedPayment[] };
+          for (const ap of found.results ?? []) {
+            if (ap.status !== "processed") continue;
+            const eventKey = authorizedPaymentKey(ap);
+            if (!eventKey) continue;
+            const { data: fresh } = await admin
+              .from("subscriptions")
+              .select(
+                "id, tenant_id, status, current_period_end, billing_cycle, plans(name, monthly_price_ars, yearly_price_ars), tenants(name)",
+              )
+              .eq("id", sub.id)
+              .maybeSingle();
+            await creditApprovedPayment(admin, {
+              sub: fresh ?? sub,
+              preapprovalId: preId,
+              eventKey,
+              topic: "subscription_authorized_payment",
+              months: monthsFor(sub.billing_cycle as string | null),
+              amount: Number(ap.transaction_amount ?? 0),
+              receiptRef: eventKey.slice("authpay:".length),
+              mpStatus: ap.status,
+              kind: "authorized_payment",
+            });
+          }
+        }
+      } catch (e) {
+        console.error("[mp_billing_webhook] authorized_payments_search_failed", String(e).slice(0, 200));
+      }
+      return ok();
+    }
+
+    // ADR-156 (H5): 'pending' es un checkout creado y todavía sin autorizar.
+    // Antes pasaba la suscripción a 'trial' (un negocio activo o en mora que
+    // volvía a generar el checkout quedaba "en prueba" y salía de la mora).
+    // Ahora sólo se guarda el estado del preapproval.
+    if (pre.status === "pending") {
+      await admin
+        .from("subscriptions")
+        .update({ mp_preapproval_id: pre.id ?? dataId, mp_preapproval_status: "pending" })
+        .eq("id", sub.id);
+      await admin.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: null,
+        entity_type: "subscriptions",
+        entity_id: sub.id,
+        action: "subscription_webhook",
+        after_data: { preapproval_id: pre.id ?? dataId, mp_status: "pending", status: prevStatus, unchanged: true },
       });
       return ok();
     }
 
-    // paused/cancelled/pending → solo status (+ preapproval_id). El trigger SQL
+    // paused/cancelled → status (+ preapproval_id). El trigger SQL
     // setea past_due_since al pasar a past_due.
     await admin
       .from("subscriptions")
-      .update({ status: newStatus, mp_preapproval_id: pre.id ?? dataId })
+      .update({ status: newStatus, mp_preapproval_id: pre.id ?? dataId, mp_preapproval_status: pre.status ?? null })
       .eq("id", sub.id);
 
     await admin.from("audit_logs").insert({
@@ -701,6 +781,16 @@ async function creditApprovedPayment(
         reactivation: isReactivation,
       },
     });
+  }
+
+  // ADR-156 (H2): con el cobro acreditado, el monto del próximo débito vuelve
+  // a ser el del período (si este débito cobró un ajuste) o toma los cambios
+  // de precio que rigen desde el período nuevo. Best-effort: el cron diario
+  // lo reintenta.
+  try {
+    await syncPreapprovalAmount(admin, tenantId, { actorId: null, via: "webhook" });
+  } catch (e) {
+    console.error("[mp_billing_webhook] amount_resync_failed", String(e).slice(0, 200));
   }
 
   // 4) Avisos al dueño (in-app + email). Idempotentes a nivel evento (ya

@@ -18,7 +18,9 @@ import {
   ShieldCheck,
   ChevronDown,
   Gift,
+  Mail,
 } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchOwnerBillingSummary,
@@ -383,8 +385,15 @@ export function SubscriptionCard() {
       await syncAmountSilently();
       invalidate();
     },
-    onError: () =>
-      toast({ title: "No se pudo activar el complemento", variant: "error" }),
+    onError: (e: Error) =>
+      toast({
+        title: /subscription_inactive/.test(e.message)
+          ? "Tu suscripción no está activa: regularizala para sumar complementos"
+          : /subscription_ending/.test(e.message)
+            ? "Tu suscripción tiene la baja programada: reactivala para sumar complementos"
+            : "No se pudo activar el complemento",
+        variant: "error",
+      }),
   });
 
   const cancelAddon = useMutation({
@@ -495,6 +504,9 @@ export function SubscriptionCard() {
   }
 
   const closureRequested = Boolean(sub.closure_requested_at);
+  const emailAddon = sub.addons.find(
+    (a) => a.addon_key === "email_ninjasoft" && (a.status === "active" || a.cancel_at_period_end),
+  );
   const aiAddon = sub.addons.find((a) => AI_ADDON_KEYS.includes(a.addon_key));
   const aiActive =
     aiAddon && (aiAddon.status === "active" || aiAddon.cancel_at_period_end);
@@ -654,7 +666,11 @@ export function SubscriptionCard() {
                     </div>
                     <p className="text-muted-foreground">
                       {fmtMoney(billing.billing.plan_amount)} (plan) +{" "}
-                      {fmtMoney(billing.billing.addons_amount)} (complementos) ={" "}
+                      {fmtMoney(billing.billing.addons_amount)} (complementos)
+                      {(billing.billing.discount_amount ?? 0) > 0 && (
+                        <> − {fmtMoney(billing.billing.discount_amount ?? 0)} (descuento)</>
+                      )}{" "}
+                      ={" "}
                       <span className="font-semibold text-foreground">
                         {fmtMoney(billing.billing.total)}
                       </span>
@@ -846,6 +862,38 @@ export function SubscriptionCard() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Email de NinjaSoft (addon, ADR-156) ── */}
+      {emailAddon && (
+        <Card className="mt-3">
+          <CardContent className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Mail size={16} className="text-ninja-flameSoft" /> Email de NinjaSoft
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {emailAddon.cancel_at_period_end ? (
+                    <span className="text-warning">Se da de baja el {fmtDate(emailAddon.current_period_end)}</span>
+                  ) : emailAddon.source === "granted" ? (
+                    "Bonificado por NinjaSoft"
+                  ) : emailAddon.monthly_price_ars ? (
+                    `${fmtMoney(Number(emailAddon.monthly_price_ars))}/mes, incluido en tu cobro`
+                  ) : (
+                    "Incluido en tu cobro"
+                  )}
+                </div>
+              </div>
+              <Link
+                href={"/configuracion?seccion=email" as never}
+                className="text-xs font-semibold text-foreground hover:underline"
+              >
+                Ver uso y escalón
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Registro de pagos ── */}
       <Card className="mt-3">

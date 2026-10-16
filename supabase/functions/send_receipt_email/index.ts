@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 // @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
 import nodemailer from "npm:nodemailer@6.9.16";
 import { fetchTradeName } from "../_shared/businessName.ts";
+import { NinjaEmailError, sendViaNinja } from "../_shared/ninjaEmail.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -462,10 +463,14 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   // Proveedor del negocio: 'resend' (API key) o 'smtp' (default). Cada uno tiene
   // su propio requisito mínimo; sin eso, pedimos configurar el email.
+  // ADR-156: 'ninjasoft' = complemento de email de NinjaSoft (el cupo, la
+  // vigencia y el dominio se validan al enviar, en sendViaNinja).
   const provider = String(cfg?.provider ?? "smtp");
   const resendKey = String(cfg?.resend_api_key ?? "");
   const providerReady =
-    provider === "resend"
+    provider === "ninjasoft"
+      ? true
+      : provider === "resend"
       ? !!resendKey && !!cfg?.from_email
       : !!cfg?.host && !!cfg?.from_email;
   if (!providerReady)
@@ -535,7 +540,18 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (provider === "resend") {
+    if (provider === "ninjasoft") {
+      // Email de NinjaSoft: remitente @dominio de la plataforma, respuesta al
+      // email del negocio y cupo del mes (ADR-156).
+      await sendViaNinja(admin, sale.tenant_id, {
+        to,
+        subject,
+        html,
+        text: bodyTextRaw,
+        fromName: name,
+        attachments: [{ filename: pdfName, content: pdfBase64, contentType: "application/pdf" }],
+      });
+    } else if (provider === "resend") {
       // Resend: adjunta el PDF (content base64). Sin socket que cerrar.
       await sendViaResend(resendKey, name, cfg.from_email, {
         to,
@@ -600,6 +616,9 @@ Deno.serve(async (req: Request) => {
       } catch (_) {
         /* noop */
       }
+    }
+    if (e instanceof NinjaEmailError) {
+      return json({ error: e.reason, detail: e.message }, e.reason === "quota_exceeded" ? 429 : 409);
     }
     return json(
       { error: "send_failed", detail: e instanceof Error ? e.message : String(e) },

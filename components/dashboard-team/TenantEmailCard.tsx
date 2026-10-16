@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Check, ExternalLink, Eye, HelpCircle, Info, KeyRound, Mail, MousePointerClick, Server, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -17,9 +17,15 @@ import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks"
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
 import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
 import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
+import { Badge } from "@/components/ui/Badge";
+import { EMAIL_OFFER_QK, NinjaEmailPanel } from "@/components/dashboard-team/NinjaEmailPanel";
+import { fetchEmailAddonOffer } from "@/modules/saas/emailAddon";
+import { ninjaEmailErrorMessage } from "@/lib/billing/emailAddon";
+import { formatCurrency } from "@/lib/utils/format";
 
-// Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
-type EmailMethod = "smtp" | "resend";
+// Método de envío del negocio: por cuenta de correo (SMTP), por API (Resend)
+// o con el complemento de NinjaSoft (@soft.ninja, ADR-156).
+type EmailMethod = "smtp" | "resend" | "ninjasoft";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
@@ -60,6 +66,12 @@ function mapError(error: string, detail?: string): string {
       return "No se pudo guardar la configuración.";
     case "internal":
       return "Error interno del servidor de envío. Probá de nuevo.";
+    case "addon_inactive":
+    case "quota_exceeded":
+    case "subscription_inactive":
+    case "domain_not_verified":
+    case "email_addon_not_configured":
+      return ninjaEmailErrorMessage(error);
     default:
       if (detail && /timeout/i.test(detail)) {
         return "El servidor SMTP no respondió (timeout). Verificá host/puerto/SSL.";
@@ -226,6 +238,14 @@ export function TenantEmailCard() {
   // get_tenant_smtp: allowed:false → no es owner/manager; allowed:true →
   // owner (con configured true/false y los campos del SMTP en el mismo objeto).
   const { data: status, isLoading } = useTenantSmtpStatus();
+  // Oferta del email de NinjaSoft (precio, escalones, uso del mes).
+  const { data: offer } = useQuery({ queryKey: EMAIL_OFFER_QK, queryFn: fetchEmailAddonOffer });
+  const ninjaActive = Boolean(offer?.addon?.usable);
+  const ninjaOffered = Boolean(offer?.allowed && (offer.available || ninjaActive));
+  const fromPrice = (offer?.tiers ?? []).reduce<number | null>(
+    (min, t) => (min == null || t.price < min ? t.price : min),
+    null,
+  );
   const { data: branding } = useTicketBranding();
   // Accent de marca para el preview del diseño "brand"; fallback gris oscuro.
   const accent = /^#[0-9a-fA-F]{6}$/.test(String(branding?.accent ?? ""))
@@ -238,7 +258,7 @@ export function TenantEmailCard() {
   useEffect(() => {
     if (!status?.allowed) return;
     const cfgHost = String(status.host ?? "");
-    setMethod(status.provider === "resend" ? "resend" : "smtp");
+    setMethod(status.provider === "resend" ? "resend" : status.provider === "ninjasoft" ? "ninjasoft" : "smtp");
     setHost(cfgHost || "smtp.gmail.com");
     setPort(String(status.port ?? "587"));
     setSecure(!!status.secure);
@@ -282,7 +302,11 @@ export function TenantEmailCard() {
           body_text: bodyText.trim() || undefined,
           body_template: bodyTemplate,
           test,
-          test_to: test ? email.trim() : undefined,
+          test_to: test
+            ? method === "ninjasoft"
+              ? String(offer?.sender?.reply_to ?? email).trim()
+              : email.trim()
+            : undefined,
         },
       });
       if (error) throw error;
@@ -301,7 +325,8 @@ export function TenantEmailCard() {
         }
         return;
       }
-      setResult({ kind: "ok", tested: !!res.tested, to: res.tested ? email.trim() : undefined });
+      const testedTo = method === "ninjasoft" ? String(offer?.sender?.reply_to ?? "").trim() : email.trim();
+      setResult({ kind: "ok", tested: !!res.tested, to: res.tested ? testedTo : undefined });
       toast({
         title: res.tested ? "Email de prueba enviado" : "Email guardado",
         variant: "success",
@@ -309,6 +334,7 @@ export function TenantEmailCard() {
       setPassword("");
       setResendKey("");
       qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
+      qc.invalidateQueries({ queryKey: EMAIL_OFFER_QK });
     },
     onError: () => {
       const msg = "No se pudo guardar. Revisá tu conexión e intentá de nuevo.";
@@ -336,9 +362,11 @@ export function TenantEmailCard() {
   // (formReady) habilita los botones de guardar.
   const configured = status.configured;
   const formReady =
-    method === "resend"
-      ? Boolean(email.trim() && (resendKey.trim() || hasResendKey))
-      : Boolean(host.trim() && email.trim());
+    method === "ninjasoft"
+      ? ninjaActive
+      : method === "resend"
+        ? Boolean(email.trim() && (resendKey.trim() || hasResendKey))
+        : Boolean(host.trim() && email.trim());
   const saving = save.isPending;
 
   return (
@@ -385,9 +413,32 @@ export function TenantEmailCard() {
               title="Resend"
               desc="Envío por API, sin servidor propio"
             />
+            {ninjaOffered && (
+              <MethodCard
+                active={method === "ninjasoft"}
+                onClick={() => setMethod("ninjasoft")}
+                icon={<Mail size={18} className="text-ninja-flameSoft" />}
+                className="sm:col-span-2"
+                title={
+                  <span className="flex flex-wrap items-center gap-2">
+                    Email de NinjaSoft (@soft.ninja)
+                    {ninjaActive ? <Badge tone="success">Activo</Badge> : <Badge tone="brand">Sin configurar nada</Badge>}
+                  </span>
+                }
+                desc={
+                  ninjaActive
+                    ? `Tus emails salen desde ${offer?.sender?.from_email ?? "@soft.ninja"}`
+                    : fromPrice != null
+                      ? `Desde ${formatCurrency(fromPrice)} por mes, se suma a tu suscripción`
+                      : "Se suma a tu suscripción"
+                }
+              />
+            )}
           </div>
 
-          {method === "smtp" ? (
+          {method === "ninjasoft" && offer ? (
+            <NinjaEmailPanel offer={offer} />
+          ) : method === "smtp" ? (
             <>
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Tu proveedor</p>
@@ -478,7 +529,8 @@ export function TenantEmailCard() {
           )}
         </Step>
 
-        {/* Paso 2 — Cuenta / credenciales */}
+        {/* Paso 2 — Cuenta / credenciales (no aplica al email de NinjaSoft) */}
+        {method !== "ninjasoft" && (
         <Step n={2} title={method === "resend" ? "Tu remitente y API key" : "Tu cuenta de email"}>
           <div className="grid gap-3 sm:grid-cols-2">
             <CredentialInput
@@ -566,9 +618,10 @@ export function TenantEmailCard() {
             </>
           )}
         </Step>
+        )}
 
         {/* Paso 3 — Probar y guardar */}
-        <Step n={3} title="Texto del email y guardar">
+        <Step n={method === "ninjasoft" ? 2 : 3} title="Texto del email y guardar">
           <div>
             <label className="mb-2 block text-sm font-medium text-muted-foreground">
               Texto del email del comprobante
@@ -745,12 +798,14 @@ function MethodCard({
   icon,
   title,
   desc,
+  className,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
-  title: string;
+  title: React.ReactNode;
   desc: React.ReactNode;
+  className?: string;
 }) {
   return (
     <button
@@ -758,7 +813,7 @@ function MethodCard({
       role="radio"
       aria-checked={active}
       onClick={onClick}
-      className={choiceClass(active, "flex items-center gap-3 p-3 pr-9")}
+      className={choiceClass(active, cn("flex items-center gap-3 p-3 pr-9", className))}
     >
       <span
         className={cn(

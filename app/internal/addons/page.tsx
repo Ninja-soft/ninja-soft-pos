@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Bot, Gift, Puzzle, Settings2, Sparkles, Store, TriangleAlert } from "lucide-react";
+import { Bot, Gift, Mail, Puzzle, Settings2, Sparkles, Store, TriangleAlert } from "lucide-react";
 import { AiConfigCard } from "@/components/internal/AiConfigCard";
+import { EmailAddonConfigCard } from "@/components/internal/EmailAddonConfigCard";
+import { EMAIL_ADDON_KEY } from "@/lib/billing/emailAddon";
 import { CatalogCard, CatalogCardSkeleton, CatalogStat } from "@/components/internal/CatalogCard";
 import { ArcaCertificateServiceCard } from "@/components/internal/arca/ArcaCertificateServiceCard";
 import { ArcaCertificateSettings } from "@/components/internal/arca/ArcaCertificateSettings";
@@ -25,10 +27,19 @@ const CONFIGURABLE: Record<string, { title: string; description: string }> = {
     description:
       "Un proveedor a la vez (Gemini o Claude), cada uno con su API key. La key se guarda cifrada y nunca se vuelve a mostrar.",
   },
+  // ADR-156: emails de los negocios desde el dominio de NinjaSoft, con
+  // escalones de emails por mes que se suman a la suscripción.
+  [EMAIL_ADDON_KEY]: {
+    title: "Email con dominio NinjaSoft",
+    description:
+      "API key de Resend de la plataforma, dominio remitente verificado, escalones de emails por mes y qué pasa al pasar el cupo.",
+  },
 };
 
 function addonIcon(key: string) {
-  return key === AI_ASSISTANT_ADDON_KEY ? Bot : Puzzle;
+  if (key === AI_ASSISTANT_ADDON_KEY) return Bot;
+  if (key === EMAIL_ADDON_KEY) return Mail;
+  return Puzzle;
 }
 
 function AddonCard({ addon, onConfigure }: { addon: AddonCatalogItem; onConfigure?: () => void }) {
@@ -44,7 +55,13 @@ function AddonCard({ addon, onConfigure }: { addon: AddonCatalogItem; onConfigur
         <>
           <CatalogStat
             label="Precio por mes"
-            value={addon.monthlyPrice > 0 ? formatCurrency(addon.monthlyPrice) : "Sin cargo"}
+            value={
+              addon.key === EMAIL_ADDON_KEY
+                ? "Por escalón"
+                : addon.monthlyPrice > 0
+                  ? formatCurrency(addon.monthlyPrice)
+                  : "Sin cargo"
+            }
           />
           <CatalogStat
             label="Negocios"
@@ -188,6 +205,7 @@ export default function InternalAddonsPage() {
         className="sm:max-w-2xl"
       >
         {configKey === AI_ASSISTANT_ADDON_KEY && <AiConfigCard bare />}
+        {configKey === EMAIL_ADDON_KEY && <EmailAddonConfigCard />}
       </Modal>
     </>
   );

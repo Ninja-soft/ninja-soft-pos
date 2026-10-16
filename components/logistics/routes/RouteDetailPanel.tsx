@@ -27,6 +27,7 @@ import {
   Truck,
   UserRound,
   XCircle,
+  ScanLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -38,6 +39,7 @@ import { SignedImage } from "@/components/logistics/SignedImage";
 import { AddDispatchesModal } from "@/components/logistics/routes/AddDispatchesModal";
 import { RouteFormModal } from "@/components/logistics/routes/RouteFormModal";
 import { RouteSheetPrint } from "@/components/logistics/routes/RouteSheetPrint";
+import { RouteLoadScanModal } from "@/components/logistics/expedition/ScanModal";
 import { RouteMap } from "@/components/logistics/map/RouteMap";
 import { routePath } from "@/lib/logistics/tracking";
 import { formatDuration } from "@/lib/logistics/planning";
@@ -130,6 +132,8 @@ export function RouteDetailPanel({ routeId, onClosed }: { routeId: string; onClo
   const [cancelling, setCancelling] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [remitoId, setRemitoId] = useState<string | null>(null);
+  // ADR-165: control de carga por escaneo.
+  const [loadScan, setLoadScan] = useState(false);
   // ADR-164: la hoja en el mapa (paradas por estado y recorrido planificado).
   const map = useMemo(() => {
     if (!d || !d.stops.some((s) => s.lat != null)) return null;
@@ -332,9 +336,14 @@ export function RouteDetailPanel({ routeId, onClosed }: { routeId: string; onClo
             </>
           )}
           {r.status === "cargando" && (
-            <Button size="sm" variant="ghost" onClick={() => setStatus("planificada")}>
-              Volver a planificada
-            </Button>
+            <>
+              <Button size="sm" variant="secondary" onClick={() => setLoadScan(true)}>
+                <ScanLine size={15} /> Escanear la carga
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setStatus("planificada")}>
+                Volver a planificada
+              </Button>
+            </>
           )}
           <Button size="sm" variant="ghost" className="text-danger" onClick={() => setCancelling(true)}>
             Cancelar hoja
@@ -432,6 +441,7 @@ export function RouteDetailPanel({ routeId, onClosed }: { routeId: string; onClo
       <AddDispatchesModal open={adding} routeId={routeId} storeId={r.store_id} onClose={() => setAdding(false)} />
       <RouteFormModal open={editing} route={r} defaultStoreId={r.store_id} defaultDate={r.service_date} onClose={() => setEditing(false)} />
       <RemitoDetailModal id={remitoId} canManage={me?.canManage ?? false} onClose={() => setRemitoId(null)} />
+      {loadScan && <RouteLoadScanModal routeId={routeId} title={`Carga de la hoja N° ${r.number}`} onClose={() => setLoadScan(false)} />}
       <ConfirmDialog
         open={cancelling}
         onOpenChange={setCancelling}

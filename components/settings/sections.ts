@@ -413,7 +413,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Truck,
         feature: "pedidos_despacho",
         keywords:
-          "logistica reparto repartidor camion flota hoja de ruta remito cot arba agip traslado copias original duplicado triplicado modelo talonario preimpreso ticket firma foto ubicacion gps motivo no estaba domicilio origen deposito seguimiento mapa en vivo desvio planificar",
+          "logistica reparto repartidor camion flota hoja de ruta remito cot arba agip traslado copias original duplicado triplicado modelo talonario preimpreso ticket firma foto ubicacion gps motivo no estaba domicilio origen deposito expedicion escaneo escanear lector codigo de barras cruce rotura roto merma parcial rechazo reprogramar pedir stock seguimiento mapa en vivo desvio planificar",
       },
       {
         key: "facturacion",

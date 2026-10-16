@@ -555,5 +555,5 @@ export function logisticsErrorMessage(e: unknown): string {
 export function isPermanentEventError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e ?? "");
   if (/Failed to fetch|NetworkError|network|timeout|fetch/i.test(msg)) return false;
-  return /stop_closed|stop_not_found|route_not_found|route_not_started|invalid_|forbidden|feature_not_in_plan|_required|too_far_from_stop/.test(msg);
+  return /stop_closed|stop_not_found|route_not_found|route_not_started|invalid_|forbidden|feature_not_in_plan|_required|too_far_from_stop|_incomplete|_not_allowed|not_in_stop|not_in_dispatch|dispatch_without_items/.test(msg);
 }

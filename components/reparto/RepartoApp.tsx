@@ -18,7 +18,9 @@ import {
   MessageCircle,
   Navigation,
   Phone,
+  PackageX,
   RefreshCw,
+  ScanLine,
   Truck,
   XCircle,
 } from "lucide-react";
@@ -31,6 +33,9 @@ import { useToast } from "@/components/ui/Toast";
 import { DeliverSheet, type DeliverResult } from "@/components/reparto/DeliverSheet";
 import { TrackingBanner } from "@/components/reparto/TrackingBanner";
 import { FailSheet, type FailResult } from "@/components/reparto/FailSheet";
+import { ItemsSheet, type ItemsResult } from "@/components/reparto/ItemsSheet";
+import { RouteLoadScanModal } from "@/components/logistics/expedition/ScanModal";
+import { DEFAULT_EXPEDITION_SETTINGS } from "@/lib/logistics/expedition";
 import { cn } from "@/lib/utils/cn";
 import { remitoNumberLabel } from "@/lib/remitos/logic";
 import {
@@ -45,8 +50,8 @@ import {
   stopIsFinal,
 } from "@/lib/logistics/logic";
 import { applyPending, pendingLabel, routeMediaPath, type QueuedAction, type QueuedMedia } from "@/lib/logistics/offline";
-import { currentPosition, currentTenantId, deviceId, newId, useActionQueue, useDriverRoute, useMyRoutes } from "@/modules/logistics/reparto";
 import { useRouteTracking } from "@/modules/logistics/tracking";
+import { currentPosition, currentTenantId, deviceId, newId, useActionQueue, useDriverRoute, useDriverRouteItems, useMyRoutes } from "@/modules/logistics/reparto";
 import type { RouteDetail, RouteStop } from "@/modules/logistics/api";
 import { createClient } from "@/lib/supabase/client";
 
@@ -163,6 +168,7 @@ function StopScreen({
   onArrive,
   onDeliver,
   onFail,
+  onPartial,
 }: {
   detail: RouteDetail;
   stop: RouteStop;
@@ -170,6 +176,8 @@ function StopScreen({
   onArrive: () => void;
   onDeliver: () => void;
   onFail: () => void;
+  /** ADR-165: entrega parcial, rotura o rechazo por producto (null si no hay renglones). */
+  onPartial: (() => void) | null;
 }) {
   const nav = navigationLinks({ lat: stop.lat, lng: stop.lng, address: stop.address_text });
   const phone = phoneLinks(stop.contact_phone);
@@ -266,6 +274,11 @@ function StopScreen({
               <XCircle size={20} /> No se pudo
             </Button>
           </div>
+          {onPartial && (
+            <Button variant="ghost" className="h-11 w-full" onClick={onPartial}>
+              <PackageX size={18} /> Parcial, rotura o rechazo
+            </Button>
+          )}
         </div>
       )}
       {!live && !final && <p className="text-center text-sm text-muted-foreground">Tocá Salir en la hoja para empezar a entregar.</p>}
@@ -281,6 +294,12 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
   const [failing, setFailing] = useState(false);
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState(false);
+  // ADR-165: escaneo y resultado por producto.
+  const itemsQ = useDriverRouteItems(routeId);
+  const exp = itemsQ.data?.data.settings ?? DEFAULT_EXPEDITION_SETTINGS;
+  const [itemsMode, setItemsMode] = useState<"full" | "partial" | null>(null);
+  const [pendingItems, setPendingItems] = useState<ItemsResult | null>(null);
+  const [loadScan, setLoadScan] = useState(false);
 
   const detail = useMemo(() => (data ? applyPending(data.data, q.items) : null), [data, q.items]);
   if (isLoading) return <div className="space-y-3 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>;
@@ -352,6 +371,7 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
 
   async function deliver(res: DeliverResult) {
     if (!stop) return;
+    if (pendingItems) return recordItems(pendingItems, res);
     const tenant = await currentTenantId();
     if (!tenant) {
       toast({ title: "Volvé a iniciar sesión", variant: "error" });
@@ -398,6 +418,75 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
     toast({ title: "Entrega guardada", variant: "success" });
     const next = open.find((s) => s.id !== stop.id);
     setStopId(next?.id ?? null);
+  }
+
+  /** ADR-165: resultado por producto (con la hoja de Entregado si se entregó algo). */
+  async function recordItems(items: ItemsResult, res: DeliverResult | null) {
+    if (!stop) return;
+    const tenant = await currentTenantId();
+    if (!tenant) {
+      toast({ title: "Volvé a iniciar sesión", variant: "error" });
+      return;
+    }
+    const id = newId();
+    const media: QueuedMedia[] = [];
+    const add = (kind: string, blob: Blob, type: string) => {
+      const path = routeMediaPath(tenant, routeId, id, kind, type === "image/webp" ? "webp" : type === "image/png" ? "png" : "jpg");
+      media.push({ path, blob, contentType: type, uploaded: false });
+      return path;
+    };
+    const signaturePath = res?.signature ? add("firma", res.signature, "image/png") : null;
+    const photoPaths = (res?.photos ?? []).map((p, i) => add(`foto${i + 1}`, p.blob, p.type));
+    const remitoPath = res?.remitoPhoto ? add("remito", res.remitoPhoto.blob, res.remitoPhoto.type) : null;
+    const damagePaths = items.damagePhotos.map((p, i) => add(`rotura${i + 1}`, p.blob, p.type));
+    const pos = res?.position ?? items.position;
+    await base(
+      "event",
+      { stopId: stop.id, eventType: "parcial" },
+      {
+        id,
+        stop_id: stop.id,
+        lat: pos?.lat,
+        lng: pos?.lng,
+        accuracy_m: pos?.accuracy,
+        far_confirmed: res ? res.farConfirmed : items.farConfirmed,
+        received_by_name: res?.receivedByName ?? null,
+        received_by_doc: res?.receivedByDoc ?? null,
+        signature_path: signaturePath,
+        photo_paths: photoPaths,
+        remito_photo_path: remitoPath,
+        note: res?.note ?? null,
+        dispatches: items.dispatches,
+        damage_reason: items.damageReason,
+        damage_note: items.damageNote || null,
+        damage_photo_paths: damagePaths,
+        scans: items.scans,
+        foreign_codes: items.foreignCodes,
+        any_delivered: items.anyDelivered,
+        complete: items.complete,
+      },
+      media,
+    );
+    setPendingItems(null);
+    setItemsMode(null);
+    setDelivering(false);
+    toast({
+      title: items.anyDelivered ? "Entrega guardada" : "Guardado: vuelve a Expedición",
+      description: items.summary,
+      variant: "success",
+    });
+    const next = open.find((s) => s.id !== stop.id);
+    setStopId(next?.id ?? null);
+  }
+
+  async function itemsConfirm(items: ItemsResult) {
+    if (items.anyDelivered) {
+      setPendingItems(items);
+      setItemsMode(null);
+      setDelivering(true);
+      return;
+    }
+    await recordItems(items, null);
   }
 
   async function fail(res: FailResult) {
@@ -448,7 +537,27 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
   if (stop) {
     return (
       <>
-        <StopScreen detail={detail} stop={stop} onBack={() => setStopId(null)} onArrive={() => void arrive()} onDeliver={() => setDelivering(true)} onFail={() => setFailing(true)} />
+        <StopScreen
+          detail={detail}
+          stop={stop}
+          onBack={() => setStopId(null)}
+          onArrive={() => void arrive()}
+          onDeliver={() => (exp.scan_on_deliver !== "no" && itemsQ.data ? setItemsMode("full") : setDelivering(true))}
+          onFail={() => setFailing(true)}
+          onPartial={itemsQ.data ? () => setItemsMode("partial") : null}
+        />
+        <ItemsSheet
+          open={itemsMode !== null}
+          mode={itemsMode ?? "partial"}
+          title={`${stop.contact_name ?? ""} · ${stop.address_text ?? ""}`}
+          stopId={stop.id}
+          routeItems={itemsQ.data?.data ?? null}
+          settings={exp}
+          logistics={detail.settings}
+          stopPoint={point}
+          onClose={() => setItemsMode(null)}
+          onConfirm={itemsConfirm}
+        />
         <DeliverSheet
           open={delivering}
           title={`${stop.contact_name ?? ""} · ${stop.address_text ?? ""}`}
@@ -456,7 +565,10 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
           stopPoint={point}
           settings={detail.settings}
           hasRemito={stop.dispatches.some((d) => d.remito)}
-          onClose={() => setDelivering(false)}
+          onClose={() => {
+            setDelivering(false);
+            setPendingItems(null);
+          }}
           onConfirm={deliver}
         />
         <FailSheet open={failing} title={`${stop.contact_name ?? ""} · ${stop.address_text ?? ""}`} settings={detail.settings} stopPoint={point} onClose={() => setFailing(false)} onConfirm={fail} />
@@ -492,9 +604,16 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
 
       <div className="fixed inset-x-0 bottom-0 bg-background p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ring-1 ring-border">
         {canStart ? (
-          <Button className="h-14 w-full text-base" onClick={() => void start()} loading={starting}>
-            <Truck size={20} /> Salir
-          </Button>
+          <div className="space-y-2">
+            {exp.scan_on_load !== "no" && q.online && (
+              <Button variant="secondary" className="h-12 w-full text-base" onClick={() => setLoadScan(true)}>
+                <ScanLine size={18} /> Controlar la carga{exp.scan_on_load === "obligatorio" ? " (obligatorio)" : ""}
+              </Button>
+            )}
+            <Button className="h-14 w-full text-base" onClick={() => void start()} loading={starting}>
+              <Truck size={20} /> Salir
+            </Button>
+          </div>
         ) : r.status === "en_curso" ? (
           open.length > 0 ? (
             <Button className="h-14 w-full text-base" onClick={() => setStopId(open[0]!.id)}>
@@ -515,6 +634,16 @@ function RouteScreen({ routeId, onBack, q }: { routeId: string; onBack: () => vo
         )}
       </div>
 
+      {loadScan && (
+        <RouteLoadScanModal
+          routeId={routeId}
+          title={`Carga de la hoja N° ${r.number}`}
+          onClose={() => {
+            setLoadScan(false);
+            void itemsQ.refetch();
+          }}
+        />
+      )}
       <ConfirmDialog
         open={closing}
         onOpenChange={setClosing}

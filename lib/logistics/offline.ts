@@ -22,8 +22,8 @@ export interface QueuedAction {
   kind: QueuedKind;
   routeId: string;
   stopId: string | null;
-  /** Tipo del evento (llegada, entregado, no_entregado, nota) si kind = event. */
-  eventType?: "llegada" | "entregado" | "no_entregado" | "nota";
+  /** Tipo del evento (llegada, entregado, no_entregado, nota; parcial = por producto, ADR-165) si kind = event. */
+  eventType?: "llegada" | "entregado" | "no_entregado" | "nota" | "parcial";
   payload: Record<string, unknown>;
   media: QueuedMedia[];
   createdAt: string;
@@ -163,6 +163,10 @@ export function applyPending<S extends StopLike, D extends RouteLike<S>>(detail:
       if (a.eventType === "llegada" && (s.status === "pendiente" || s.status === "en_camino")) s.status = "en_el_lugar";
       if (a.eventType === "entregado") s.status = "entregada";
       if (a.eventType === "no_entregado") s.status = "no_entregada";
+      if (a.eventType === "parcial") {
+        const r = a.payload as { any_delivered?: boolean; complete?: boolean };
+        s.status = r.any_delivered ? (r.complete ? "entregada" : "parcial") : "no_entregada";
+      }
     }
   }
   return { ...detail, route: { ...detail.route, status }, stops };

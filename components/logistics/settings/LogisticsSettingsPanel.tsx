@@ -19,6 +19,7 @@ import { useToast } from "@/components/ui/Toast";
 import { SettingRow, SettingsCard } from "@/components/settings/Settings";
 import { RemitoSettingsCard } from "@/components/remitos/RemitoSettingsCard";
 import { OriginsCard } from "@/components/logistics/settings/OriginsCard";
+import { ExpeditionSettingsCard } from "@/components/logistics/settings/ExpeditionSettingsCard";
 import { TrackingSettingsCard } from "@/components/logistics/settings/TrackingSettingsCard";
 import { selectCls } from "@/components/stock/transfers/shared";
 import {
@@ -37,7 +38,7 @@ import {
 import { useCan, useLogisticsMutations, useLogisticsSettings } from "@/modules/logistics/api";
 import { useFeature } from "@/modules/saas/gating";
 
-type Tab = "remitos" | "entrega" | "origenes" | "seguimiento" | "flota";
+type Tab = "remitos" | "entrega" | "expedicion" | "origenes" | "seguimiento" | "flota";
 
 const COPY_NAMES = ["Original", "Duplicado", "Triplicado"];
 
@@ -163,12 +164,13 @@ export function LogisticsSettingsPanel() {
         options={[
           { value: "remitos", label: "Remitos" },
           { value: "entrega", label: "Entrega en la calle" },
+          { value: "expedicion", label: "Expedición" },
           { value: "origenes", label: "Orígenes" },
           { value: "seguimiento", label: "Seguimiento" },
           { value: "flota", label: "Flota y equipo" },
         ]}
       />
-      {!canEdit && (tab === "remitos" || tab === "entrega") && (
+      {!canEdit && (tab === "remitos" || tab === "entrega" || tab === "expedicion") && (
         <p className="text-sm text-muted-foreground">Sólo el dueño cambia esta configuración. Ves cómo está.</p>
       )}
 
@@ -298,6 +300,8 @@ export function LogisticsSettingsPanel() {
           </SettingRow>
         </SettingsCard>
       )}
+
+      {tab === "expedicion" && <ExpeditionSettingsCard canEdit={canEdit} />}
 
       {tab === "origenes" &&
         (reparto ? (

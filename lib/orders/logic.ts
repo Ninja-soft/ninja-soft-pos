@@ -186,6 +186,14 @@ export interface DispatchLike {
   sale_store_id?: string | null;
   /** ADR-149: envío con logística enganchado (lo cierra la logística). */
   shipment_id?: string | null;
+  /** ADR-161: intentos fallidos en reparto propio. */
+  delivery_attempts?: number;
+  /** ADR-165: quedó algo roto, rechazado o faltante sin resolver. */
+  issue_open?: boolean;
+  /** ADR-165: traslado pedido a otra sucursal que todavía no llegó. */
+  awaiting_transfer_id?: string | null;
+  /** ADR-165: lecturas de productos ajenos (cruces) en el escaneo. */
+  scan_alerts?: number;
 }
 
 export type DispatchAction = "armando" | "listo" | "en_transito" | "recibir" | "entregar" | "despachar";
@@ -236,15 +244,48 @@ export function dispatchIsForStore(d: DispatchLike, storeId: string | null): boo
 
 // ── Pestañas de Expedición (ADR-149, L0) ────────────────────────────────────
 
-export type ExpeditionTab = "pendientes" | "armando" | "listos" | "en_camino" | "entregados";
+export type ExpeditionTab = "pendientes" | "armando" | "listos" | "en_camino" | "problemas" | "entregados";
 
 export const EXPEDITION_TABS: { value: ExpeditionTab; label: string }[] = [
   { value: "pendientes", label: "Pendientes" },
   { value: "armando", label: "Armando" },
   { value: "listos", label: "Listos" },
   { value: "en_camino", label: "En camino" },
+  { value: "problemas", label: "Con problemas" },
   { value: "entregados", label: "Entregados" },
 ];
+
+// ── Con problemas (ADR-165, L5) ─────────────────────────────────────────────
+
+export type DispatchProblem = "resultado" | "no_entregado" | "esperando_stock" | "cruces";
+
+export const DISPATCH_PROBLEM_LABEL: Record<DispatchProblem, string> = {
+  resultado: "Roto, rechazado o sin entregar",
+  no_entregado: "No se pudo entregar",
+  esperando_stock: "Esperando stock de otra sucursal",
+  cruces: "Escanearon productos de otra entrega",
+};
+
+const OPEN_STATUSES: DispatchStatus[] = ["pendiente", "armando", "listo", "en_transito", "despachado"];
+
+/**
+ * Por qué una entrega está en Con problemas: lo que quedó sin resolver de una
+ * entrega parcial (aunque ya esté entregada), lo que volvió sin entregarse, lo
+ * que espera un traslado y los cruces de escaneo de una entrega abierta.
+ */
+export function dispatchProblems(d: DispatchLike): DispatchProblem[] {
+  const out: DispatchProblem[] = [];
+  const open = OPEN_STATUSES.includes(d.status);
+  if (d.issue_open && d.status !== "cancelado") out.push("resultado");
+  if (open && (d.delivery_attempts ?? 0) > 0 && d.status !== "despachado") out.push("no_entregado");
+  if (open && d.awaiting_transfer_id) out.push("esperando_stock");
+  if (open && (d.scan_alerts ?? 0) > 0) out.push("cruces");
+  return out;
+}
+
+export function dispatchHasProblem(d: DispatchLike): boolean {
+  return dispatchProblems(d).length > 0;
+}
 
 /** Pestaña de cada estado. "Despachado" va a En camino hasta que se entrega. */
 export function dispatchTab(status: DispatchStatus): ExpeditionTab {
@@ -280,7 +321,7 @@ export interface ExpeditionFilter {
  */
 export function expeditionList<T extends DispatchLike>(all: T[], f: ExpeditionFilter): T[] {
   return all.filter((d) => {
-    if (dispatchTab(d.status) !== f.tab) return false;
+    if (f.tab === "problemas" ? !dispatchHasProblem(d) : dispatchTab(d.status) !== f.tab) return false;
     if (!dispatchIsForStore(d, f.storeId)) return false;
     if (f.mode !== "todos" && d.delivery_type !== f.mode) return false;
     if (f.tab === "entregados" && d.delivery_type === "inmediato" && !f.showImmediate) return false;
@@ -290,11 +331,13 @@ export function expeditionList<T extends DispatchLike>(all: T[], f: ExpeditionFi
 
 /** Cantidad por pestaña abierta (para los números de las pestañas). */
 export function expeditionCounts(all: DispatchLike[], storeId: string | null, mode: DeliveryFilter): Record<ExpeditionTab, number> {
-  const c: Record<ExpeditionTab, number> = { pendientes: 0, armando: 0, listos: 0, en_camino: 0, entregados: 0 };
+  const c: Record<ExpeditionTab, number> = { pendientes: 0, armando: 0, listos: 0, en_camino: 0, problemas: 0, entregados: 0 };
   for (const d of all) {
     if (!dispatchIsForStore(d, storeId)) continue;
     if (mode !== "todos" && d.delivery_type !== mode) continue;
-    c[dispatchTab(d.status)]++;
+    // ADR-165: una entrega cerrada con algo sin resolver sólo cuenta en Con problemas.
+    if (OPEN_STATUSES.includes(d.status)) c[dispatchTab(d.status)]++;
+    if (dispatchHasProblem(d)) c.problemas++;
   }
   return c;
 }
@@ -444,6 +487,8 @@ const ERRORS: [RegExp, string][] = [
   [/cancel_requires_manager/, "Cancelar una entrega es de un dueño o encargado."],
   [/shipment_not_found/, "Ese envío no es de esta venta."],
   [/reason_required/, "Contá el motivo."],
+  [/pick_scan_incomplete/, "Falta escanear lo armado: completá el control o justificá lo que falta."],
+  [/deliver_scan_incomplete/, "Falta escanear lo que se entrega: escaneá cada producto o justificá la diferencia."],
   [/forbidden|role_forbidden/, "Tu rol no puede hacer esto."],
 ];
 

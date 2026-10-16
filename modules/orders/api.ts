@@ -121,9 +121,21 @@ export interface Dispatch {
   route?: { number: number; status: string } | null;
   delivery_attempts?: number;
   last_failure_reason?: string | null;
+  /** ADR-165: entrega madre, resultado, problema abierto, traslado que espera y cruces de escaneo. */
+  parent_dispatch_id?: string | null;
+  delivery_result?: "completa" | "parcial" | null;
+  issue_open?: boolean;
+  issue_summary?: string | null;
+  awaiting_transfer_id?: string | null;
+  stock_arrived_at?: string | null;
+  scan_alerts?: number;
+  parent?: { number: number } | null;
 }
 
 export interface DispatchPartItem {
+  /** ADR-165: id del renglón (escaneo y resultado por producto) y su SKU. */
+  id?: string;
+  sku?: string | null;
   product_id?: string;
   variant_id?: string | null;
   product_name: string;
@@ -132,6 +144,13 @@ export interface DispatchPartItem {
   unit: string;
   source_store_id: string;
   source_warehouse_id: string | null;
+  /** ADR-165: lo pedido antes del resultado y lo roto, rechazado, faltante, reprogramado y resuelto. */
+  qty_ordered?: number | null;
+  qty_damaged?: number;
+  qty_rejected?: number;
+  qty_missing?: number;
+  qty_rescheduled?: number;
+  qty_settled?: number;
 }
 
 const DISPATCH_COLS =
@@ -151,6 +170,16 @@ const MISSING_L1_COLS = /ship_to/;
 // ADR-161 (L2): hoja de ruta, intentos y motivo de no entrega.
 const DISPATCH_COLS_L2 = `${DISPATCH_COLS_L1}, route_id, delivery_attempts, last_failure_reason, route:delivery_routes!dispatches_route_id_fkey(number, status)`;
 const MISSING_L2_COLS = /route_id|delivery_attempts|last_failure_reason|delivery_routes|relationship/;
+// ADR-165 (L5): resultado por producto, problemas, pedido de stock y cruces.
+const DISPATCH_COLS_L5 =
+  DISPATCH_COLS_L2.replace(
+    "items:dispatch_items(product_id,",
+    "items:dispatch_items(id, sku, qty_ordered, qty_damaged, qty_rejected, qty_missing, qty_rescheduled, qty_settled, product_id,",
+  ) +
+  ", parent_dispatch_id, delivery_result, issue_open, issue_summary, awaiting_transfer_id, stock_arrived_at, scan_alerts, " +
+  "parent:dispatches!dispatches_parent_dispatch_id_fkey(number)";
+const MISSING_L5_COLS = /qty_ordered|qty_damaged|parent_dispatch_id|issue_open|awaiting_transfer_id|scan_alerts|delivery_result|parent|relationship/;
+const OPEN_DISPATCH = ["pendiente", "armando", "listo", "en_transito", "despachado"];
 
 /** Lo que falta entregar de una venta (dispatch_sale_pending, ADR-149). */
 export interface SalePending {
@@ -265,7 +294,7 @@ export const ordersApi = {
     rpc<{ ok: boolean; already?: boolean }>("sale_order_complete", { p_id: id, p_sale_id: saleId }),
 
   dispatches: async (opts: { storeId: string | null; open: boolean }): Promise<Dispatch[]> => {
-    const run = (cols: string, parts: boolean) => {
+    const run = (cols: string, parts: boolean, l5 = false) => {
       let q = createClient()
         .from("dispatches" as never)
         .select(cols)
@@ -280,11 +309,12 @@ export const ordersApi = {
         );
       }
       // ADR-149 (A6): lo despachado sigue abierto (En camino) hasta que se entrega.
-      return opts.open
-        ? q.in("status", ["pendiente", "armando", "listo", "en_transito", "despachado"])
-        : q.in("status", ["entregado", "cancelado"]);
+      // ADR-165: una entrega ya entregada con algo sin resolver sigue a la vista (Con problemas).
+      if (opts.open && l5) return q.or(`status.in.(${OPEN_DISPATCH.join(",")}),issue_open.is.true`);
+      return opts.open ? q.in("status", OPEN_DISPATCH) : q.in("status", ["entregado", "cancelado"]);
     };
-    let { data, error } = await run(DISPATCH_COLS_L2, true);
+    let { data, error } = await run(DISPATCH_COLS_L5, true, true);
+    if (error && MISSING_L5_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_L2, true));
     if (error && MISSING_L2_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_L1, true));
     if (error && MISSING_L1_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_L0, true));
     if (error && MISSING_L0_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_PARTS, true));
@@ -292,7 +322,16 @@ export const ordersApi = {
     if (error) throw error;
     return ((data ?? []) as unknown as Dispatch[]).map((d) => ({
       ...d,
-      items: (d.items ?? []).map((i) => ({ ...i, qty: Number(i.qty) })),
+      items: (d.items ?? []).map((i) => ({
+        ...i,
+        qty: Number(i.qty),
+        qty_ordered: i.qty_ordered == null ? null : Number(i.qty_ordered),
+        qty_damaged: Number(i.qty_damaged ?? 0),
+        qty_rejected: Number(i.qty_rejected ?? 0),
+        qty_missing: Number(i.qty_missing ?? 0),
+        qty_rescheduled: Number(i.qty_rescheduled ?? 0),
+        qty_settled: Number(i.qty_settled ?? 0),
+      })),
     }));
   },
 

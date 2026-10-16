@@ -19,7 +19,7 @@
 // liquidación: sigue usando la última cotización disponible.
 //
 // Entradas:
-//   1. Cron (pg_cron + pg_net, platform-fx-sync, 09:15 y 18:15 ART): header
+//   1. Cron (pg_cron + pg_net, platform-fx-sync, lunes a viernes cada hora de 10 a 15 ART): header
 //      X-Cron-Secret == platform_secrets('internal_cron').token, body
 //      { mode: "cron" }.
 //   2. Staff (Actualizar ahora): JWT del usuario + header x-ninja-scope:

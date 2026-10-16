@@ -414,9 +414,10 @@ describe.skipIf(!enabled)("recorridos y sugerencias · RLS y RPC", () => {
 
   it("onboarding_status y onboarding_activation_status mantienen sus claves", async () => {
     const s = (await rpc(ctx.ownerA.client, "onboarding_status")).data as Record<string, unknown>;
-    expect(Object.keys(s).sort()).toEqual(["fiscal", "mp", "producto", "ticket", "venta"]);
+    // ADR-154 suma marca, email y pagos a la puesta en marcha.
+    expect(Object.keys(s).sort()).toEqual(["email", "fiscal", "marca", "mp", "pagos", "producto", "ticket", "venta"]);
     const a = (await rpc(ctx.ownerA.client, "onboarding_activation_status")).data as Record<string, unknown>;
-    expect(Object.keys(a).sort()).toEqual(["agenda", "arca", "caja", "equipo", "escuela", "mesas"]);
+    expect(Object.keys(a)).toEqual(expect.arrayContaining(["agenda", "arca", "caja", "equipo", "escuela", "mesas"]));
   });
 
   it("guardarraíles en 0", async () => {

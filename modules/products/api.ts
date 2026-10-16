@@ -22,7 +22,7 @@ import {
   ProductionSchema,
   type ProductionInput,
 } from "./schemas";
-import { onlyActiveTenant } from "@/lib/tenant/scope";
+import { fetchMyMembership } from "@/lib/tenant/myMembership";
 
 export interface ProductsPageParams {
   page: number; // 1-based
@@ -643,16 +643,7 @@ export const pluSettingsApi = {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) throw new Error("no_user");
-    const { data: mem } = await onlyActiveTenant(
-      supabase
-        .from("tenant_users")
-        .select("tenant_id")
-        .eq("user_id", user.id)
-        .eq("status", "active"),
-      user,
-    )
-      .limit(1)
-      .maybeSingle();
+    const mem = await fetchMyMembership<{ tenant_id: string }>(supabase, user, "tenant_id");
     const tenantId = (mem as { tenant_id?: string } | null)?.tenant_id;
     if (!tenantId) throw new Error("no_tenant");
     const { error } = await supabase.from("pos_settings").upsert(

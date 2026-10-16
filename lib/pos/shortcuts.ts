@@ -14,6 +14,8 @@
 //   * ADR-106: Pausar venta = Shift + F8 (al lado de F8, cobros en espera) o
 //     la tecla Pausa; Limpiar = Shift + F4. Shift no lo usa el navegador con
 //     esas teclas. Shift con cualquier otra tecla de función no dispara nada.
+//   * ADR-155: Factura o sólo ticket = Shift + F9 (al lado de F9, cobrar),
+//     sólo con la hoja de cobro abierta (lo atiende la hoja).
 
 export type PosShortcutAction =
   | "search"
@@ -22,6 +24,7 @@ export type PosShortcutAction =
   | "pending"
   | "pause"
   | "clear"
+  | "fiscal"
   | "help";
 
 export interface PosShortcut {
@@ -66,6 +69,12 @@ export const POS_SHORTCUTS: PosShortcut[] = [
     hint: "F12 también cobra si el navegador no lo usa.",
   },
   {
+    action: "fiscal",
+    keys: ["Shift + F9"],
+    label: "Factura o sólo ticket",
+    hint: "En la hoja de cobro, si el negocio factura con ARCA.",
+  },
+  {
     action: "help",
     keys: ["?"],
     label: "Ver esta ayuda",
@@ -86,6 +95,7 @@ export const POS_PASSIVE_SHORTCUTS: { keys: string[]; label: string }[] = [
 const SHIFT_KEYS: Record<string, PosShortcutAction> = {
   F8: "pause",
   F4: "clear",
+  F9: "fiscal",
 };
 
 const F_KEYS: Record<string, PosShortcutAction> = {

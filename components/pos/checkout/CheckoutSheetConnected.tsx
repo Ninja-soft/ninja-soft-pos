@@ -20,6 +20,8 @@ import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
 import { CheckoutSheet, type CheckoutSheetProps } from "./CheckoutSheet";
 import { CheckoutLetter, type CheckoutLetterState } from "./CheckoutLetter";
 import { CheckoutCustomerBlock, type CheckoutCustomerActions } from "./CheckoutCustomerBlock";
+import { CheckoutFiscalMode } from "./CheckoutFiscalMode";
+import { useFiscalChoice } from "./useFiscalChoice";
 import type { AccountPayRequest, ElectronicRequest, TerminalChargeRequest } from "./types";
 
 // Cobros electrónicos: los modales existentes de cada proveedor, en su chunk.
@@ -85,6 +87,10 @@ export function CheckoutSheetConnected({
 }: Connected) {
   // Letra vigente (la muestra el bloque Cliente cerrado).
   const [letterState, setLetterState] = useState<CheckoutLetterState | null>(null);
+
+  // ADR-155: Factura o sólo ticket (registrada antes de crear la venta).
+  const fiscal = useFiscalChoice({ open: props.open, offline, customerId, onConfirm: props.onConfirm });
+  const ticketOnly = fiscal.ticketOnly;
   // Cuentas de transferencia de la caja (herencia por sucursal y caja).
   const transferCfg = usePosTransferConfig();
   // Detección automática de transferencias de Mercado Pago (ADR-061).
@@ -278,20 +284,41 @@ export function CheckoutSheetConnected({
   return (
     <CheckoutSheet
       {...props}
+      onConfirm={fiscal.onConfirm}
+      commitBlocker={fiscal.commitBlocker}
       fiscalSlot={
-        customerBlock ? (
-          <CheckoutCustomerBlock
-            {...customerBlock}
-            open={props.open}
-            offline={offline}
-            letterState={letterState}
-            letter={
-              <CheckoutLetter open={props.open} customerId={customerId} offline={offline} embedded onState={setLetterState} />
-            }
-          />
-        ) : (
-          <CheckoutLetter open={props.open} customerId={customerId} offline={offline} />
-        )
+        <>
+          {fiscal.visible && (
+            <CheckoutFiscalMode
+              open={props.open}
+              value={offline ? "factura" : fiscal.choice}
+              onChange={fiscal.setChoice}
+              customerId={customerId}
+              letter={letterState?.letter ?? null}
+              total={props.base}
+              offline={offline}
+            />
+          )}
+          {customerBlock ? (
+            <CheckoutCustomerBlock
+              {...customerBlock}
+              open={props.open}
+              offline={offline}
+              letterState={ticketOnly ? null : letterState}
+              letter={
+                // Con sólo ticket no hay letra que mostrar (queda montada para no
+                // perder el tipo elegido si se vuelve a Factura).
+                <div hidden={ticketOnly}>
+                  <CheckoutLetter open={props.open} customerId={customerId} offline={offline} embedded onState={setLetterState} />
+                </div>
+              }
+            />
+          ) : (
+            <div hidden={ticketOnly}>
+              <CheckoutLetter open={props.open} customerId={customerId} offline={offline} onState={setLetterState} />
+            </div>
+          )}
+        </>
       }
       tenders={tenders}
       initialTenderId={initialTenderId}

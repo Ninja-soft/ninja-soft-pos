@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Check } from "lucide-react";
+import { Check, CreditCard } from "lucide-react";
 import {
   useSignupPlans,
   formatPlanPrice,
@@ -13,6 +13,8 @@ import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import { AssistantMark } from "@/components/ai/AssistantMark";
+import { AI_ADDON_BENEFITS, aiAddonCopy } from "@/lib/saas/aiAddonCopy";
+import { salesContactHref } from "@/lib/support/contact";
 
 // Mapea un SignupPlan (forma del selector) al modelo de PlanCards.
 function toPlanCardModel(p: SignupPlan): PlanCardModel {
@@ -30,14 +32,6 @@ function toPlanCardModel(p: SignupPlan): PlanCardModel {
     limits: p.limits?.limits ?? {},
   };
 }
-
-// Beneficios cortos del Asistente IA para la venta en el registro.
-const AI_BENEFITS = [
-  "Consultá tus ventas en lenguaje natural",
-  "Resolvé dudas del sistema al instante",
-  "Sugerencias para vender y reponer mejor",
-  "Disponible para todo tu equipo, en cada pantalla",
-];
 
 export function SignupStepPlan({
   value,
@@ -73,6 +67,9 @@ export function SignupStepPlan({
   const recommendedName = (plans ?? []).find((p) => p.isRecommended)?.name ?? null;
   const aiPrice = (aiCfg?.addon_price_ars ?? "").trim();
   const aiTrialDays = Number(aiCfg?.addon_trial_days ?? "") || 0;
+  // Días de prueba del plan elegido: el complemento acompaña ese período.
+  const planTrialDays = (plans ?? []).find((p) => p.key === value)?.trialDays ?? 0;
+  const aiCopy = aiAddonCopy({ planTrialDays });
 
   if (isLoading) {
     return (
@@ -112,16 +109,25 @@ export function SignupStepPlan({
         diffLabel={recommendedName ? `Suma sobre ${recommendedName}` : "Suma sobre el recomendado"}
       />
 
+      {/* Prueba sin tarjeta: lo que más frena un alta es pensar que se cobra ya. */}
+      {planTrialDays > 0 && (
+        <p className="mt-4 flex items-start gap-2 rounded-lg bg-muted px-3.5 py-3 text-sm text-foreground">
+          <CreditCard size={16} className="mt-0.5 shrink-0 text-success" aria-hidden />
+          <span>
+            <span className="font-semibold">No pagás nada ahora.</span>{" "}
+            <span className="text-muted-foreground">
+              Probás {planTrialDays} días gratis sin cargar tarjeta y elegís cómo pagar recién
+              al terminar la prueba.
+            </span>
+          </span>
+        </p>
+      )}
+
       {/* ── Add-on IA: venta + toggle ── */}
-      <button
-        type="button"
-        onClick={() => onAddonAiChange(!addonAi)}
-        aria-pressed={addonAi}
+      <div
         className={cn(
-          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          addonAi
-            ? "choice-on"
-            : "border-border bg-card hover:bg-secondary",
+          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 transition",
+          addonAi ? "choice-on" : "border-border bg-card",
         )}
       >
         <div className="flex items-start justify-between gap-3">
@@ -129,11 +135,9 @@ export function SignupStepPlan({
             <AssistantMark size={40} sparkle={false} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-foreground">
-                  Sumar Asistente IA
-                </span>
+                <span className="font-semibold text-foreground">Sumar Asistente IA</span>
                 {aiPrice ? (
-                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
                     +{formatPlanPrice(Number(aiPrice))}/mes
                   </span>
                 ) : null}
@@ -142,6 +146,9 @@ export function SignupStepPlan({
                     {aiTrialDays} días gratis
                   </span>
                 )}
+                <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Opcional
+                </span>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {aiCfg?.commercial_text?.trim() ||
@@ -149,32 +156,37 @@ export function SignupStepPlan({
               </p>
             </div>
           </div>
-          {/* Switch visual (el click del bloque entero hace el toggle). */}
-          <span className="pointer-events-none mt-1 shrink-0">
-            <Switch checked={addonAi} onCheckedChange={onAddonAiChange} />
+          <span className="mt-1 shrink-0">
+            <Switch checked={addonAi} onCheckedChange={onAddonAiChange} label="Sumar Asistente IA" />
           </span>
         </div>
 
-        <ul className="grid gap-1 sm:grid-cols-2">
-          {AI_BENEFITS.map((b) => (
-            <li
-              key={b}
-              className="flex items-start gap-1.5 text-xs text-muted-foreground"
-            >
-              <Check size={13} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+        <ul className="grid gap-1.5 sm:grid-cols-2">
+          {AI_ADDON_BENEFITS.map((b) => (
+            <li key={b} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Check size={13} className="mt-0.5 shrink-0 text-ninja-flameSoft" aria-hidden />
               <span>{b}</span>
             </li>
           ))}
         </ul>
 
-        {addonAi && (
-          <p className="text-[11px] text-ninja-flameSoft">
-            {aiTrialDays > 0
-              ? `Lo activamos con tus ${aiTrialDays} días gratis al crear tu cuenta.`
-              : "Se suma a tu suscripción al crear tu cuenta. Lo podés dar de baja cuando quieras."}
-          </p>
-        )}
-      </button>
+        <div className="space-y-1 border-t border-border pt-3 text-xs">
+          <p className="font-medium text-foreground">{aiCopy.billing}</p>
+          <p className="text-muted-foreground">{aiCopy.later}</p>
+        </div>
+      </div>
+
+      {/* Cuenta corriente: no es self-service, la armamos nosotros. */}
+      <p className="mt-4 text-xs text-muted-foreground">
+        ¿Preferís pagar por cuenta corriente, con transferencia contra factura?{" "}
+        <a
+          href={salesContactHref("Quiero pagar por cuenta corriente")}
+          className="rounded-sm font-medium text-ninja-flameSoft outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Escribinos
+        </a>{" "}
+        y lo dejamos configurado. Podés crear la cuenta igual y probar mientras tanto.
+      </p>
     </div>
   );
 }

@@ -68,7 +68,9 @@ describe("atajos del POS", () => {
     expect(matchPosShortcut({ key: "F8" }, input)).toBe("pending");
     expect(matchPosShortcut({ key: "F4" }, input)).toBe("customer");
     // Shift con otras teclas de función no dispara nada (ni cobra).
-    for (const key of ["F2", "F9", "F12", "F5"]) expect(matchPosShortcut({ key, shiftKey: true })).toBeNull();
+    for (const key of ["F2", "F12", "F5"]) expect(matchPosShortcut({ key, shiftKey: true })).toBeNull();
+    // ADR-155: Shift + F9 alterna Factura / Sólo ticket (no cobra).
+    expect(matchPosShortcut({ key: "F9", shiftKey: true }, input)).toBe("fiscal");
     expect(matchPosShortcut({ key: "F8", shiftKey: true, ctrlKey: true })).toBeNull();
     // Cada tecla del catálogo es de una sola acción.
     const seen = new Map<string, string>();

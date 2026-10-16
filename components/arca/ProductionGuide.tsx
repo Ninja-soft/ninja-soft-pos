@@ -90,7 +90,7 @@ export function ProductionGuide({
 
       {live ? (
         <Callout tone="success" icon={Rocket} title="Estás facturando en real">
-          Cada factura que sale tiene validez fiscal. Podés volver al modo prueba desde Ajustes.
+          Cada factura que sale tiene validez fiscal. Podés volver al modo prueba con un toque en Modo de facturación, arriba.
         </Callout>
       ) : (
         <p className="text-muted-foreground">
@@ -445,7 +445,7 @@ function ActivarBody({ config, canWrite, steps }: { config: ArcaConfig; canWrite
   const pending = steps.filter((s) => s.key !== "activar" && s.state !== "ok");
   const ready = config.checklist.ready && pending.length === 0;
   if (live) {
-    return <p className="text-muted-foreground">Ya estás facturando en real. Desde Ajustes podés volver al modo prueba.</p>;
+    return <p className="text-muted-foreground">Ya estás facturando en real. Para volver al modo prueba, tocá Prueba en Modo de facturación, arriba.</p>;
   }
   return (
     <div className="space-y-3">

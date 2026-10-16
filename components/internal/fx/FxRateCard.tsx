@@ -77,7 +77,7 @@ export function FxRateCard({ legacy }: { legacy?: { period: string; rate: number
             <DollarSign size={16} className="text-ninja-flameSoft" aria-hidden /> Cotización del dólar
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Venta del dólar oficial (ArgentinaDatos), se actualiza sola todos los días. Cada gasto en dólares usa la del día en que ocurre o la última anterior.
+            Venta del dólar oficial (ArgentinaDatos), se actualiza sola de lunes a viernes, cada hora de 10 a 15. Cada gasto en dólares usa la del día en que ocurre o la última anterior.
           </p>
         </div>
         <Button

@@ -1,14 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BookOpen, Download, FileJson, FlaskConical, Gauge, KeyRound, Lock, ShieldAlert, TriangleAlert } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  BookOpen,
+  Download,
+  FileCode2,
+  FileJson,
+  FileText,
+  FlaskConical,
+  Gauge,
+  KeyRound,
+  Lock,
+  Mail,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/utils/cn";
 import { buildOpenApi } from "@/lib/api/openapi";
+import { DEMO_CLIENT_ID, DEMO_CLIENT_SECRET, DOCS_HTML_PATH, SANDBOX_BASE_PATH } from "@/lib/api/sandboxConstants";
 import { SNIPPET_LANGS, snippet, type SnippetLang } from "@/lib/api/snippets";
 import {
   API_BASE_PATH,
@@ -34,6 +48,10 @@ import { TryIt } from "./TryIt";
 // Portal de desarrolladores de la API pública (ADR-159, H68b): guía y
 // referencia generadas desde lib/api/spec.ts, con "Probar" contra el sandbox.
 // Navegación lateral desde lg; en mobile, un selector arriba.
+// variant "public" (ADR-163): la misma referencia en /developers, sin login,
+// con Probar contra /api/sandbox/v1 (datos ficticios o credencial de prueba).
+
+export type PortalVariant = "panel" | "public";
 
 export const PORTAL_START = "intro";
 
@@ -46,10 +64,17 @@ const GUIDES: { id: GuideId; label: string; icon: typeof BookOpen }[] = [
   { id: "sandbox", label: "Sandbox y pruebas", icon: FlaskConical },
   { id: "limits", label: "Límites", icon: Gauge },
   { id: "errors", label: "Errores", icon: ShieldAlert },
-  { id: "downloads", label: "Postman y OpenAPI", icon: Download },
+  { id: "downloads", label: "Descargas", icon: Download },
 ];
 
 const isGuide = (id: string): id is GuideId => GUIDES.some((g) => g.id === id);
+
+const PUBLIC_SANDBOX_RULES = [
+  "Las credenciales de ejemplo son públicas: no dan acceso a ningún negocio real.",
+  "Si pegás una credencial de prueba propia (nsc_test_), el pedido va a tu negocio en modo prueba: lecturas reales y escrituras con dry_run.",
+  "Las credenciales de producción se rechazan en esta página: usalas directo contra /api/v1 desde tu servidor.",
+  "Límite de 60 pedidos por minuto por IP.",
+];
 
 export function MethodBadge({ method }: { method: EndpointSpec["method"] }) {
   return (
@@ -262,7 +287,7 @@ function EndpointPage({ e, origin }: { e: EndpointSpec; origin: string }) {
   );
 }
 
-function Intro({ origin, go }: { origin: string; go: (id: string) => void }) {
+function Intro({ origin, go, variant }: { origin: string; go: (id: string) => void; variant: PortalVariant }) {
   return (
     <article className="space-y-6">
       <header className="space-y-2">
@@ -273,11 +298,25 @@ function Intro({ origin, go }: { origin: string; go: (id: string) => void }) {
         <CodeBlock code={`${origin}${API_BASE_PATH}`} label="Base" />
       </Section>
       <Section title="Primeros pasos">
-        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
-          <li>Creá una credencial de prueba en Credenciales.</li>
-          <li>Descargá la colección de Postman o probá desde esta página.</li>
-          <li>Cuando la integración funciona, creá una credencial de producción con los mismos permisos.</li>
-        </ol>
+        {variant === "public" ? (
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+            <li>
+              Probá cualquier endpoint desde esta página con las credenciales de ejemplo: responde un negocio ficticio y no
+              hace falta cuenta.
+            </li>
+            <li>Descargá la colección de Postman o la documentación en HTML o PDF.</li>
+            <li>
+              Para conectar un negocio real, el dueño crea una credencial de prueba (plan Enterprise) y después una de
+              producción.
+            </li>
+          </ol>
+        ) : (
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+            <li>Creá una credencial de prueba en Credenciales.</li>
+            <li>Descargá la colección de Postman o probá desde esta página.</li>
+            <li>Cuando la integración funciona, creá una credencial de producción con los mismos permisos.</li>
+          </ol>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={() => go("credentials")}>
             <KeyRound size={15} /> Credenciales
@@ -286,7 +325,7 @@ function Intro({ origin, go }: { origin: string; go: (id: string) => void }) {
             <FlaskConical size={15} /> Sandbox
           </Button>
           <Button size="sm" variant="secondary" onClick={() => go("downloads")}>
-            <Download size={15} /> Postman y OpenAPI
+            <Download size={15} /> Descargas
           </Button>
         </div>
       </Section>
@@ -371,13 +410,28 @@ function AuthGuide({ origin }: { origin: string }) {
   );
 }
 
-function SandboxGuide({ go }: { go: (id: string) => void }) {
+function SandboxGuide({ go, variant, origin }: { go: (id: string) => void; variant: PortalVariant; origin: string }) {
   return (
     <article className="space-y-6">
       <header className="space-y-2">
         <h2 className="text-lg font-semibold">Sandbox y pruebas</h2>
         <p className="text-sm text-muted-foreground">{SANDBOX_DOC.summary}</p>
       </header>
+      {variant === "public" && (
+        <Section title="Sandbox público con datos ficticios">
+          <p className="text-sm text-muted-foreground">
+            Sin cuenta: un negocio inventado (productos, sucursales, stock, ventas y clientes) que responde los mismos
+            endpoints, con las mismas validaciones y errores. Las escrituras se simulan y no se guarda nada. Mismo árbol de
+            rutas que la API, con otra base:
+          </p>
+          <CodeBlock code={`${origin}${SANDBOX_BASE_PATH}`} label="Base del sandbox público" />
+          <CodeBlock
+            code={`client_id=${DEMO_CLIENT_ID}\nclient_secret=${DEMO_CLIENT_SECRET}`}
+            label="Credenciales de ejemplo (públicas)"
+          />
+          <List items={PUBLIC_SANDBOX_RULES} />
+        </Section>
+      )}
       <Section title="Qué pasa con una credencial de prueba">
         <List items={SANDBOX_DOC.rules} />
       </Section>
@@ -397,8 +451,9 @@ function SandboxGuide({ go }: { go: (id: string) => void }) {
       </Section>
       <Section title="Probar desde esta página">
         <p className="text-sm text-muted-foreground">
-          Cada endpoint tiene su consola Probar. Conectate una vez con tu credencial de prueba y quedás conectado mientras
-          no cierres la pestaña. No acepta credenciales de producción.
+          Cada endpoint tiene su consola Probar. Conectate una vez con{" "}
+          {variant === "public" ? "las credenciales de ejemplo o tu credencial de prueba" : "tu credencial de prueba"} y
+          quedás conectado mientras no cierres la pestaña. No acepta credenciales de producción.
         </p>
         <Button size="sm" variant="secondary" onClick={() => go("oauth.token")}>
           <FlaskConical size={15} /> Conectar y probar
@@ -481,19 +536,54 @@ function ErrorsGuide() {
   );
 }
 
-function DownloadsGuide({ origin, onPostman }: { origin: string; onPostman: () => void }) {
+function DownloadsGuide({
+  origin,
+  onPostman,
+  onEmail,
+  variant,
+}: {
+  origin: string;
+  onPostman: () => void;
+  onEmail?: () => void;
+  variant: PortalVariant;
+}) {
   return (
     <article className="space-y-6">
       <header className="space-y-2">
-        <h2 className="text-lg font-semibold">Postman y OpenAPI</h2>
+        <h2 className="text-lg font-semibold">Descargas</h2>
         <p className="text-sm text-muted-foreground">
           Todo sale de la misma definición que esta página: lo que ves acá es lo que trae la colección y la especificación.
         </p>
       </header>
+      <Section title="Documentación completa">
+        <p className="text-sm text-muted-foreground">
+          Toda la referencia en un solo archivo HTML que se abre sin conexión. Para PDF se abre lista para imprimir: elegí
+          Guardar como PDF.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <a href={`${DOCS_HTML_PATH}?download=1`} download className={buttonVariants({ size: "sm" })}>
+            <FileCode2 size={15} aria-hidden /> Descargar HTML
+          </a>
+          <a
+            href={`${DOCS_HTML_PATH}?print=1`}
+            target="_blank"
+            rel="noopener"
+            className={buttonVariants({ size: "sm", variant: "secondary" })}
+          >
+            <FileText size={15} aria-hidden /> Guardar como PDF
+          </a>
+          {onEmail && (
+            <Button size="sm" variant="secondary" onClick={onEmail}>
+              <Mail size={15} /> Enviar por email
+            </Button>
+          )}
+        </div>
+      </Section>
       <Section title="Colección de Postman">
         <p className="text-sm text-muted-foreground">
           Formato v2.1, una carpeta por recurso, cada pedido con su explicación, ejemplos de cuerpo y de respuesta. Variables
           base_url, client_id y client_secret; el token se pide solo antes del primer pedido y se renueva.
+          {variant === "public" && " Viene apuntada al sandbox público con las credenciales de ejemplo: funciona al importarla."}
         </p>
         <Button size="sm" onClick={onPostman}>
           <Download size={15} /> Descargar colección de Postman
@@ -517,17 +607,25 @@ function DownloadsGuide({ origin, onPostman }: { origin: string; onPostman: () =
 export function ApiPortal({
   credentials,
   onPostman,
+  onEmail,
   active,
   onNavigate,
+  variant = "panel",
 }: {
   /** Sección de credenciales (sólo el dueño la ve completa). */
   credentials: React.ReactNode;
   onPostman: () => void;
+  /** Enviar la documentación por email (sólo el panel, auditado). */
+  onEmail?: () => void;
   /** Sección visible: id de guía o de endpoint. */
   active: string;
   onNavigate: (id: string) => void;
+  variant?: PortalVariant;
 }) {
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  // El origen se lee después de montar: en /developers la página se renderiza
+  // también en el servidor y leerlo en el render rompía la hidratación.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
   const endpoint = useMemo(() => ENDPOINTS.find((e) => e.id === active) ?? null, [active]);
 
   const go = (id: string) => {
@@ -610,15 +708,15 @@ export function ApiPortal({
             ) : active === "auth" ? (
               <AuthGuide origin={origin} />
             ) : active === "sandbox" ? (
-              <SandboxGuide go={go} />
+              <SandboxGuide go={go} variant={variant} origin={origin} />
             ) : active === "limits" ? (
               <LimitsGuide />
             ) : active === "errors" ? (
               <ErrorsGuide />
             ) : active === "downloads" ? (
-              <DownloadsGuide origin={origin} onPostman={onPostman} />
+              <DownloadsGuide origin={origin} onPostman={onPostman} onEmail={onEmail} variant={variant} />
             ) : isGuide(active) ? (
-              <Intro origin={origin} go={go} />
+              <Intro origin={origin} go={go} variant={variant} />
             ) : (
               <Callout tone="warning" icon={TriangleAlert}>
                 Sección inexistente.

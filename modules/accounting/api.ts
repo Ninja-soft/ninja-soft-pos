@@ -276,6 +276,38 @@ export const accountingApi = {
     return { rows, total: count ?? rows.length };
   },
 
+  /**
+   * Asientos de un documento (H155, ADR-158): "Ver asiento" desde Tesorería y
+   * otras pantallas. Para un movimiento de Tesorería el servidor resuelve el
+   * documento real (venta, orden de pago, contrapartida). Sin la RPC, vacío.
+   */
+  entriesForSource: async (sourceType: string, sourceId: string): Promise<AccEntry[]> => {
+    const { data, error } = await createClient().rpc(
+      "acc_entry_lookup" as never,
+      { p_source_type: sourceType, p_source_id: sourceId } as never,
+    );
+    if (error) {
+      if (/Could not find the function|PGRST202|does not exist/i.test(error.message ?? "")) return [];
+      throw error;
+    }
+    return ((data ?? []) as unknown as Array<Partial<AccEntry> & { id: string; number: number; total: unknown }>).map((e) => ({
+      id: e.id,
+      number: Number(e.number),
+      official_number: e.official_number ?? null,
+      entry_date: e.entry_date ?? "",
+      kind: e.kind ?? "auto",
+      source_type: e.source_type ?? null,
+      source_id: e.source_id ?? null,
+      source_event: e.source_event ?? null,
+      description: e.description ?? "",
+      store_id: e.store_id ?? null,
+      reversal_of: e.reversal_of ?? null,
+      reversed_by: e.reversed_by ?? null,
+      total: Number(e.total),
+      created_at: e.created_at ?? "",
+    }));
+  },
+
   entryLines: async (entryId: string): Promise<JournalLine[]> => {
     const { data, error } = await from("acc_journal_lines")
       .select(JOURNAL_COLS)

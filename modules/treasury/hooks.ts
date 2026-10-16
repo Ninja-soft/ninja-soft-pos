@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFeature } from "@/modules/saas/gating";
 import type { ChequeKind, ChequeStatus } from "@/lib/treasury/cheques";
@@ -32,6 +33,44 @@ export function useTreasuryBalances(enabled = true) {
   });
 }
 
+/** Posición (H150): cuentas de dinero con saldo, cajas del POS y lo a acreditar. */
+export function useTreasuryPosition(enabled = true) {
+  return useQuery({
+    queryKey: ["treasury", "position"],
+    queryFn: () => treasuryApi.position(),
+    enabled,
+  });
+}
+
+/**
+ * Crea las cuentas de sistema que falten (cajas del POS, a acreditar) una vez
+ * por sesión al abrir Posición. Silenciosa: si falla, la pantalla sigue.
+ */
+let synced = false;
+export function useTreasuryAccountsSync(enabled: boolean) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled || synced) return;
+    synced = true;
+    treasuryApi
+      .syncAccounts()
+      .then((created) => {
+        if (created > 0) void qc.invalidateQueries({ queryKey: ["treasury"] });
+      })
+      .catch(() => {
+        synced = false;
+      });
+  }, [enabled, qc]);
+}
+
+export function usePendingCollections(provider: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["treasury", "pending-collections", provider],
+    queryFn: () => treasuryApi.pendingCollections(provider),
+    enabled,
+  });
+}
+
 export function useTreasuryMovements(
   f: { accountId?: string | null; from?: string | null; to?: string | null; includeVoided?: boolean; onlyUnreconciled?: boolean },
   enabled = true,
@@ -40,6 +79,14 @@ export function useTreasuryMovements(
     queryKey: ["treasury", "movements", f],
     queryFn: () => treasuryApi.movements(f),
     enabled,
+  });
+}
+
+export function useTreasuryMovement(id: string | null) {
+  return useQuery({
+    queryKey: ["treasury", "movement", id],
+    queryFn: () => treasuryApi.movement(id!),
+    enabled: Boolean(id),
   });
 }
 
@@ -80,6 +127,18 @@ export function useTreasuryMutations() {
       onSuccess: inv,
     }),
     archiveAccount: useMutation({ mutationFn: (id: string) => treasuryApi.archiveAccount(id), onSuccess: inv }),
+    linkTransfer: useMutation({
+      mutationFn: (v: { treasuryId: string; transferId: string; linked: boolean }) =>
+        treasuryApi.linkTransfer(v.treasuryId, v.transferId, v.linked),
+      onSuccess: inv,
+    }),
+    createLedgerAccount: useMutation({
+      mutationFn: (accountId: string) => treasuryApi.createLedgerAccount(accountId),
+      onSuccess: () => {
+        inv();
+        void qc.invalidateQueries({ queryKey: ["accounting"] });
+      },
+    }),
     createMovement: useMutation({ mutationFn: (v: MovementInput) => treasuryApi.createMovement(v), onSuccess: inv }),
     transfer: useMutation({
       mutationFn: (v: Parameters<typeof treasuryApi.transfer>[0]) => treasuryApi.transfer(v),

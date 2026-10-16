@@ -747,8 +747,19 @@ export const posApi = {
     // Cobros en espera del turno (ADR-048): cancelarlos o pasarlos a la
     // próxima apertura. Sin cobros abiertos no hace falta.
     pendingAction?: "cancel" | "carry" | null,
+    // H156 (ADR-158): cerrar con $0 contados y esperado positivo pide
+    // confirmarlo con motivo antes (cash_shift_confirm_zero_close).
+    zeroCloseReason?: string | null,
   ): Promise<number> => {
     const supabase = createClient();
+    if (zeroCloseReason && zeroCloseReason.trim()) {
+      const { error: zErr } = await supabase.rpc(
+        "cash_shift_confirm_zero_close" as never,
+        { p_shift_id: shiftId, p_reason: zeroCloseReason.trim() } as never,
+      );
+      // Sin la migración la RPC no existe y el cierre no la pide: se sigue.
+      if (zErr && !/Could not find the function|PGRST202|does not exist/i.test(zErr.message ?? "")) throw zErr;
+    }
     const { data, error } = await supabase.rpc("close_cash_shift", {
       p_shift_id: shiftId,
       p_closing_amount: closing,

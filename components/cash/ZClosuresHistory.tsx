@@ -6,7 +6,11 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
-import { useZClosures } from "@/modules/cash/hooks";
+import { useReviewZ, useZClosures } from "@/modules/cash/hooks";
+import { Badge } from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/Toast";
+import { useMyTenant } from "@/modules/tenants/hooks";
+import { MIN_REASON, Z_REVIEW_KINDS, validReason, zNeedsReview, zReviewLabel, type ZReviewKind } from "@/lib/cash/closeControls";
 import type { ZClosure } from "@/modules/cash/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
@@ -33,6 +37,12 @@ function itemsOf(z: ZClosure) {
   return parseZItems((z as ZClosure & { items_summary?: unknown }).items_summary);
 }
 
+// Conciliación del Z (H156, ADR-158): columnas nuevas, ausentes sin la migración.
+type ZReviewCols = { review_kind?: string | null; review_reason?: string | null; reviewed_at?: string | null };
+function reviewOf(z: ZClosure): ZReviewCols {
+  return z as ZClosure & ZReviewCols;
+}
+
 // Cobros de cuenta corriente del turno por medio (Cuenta corriente v2).
 function accountCollected(z: ZClosure): [string, number][] {
   const b = (z.account_collected ?? {}) as Record<string, number>;
@@ -57,6 +67,9 @@ export function ZClosuresHistory() {
     registerFilterOn ? registerId : null,
   );
   const [sel, setSel] = useState<ZClosure | null>(null);
+  const [reviewing, setReviewing] = useState<ZClosure | null>(null);
+  const { data: me } = useMyTenant();
+  const canReview = Boolean(me?.canManage);
   // Series propias de la sucursal (sólo con varias) y de la caja.
   const seriesOf = (z: ZClosure) =>
     zSeriesLabel(z, {
@@ -216,15 +229,27 @@ export function ZClosuresHistory() {
                           : "text-danger")
                     }
                   >
-                    {formatCurrency(z.difference)}
+                    <div>{formatCurrency(z.difference)}</div>
+                    {zNeedsReview({ difference: z.difference, reviewed_at: reviewOf(z).reviewed_at }) ? (
+                      <Badge tone="warning" className="mt-1">Diferencia sin revisar</Badge>
+                    ) : reviewOf(z).reviewed_at ? (
+                      <Badge tone="neutral" className="mt-1">{zReviewLabel(reviewOf(z).review_kind)}</Badge>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <button
-                      onClick={() => setSel(z)}
-                      className="text-ninja-flameSoft hover:underline"
-                    >
-                      Ver
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      {canReview && zNeedsReview({ difference: z.difference, reviewed_at: reviewOf(z).reviewed_at }) && (
+                        <button onClick={() => setReviewing(z)} className="text-warning hover:underline">
+                          Revisar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setSel(z)}
+                        className="text-ninja-flameSoft hover:underline"
+                      >
+                        Ver
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -275,6 +300,12 @@ export function ZClosuresHistory() {
                 v={formatCurrency(sel.difference)}
                 strong
               />
+              {reviewOf(sel).reviewed_at && (
+                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{zReviewLabel(reviewOf(sel).review_kind)}:</span>{" "}
+                  {reviewOf(sel).review_reason}
+                </p>
+              )}
 
               {breakdown(sel).length > 0 && (
                 <>
@@ -313,7 +344,91 @@ export function ZClosuresHistory() {
           </div>
         )}
       </Modal>
+      <ZReviewModal z={reviewing} onClose={() => setReviewing(null)} />
     </section>
+  );
+}
+
+// Conciliación del Z (H156): el encargado deja por qué hubo diferencia.
+function ZReviewModal({ z, onClose }: { z: ZClosure | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const review = useReviewZ();
+  const [kind, setKind] = useState<ZReviewKind>("conteo");
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (z) {
+      setKind(z.difference < 0 ? "faltante_real" : "sobrante_real");
+      setReason("");
+    }
+  }, [z]);
+
+  async function save() {
+    if (!z || !validReason(reason)) return;
+    try {
+      await review.mutateAsync({ id: z.id, kind, reason: reason.trim() });
+      toast({ title: "Diferencia revisada", variant: "success" });
+      onClose();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String((e as { message?: unknown })?.message ?? "");
+      toast({
+        title: "No se pudo guardar la revisión",
+        description: /forbidden/.test(msg)
+          ? "Sólo el dueño o un encargado revisan los cierres."
+          : /Could not find the function|PGRST202/.test(msg)
+            ? "Falta actualizar la base para usar esta función."
+            : msg || undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  return (
+    <Modal
+      open={z !== null}
+      onOpenChange={(o) => !o && onClose()}
+      title={z ? `Revisar la diferencia del Z #${z.z_number}` : "Revisar diferencia"}
+      description={z ? `Diferencia de ${formatCurrency(z.difference)}. Queda registrado quién lo revisó y por qué.` : undefined}
+      className="max-w-md"
+    >
+      <div className="space-y-3">
+        <fieldset className="space-y-1.5">
+          <legend className="mb-1 text-sm font-medium">¿Qué pasó?</legend>
+          {Z_REVIEW_KINDS.map((k) => (
+            <label key={k.value} className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-muted">
+              <input
+                type="radio"
+                name="z-review-kind"
+                className="mt-1"
+                checked={kind === k.value}
+                onChange={() => setKind(k.value)}
+              />
+              <span className="text-sm">
+                <span className="font-medium">{k.label}</span>
+                <span className="block text-xs text-muted-foreground">{k.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <label className="block text-sm">
+          <span className="mb-1 block font-medium">Motivo</span>
+          <textarea
+            className="min-h-[72px] w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            maxLength={300}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={`Mínimo ${MIN_REASON} letras`}
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={review.isPending} disabled={!validReason(reason)} onClick={() => void save()}>
+            Guardar revisión
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

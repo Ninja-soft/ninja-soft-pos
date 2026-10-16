@@ -125,6 +125,17 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["pos"],
   },
+  direcciones_geo: {
+    desc: "Direcciones con mapa: al cobrar un envío se elige el cliente y su dirección se busca escribiendo (sugerencias de OpenStreetMap), se normaliza con los datos oficiales de Georef (localidad, partido y provincia) y se ve en un mini mapa con el pin para corregirla. Cada cliente guarda varias direcciones con una predeterminada, la entrega se lleva una copia y el costo de envío se sugiere por la zona de la localidad.",
+    impact: "Desactivado, la dirección del envío se escribe a mano como texto, sin sugerencias, sin mapa y sin guardarla en el cliente (el servidor rechaza las direcciones estructuradas).",
+    minPlan: "Start",
+  },
+  reparto_propio: {
+    desc: "Reparto propio: cargá tus camiones y motos con fotos, capacidad y vencimientos (seguro, VTV, SENASA), armá hojas de ruta por camión con las paradas ordenadas por cercanía, imprimí la hoja y la planilla de carga, y emití los remitos con copias y modelo. El repartidor entra con su propio rol (no ve ventas, caja ni clientes) a una app en el celular que funciona sin señal: sale, marca llegué, entregado con firma en pantalla, foto y foto del remito firmado, o no se pudo entregar con el motivo, y todo queda con la ubicación del momento.",
+    impact: "Desactivado, no hay flota, hojas de ruta ni app del repartidor: los envíos propios se entregan a mano desde Expedición (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["pedidos_despacho"],
+  },
   entregas_remitos: {
     desc: "Entregas partidas y remitos: vendé desde el POS el stock de otra sucursal o de un depósito habilitado (retira allá o se envía), partí la entrega de una venta (una parte se la lleva ahora, otra la retira en otra sucursal y otra se envía) con estados por entrega en Expedición, y emití remitos de entrega y de envío con numeración propia, bultos, transporte, COT y PDF A4 para imprimir o mandar por email.",
     impact: "Desactivado, cada venta sale entera del salón de la sucursal que cobra y no se emiten remitos desde el sistema (el servidor lo rechaza).",
@@ -642,7 +653,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Cuenta Envíopack con API key y secret key.",
   },
   api_publica: {
-    desc: "API pública v1: API REST versionada para conectar tu tienda online, ERP o planillas. Credenciales OAuth2 por integración con permisos por alcance (productos, stock, precios, ventas y clientes), secreto que se muestra una vez, rotación, revocación y último uso. Productos y precios en lote hasta 500 por pedido con Idempotency-Key, stock por sucursal con motivo, ventas por rango (sólo lectura), límite de pedidos por minuto y todo en la auditoría.",
+    desc: "API pública v1: API REST versionada para conectar tu tienda online, ERP o planillas. Credenciales OAuth2 por integración con permisos por alcance (productos, stock, precios, ventas y clientes), secreto que se muestra una vez, rotación, revocación y último uso. Productos y precios en lote hasta 500 por pedido con Idempotency-Key, stock por sucursal con motivo, ventas por rango (sólo lectura), límite de pedidos por minuto y todo en la auditoría. Portal para desarrolladores con referencia por endpoint, ejemplos en curl, JavaScript y Python, colección de Postman, OpenAPI 3.1 y credenciales de prueba (sandbox) que validan sin guardar nada.",
     impact: "Desactivado, no se emiten tokens y la API rechaza cada pedido (el servidor lo exige); las credenciales existentes se pueden ver y revocar.",
     minPlan: "Enterprise",
     needs: "Un sistema que se integre por HTTP y guarde el client_id y el secreto de forma segura.",

@@ -2465,6 +2465,13 @@ function PosPageInner() {
                   setDeliveryError(r.error);
                 }}
                 onSplit={() => setFulfillOpen(true)}
+                onPickCustomer={() => setCustOpen(true)}
+                onNewCustomer={() => {
+                  setNewCustSearch("");
+                  setNewCustOpen(true);
+                }}
+                saleTotal={rawTotal}
+                offline={offline.isOffline}
               />
             ) : null
           }

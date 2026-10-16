@@ -52,7 +52,10 @@ export const remitosApi = {
   },
 
   get: async (id: string): Promise<Remito | null> => {
-    const { data, error } = await createClient().from("remitos" as never).select(COLS).eq("id", id).maybeSingle();
+    const run = (cols: string) => createClient().from("remitos" as never).select(cols).eq("id", id).maybeSingle();
+    // ADR-161: copias, modelo y foto del remito firmado. Sin la migración, sin ellos.
+    let { data, error } = await run(`${COLS}, copies, model_key, route_id, signed_copy_path`);
+    if (error && /copies|model_key|route_id|signed_copy_path/.test(error.message)) ({ data, error } = await run(COLS));
     if (error) throw error;
     return data ? normalize(data as unknown as Remito) : null;
   },

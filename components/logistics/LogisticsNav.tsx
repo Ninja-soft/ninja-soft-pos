@@ -1,14 +1,14 @@
 "use client";
 
 // Logística (ADR-149 · L0, A24): un solo menú con sus sub-páginas. Esta barra
-// va arriba de Expedición, Remitos y Envíos para pasar de una a otra sin
+// va arriba de Expedición, Reparto, Flota, Remitos y Envíos para pasar de una a otra sin
 // volver al menú. Las que el plan no incluye se ven con candado (la página
 // explica cómo sumarlas). Mobile-first: una fila con scroll lateral.
 
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { FileText, Lock, PackageCheck, Send, type LucideIcon } from "lucide-react";
+import { FileText, Lock, PackageCheck, Route as RouteIcon, Send, Truck, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useFeature } from "@/modules/saas/gating";
 
@@ -21,6 +21,9 @@ export interface LogisticsSection {
 
 export const LOGISTICS_SECTIONS: LogisticsSection[] = [
   { href: "/expedicion", label: "Expedición", icon: PackageCheck, feature: "pedidos_despacho" },
+  // ADR-161 (L2): hojas de ruta y flota del reparto propio.
+  { href: "/logistica/reparto", label: "Reparto", icon: RouteIcon, feature: "reparto_propio" },
+  { href: "/logistica/flota", label: "Flota", icon: Truck, feature: "reparto_propio" },
   { href: "/remitos", label: "Remitos", icon: FileText, feature: "entregas_remitos" },
   { href: "/envios", label: "Envíos", icon: Send, feature: "envios" },
 ];

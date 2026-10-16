@@ -19,11 +19,11 @@ import { LogisticsNav } from "@/components/logistics/LogisticsNav";
 import { SaleDeliveriesView } from "@/components/sales/SaleDeliveries";
 
 describe("LogisticsNav", () => {
-  it("una barra con las tres sub-páginas, la actual marcada y candado en lo que no está en el plan", () => {
+  it("una barra con las sub-páginas (también Reparto y Flota, ADR-161), la actual marcada y candado en lo que no está en el plan", () => {
     render(<LogisticsNav />);
     const nav = screen.getByRole("navigation", { name: "Logística" });
     const links = nav.querySelectorAll("a");
-    expect([...links].map((a) => a.getAttribute("href"))).toEqual(["/expedicion", "/remitos", "/envios"]);
+    expect([...links].map((a) => a.getAttribute("href"))).toEqual(["/expedicion", "/logistica/reparto", "/logistica/flota", "/remitos", "/envios"]);
     expect(screen.getByRole("link", { name: /Remitos/ }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: /Expedición/ }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("link", { name: /Envíos/ }).querySelector('[aria-label="No incluido en tu plan"]')).toBeTruthy();

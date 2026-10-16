@@ -5,9 +5,17 @@ import { createHash } from "node:crypto";
 // sólo como sha256 hex (_api_sha256). Acá: el mismo hash para tests y los
 // formatos que la ruta valida antes de ir a la base.
 
-export const CLIENT_ID_RE = /^nsc_[0-9a-f]{24}$/;
-export const CLIENT_SECRET_RE = /^nss_[0-9a-f]{64}$/;
-export const ACCESS_TOKEN_RE = /^nsat_[0-9a-f]{64}$/;
+export {
+  CLIENT_ID_RE,
+  CLIENT_SECRET_RE,
+  ACCESS_TOKEN_RE,
+  SANDBOX_CLIENT_PREFIX,
+  SANDBOX_SECRET_PREFIX,
+  SANDBOX_TOKEN_PREFIX,
+  isSandboxToken,
+  isSandboxClientId,
+} from "./formats";
+import { ACCESS_TOKEN_RE } from "./formats";
 
 export function sha256Hex(s: string): string {
   return createHash("sha256").update(s, "utf8").digest("hex");

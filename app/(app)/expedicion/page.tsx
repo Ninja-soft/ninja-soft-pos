@@ -49,6 +49,7 @@ import { useBranchContext } from "@/modules/branches/hooks";
 import { useStores } from "@/modules/stock/hooks";
 import { useDispatches, useOrderConfig, useOrderMutations, useSalePending, type Dispatch } from "@/modules/orders/hooks";
 import { fmtDateTime, selectCls } from "@/components/stock/transfers/shared";
+import type { GeoAddress } from "@/lib/geo/address";
 
 const STATUS_TONE: Record<DispatchStatus, BadgeTone> = {
   pendiente: "info",
@@ -304,6 +305,17 @@ export default function ExpedicionPage() {
                     )}
                     {d.has_pickup_code && d.delivery_type === "retiro" && <span>· pide código</span>}
                     {soldElsewhere && <span>· vendida en {storeName(d.sale_store_id ?? null)}</span>}
+                    {d.route && d.status !== "entregado" && (
+                      <Link href={`/logistica/reparto?hoja=${d.route_id}` as Route} className="font-semibold text-ninja-flameSoft hover:underline">
+                        En hoja N° {d.route.number}
+                      </Link>
+                    )}
+                    {(d.delivery_attempts ?? 0) > 0 && d.status !== "entregado" && (
+                      <Badge tone="danger">
+                        {d.delivery_attempts === 1 ? "1 intento" : `${d.delivery_attempts} intentos`}
+                        {d.last_failure_reason ? `: ${d.last_failure_reason}` : ""}
+                      </Badge>
+                    )}
                   </div>
                   <ul className="mt-3 space-y-0.5 text-sm">
                     {items.slice(0, 6).map((i, idx) => (
@@ -319,6 +331,7 @@ export default function ExpedicionPage() {
                   {(d.ship_address || d.notes || d.tracking || d.delivered_to || d.cancel_reason || d.shipment_status) && (
                     <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                       {d.ship_address && <p>Domicilio: {d.ship_address}</p>}
+                      <ShipToExtra shipTo={d.ship_to} />
                       {d.notes && <p>Nota: {d.notes}</p>}
                       {d.shipment_status && <p>Envío con logística: {shipmentStatusLabel(d.shipment_status).toLowerCase()}</p>}
                       {d.shipped_at && d.status === "despachado" && <p>Despachado {fmtDateTime(d.shipped_at)}</p>}
@@ -551,6 +564,7 @@ function ShipModal({
     >
       <div className="space-y-3">
         {dispatch.ship_address && <p className="text-sm">Domicilio: {dispatch.ship_address}</p>}
+        <ShipToExtra shipTo={dispatch.ship_to} />
         <Input label="Seguimiento (opcional)" value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={120} />
       </div>
     </Modal>
@@ -754,5 +768,29 @@ function AddSaleModal({
         {type === "envio" && <Input label="Domicilio de entrega" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} />}
       </div>
     </Modal>
+  );
+}
+
+// ADR-157: lo que suma la dirección estructurada (referencia, contacto y mapa).
+function ShipToExtra({ shipTo }: { shipTo?: GeoAddress | null }) {
+  if (!shipTo) return null;
+  const hasPin = shipTo.lat != null && shipTo.lng != null;
+  return (
+    <>
+      {(shipTo.reference || shipTo.between_streets) && <p>Referencia: {[shipTo.between_streets, shipTo.reference].filter(Boolean).join(" · ")}</p>}
+      {(shipTo.contact_name || shipTo.contact_phone) && <p>Recibe: {[shipTo.contact_name, shipTo.contact_phone].filter(Boolean).join(" · ")}</p>}
+      {hasPin && (
+        <p>
+          <a
+            href={`https://www.openstreetmap.org/?mlat=${shipTo.lat}&mlon=${shipTo.lng}#map=18/${shipTo.lat}/${shipTo.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            Ver en el mapa
+          </a>
+        </p>
+      )}
+    </>
   );
 }

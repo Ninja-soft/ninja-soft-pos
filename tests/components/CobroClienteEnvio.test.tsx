@@ -24,6 +24,25 @@ vi.mock("@/modules/customers/checkoutFiscal", () => ({
   useCheckoutCustomerFiscal: (id: string | null) => ({ data: id ? (FISCAL[id] ?? null) : undefined }),
 }));
 vi.mock("@/modules/saas/gating", () => ({ useFeature: () => true }));
+// ADR-157: direcciones guardadas del cliente y zonas por localidad.
+const ADDRS: Record<string, unknown[]> = {
+  conDir: [
+    {
+      id: "dir-1", customer_id: "conDir", label: "Casa", street: "Av. San Martín", number: "1234", locality: "Pilar",
+      province: "Buenos Aires", province_code: "B", lat: -34.45, lng: -58.91, geo_source: "georef", geo_quality: "exacta",
+      is_default: true, created_at: "2026-10-01T00:00:00Z",
+    },
+  ],
+};
+vi.mock("@/modules/geo/api", () => ({
+  useCustomerAddresses: (id: string | null) => ({ data: id ? (ADDRS[id] ?? []) : [], isLoading: false }),
+  geoApi: { suggest: vi.fn(), normalize: vi.fn(), reverse: vi.fn() },
+}));
+vi.mock("@/modules/delivery/hooks", () => ({
+  useDeliveryZones: () => ({
+    data: [{ id: "z1", name: "Norte", fee: 3500, is_active: true, localities: ["pilar", "Del Viso"], free_from: null, eta_minutes: null, sort_order: 0 }],
+  }),
+}));
 vi.mock("@/modules/tax/hooks", () => ({
   useTaxSettings: () => ({ data: { iva_condition: "responsable_inscripto", issues_cbte_m: false } }),
 }));
@@ -112,10 +131,11 @@ describe("Bloque Entrega", () => {
   const rules = { storeId: "A", retiroEnabled: true, envioEnabled: true, retiroCrossBranch: false };
 
   // Controlado como en el POS: lo que devuelve onApply vuelve como choice.
-  function DeliveryHarness({ onApply, customerId = "ri", locks = { retiro: null, envio: null } }: {
+  function DeliveryHarness({ onApply, customerId = "ri", locks = { retiro: null, envio: null }, onPick }: {
     onApply: (r: DeliveryApply) => void;
     customerId?: string | null;
     locks?: { retiro: string | null; envio: string | null };
+    onPick?: () => void;
   }) {
     const [last, setLast] = useState<DeliveryApply | null>(null);
     return (
@@ -138,6 +158,8 @@ describe("Bloque Entrega", () => {
           onApply(r);
         }}
         onSplit={vi.fn()}
+        onPickCustomer={onPick}
+        onNewCustomer={vi.fn()}
       />
     );
   }
@@ -158,7 +180,7 @@ describe("Bloque Entrega", () => {
     render(<DeliveryHarness onApply={(r) => applied.push(r)} />);
     fireEvent.click(header("Entrega"));
     fireEvent.click(screen.getByRole("radio", { name: /Envío a domicilio/ }));
-    expect((screen.getByLabelText("Domicilio de entrega") as HTMLInputElement).value).toBe("Av. Siempreviva 742, Rosario");
+    expect(screen.getByRole("radio", { name: /Domicilio cargado/ }).getAttribute("aria-checked")).toBe("true");
     let plan = lastPlan()!;
     expect(plan.deliveries).toHaveLength(1);
     expect(plan.deliveries[0]).toMatchObject({ mode: "envio", ship_address: "Av. Siempreviva 742, Rosario" });
@@ -172,13 +194,37 @@ describe("Bloque Entrega", () => {
     expect(plan.shipping_fee).toBe(1500);
   });
 
-  it("envío sin domicilio no deja cobrar (error en vez de plan)", () => {
-    render(<DeliveryHarness onApply={(r) => applied.push(r)} customerId={null} />);
+  it("envío sin cliente no deja cobrar y ofrece elegirlo (ADR-157)", () => {
+    const onPick = vi.fn();
+    render(<DeliveryHarness onApply={(r) => applied.push(r)} customerId={null} onPick={onPick} />);
     fireEvent.click(header("Entrega"));
     fireEvent.click(screen.getByRole("radio", { name: /Envío a domicilio/ }));
-    expect(applied.at(-1)).toMatchObject({ plan: null, error: "Cargá el domicilio de cada envío." });
+    expect(applied.at(-1)).toMatchObject({ plan: null, error: "Para enviar elegí o cargá un cliente." });
     expect(header("Entrega").textContent).toContain("Falta completar la entrega");
-    expect(screen.getByRole("status").textContent).toBe("Cargá el domicilio de cada envío.");
+    expect(screen.getByText("Para enviar, elegí el cliente")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Elegir cliente/ }));
+    expect(onPick).toHaveBeenCalled();
+  });
+
+  it("envío con dirección guardada: la predeterminada, su copia en el plan y el costo de la zona (ADR-157)", () => {
+    render(<DeliveryHarness onApply={(r) => applied.push(r)} customerId="conDir" />);
+    fireEvent.click(header("Entrega"));
+    fireEvent.click(screen.getByRole("radio", { name: /Envío a domicilio/ }));
+    expect(screen.getByRole("radio", { name: /Casa · Av. San Martín 1234/ }).getAttribute("aria-checked")).toBe("true");
+    let plan = lastPlan()!;
+    expect(plan.deliveries[0]).toMatchObject({
+      mode: "envio",
+      address_id: "dir-1",
+      ship_to: null,
+      save_to_customer: false,
+      ship_address: "Av. San Martín 1234, Pilar, Buenos Aires",
+    });
+    // Pilar está en la zona Norte: el costo se completa solo.
+    expect(plan.shipping_fee).toBe(3500);
+    expect((screen.getByLabelText(/Costo de envío/) as HTMLInputElement).value).toBe("3500");
+    fireEvent.change(screen.getByLabelText(/Costo de envío/), { target: { value: "0" } });
+    plan = lastPlan()!;
+    expect(plan.shipping_fee).toBeUndefined();
   });
 
   it("retira en otra sucursal: elige la que tiene todo y arma el retiro a nombre del cliente", () => {

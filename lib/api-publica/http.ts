@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { z } from "zod";
-import { parseBearer } from "./hashing";
+import { isSandboxToken, parseBearer } from "./hashing";
 import { MAX_BODY_BYTES, zodDetails } from "./schemas";
 
 // Capa HTTP de /api/v1 (ADR-094). La ruta NO decide el negocio ni tiene
@@ -13,6 +13,8 @@ export type ApiEnvelope = {
   status: number;
   body: unknown;
   rate?: { limit: number; remaining: number; reset: number; retry_after?: number };
+  /** Credencial de prueba (ADR-159): la base hizo dry_run, nada persistió. */
+  sandbox?: boolean;
 };
 
 export const API_VERSION = "v1";
@@ -41,6 +43,7 @@ export function respond(env: ApiEnvelope, extraHeaders?: Record<string, string>)
     if (env.status === 429) headers["Retry-After"] = String(env.rate.retry_after ?? env.rate.reset);
   }
   if (env.status === 401) headers["WWW-Authenticate"] = 'Bearer realm="ninjasoft-api"';
+  if (env.sandbox) headers["X-Ninja-Environment"] = "test";
   return NextResponse.json(env.body ?? {}, { status: env.status, headers });
 }
 
@@ -74,6 +77,14 @@ export function requireBearer(req: Request): string | NextResponse {
   return token ?? apiError(401, "invalid_token", "Falta el token Bearer o no es válido.", undefined, {
     "WWW-Authenticate": 'Bearer realm="ninjasoft-api"',
   });
+}
+
+/**
+ * Ambiente del token para la respuesta (ADR-159). Sólo informativo: el modo
+ * dry_run lo decide la base con la credencial, nunca este header.
+ */
+export function environmentHeaders(token: string): Record<string, string> {
+  return { "X-Ninja-Environment": isSandboxToken(token) ? "test" : "live" };
 }
 
 /** Idempotency-Key opcional (validada en la base). */

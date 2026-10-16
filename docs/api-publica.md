@@ -1,6 +1,6 @@
 # API pública de NinjaSoft POS (v1)
 
-> Para quien integra una tienda online, un ERP o una planilla con NinjaSoft. Plan **Enterprise**. Decisión técnica: [ADR-094](17-decision-log.md). Especificación completa: **OpenAPI 3.1** en [`/api/openapi.json`](../public/api/openapi.json).
+> Para quien integra una tienda online, un ERP o una planilla con NinjaSoft. Plan **Enterprise**. Decisión técnica: [ADR-094](17-decision-log.md). Especificación completa: **OpenAPI 3.1** en `/api/openapi.json` (generada desde [`lib/api/spec.ts`](../lib/api/spec.ts), ADR-159). Portal con referencia, colección de Postman y Probar contra el sandbox en **Configuración > Integraciones > API** y, sin login, en **`/developers`** (ADR-163), con un sandbox de datos ficticios y la documentación en HTML o PDF (`/api/docs/html`).
 
 ## 1. En dos minutos
 
@@ -16,7 +16,7 @@
 
 Las crea **el dueño** en **Configuración > Integraciones > API**:
 
-1. **Nueva credencial**: nombre (por ejemplo "Tienda online"), permisos y pedidos por minuto.
+1. **Nueva credencial**: ambiente (**Prueba** o **Producción**), nombre (por ejemplo "Tienda online"), permisos y pedidos por minuto.
 2. Se muestra el **secreto una sola vez**. NinjaSoft guarda sólo su huella (sha256): si se pierde, se **rota**.
 3. **Rotar** genera un secreto nuevo; el anterior y los tokens emitidos dejan de servir en el acto.
 4. **Revocar** corta el acceso para siempre (con motivo). Siempre se puede, aunque el plan ya no incluya la API.
@@ -144,10 +144,31 @@ curl -s -X POST $API/customers/batch -H "Authorization: Bearer $TOKEN" -H "Conte
 curl -s "$API/customers?external_id=WEB-1001" -H "Authorization: Bearer $TOKEN"
 ```
 
+## 6 bis. Sandbox (credenciales de prueba, ADR-159)
+
+- Se crean igual que las de producción eligiendo el ambiente **Prueba**. Prefijos: `client_id` `nsc_test_`, secreto `nss_test_`, token `nsat_test_`. El ambiente se fija al crear y no cambia.
+- **Escrituras** (`products/batch`, `prices/batch`, `stock/adjustments`, `customers/batch`): la base valida y ejecuta todo dentro de un subbloque y lo deshace antes de responder (*dry_run*). Misma respuesta que en producción con `"dry_run": true`; los `id` de altas son simulados. No queda nada: ni productos, ni stock, ni movimientos, ni auditoría del lote, ni la `Idempotency-Key`, ni lo que encolarían los triggers (Mercado Libre, catálogo).
+- **Lecturas:** datos reales del negocio, sólo lectura, con los alcances de la credencial.
+- Nunca factura en ARCA, no cobra ni publica: la API v1 no expone esas operaciones.
+- Mismo plan (Enterprise), límite y errores que producción. Las respuestas traen `X-Ninja-Environment: test`.
+- El **Probar** del portal sólo acepta credenciales de prueba; credenciales y token quedan en memoria de la pestaña.
+
+## 6 ter. Portal público y sandbox con datos ficticios (ADR-163)
+
+- **`/developers`** (sin login): la misma referencia generada desde `lib/api/spec.ts`, Probar, descargas y cómo conseguir credenciales.
+- **Sandbox público:** base `https://pos.soft.ninja/api/sandbox/v1`, mismo árbol de rutas que `/api/v1`.
+  - Con las **credenciales de ejemplo** (públicas) `nsc_test_000000000000000000000000` / `nss_test_` + 64 ceros responde un negocio **ficticio** (productos, dos sucursales, stock, ventas del 1 al 14/10/2026 y clientes) sin tocar la base: mismas validaciones Zod, mismas formas, mismos errores (incluido `insufficient_scope` si pedís un token con menos alcances) y escrituras simuladas con `"dry_run": true`. Determinístico: el mismo pedido da la misma respuesta. Headers `X-Ninja-Environment: test` y `X-Ninja-Dataset: demo`.
+  - Con una **credencial de prueba propia** (`nsc_test_` / `nsat_test_`) el pedido pasa a `/api/v1` tal cual: lecturas reales de tu negocio y escrituras con dry_run en la base (6 bis).
+  - Las credenciales de **producción** se rechazan ahí (`sandbox_only` / `invalid_client`) y nunca llegan a la base.
+  - Límite de **60 pedidos por minuto por IP** (en memoria de cada instancia), además del límite por credencial.
+- **Documentación descargable:** `GET /api/docs/html` (HTML autocontenido, sin recursos externos, con hoja de impresión), `?download=1` como adjunto y `?print=1` abre Imprimir para **Guardar como PDF**.
+- **Enviar por email** (dueño, desde el panel): link al portal y, como adjuntos, la colección de Postman con las variables cargadas y el HTML de la documentación. Opcional, una credencial: `client_id`, ambiente, alcances y URL base; el `client_secret` sólo si se acaba de crear o rotar (o con **Rotar y enviar**), con confirmación. Sale por la Edge `send_api_docs_email`, que envía directo sin guardar el cuerpo; la base sólo ve el hash del secreto y audita `api_docs_emailed` con `with_secret`, el `client_id` acortado y el destinatario, nunca el secreto. Hasta 20 por día. Recomendado: mandar credenciales de prueba.
+- **Postman del sandbox público:** la colección de `/developers` viene apuntada a `/api/sandbox/v1` con las credenciales de ejemplo; para tu negocio cambiá `base_url` a `/api/v1` y cargá tu credencial.
+
 ## 7. Rendimiento
 
 Criterio F5: sincronizar **1000 productos en menos de 60 s**. Con dos lotes de 500 el test de CI (`tests/integration/rls-api-publica.test.ts`) mide el alta y el cambio de precios y lo deja en el log.
 
 ## 8. Fuera de v1 (deuda)
 
-Webhooks salientes (venta creada, stock bajo) con firma HMAC y reintentos; variantes; listas de precios; facturas; logs de pedidos por credencial visibles para el dueño; dominio propio `api.soft.ninja`. Ver ADR-094.
+Webhooks salientes (venta creada, stock bajo) con firma HMAC y reintentos; variantes; listas de precios; **lectura completa del producto** (marca, categoría, impuestos, variantes con stock, imágenes y precios por lista: siguiente paso propuesto en ADR-163, todavía no existe); facturas; logs de pedidos por credencial visibles para el dueño; dominio propio `api.soft.ninja`. Ver ADR-094.

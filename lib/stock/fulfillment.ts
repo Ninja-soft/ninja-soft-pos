@@ -7,6 +7,7 @@
 // modalidad, origen y lugar de retiro) y viajan a pos_sale_create_fulfilled,
 // que valida lo mismo en el servidor (espejo de sus reglas).
 import { roleErrorMessage } from "@/lib/permissions/errors";
+import { addressServerError, type GeoAddress } from "@/lib/geo/address";
 
 export type FulfillmentMode = "ahora" | "retiro" | "envio";
 
@@ -62,6 +63,12 @@ export interface DeliveryInfo {
   pickupName?: string;
   shipAddress?: string;
   notes?: string;
+  /** ADR-157: dirección guardada del cliente. */
+  addressId?: string | null;
+  /** ADR-157: dirección nueva estructurada (autocompletar y mapa). */
+  shipTo?: GeoAddress | null;
+  /** ADR-157: guardar la dirección nueva en el cliente al cobrar. */
+  saveToCustomer?: boolean;
 }
 
 export interface DeliveryGroup {
@@ -94,6 +101,10 @@ export interface PlanPayload {
     pickup_name: string | null;
     ship_address: string | null;
     notes: string | null;
+    /** ADR-157 (sólo envío): dirección guardada, dirección nueva y si se guarda en el cliente. */
+    address_id?: string | null;
+    ship_to?: GeoAddress | null;
+    save_to_customer?: boolean;
     items: {
       product_id: string;
       variant_id: string | null;
@@ -267,6 +278,15 @@ export function checkAllocations(
   return [...new Set(errors)];
 }
 
+/**
+ * RPC de la venta con plan (ADR-157): con algún envío va por
+ * pos_sale_create_delivery (cliente obligatorio, dirección estructurada y copia
+ * en la entrega); si no, pos_sale_create_fulfilled como siempre.
+ */
+export function planRpc(plan: PlanPayload): "pos_sale_create_delivery" | "pos_sale_create_fulfilled" {
+  return plan.deliveries.some((d) => d.mode === "envio") ? "pos_sale_create_delivery" : "pos_sale_create_fulfilled";
+}
+
 /** Payload de pos_sale_create_fulfilled. */
 export function buildPlan(
   lines: FulfillmentLine[],
@@ -284,6 +304,13 @@ export function buildPlan(
         pickup_name: g.mode === "retiro" ? (i.pickupName?.trim() || null) : null,
         ship_address: g.mode === "envio" ? (i.shipAddress?.trim() || null) : null,
         notes: i.notes?.trim() || null,
+        ...(g.mode === "envio" && (i.addressId || i.shipTo)
+          ? {
+              address_id: i.addressId ?? null,
+              ship_to: i.addressId ? null : (i.shipTo ?? null),
+              save_to_customer: !i.addressId && Boolean(i.shipTo) && Boolean(i.saveToCustomer),
+            }
+          : {}),
         items: g.allocations
           .filter((a) => byKey.has(a.key))
           .map((a) => {
@@ -308,7 +335,16 @@ export function buildPlan(
 export type DeliveryChoice =
   | { kind: "ahora" }
   | { kind: "retiro"; storeId: string; pickupName: string }
-  | { kind: "envio"; address: string; fee: number }
+  | {
+      kind: "envio";
+      address: string;
+      fee: number;
+      /** ADR-157: dirección guardada del cliente, nueva (estructurada) y si se guarda. */
+      addressId?: string | null;
+      shipTo?: GeoAddress | null;
+      saveToCustomer?: boolean;
+      notes?: string;
+    }
   | { kind: "split" };
 
 export interface PickupStoreOption {
@@ -475,6 +511,7 @@ const ERROR_MESSAGES: [RegExp, string][] = [
   [/pickup_name_required/, "Cargá quién retira (o elegí un cliente)."],
   [/cross_branch_not_allowed/, "Retirar en otra sucursal que la de origen está apagado en Configuración."],
   [/delivery_type_disabled/, "Ese tipo de entrega está apagado en Configuración."],
+  [/customer_required_for_shipping/, "Para enviar elegí o cargá un cliente."],
   [/fulfillment_not_for_orders/, "Las mesas, el delivery y los pedidos de salón no se parten desde acá."],
   [/variant_required/, "Elegí la variante (talle o color)."],
   [/invalid_plan|invalid_delivery_mode/, "El reparto de entregas no es válido: volvé a armarlo."],
@@ -488,7 +525,7 @@ export function fulfillmentErrorMessage(e: unknown): string | null {
     const m = msg.match(re);
     if (m) return text.replace("$1", (m[1] ?? "").trim());
   }
-  return roleErrorMessage(msg) ?? null;
+  return addressServerError(msg) ?? roleErrorMessage(msg) ?? null;
 }
 
 function fmt(n: number): string {

@@ -5,7 +5,9 @@
 // clientes en cuenta corriente y cheques de terceros en cartera, por fecha de
 // cobro) y lo que sale (comprobantes de proveedor abiertos por vencimiento y
 // cheques propios entregados, por fecha de débito). Lo vencido se proyecta en
-// el primer período.
+// el primer período. F23 · H152 (ADR-162, T6): también lo que los
+// procesadores tienen que acreditar, por la fecha de la liquidación o la
+// estimada.
 
 import { round } from "@/lib/purchases/costs";
 
@@ -25,6 +27,8 @@ export interface CashFlowInput {
   chequesIn: DatedAmount[];
   payables: DatedAmount[];
   chequesOut: DatedAmount[];
+  /** A acreditar de los procesadores (H152). Opcional para no romper llamadas viejas. */
+  settlements?: DatedAmount[];
 }
 
 export interface CashFlowRow {
@@ -32,6 +36,7 @@ export interface CashFlowRow {
   label: string;
   start: string;
   receivables: number;
+  settlements: number;
   chequesIn: number;
   payables: number;
   chequesOut: number;
@@ -96,6 +101,7 @@ export function buildCashFlow(input: CashFlowInput): CashFlowRow[] {
         label: periodLabel(k, input.granularity),
         start: k,
         receivables: 0,
+        settlements: 0,
         chequesIn: 0,
         payables: 0,
         chequesOut: 0,
@@ -104,7 +110,7 @@ export function buildCashFlow(input: CashFlowInput): CashFlowRow[] {
       },
     ]),
   );
-  const put = (list: DatedAmount[], field: "receivables" | "chequesIn" | "payables" | "chequesOut") => {
+  const put = (list: DatedAmount[], field: "receivables" | "settlements" | "chequesIn" | "payables" | "chequesOut") => {
     for (const x of list) {
       if (!x.date || !(Number(x.amount) > 0)) continue;
       if (x.date > input.to) continue;
@@ -114,6 +120,7 @@ export function buildCashFlow(input: CashFlowInput): CashFlowRow[] {
     }
   };
   put(input.receivables, "receivables");
+  put(input.settlements ?? [], "settlements");
   put(input.chequesIn, "chequesIn");
   put(input.payables, "payables");
   put(input.chequesOut, "chequesOut");
@@ -122,12 +129,63 @@ export function buildCashFlow(input: CashFlowInput): CashFlowRow[] {
   const out: CashFlowRow[] = [];
   for (const k of keys) {
     const r = rows.get(k)!;
-    r.net = round(r.receivables + r.chequesIn - r.payables - r.chequesOut, 2);
+    r.net = round(r.receivables + r.settlements + r.chequesIn - r.payables - r.chequesOut, 2);
     bal = round(bal + r.net, 2);
     r.balance = bal;
     out.push(r);
   }
   return out;
+}
+
+// ── A acreditar por fecha (H152) ────────────────────────────────────────────
+
+export interface PendingLike {
+  amount: number;
+  expected_date: string | null;
+  expected_known?: boolean;
+}
+
+/** Día de hoy en Argentina (UTC-3). */
+export function arToday(now: Date = new Date()): string {
+  return new Date(now.getTime() - 3 * 3600_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Cobros pendientes agrupados por fecha de acreditación (ascendente). Lo que
+ * tenía que entrar antes de hoy se junta en hoy (está atrasado). `estimated`
+ * es true si alguna fecha del grupo es estimada.
+ */
+export function groupPendingByDate<T extends PendingLike>(
+  rows: T[],
+  today: string = arToday(),
+): Array<{ date: string; amount: number; count: number; estimated: boolean }> {
+  const map = new Map<string, { date: string; amount: number; count: number; estimated: boolean }>();
+  for (const r of rows) {
+    if (!r.expected_date || !(Number(r.amount) > 0)) continue;
+    const d = r.expected_date < today ? today : r.expected_date.slice(0, 10);
+    const g = map.get(d) ?? { date: d, amount: 0, count: 0, estimated: false };
+    g.amount = round(g.amount + Number(r.amount), 2);
+    g.count += 1;
+    g.estimated = g.estimated || !r.expected_known;
+    map.set(d, g);
+  }
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Lo que entra desde hoy hasta dentro de `days` días (incluye lo atrasado). */
+export function pendingWithin<T extends PendingLike>(rows: T[], days: number, today: string = arToday()): number {
+  const limit = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10) + days))
+    .toISOString()
+    .slice(0, 10);
+  return rows.reduce(
+    (t, r) => (r.expected_date && r.expected_date <= limit && Number(r.amount) > 0 ? round(t + Number(r.amount), 2) : t),
+    0,
+  );
+}
+
+/** Para el flujo de fondos: cada cobro pendiente como entrada en su fecha. */
+export function pendingToDated<T extends PendingLike>(rows: T[]): DatedAmount[] {
+  return rows.filter((r) => r.expected_date).map((r) => ({ date: r.expected_date!.slice(0, 10), amount: Number(r.amount) }));
 }
 
 /** Primer período en que el saldo proyectado queda negativo (null si nunca). */

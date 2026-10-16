@@ -589,6 +589,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Mercado Pago conectado (Medios de pago) para la sincronización automática; para Payway y otros, el archivo de liquidación del portal del adquirente.",
   },
+  conciliacion_bancaria: {
+    desc: "Conciliación bancaria: subí el extracto de tu banco o de Mercado Pago (Excel o CSV, con los formatos de Galicia, Santander, BBVA, Macro, Nación, Provincia, Credicoop, Brubank y Mercado Pago) y se tilda solo contra los movimientos de Tesorería por importe y fecha. Lo que no coincide queda para revisar: lo vinculás, lo creás en un toque (comisiones del banco, impuestos, transferencias que faltaban) o lo ignorás con motivo. Todo auditado.",
+    impact: "Desactivado, los movimientos de Tesorería se tildan a mano contra el extracto, uno por uno (el servidor rechaza la importación).",
+    minPlan: "Business",
+    needs: "Tesorería con tu banco o billetera cargado como cuenta.",
+  },
   cockpit_comercio: {
     desc: "Cockpit de comercio unificado: en una pantalla, qué canal vende (mostrador, salón, delivery, WhatsApp, links de pago, retiro en tienda, sin conexión) por sucursal, qué pedidos, reservas y traslados faltan surtir, qué cobros fallaron o no se concilian, qué facturas están bloqueadas, cuánto stock está reservado o en camino, y alertas con plazo (pedido demorado, quiebre de stock, caja sin señal).",
     impact: "Desactivado, cada dato se mira en su pantalla (ventas, delivery, cobros, facturación, stock) sin una vista central ni alertas cruzadas (el servidor lo rechaza).",

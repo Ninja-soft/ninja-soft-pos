@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { readXlsxGrid } from "@/lib/utils/xlsxImport";
 import {
   IMPORT_FIELDS,
+  IMPORT_PRESETS,
   guessMapping,
   parseCsv,
   providerLabel,
@@ -90,7 +91,7 @@ export function ImportSettlementModal({
     setFileName(f.name);
     setGrid(g);
     setHeaderRow(hr);
-    setMap(guessMapping(g[hr] ?? []));
+    setMap(guessMapping(g[hr] ?? [], provider));
   }
 
   async function submit() {
@@ -145,6 +146,11 @@ export function ImportSettlementModal({
         </div>
       }
     >
+      {IMPORT_PRESETS[provider] && (
+        <Callout tone="neutral" className="mb-3">
+          {IMPORT_PRESETS[provider]!.hint}
+        </Callout>
+      )}
       {!fileName ? (
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border px-4 py-10 text-center hover:bg-muted/40">
           <FileUp size={22} className="text-ninja-flameSoft" aria-hidden />

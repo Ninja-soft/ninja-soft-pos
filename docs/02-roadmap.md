@@ -34,7 +34,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b, F20-1, F20-2, F20-3 y F20-8 con código (ADR-110, ADR-115, ADR-117, ADR-120, ADR-126; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
 | **F22** | Logística y reparto propio (entrega unificada, direcciones con mapa, flota, hojas de ruta, app del repartidor, seguimiento, COT automático) | 14–20 semanas | 🔵 Propuesta (ADR-149, auditoría y plan en [`45-logistica-reparto.md`](./45-logistica-reparto.md)) |
-| **F23** | Tesorería ordenada: cuentas de dinero unificadas, liquidaciones a la billetera, extracto bancario, NubCeo dentro de la Contabilidad, gastos con categoría y menú propio | 6–9 semanas | 🟡 Plan y auditoría (ADR-150, [`46-tesoreria.md`](./46-tesoreria.md)); arreglos chicos con código, migración sin aplicar |
+| **F23** | Tesorería ordenada: cuentas de dinero unificadas, liquidaciones a la billetera, extracto bancario, NubCeo dentro de la Contabilidad, gastos con categoría y menú propio | 6–9 semanas | 🟡 H150 a H156 con código (ADR-158 aplicada, ADR-162 sin aplicar); H157 con test de punta a punta, falta el export en Xubio ([`46-tesoreria.md`](./46-tesoreria.md)) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1561,19 +1561,19 @@ Objetivo: cada peso se sigue desde la venta hasta el banco y hasta el asiento, e
 
 - [x] **H150 · Cuentas de dinero unificadas.** Cajas del POS, billeteras y "a acreditar" como cuentas de Tesorería; cobros por transferencia a su cuenta; mapeo contable por cuenta; asiento de saldo inicial; fechas argentinas; señas y medios sin cuenta; moneda en los asientos; regenerar por documento. · *OPTIONAL `tesoreria` (existe).*
   - [x] *Criterio:* una venta por transferencia a "Galicia" suma en Galicia en Tesorería y en el Mayor de la subcuenta Galicia, al centavo; anularla resta en los dos. *Hecho en `feat/tesoreria-cuentas-unificadas` (ADR-158), migraciones `20261227100000` y `20261227100100` sin aplicar. Verificado en una transacción revertida en producción (1.000 + 1.210 = 2.210 en Tesorería y en el Mayor; anulada, 1.000 en los dos) y en `tests/integration/rls-tesoreria-unificada.test.ts`.*
-- [ ] **H151 · Liquidaciones a la billetera.** Acreditación como movimiento en la billetera o banco, retiros del cajón con destino, IVA de la comisión separado, asiento de liquidación sólo para líneas conciliadas con contra-asiento al desvincular o ignorar, contracargos por cambio de estado. · *OPTIONAL `conciliacion_procesadores` (existe).*
-  - [ ] *Criterio:* un mes de Mercado Pago: saldo de la billetera en Tesorería = extracto de MP = Mayor de la billetera.
-- [ ] **H152 · A acreditar, extracto bancario y flujo de fondos.** Pantalla A acreditar, import de extracto con matching, flujo con lo pendiente de liquidar, presets de Ualá, MODO, Transferencias y Directo. · *OPTIONAL `conciliacion_bancaria` (nueva, Business).*
-  - [ ] *Criterio:* el dueño sube el extracto de un mes y ve tildado lo que coincide y en "Pendientes de revisar" lo que no.
-- [ ] **H153 · NubCeo dentro de la Contabilidad.** Fuente única de los asientos de liquidación (NinjaPOS o NubCeo), tabla de equivalencias de cuentas, asientos de NubCeo al Diario con control de balance, estado de conciliación por venta. · *OPTIONAL `integracion_nubceo` + `contabilidad` (existen).*
-  - [ ] *Criterio:* con fuente NubCeo cada liquidación aparece una sola vez en el Diario y Sumas y saldos cierra.
+- [x] **H151 · Liquidaciones a la billetera.** Acreditación como movimiento en la billetera o banco, retiros del cajón con destino, IVA de la comisión separado, asiento de liquidación sólo para líneas conciliadas con contra-asiento al desvincular o ignorar, contracargos por cambio de estado. · *OPTIONAL `conciliacion_procesadores` (existe).*
+  - [x] *Criterio:* un mes de Mercado Pago: saldo de la billetera en Tesorería = extracto de MP = Mayor de la billetera. *Hecho en `feat/tesoreria-liquidaciones` (ADR-162), migración `20261231100000` sin aplicar. Dry-run en producción (transacción revertida): billetera de MP $2.824,80 en Tesorería y en el Mayor después de desvincular y volver a vincular la línea y de un contracargo perdido, ganado, perdido y ganado; comisión $200, IVA de la comisión $42 a crédito fiscal y retención $30 aparte. Validar contra un extracto real de MP.*
+- [x] **H152 · A acreditar, extracto bancario y flujo de fondos.** Pantalla A acreditar, import de extracto con matching, flujo con lo pendiente de liquidar, presets de Ualá, MODO, Transferencias y Directo. · *OPTIONAL `conciliacion_bancaria` (nueva, Business).*
+  - [x] *Criterio:* el dueño sube el extracto de un mes y ve tildado lo que coincide y en "Pendientes de revisar" lo que no. *ADR-162, migración `20261231100100` sin aplicar: Tesorería > Conciliación > Extracto del banco con presets de 9 bancos y billeteras; en el dry-run, 3 de 4 renglones se tildaron solos y la comisión del banco se creó desde el extracto. Los presets de Ualá, MODO, Transferencias y Directo y el cruce sólo con su propio medio requieren desplegar la Edge `settlements`.*
+- [x] **H153 · NubCeo dentro de la Contabilidad.** Fuente única de los asientos de liquidación (NinjaPOS o NubCeo), tabla de equivalencias de cuentas, asientos de NubCeo al Diario con control de balance, estado de conciliación por venta. · *OPTIONAL `integracion_nubceo` + `contabilidad` (existen).*
+  - [x] *Criterio:* con fuente NubCeo cada liquidación aparece una sola vez en el Diario y Sumas y saldos cierra. *ADR-162, migración `20261231100200` sin aplicar. Supuesto (el dueño no respondió): NinjaPOS por defecto, NubCeo opcional desde Contabilidad > Mapeos > Procesadores. El estado de conciliación por venta requiere desplegar la Edge `nubceo_sync` y validar la respuesta real de `GET /reconciler/sales`.*
 - [x] **H154 · Gastos con categoría y cheques bien contabilizados.** Gasto con cuenta de gasto, comprobante y adjunto; asiento al recibir un cheque de tercero; rechazo de cheque propio contra la deuda. · *OPTIONAL `tesoreria` (existe).*
   - [x] *Criterio:* un alquiler pagado desde Galicia aparece en el Mayor de Alquileres y "Valores a depositar" nunca queda negativo. *Hecho en `feat/tesoreria-cuentas-unificadas` (ADR-158): gasto de $121 con IVA $21 desde Galicia da Alquileres $100 e IVA crédito fiscal $21; cheque recibido y rechazado deja Valores a depositar en $0 (dry-run en producción y test de integración).*
 - [x] **H155 · Menú y copy de Tesorería.** Grupo Tesorería (Posición, Movimientos, A acreditar, Conciliación, Cheques, Flujo, NubCeo), Mapeos y Cierres en el menú, grupo Impuestos, "Ver asiento" y "Ver origen", estados vacíos útiles. · *Sin feature nueva.*
   - [x] *Criterio:* un dueño nuevo encuentra dónde está su plata, qué falta acreditar y el asiento de una venta en menos de tres clics. *Posición y A acreditar a un clic desde el menú; el asiento de un cobro, desde Movimientos con "Ver asiento" (ADR-158). El recorrido del dueño queda para la revisión del PR.*
 - [x] **H156 · Controles de caja.** Confirmación al cerrar con contado 0 y esperado positivo; conciliación del Z con motivo. · *BASE.* *Hecho en ADR-158: `cash_shift_confirm_zero_close` + trigger en `cash_shifts` (sin tocar `close_cash_shift`) y `cash_z_review` con tipo y motivo; migración `20261227100200` sin aplicar.*
-- [ ] **H157 · Prueba de punta a punta.** Un día con efectivo, transferencia, QR de MP y tarjeta Payway, retiro, depósito, liquidación, cierre de mes y export al estudio. · *Test de integración.*
-  - [ ] *Criterio:* Tesorería, Mayor y Sumas y saldos cuadran al centavo y el export abre en Xubio.
+- [~] **H157 · Prueba de punta a punta.** Un día con efectivo, transferencia, QR de MP y tarjeta Payway, retiro, depósito, liquidación, cierre de mes y export al estudio. · *Test de integración.*
+  - [~] *Criterio:* Tesorería, Mayor y Sumas y saldos cuadran al centavo y el export abre en Xubio. *ADR-162: `tests/integration/tesoreria-e2e.test.ts` y el mismo escenario en un dry-run en producción cuadran al centavo (Galicia $6.853,20, billetera de MP $2.824,80, caja fuerte $0, caja del POS $400; Sumas y saldos $20.850 = $20.850; 0 asientos desbalanceados; cierre del mes sin problemas). Falta abrir el export en Xubio (manual).*
 
 ---
 
@@ -1758,7 +1758,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F11** | 76/93 | 13 | 4 | 82% | 89% |
 | **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
-| **F14** | 6/68 | 39 | 23 | 9% | 38% |
+| **F14** | 8/68 | 41 | 19 | 12% | 42% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
@@ -1767,9 +1767,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 4/14 | 0 | 10 | 29% | 29% |
-| **F23** | 7/15 | 0 | 8 | 47% | 47% |
+| **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 666/1204 | 305 | 233 | 55% | 68% |
+| **Total** | 674/1204 | 309 | 221 | 56% | 69% |
 <!-- roadmap-progress:end -->
 
 ---

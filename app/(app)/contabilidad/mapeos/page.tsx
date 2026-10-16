@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/accounting/mappings";
 import { accErrorMessage } from "@/lib/accounting/sources";
 import { AccountSelect, AccountingFrame, inputCls } from "@/components/accounting/shared";
+import { SettlementSourceCard } from "@/components/accounting/SettlementSourceCard";
 import { useAccAccounts, useAccMappings, useAccountingMutations } from "@/modules/accounting/hooks";
 import type { AccAccount, Mapping } from "@/modules/accounting/api";
 import { useStores } from "@/modules/stock/hooks";
@@ -31,7 +33,9 @@ export default function MapeosPage() {
         title="Mapeos"
         description="Elegí a qué cuenta va cada parte de los asientos automáticos. Lo más específico gana: medio y adquirente, después el medio, después la regla general; en cada nivel, la de la sucursal."
       >
-        <MappingsEditor />
+        <Suspense fallback={null}>
+          <MappingsEditor />
+        </Suspense>
       </AccountingFrame>
     </PageContainer>
   );
@@ -42,7 +46,10 @@ const GROUPS = Object.keys(CONCEPT_GROUP_LABEL) as ConceptGroup[];
 function MappingsEditor() {
   const { data: accounts = [] } = useAccAccounts();
   const { data: mappings = [], isLoading } = useAccMappings();
-  const [group, setGroup] = useState<ConceptGroup>("cobros");
+  const params = useSearchParams();
+  const [group, setGroup] = useState<ConceptGroup>(() =>
+    GROUPS.includes(params.get("grupo") as ConceptGroup) ? (params.get("grupo") as ConceptGroup) : "cobros",
+  );
 
   return (
     <div className="mt-5 space-y-4">
@@ -61,6 +68,7 @@ function MappingsEditor() {
           </button>
         ))}
       </nav>
+      {group === "procesadores" && <SettlementSourceCard />}
       {!isLoading &&
         CONCEPTS.filter((c) => c.group === group).map((c) => (
           <ConceptCard key={c.key} concept={c} accounts={accounts} rows={mappings.filter((m) => m.concept === c.key)} />

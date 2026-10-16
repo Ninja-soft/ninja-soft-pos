@@ -300,7 +300,31 @@ Migraciones `20261227100000_tesoreria_cuentas_unificadas`, `20261227100100_tesor
 
 Gasto (H154): en un retiro se elige la cuenta de gasto, el número de comprobante, el IVA y un adjunto (bucket privado `treasury-proofs`). El asiento va a la cuenta de gasto y el IVA a crédito fiscal (si el negocio discrimina IVA). El cheque de terceros cancela "Otros medios de cobro a cobrar": si paga una venta o una cuenta corriente, ese cobro se registra con el medio Otro.
 
+### 8.2 H151, H152, H153 y H157 (ADR-162, `feat/tesoreria-liquidaciones`)
+
+Migraciones `20261231100000_tesoreria_liquidaciones`, `20261231100100_conciliacion_bancaria` y `20261231100200_nubceo_contabilidad` (sin aplicar, en ese orden, después de las de ADR-158). Edges `settlements` y `nubceo_sync` cambiadas, sin desplegar.
+
+| Hallazgo | Qué quedó |
+|---|---|
+| T6 | "A acreditar" con fecha: la de la liquidación si ya llegó sin liberar, si no la estimada (débito 2 días, crédito 14, QR y billeteras 1, Mercado Libre 14, plataformas 7). Pantalla A acreditar agrupada por fecha y con lo que entra en 7 días; el flujo de fondos suma la columna "A acreditar". |
+| T7 | Con la diferencia aceptada, el asiento acredita el cobro del POS y la diferencia va a "Diferencias de redondeo y conciliación"; una devolución parcial posterior rehace el asiento por estado. Validar con una devolución parcial real de MP. |
+| T15 | Sólo las líneas conciliadas (`matched`, o con la diferencia aceptada) arman asiento y movimiento. Desvincular, ignorar o cambiar lo devuelto o el neto arma el contra-asiento (`<evento>:rev`) y el contra-movimiento (`settlement_credit_void`); volver a vincular arma la versión nueva (`release#2`). |
+| T16 | Contracargo por estado: perdido, ganado, perdido otra vez y baja lógica rehacen el asiento (`acc_post_state`). Si el cobro ya se había acreditado, sale de la billetera o banco de destino con un movimiento `processor_debit`. |
+| T21 | Presets de archivo para Ualá Bis, MODO, Transferencias y Directo; el cruce de esos proveedores usa sólo su propio medio (Ualá con Ualá, transferencia con transferencia, MODO sólo con cupones de MODO), nunca una tarjeta por monto y día (`fileCandidateRule`). Requiere desplegar la Edge `settlements`. |
+| T3, T9 | Fuente de los asientos de liquidación elegible (Contabilidad > Mapeos > Procesadores), tabla de equivalencias (Tesorería > NubCeo > Cuentas) e importación de los asientos de liquidación de NubCeo al Diario sólo si balancean y todas sus cuentas tienen equivalencia. |
+
+Cómo funciona ahora:
+
+- **Liquidación a la billetera o al banco (H151).** Una billetera recibe lo de su procesador (`provider_key`); un banco elige qué procesadores le depositan ("Liquidaciones que se acreditan acá", `treasury_accounts.settlement_providers`, RPC `treasury_account_set_settlement` auditada). Cada línea conciliada suma el neto en esa cuenta con la fecha de acreditación (`settlement_credit`) y el asiento va a su cuenta contable: el Mayor coincide con Tesorería. Sin cuenta de destino, el asiento usa el mapeo `acreditacion` de siempre.
+- **IVA de la comisión.** Se separa de las retenciones: a IVA crédito fiscal si el negocio discrimina IVA, si no a "IVA sobre comisiones de procesadores" (5.2.05, mapeo `iva_comision:gasto`). No genera una retención sufrida. En los archivos se carga con la columna "IVA del arancel (si viene aparte)".
+- **Retiro del cajón con destino.** En Caja, al registrar un egreso se elige "¿A dónde va la plata?" (caja fuerte o banco); un ingreso puede salir de una caja de Tesorería. Suma o resta en esa cuenta (`cash_drop` / `cash_fund`) y el asiento va contra ella en lugar de Fondos en tránsito. Lo puede elegir el cajero (sólo ve nombre y tipo).
+- **Extracto bancario (H152, feature `conciliacion_bancaria`, Business).** Tesorería > Conciliación > Extracto del banco: elegir la cuenta, subir el CSV o Excel con el preset del banco (Galicia, Santander, BBVA, Macro, Nación, Provincia, Credicoop, Brubank, Mercado Pago o genérico), revisar la vista previa e importar. Se tilda solo lo que tiene el mismo importe el mismo día, o hasta 4 días de diferencia si hay un solo candidato. Lo demás queda "Para revisar": vincular, crear el movimiento (con su cuenta de gasto) o ignorar con motivo. Volver a subir el mismo extracto no duplica.
+- **NubCeo (H153).** Con NinjaPOS como fuente (por defecto) los asientos de NubCeo se ven como control. Con NubCeo, desde el primer día de un mes abierto los asientos de liquidación de NinjaPOS se dan de baja y entran los de NubCeo de categoría `settlement` (importe positivo = Debe). Un asiento sin equivalencias o desbalanceado queda en Contabilidad > Resumen; al cargar la equivalencia se reintenta solo. Si NubCeo lo borra, contra-asiento. El estado de conciliación de cada venta enviada (conciliada, pendiente, con diferencia) llega una vez por día y con "Traer ahora", y se ve en Tesorería > NubCeo.
+- **Deudas de ADR-158 cerradas.** El cobro de cuenta corriente por transferencia pregunta a qué cuenta te transfirieron y entra a su banco (`cc_collection`); el alta de pagos y órdenes de pago sin fecha toma el día de Argentina; al crear una cuenta se elige la moneda (queda fija con movimientos).
+
 ## 9. Preguntas para el dueño
+
+> **Supuesto vigente (ADR-162, sin respuesta del dueño):** NinjaPOS arma los asientos de liquidación en todos los negocios; NubCeo es opcional y lo elige el dueño desde Contabilidad > Mapeos > Procesadores. El signo de los asientos de NubCeo se toma como positivo = Debe. Las cajas del POS pueden mandar el retiro a la caja fuerte o directo al banco. Las minutas de Mercado Libre (pregunta 3) siguen fuera de alcance.
 
 1. ¿Querés que NubCeo sea la fuente de los asientos de liquidación en los negocios que lo usen (como en ANDESMAR con su estudio), o preferís que NinjaPOS los arme y NubCeo quede como control?
 2. ¿El estudio usa un plan de cuentas propio para las liquidaciones de NubCeo? Si nos pasás un export de asientos de NubCeo de un mes, armamos la tabla de equivalencias y confirmamos el signo de `amount` (hoy se asume positivo = Debe).

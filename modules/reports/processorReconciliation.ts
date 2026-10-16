@@ -201,7 +201,8 @@ export function useImportSettlement() {
   });
 }
 
-export type ResolveAction = "ignore" | "unignore" | "link" | "unlink";
+/** accept_diff (ADR-162): concilia una línea con diferencia de monto, con motivo. */
+export type ResolveAction = "ignore" | "unignore" | "link" | "unlink" | "accept_diff";
 
 export function useResolveLine() {
   const qc = useQueryClient();
@@ -218,6 +219,7 @@ export function useResolveLine() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settlements"] });
       qc.invalidateQueries({ queryKey: ["reports", "card-payments"] });
+      qc.invalidateQueries({ queryKey: ["treasury"] });
     },
   });
 }
@@ -277,6 +279,8 @@ const ERRORS: [string, string][] = [
   ["forbidden", "Sólo el dueño o el encargado pueden conciliar."],
   ["not_connected", "Mercado Pago no está conectado. Conectalo para traer tus cobros."],
   ["payment_already_linked", "Ese cobro ya está vinculado a otra línea."],
+  ["line_not_amount_diff", "Sólo se acepta la diferencia de una línea vinculada con diferencia de monto."],
+  ["reason_required", "Escribí el motivo (al menos 3 letras)."],
   ["payment_not_found", "No encontramos ese cobro."],
   ["too_many_lines", "El archivo tiene más de 5.000 filas: dividilo por período."],
   ["invalid_range", "Elegí un período de hasta 93 días."],

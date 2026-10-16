@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { entryTotals } from "@/lib/accounting/journal";
 import { round2 } from "@/lib/accounting/vat";
-import { ENTRY_KIND_LABEL, EVENT_LABEL, accErrorMessage, sourceHref, sourceLabel } from "@/lib/accounting/sources";
+import { ENTRY_KIND_LABEL, accErrorMessage, eventLabel, sourceHref, sourceLabel } from "@/lib/accounting/sources";
 import { useAccAccounts, useAccountingMutations, useCostCenters, useEntryLines } from "@/modules/accounting/hooks";
 import type { AccEntry } from "@/modules/accounting/api";
 import { useStores } from "@/modules/stock/hooks";
@@ -79,7 +79,7 @@ export function EntryDetailModal({ entry, onOpenChange }: { entry: AccEntry | nu
             </Badge>
             {entry.source_type && (
               <Badge tone="neutral">
-                {sourceLabel(entry.source_type)} · {EVENT_LABEL[entry.source_event ?? ""] ?? entry.source_event}
+                {sourceLabel(entry.source_type)} · {eventLabel(entry.source_event)}
               </Badge>
             )}
             {entry.reversed_by && <Badge tone="warning">Revertido</Badge>}

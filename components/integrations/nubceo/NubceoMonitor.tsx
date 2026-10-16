@@ -34,6 +34,7 @@ import {
 } from "@/modules/integrations/nubceo/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { NUBCEO_RECON_LABEL } from "@/lib/accounting/settlementSource";
 import {
   ENV_LABEL,
   ERROR_KIND,
@@ -267,6 +268,11 @@ export function NubceoMonitor({ config, canWrite }: { config: NubceoConfig; canW
                       <SyncStatusBadge status={r.status} />
                       {r.already_existed && <Badge tone="neutral">Ya estaba</Badge>}
                       {r.environment === "test" && r.status === "synced" && <Badge tone="info">Prueba</Badge>}
+                      {r.reconciled_status && (
+                        <Badge tone={NUBCEO_RECON_LABEL[r.reconciled_status].tone}>
+                          {NUBCEO_RECON_LABEL[r.reconciled_status].label}
+                        </Badge>
+                      )}
                     </div>
                     <RowStatusNote r={r} />
                   </td>

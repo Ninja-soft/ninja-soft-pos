@@ -36,9 +36,15 @@ export interface TreasuryAccount {
   provider_key: string | null;
   cash_register_id: string | null;
   is_system: boolean;
+  /** H151 (ADR-162): procesadores que acreditan acá. Vacío sin la migración. */
+  settlement_providers: string[];
 }
 
-export type TreasuryAccountInput = Omit<TreasuryAccount, "id" | "created_at" | "cash_register_id" | "is_system">;
+/** Los procesadores que acreditan se guardan con su RPC (auditada), no con la cuenta. */
+export type TreasuryAccountInput = Omit<
+  TreasuryAccount,
+  "id" | "created_at" | "cash_register_id" | "is_system" | "settlement_providers"
+>;
 
 export interface TreasuryBalance {
   account_id: string;
@@ -78,6 +84,8 @@ export interface TreasuryPosition {
   } | null;
   transfer_accounts: Array<{ id: string; bank_name: string | null; alias: string | null; holder_name: string | null }>;
   ledger_account: { id: string; code: string; name: string } | null;
+  /** H151 (ADR-162): procesadores que acreditan en esta cuenta. */
+  settlement_providers: string[];
 }
 
 /** Cobro todavía no acreditado por el procesador (RPC treasury_pending_collections). */
@@ -90,6 +98,10 @@ export interface PendingCollection {
   amount: number;
   created_at: string;
   store_id: string | null;
+  /** H152 (ADR-162): fecha de acreditación (la de la liquidación o la estimada). */
+  expected_date: string | null;
+  /** true si la fecha viene de la liquidación; false si es un estimado. */
+  expected_known: boolean;
 }
 
 export type TreasuryMovementType =
@@ -105,7 +117,15 @@ export type TreasuryMovementType =
   | "adjustment"
   | "other"
   | "sale_collection"
-  | "sale_collection_void";
+  | "sale_collection_void"
+  | "settlement_credit"
+  | "settlement_credit_void"
+  | "processor_debit"
+  | "processor_debit_void"
+  | "cash_drop"
+  | "cash_fund"
+  | "cc_collection"
+  | "cc_collection_void";
 
 export const MOVEMENT_TYPE_LABEL: Record<TreasuryMovementType, string> = {
   deposit: "Depósito / ingreso",
@@ -121,7 +141,62 @@ export const MOVEMENT_TYPE_LABEL: Record<TreasuryMovementType, string> = {
   other: "Otro",
   sale_collection: "Cobro por transferencia",
   sale_collection_void: "Venta anulada",
+  settlement_credit: "Acreditación de liquidación",
+  settlement_credit_void: "Liquidación deshecha",
+  processor_debit: "Contracargo",
+  processor_debit_void: "Contracargo revertido",
+  cash_drop: "Retiro de la caja del POS",
+  cash_fund: "Fondo para la caja del POS",
+  cc_collection: "Cobro de cuenta corriente",
+  cc_collection_void: "Cobro de cuenta corriente anulado",
 };
+
+/** Destino posible de un retiro del cajón (H151). */
+export interface DropDestination {
+  id: string;
+  name: string;
+  kind: "cash" | "bank";
+  store_id: string | null;
+}
+
+/** Extracto subido (H152). */
+export interface BankStatementImport {
+  id: string;
+  treasury_account_id: string;
+  file_name: string | null;
+  bank_preset: string | null;
+  period_from: string | null;
+  period_to: string | null;
+  row_count: number;
+  inserted_count: number;
+  matched_count: number;
+  created_at: string;
+}
+
+/** Renglón de un extracto (H152). */
+export interface BankStatementLine {
+  id: string;
+  import_id: string;
+  treasury_account_id: string;
+  line_date: string;
+  description: string | null;
+  reference: string | null;
+  amount: number;
+  balance: number | null;
+  match_status: "pending" | "matched" | "ignored";
+  match_method: string | null;
+  treasury_movement_id: string | null;
+  review_note: string | null;
+}
+
+export interface BankStatementImportResult {
+  import_id: string;
+  rows: number;
+  inserted: number;
+  duplicates: number;
+  matched: number;
+  pending: number;
+}
 
 export interface TreasuryMovement {
   id: string;
@@ -232,7 +307,8 @@ const n = (v: unknown) => (v == null ? (v as null) : Number(v));
 
 const ACCOUNT_BASE_COLS =
   "id, kind, name, store_id, bank_name, account_number, cbu, alias, currency, opening_balance, opening_date, is_active, notes, created_at";
-const ACCOUNT_COLS = `${ACCOUNT_BASE_COLS}, provider_key, cash_register_id, is_system`;
+const ACCOUNT_COLS_158 = `${ACCOUNT_BASE_COLS}, provider_key, cash_register_id, is_system`;
+const ACCOUNT_COLS = `${ACCOUNT_COLS_158}, settlement_providers`;
 const MOVEMENT_BASE_COLS =
   "id, account_id, movement_date, amount, type, description, counterpart_id, reference_type, reference_id, cheque_id, reconciled_at, statement_ref, voided_at, void_reason, created_at";
 const MOVEMENT_COLS = `${MOVEMENT_BASE_COLS}, sale_id, expense_account_id, receipt_number, receipt_vat, proof_path`;
@@ -244,8 +320,13 @@ export const PROOF_BUCKET = "treasury-proofs";
 
 const blank = (v: string | null | undefined) => (v == null || String(v).trim() === "" ? null : v);
 
-type RawAccount = Omit<TreasuryAccount, "provider_key" | "cash_register_id" | "is_system" | "opening_balance"> &
-  Partial<Pick<TreasuryAccount, "provider_key" | "cash_register_id" | "is_system">> & { opening_balance: unknown };
+type RawAccount = Omit<
+  TreasuryAccount,
+  "provider_key" | "cash_register_id" | "is_system" | "opening_balance" | "settlement_providers"
+> &
+  Partial<Pick<TreasuryAccount, "provider_key" | "cash_register_id" | "is_system" | "settlement_providers">> & {
+    opening_balance: unknown;
+  };
 
 function normAccount(a: RawAccount): TreasuryAccount {
   return {
@@ -254,6 +335,7 @@ function normAccount(a: RawAccount): TreasuryAccount {
     provider_key: a.provider_key ?? null,
     cash_register_id: a.cash_register_id ?? null,
     is_system: Boolean(a.is_system),
+    settlement_providers: Array.isArray(a.settlement_providers) ? a.settlement_providers : [],
   };
 }
 
@@ -284,7 +366,8 @@ export const treasuryApi = {
       return q;
     };
     let { data, error } = await run(ACCOUNT_COLS);
-    // Base sin la migración H150: columnas nuevas ausentes.
+    // Base sin la migración H151 o H150: columnas nuevas ausentes.
+    if (error && isMissingSchema(error)) ({ data, error } = await run(ACCOUNT_COLS_158));
     if (error && isMissingSchema(error)) ({ data, error } = await run(ACCOUNT_BASE_COLS));
     if (error) throw error;
     return ((data ?? []) as unknown as RawAccount[]).map(normAccount);
@@ -358,6 +441,7 @@ export const treasuryApi = {
           detail: null,
           transfer_accounts: [],
           ledger_account: null,
+          settlement_providers: a.settlement_providers,
         };
       });
     }
@@ -370,6 +454,7 @@ export const treasuryApi = {
       is_system: Boolean(r.is_system),
       transfer_accounts: Array.isArray(r.transfer_accounts) ? r.transfer_accounts : [],
       ledger_account: r.ledger_account ?? null,
+      settlement_providers: Array.isArray(r.settlement_providers) ? r.settlement_providers : [],
       detail: r.detail
         ? {
             ...r.detail,
@@ -405,8 +490,98 @@ export const treasuryApi = {
       ...r,
       amount: Number(r.amount),
       sale_number: r.sale_number == null ? null : Number(r.sale_number),
+      expected_date: r.expected_date ?? null,
+      expected_known: Boolean(r.expected_known),
     }));
   },
+
+  /** Elegir qué procesadores acreditan en un banco o billetera (H151). Devuelve los movimientos que trajo. */
+  setSettlementProviders: (accountId: string, providers: string[]) =>
+    rpc<number>("treasury_account_set_settlement", { p_account: accountId, p_providers: providers }),
+
+  /** Cajas fuertes y bancos a los que puede ir un retiro del cajón (lo puede leer el cajero). */
+  dropDestinations: async (): Promise<DropDestination[]> => {
+    const { data, error } = await createClient().rpc("treasury_drop_destinations" as never);
+    if (error) {
+      if (isMissingSchema(error)) return [];
+      throw error;
+    }
+    return (data ?? []) as unknown as DropDestination[];
+  },
+
+  // ── Extracto bancario (H152) ───────────────────────────────────────────────
+
+  statementImports: async (accountId: string): Promise<BankStatementImport[]> => {
+    const { data, error } = await from("bank_statement_imports")
+      .select("id, treasury_account_id, file_name, bank_preset, period_from, period_to, row_count, inserted_count, matched_count, created_at")
+      .eq("tenant_id", await tenantId())
+      .eq("treasury_account_id", accountId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      if (isMissingSchema(error)) return [];
+      throw error;
+    }
+    return (data ?? []) as unknown as BankStatementImport[];
+  },
+
+  statementLines: async (f: { accountId: string; status?: BankStatementLine["match_status"] | null; from?: string | null; to?: string | null }): Promise<BankStatementLine[]> => {
+    let q = from("bank_statement_lines")
+      .select("id, import_id, treasury_account_id, line_date, description, reference, amount, balance, match_status, match_method, treasury_movement_id, review_note")
+      .eq("tenant_id", await tenantId())
+      .eq("treasury_account_id", f.accountId)
+      .is("deleted_at", null)
+      .order("line_date", { ascending: false })
+      .limit(2000);
+    if (f.status) q = q.eq("match_status", f.status);
+    if (f.from) q = q.gte("line_date", f.from);
+    if (f.to) q = q.lte("line_date", f.to);
+    const { data, error } = await q;
+    if (error) {
+      if (isMissingSchema(error)) return [];
+      throw error;
+    }
+    return ((data ?? []) as unknown as BankStatementLine[]).map((l) => ({
+      ...l,
+      amount: Number(l.amount),
+      balance: l.balance == null ? null : Number(l.balance),
+    }));
+  },
+
+  importStatement: (v: {
+    accountId: string;
+    fileName: string;
+    preset: string | null;
+    lines: Array<{ date: string; description: string | null; reference: string | null; amount: number; balance: number | null }>;
+  }) =>
+    rpc<BankStatementImportResult>("bank_statement_import", {
+      p_account: v.accountId,
+      p_file_name: v.fileName,
+      p_preset: v.preset,
+      p_lines: v.lines,
+    }),
+
+  resolveStatementLine: (v: {
+    lineId: string;
+    action: "link" | "unlink" | "ignore" | "unignore" | "create";
+    movementId?: string | null;
+    note?: string | null;
+    expenseAccountId?: string | null;
+    description?: string | null;
+  }) =>
+    rpc<unknown>("bank_statement_line_resolve", {
+      p_line: v.lineId,
+      p_action: v.action,
+      p_movement: v.movementId ?? null,
+      p_note: v.note ?? null,
+      p: { expense_account_id: v.expenseAccountId ?? null, description: v.description ?? null },
+    }),
+
+  rematchStatement: (accountId: string) => rpc<number>("bank_statement_rematch", { p_account: accountId }),
+
+  deleteStatement: (importId: string, reason: string) =>
+    rpc<number>("bank_statement_import_delete", { p_import: importId, p_reason: reason }),
 
   movements: async (f: {
     accountId?: string | null;

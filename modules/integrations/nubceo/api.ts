@@ -95,6 +95,9 @@ export interface SyncRow {
   synced_at: string | null;
   deleted_in_nubceo_at: string | null;
   updated_at: string;
+  /** ADR-162 (H153): lo que dice NubCeo de la venta. Ausente sin la migración. */
+  reconciled_status?: "reconciled" | "pending" | "difference" | null;
+  reconciled_at?: string | null;
 }
 
 export interface RunRow {
@@ -194,8 +197,10 @@ async function edge<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-const SYNC_COLS =
+const SYNC_BASE_COLS =
   "id, kind, sale_id, return_id, venta_id, store_id, sale_number, sale_date, amount, status, excluded_by, excluded_reason, error_kind, attempts, next_attempt_at, last_error, last_http_status, last_response, payload, payload_hash, environment, already_existed, sent_at, synced_at, deleted_in_nubceo_at, updated_at";
+// ADR-162 (H153): estado de conciliación que devuelve NubCeo.
+const SYNC_COLS = `${SYNC_BASE_COLS}, reconciled_status, reconciled_at`;
 
 export const nubceoApi = {
   config: () => rpc<NubceoConfig>("nubceo_settings_get"),
@@ -238,23 +243,29 @@ export const nubceoApi = {
     edge<{ ok: boolean; action: string; reason?: string; payload?: unknown }>({ action: "preview", sync_id: syncId }),
 
   list: async (f: MonitorFilters): Promise<{ rows: SyncRow[]; total: number }> => {
-    let q = from("nubceo_sync")
-      .select(SYNC_COLS, { count: "exact" })
-      .eq("tenant_id", await tenantId())
-      .in("status", TAB_STATUSES[f.tab])
-      .gte("sale_date", f.from)
-      .lt("sale_date", f.to)
-      .order("sale_date", { ascending: false })
-      .range(f.page * f.pageSize, f.page * f.pageSize + f.pageSize - 1);
-    if (f.storeId) q = q.eq("store_id", f.storeId);
-    const s = f.search.trim();
-    if (s) {
-      const n = Number(s.replace(/\D/g, ""));
-      q = /^\d+$/.test(s) && Number.isFinite(n)
-        ? q.or(`sale_number.eq.${n},venta_id.ilike.%${s}%`)
-        : q.ilike("venta_id", `%${s.replace(/[%,()]/g, "")}%`);
-    }
-    const { data, error, count } = await q;
+    const tid = await tenantId();
+    const run = (cols: string) => {
+      let q = from("nubceo_sync")
+        .select(cols, { count: "exact" })
+        .eq("tenant_id", tid)
+        .in("status", TAB_STATUSES[f.tab])
+        .gte("sale_date", f.from)
+        .lt("sale_date", f.to)
+        .order("sale_date", { ascending: false })
+        .range(f.page * f.pageSize, f.page * f.pageSize + f.pageSize - 1);
+      if (f.storeId) q = q.eq("store_id", f.storeId);
+      const s = f.search.trim();
+      if (s) {
+        const n = Number(s.replace(/\D/g, ""));
+        q = /^\d+$/.test(s) && Number.isFinite(n)
+          ? q.or(`sale_number.eq.${n},venta_id.ilike.%${s}%`)
+          : q.ilike("venta_id", `%${s.replace(/[%,()]/g, "")}%`);
+      }
+      return q;
+    };
+    let { data, error, count } = await run(SYNC_COLS);
+    // Base sin la migración de ADR-162: sin el estado de conciliación.
+    if (error && /reconciled_|does not exist|schema cache/i.test(error.message)) ({ data, error, count } = await run(SYNC_BASE_COLS));
     if (error) throw error;
     return {
       rows: ((data ?? []) as unknown as SyncRow[]).map((r) => ({ ...r, amount: Number(r.amount) })),

@@ -75,8 +75,13 @@ export function useAddMovement() {
       type: "income" | "expense";
       amount: number;
       reason: string;
-    }) => cashApi.addMovement(vars.shiftId, vars.type, vars.amount, vars.reason),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cash", "movements"] }),
+      /** ADR-162 (H151): caja fuerte o banco de destino (u origen del ingreso). */
+      treasuryAccountId?: string | null;
+    }) => cashApi.addMovement(vars.shiftId, vars.type, vars.amount, vars.reason, vars.treasuryAccountId ?? null),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["cash", "movements"] });
+      void qc.invalidateQueries({ queryKey: ["treasury"] });
+    },
   });
 }
 

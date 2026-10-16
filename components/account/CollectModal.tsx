@@ -19,6 +19,7 @@ import {
   type OpenItemRow,
 } from "@/modules/customers/account";
 import { useAccountMutations, useAccountStatement } from "@/modules/customers/hooks";
+import { useTransferAccounts } from "@/modules/payments/transfer";
 import { COLLECT_METHODS, KIND_LABEL, METHOD_LABEL, fmtDate } from "./shared";
 
 function itemLabel(it: Pick<OpenItemRow, "kind" | "reason" | "installment_no" | "installments">): string {
@@ -53,10 +54,16 @@ export function CollectModal({
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [key, setKey] = useState(newIdempotencyKey);
   const [result, setResult] = useState<CollectResult | null>(null);
+  // ADR-162: a qué cuenta te transfirieron (si está vinculada a un banco de
+  // Tesorería, el cobro suma ahí y en su cuenta contable).
+  const { data: transferAccounts = [] } = useTransferAccounts();
+  const activeTransfers = transferAccounts.filter((t) => t.is_active && !t.deleted_at);
+  const [transferAccount, setTransferAccount] = useState("");
 
   useEffect(() => {
     if (open) {
       setAmount(presetAmount && presetAmount > 0 ? String(presetAmount) : "");
+      setTransferAccount("");
       setMethod("cash");
       setNote("");
       setChoose(false);
@@ -107,6 +114,7 @@ export function CollectModal({
         allocations: picks,
         idempotencyKey: key,
         note,
+        transferAccountId: method === "transfer" ? transferAccount || null : null,
       });
       setResult(r);
       toast({ title: `Cobro registrado · recibo #${r.receipt_no}`, variant: "success" });
@@ -201,6 +209,30 @@ export function CollectModal({
               ))}
             </div>
           </div>
+
+          {method === "transfer" && activeTransfers.length > 0 && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-muted-foreground">¿A qué cuenta te transfirió?</span>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                value={transferAccount}
+                onChange={(e) => setTransferAccount(e.target.value)}
+              >
+                <option value="" className="bg-popover text-popover-foreground">
+                  No sé o no importa
+                </option>
+                {activeTransfers.map((t) => (
+                  <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">
+                    {t.bank_name}
+                    {t.alias ? ` · ${t.alias}` : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Si esa cuenta está vinculada a un banco en Tesorería, el cobro suma solo en ese banco.
+              </span>
+            </label>
+          )}
 
           {items.length > 0 && (
             <div className="space-y-2">

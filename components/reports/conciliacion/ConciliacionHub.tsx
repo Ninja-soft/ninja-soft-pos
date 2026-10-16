@@ -72,12 +72,13 @@ import { useCardPayments, useVoucherEdits } from "@/modules/reports/cardReconcil
 import { settlementErrorMessage, useSettlementSync } from "@/modules/reports/processorReconciliation";
 import { useDisputesForPayments, useOpenDisputes } from "@/modules/reports/paymentDisputes";
 import { useAllSettlementLines, useHubMatches, useSaleInfo } from "@/modules/reports/reconciliationHub";
+import { BankStatementView } from "@/components/treasury/BankStatementView";
 import { CardBatches } from "./CardBatches";
 import { PendingInbox } from "./PendingInbox";
 import { ProvidersView } from "./ProvidersView";
 import { KpiTile } from "./ui";
 
-type View = "procesadores" | "tarjetas" | "pendientes";
+type View = "procesadores" | "tarjetas" | "pendientes" | "banco";
 
 // Ruta por defecto; el hub vive también en /tesoreria/conciliacion (H155) y
 // mantiene la ruta desde la que se abrió.
@@ -120,6 +121,7 @@ export function ConciliacionHub() {
 
   const cardsEnabled = useFeature("conciliacion_tarjetas");
   const procEnabled = useFeature("conciliacion_procesadores");
+  const treasuryEnabled = useFeature("tesoreria");
   const exportEnabled = useFeature("export_xlsx");
   const { data: me } = useMyTenant();
   const { data: userId } = useCurrentUserId();
@@ -150,6 +152,8 @@ export function ConciliacionHub() {
   if (procActive) tabs.push({ value: "procesadores", label: "Por procesador" });
   tabs.push({ value: "tarjetas", label: "Tarjetas por lote" });
   if (canManage) tabs.push({ value: "pendientes", label: "Pendientes de revisar" });
+  // H152 (ADR-162): el extracto del banco contra Tesorería (con candado si el plan no lo trae).
+  if (canManage && treasuryEnabled === true) tabs.push({ value: "banco", label: "Extracto del banco" });
   const wanted = params.get("vista") as View | null;
   const fromAlert = params.get("filtro") === "disputas";
   const view: View =
@@ -535,6 +539,8 @@ export function ConciliacionHub() {
               onRefetch={() => void linesQ.refetch()}
             />
           )}
+
+          {view === "banco" && canManage && <BankStatementView />}
 
           <ImportSettlementModal
             open={importProvider !== null}

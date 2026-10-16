@@ -1694,7 +1694,71 @@ export function createNubceoApi(o: NubceoApiOpts) {
           ids,
         }),
       ),
+    /** Ventas enviadas con su estado de conciliación (ADR-162, H153). */
+    reconciledSales: (query: string) =>
+      inQueue(() => authed("GET", `/v1/tenants/${t}/reconciler/sales?${query}`)),
   };
+}
+
+// -----------------------------------------------------------------------------
+// Estado de conciliación por venta (ADR-162, H153)
+// -----------------------------------------------------------------------------
+
+export type ReconciledStatus = "reconciled" | "pending" | "difference";
+
+export interface ReconciledRow {
+  venta_id: string;
+  status: ReconciledStatus;
+  reconciled_at: string | null;
+  detail: Record<string, unknown> | null;
+}
+
+/** Query del listado de ventas con su conciliación, por fecha de la venta. */
+export function reconciledQuery(opts: { page: number; pageSize: number; from: string; to: string }): string {
+  const q = [
+    "getReconciledSales=true",
+    `page=${Math.max(1, Math.trunc(opts.page))}`,
+    `pageSize=${Math.min(Math.max(1, Math.trunc(opts.pageSize)), 500)}`,
+    `filter[fecha][gte]=${encodeURIComponent(opts.from)}`,
+    `filter[fecha][lte]=${encodeURIComponent(opts.to)}`,
+  ];
+  return q.join("&");
+}
+
+/** Estado de NubCeo en palabras nuestras. Sin estado reconocible: null. */
+export function reconciledStatusOf(raw: unknown): ReconciledStatus | null {
+  const s = txt(raw)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\s-]+/g, "_");
+  if (!s) return null;
+  if (/(diff|difer|partial|parcial|mismatch|inconsist)/.test(s)) return "difference";
+  if (/^(not_|no_|un|sin_|pending|pendiente|unreconciled)/.test(s)) return "pending";
+  if (/(reconciled|conciliad|matched|ok$|complete)/.test(s)) return "reconciled";
+  return "pending";
+}
+
+/** data[] de GET /reconciler/sales?getReconciledSales=true → estado por venta_id. */
+export function parseReconciledSales(body: unknown): { rows: ReconciledRow[]; total: number; count: number } {
+  const b = isObj(body) ? body : {};
+  const meta = isObj(b.meta) ? b.meta : {};
+  const list = (Array.isArray(b.data) ? b.data : Array.isArray(body) ? (body as unknown[]) : []).filter(isObj);
+  const rows: ReconciledRow[] = [];
+  for (const r of list) {
+    const venta = txt(pick(r, "venta_id", "ventaId", "saleId", "externalId", "external_id", "id"));
+    const status = reconciledStatusOf(pick(r, "reconciliationStatus", "reconciliation_status", "status"));
+    if (!venta || !status) continue;
+    const at = txt(pick(r, "reconciledAt", "reconciliationDate", "updatedAt"));
+    const diff = pick(r, "difference", "diferencia", "reconciliationDifference");
+    rows.push({
+      venta_id: venta.slice(0, 200),
+      status,
+      reconciled_at: status === "reconciled" && at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : null,
+      detail: diff !== undefined ? { difference: diff } : null,
+    });
+  }
+  return { rows, total: Number(meta.total) || 0, count: Number(meta.count) || list.length };
 }
 
 export type NubceoApi = ReturnType<typeof createNubceoApi>;

@@ -93,7 +93,7 @@ import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
 import { ProviderTile, StatusChip } from "@/components/reports/conciliacion/ui";
 import { ImportSettlementModal } from "./ImportSettlementModal";
 import { MpConnectModal } from "./MpConnectModal";
-import { CreateSaleFromLineModal, IgnoreLineModal, LinkLineModal } from "./LineActionModals";
+import { AcceptDiffModal, CreateSaleFromLineModal, IgnoreLineModal, LinkLineModal } from "./LineActionModals";
 
 const FEATURE = "conciliacion_procesadores";
 
@@ -268,6 +268,7 @@ export function ProcessorReconciliation({
   const [connectOpen, setConnectOpen] = useState(false);
   const [linking, setLinking] = useState<SettlementLineRow | null>(null);
   const [ignoring, setIgnoring] = useState<SettlementLineRow | null>(null);
+  const [accepting, setAccepting] = useState<SettlementLineRow | null>(null);
   const [creating, setCreating] = useState<SettlementLineRow | null>(null);
 
   const active = enabled === true && canManage;
@@ -720,6 +721,7 @@ export function ProcessorReconciliation({
                 busy={resolve.isPending}
                 onLink={setLinking}
                 onIgnore={setIgnoring}
+                onAcceptDiff={setAccepting}
                 onCreate={provider === "mercadopago" ? setCreating : undefined}
                 onUnlink={(l) => act(l, "unlink")}
                 onUnignore={(l) => act(l, "unignore")}
@@ -738,6 +740,7 @@ export function ProcessorReconciliation({
       <MpConnectModal open={connectOpen} onOpenChange={setConnectOpen} />
       {linking && <LinkLineModal line={linking} onClose={() => setLinking(null)} onDone={() => void match.refetch()} />}
       {ignoring && <IgnoreLineModal line={ignoring} onClose={() => setIgnoring(null)} />}
+      {accepting && <AcceptDiffModal line={accepting} onClose={() => setAccepting(null)} />}
       {creating && <CreateSaleFromLineModal line={creating} onClose={() => setCreating(null)} onDone={() => void match.refetch()} />}
     </div>
   );
@@ -754,6 +757,7 @@ interface LinesTableProps {
   busy: boolean;
   onLink: (l: SettlementLineRow) => void;
   onIgnore: (l: SettlementLineRow) => void;
+  onAcceptDiff: (l: SettlementLineRow) => void;
   onCreate?: (l: SettlementLineRow) => void;
   onUnlink: (l: SettlementLineRow) => void;
   onUnignore: (l: SettlementLineRow) => void;
@@ -800,6 +804,11 @@ function LineActions({
         {(l.match_status === "missing_in_pos" || l.match_status === "amount_diff") && (
           <DropdownItem onSelect={() => p.onLink(l)}>
             <Link2 size={14} /> Vincular a una venta
+          </DropdownItem>
+        )}
+        {l.match_status === "amount_diff" && l.payment_id && (
+          <DropdownItem onSelect={() => p.onAcceptDiff(l)}>
+            <CheckCircle2 size={14} /> Aceptar la diferencia
           </DropdownItem>
         )}
         {l.match_status !== "ignored" && l.match_status !== "matched" && (

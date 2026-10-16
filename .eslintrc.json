@@ -1,5 +1,7 @@
 {
-  "extends": ["next/core-web-vitals"],
+  "extends": [
+    "next/core-web-vitals"
+  ],
   "rules": {
     "@next/next/no-html-link-for-pages": "off"
   },
@@ -26,6 +28,22 @@
           {
             "selector": "TemplateElement[value.raw=/—/]",
             "message": "No usar '—' en la UI: usá <NoData /> o otra puntuación."
+          },
+          {
+            "selector": "VariableDeclarator > MemberExpression.init[computed=false][property.name=/^(rpc|from|schema|channel)$/]",
+            "message": "No saques métodos del cliente de Supabase a una variable (pierden 'this' y fallan con \"reading 'rest'\"): llamá supabase.rpc(...) directo o usá supabase.rpc.bind(supabase)."
+          },
+          {
+            "selector": "VariableDeclarator > TSAsExpression.init > MemberExpression.expression[computed=false][property.name=/^(rpc|from|schema|channel)$/]",
+            "message": "No saques métodos del cliente de Supabase a una variable (pierden 'this' y fallan con \"reading 'rest'\"): llamá supabase.rpc(...) directo o usá supabase.rpc.bind(supabase)."
+          },
+          {
+            "selector": "VariableDeclarator > TSAsExpression.init > TSAsExpression.expression > MemberExpression.expression[computed=false][property.name=/^(rpc|from|schema|channel)$/]",
+            "message": "No saques métodos del cliente de Supabase a una variable (pierden 'this' y fallan con \"reading 'rest'\"): llamá supabase.rpc(...) directo o usá supabase.rpc.bind(supabase)."
+          },
+          {
+            "selector": "VariableDeclarator > ObjectPattern.id > Property[key.name='rpc']",
+            "message": "No saques métodos del cliente de Supabase a una variable (pierden 'this' y fallan con \"reading 'rest'\"): llamá supabase.rpc(...) directo o usá supabase.rpc.bind(supabase)."
           }
         ]
       }

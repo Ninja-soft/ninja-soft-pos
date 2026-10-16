@@ -220,6 +220,9 @@ function SignupWizard() {
   const { data: signupPlans } = useSignupPlans();
   // Si el alta de email ya creó el usuario, no lo recreamos en un reintento.
   const userCreatedRef = useRef(false);
+  // Negocio ya creado en este intento: un reintento NUNCA crea otro (bug: cada
+  // "Pagar y activar" fallido dejaba un negocio duplicado).
+  const tenantIdRef = useRef<string | null>(null);
 
   // Autoselección del plan recomendado (Pro) en cuanto cargan los planes, sin
   // pisar una elección manual previa del usuario.
@@ -438,6 +441,42 @@ function SignupWizard() {
     }
   }
 
+  // Crea el negocio una sola vez por intento (el servidor además reutiliza el
+  // recién creado con el mismo nombre si el pedido se repite).
+  async function createTenantOnce(input: Parameters<typeof createTenant>[0]): Promise<string> {
+    if (tenantIdRef.current) return tenantIdRef.current;
+    const res = await createTenant(input);
+    tenantIdRef.current = res.tenant_id;
+    return res.tenant_id;
+  }
+
+  // Pasos posteriores al alta (código, plan, IA, cobro). El negocio YA existe:
+  // ninguno puede mostrar "No pudimos crear tu negocio" ni abortar el ingreso.
+  // Devuelve true si redirigió a Mercado Pago.
+  async function finishAfterCreate(tenantId: string, inviteCode: string | undefined): Promise<boolean> {
+    let invitePinnedPlan = false;
+    try {
+      invitePinnedPlan = await applyInviteCode(tenantId, inviteCode);
+    } catch {
+      toast({ title: "Negocio creado", description: "El código de invitación no se pudo aplicar. Probalo desde tu panel.", variant: "info" });
+    }
+    try {
+      await applyChosenPlan(invitePinnedPlan);
+    } catch {
+      toast({ title: "Negocio creado", description: "No pudimos fijar el plan elegido. Lo elegís desde tu panel (Suscripción).", variant: "info" });
+    }
+    try {
+      await maybeActivateAddon();
+    } catch {
+      toast({ title: "Negocio creado", description: "No pudimos sumar el Asistente IA ahora. Lo activás desde tu panel (Suscripción).", variant: "info" });
+    }
+    try {
+      return await applyPaidPlanAndCheckout(invitePinnedPlan);
+    } catch {
+      return false;
+    }
+  }
+
   // CTA secundaria: contacto con ventas (queda como alternativa al self-service).
   function contactSales() {
     window.location.href = salesContactHref("Quiero el plan Enterprise (Sensei)");
@@ -505,27 +544,18 @@ function SignupWizard() {
       }
 
       // 2. Crear tenant (Edge). Reintentable sin recrear el usuario.
-      const res = await createTenant({
+      const tenantId = await createTenantOnce({
         name: v.businessName,
         industry,
         cuit: v.cuit || undefined,
         legal_name: v.legalName || undefined,
         iva_condition: v.ivaCondition || undefined,
+        plan_key: selectedPlan || undefined,
       });
       await supabase.auth.refreshSession();
 
-      // 3. Código de invitación (no bloqueante). Si fija plan, gana sobre el
-      //    selector; si no, aplicamos el plan elegido (sólo planes con trial).
-      const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
-      await applyChosenPlan(invitePinnedPlan);
-
-      // 3b. Add-on IA (si lo marcó). Antes del checkout: el preapproval del plan
-      //     pago debe incluir el monto del addon.
-      await maybeActivateAddon();
-
-      // 4. Plan sin trial → cobro self-service: redirige a Mercado Pago. Si
-      //    redirige, cortamos acá (no vamos al dashboard).
-      if (await applyPaidPlanAndCheckout(invitePinnedPlan)) return;
+      // 3. Código, plan, IA y cobro: nunca abortan el alta (el negocio ya existe).
+      if (await finishAfterCreate(tenantId, v.inviteCode)) return;
 
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
@@ -555,18 +585,16 @@ function SignupWizard() {
     setSubmitting(true);
     const supabase = createClient();
     try {
-      const res = await createTenant({
+      const tenantId = await createTenantOnce({
         name: v.businessName,
         industry,
         cuit: v.cuit || undefined,
         legal_name: v.legalName || undefined,
         iva_condition: v.ivaCondition || undefined,
+        plan_key: selectedPlan || undefined,
       });
       await supabase.auth.refreshSession();
-      const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
-      await applyChosenPlan(invitePinnedPlan);
-      await maybeActivateAddon();
-      if (await applyPaidPlanAndCheckout(invitePinnedPlan)) return;
+      if (await finishAfterCreate(tenantId, v.inviteCode)) return;
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
       router.refresh();
@@ -591,16 +619,31 @@ function SignupWizard() {
   const accountErrors = accountForm.formState.errors;
   const businessErrors = businessForm.formState.errors;
 
-  const planNote = planNeedsContact && (
+  // Nadie paga al crear la cuenta (pedido del dueño): el botón invita a probar
+  // y abajo se aclara cuándo empieza el cobro. Acá no se conecta Mercado Pago.
+  // Días según la configuración de planes (internal): los del plan elegido o,
+  // si no tiene, los que muestra el registro.
+  const trialDaysForCta =
+    chosenPlan && chosenPlan.trialDays > 0 ? chosenPlan.trialDays : signupTrialDays(signupPlans);
+  const trialCta =
+    trialDaysForCta > 0
+      ? `Probá gratis ${trialDaysForCta === 1 ? "1 día" : `${trialDaysForCta} días`}`
+      : "Crear mi negocio";
+  const planNote = (
     <p className="text-center text-xs text-muted-foreground sm:text-right">
-      Pagás con Mercado Pago y tu plan queda activo al instante.{" "}
-      <button
-        type="button"
-        onClick={contactSales}
-        className="rounded-sm font-medium text-ninja-flameSoft outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        ¿Preferís hablar con ventas?
-      </button>
+      No pagás nada ahora: el cobro empieza recién al terminar la prueba.
+      {planNeedsContact && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={contactSales}
+            className="rounded-sm font-medium text-ninja-flameSoft outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            ¿Preferís hablar con ventas?
+          </button>
+        </>
+      )}
     </p>
   );
 
@@ -778,7 +821,7 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitAccount}
                 >
-                  {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
+                  {trialCta}
                 </Button>
               </StepActions>
               {planNote}
@@ -838,7 +881,7 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitBusiness}
                 >
-                  {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
+                  {trialCta}
                 </Button>
               </StepActions>
               {planNote}
@@ -914,7 +957,7 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitBusiness}
                 >
-                  {planNeedsContact ? "Pagar y activar" : "Crear mi negocio"}
+                  {trialCta}
                 </Button>
               </StepActions>
               {planNote}

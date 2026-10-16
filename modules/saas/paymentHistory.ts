@@ -44,7 +44,7 @@ export function useMyPaymentHistory(enabled = true) {
     staleTime: 60_000,
     queryFn: async (): Promise<PaymentRecord[]> => {
       const supabase = createClient();
-      const rpc = supabase.rpc as unknown as (
+      const rpc = supabase.rpc.bind(supabase) as unknown as (
         fn: string,
       ) => Promise<{ data: unknown; error: unknown }>;
       const { data, error } = await rpc("my_payment_history");

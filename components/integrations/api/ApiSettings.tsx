@@ -18,7 +18,8 @@ import { SandboxProvider, useSandbox } from "./TryIt";
 // los ve cualquiera que entre a la sección; las credenciales y la colección
 // de Postman con credencial precargada, sólo el dueño. El secreto recién
 // creado o rotado vive sólo en memoria de esta página. El dueño también puede
-// mandar la documentación por email (ADR-163, auditado).
+// mandar la documentación por email con una credencial (ADR-163): el secreto
+// sólo si está en esa memoria (recién creado o rotado), auditado sin él.
 
 function Inner() {
   const { data: me, isLoading: meLoading } = useMyTenant();
@@ -53,6 +54,7 @@ function Inner() {
         state={q.data}
         onSecret={setFresh}
         onPostman={(c) => setPostman({ open: true, clientId: c.client_id })}
+        onEmail={() => setEmailOpen(true)}
         onSandbox={(c) => {
           sandbox.loadCredentials(c.client_id, c.client_secret);
           setSection("oauth.token");
@@ -70,7 +72,15 @@ function Inner() {
         onPostman={() => setPostman({ open: true, clientId: null })}
         onEmail={isOwner ? () => setEmailOpen(true) : undefined}
       />
-      {isOwner && <EmailDocsDialog open={emailOpen} onOpenChange={setEmailOpen} />}
+      {isOwner && (
+        <EmailDocsDialog
+          open={emailOpen}
+          onOpenChange={setEmailOpen}
+          clients={q.data?.clients ?? []}
+          fresh={fresh}
+          onRotated={setFresh}
+        />
+      )}
       <PostmanDialog
         open={postman.open}
         onOpenChange={(open) => setPostman((p) => ({ ...p, open }))}

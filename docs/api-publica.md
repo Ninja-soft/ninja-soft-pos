@@ -162,7 +162,7 @@ curl -s "$API/customers?external_id=WEB-1001" -H "Authorization: Bearer $TOKEN"
   - Las credenciales de **producción** se rechazan ahí (`sandbox_only` / `invalid_client`) y nunca llegan a la base.
   - Límite de **60 pedidos por minuto por IP** (en memoria de cada instancia), además del límite por credencial.
 - **Documentación descargable:** `GET /api/docs/html` (HTML autocontenido, sin recursos externos, con hoja de impresión), `?download=1` como adjunto y `?print=1` abre Imprimir para **Guardar como PDF**.
-- **Enviar por email** (dueño, desde el panel): link al portal, al HTML y al PDF por el sistema de emails (`api_docs_send_email` → `enqueue_system_email`), auditado como `api_docs_emailed`, hasta 20 por día. Nunca viajan credenciales.
+- **Enviar por email** (dueño, desde el panel): link al portal y, como adjuntos, la colección de Postman con las variables cargadas y el HTML de la documentación. Opcional, una credencial: `client_id`, ambiente, alcances y URL base; el `client_secret` sólo si se acaba de crear o rotar (o con **Rotar y enviar**), con confirmación. Sale por la Edge `send_api_docs_email`, que envía directo sin guardar el cuerpo; la base sólo ve el hash del secreto y audita `api_docs_emailed` con `with_secret`, el `client_id` acortado y el destinatario, nunca el secreto. Hasta 20 por día. Recomendado: mandar credenciales de prueba.
 - **Postman del sandbox público:** la colección de `/developers` viene apuntada a `/api/sandbox/v1` con las credenciales de ejemplo; para tu negocio cambiá `base_url` a `/api/v1` y cargá tu credencial.
 
 ## 7. Rendimiento

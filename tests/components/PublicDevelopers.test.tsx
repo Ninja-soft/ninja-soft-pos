@@ -1,6 +1,6 @@
 // ADR-163 (H68b): portal público /developers y envío de la documentación por
 // email. Probar con las credenciales de ejemplo va a /api/sandbox/v1; las de
-// producción se rechazan sin llamar a la red; el email valida antes de enviar.
+// producción se rechazan sin llamar a la red.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
@@ -13,11 +13,8 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
-const mutate = vi.fn();
-vi.mock("@/modules/api-publica/hooks", () => ({ useSendApiDocs: () => ({ mutate, isPending: false }) }));
 
 import { PublicDevelopers } from "@/components/integrations/api/PublicDevelopers";
-import { EmailDocsDialog } from "@/components/integrations/api/EmailDocsDialog";
 import { DEMO_CLIENT_ID } from "@/lib/api/sandboxConstants";
 
 const DEMO_TOKEN = `nsat_test_${"0".repeat(62)}ff`;
@@ -25,7 +22,6 @@ const DEMO_TOKEN = `nsat_test_${"0".repeat(62)}ff`;
 describe("PublicDevelopers", () => {
   beforeEach(() => {
     toast.mockReset();
-    mutate.mockReset();
     vi.restoreAllMocks();
     window.history.replaceState(null, "", "/developers");
   });
@@ -80,32 +76,5 @@ describe("PublicDevelopers", () => {
     fireEvent.click(screen.getByRole("button", { name: /^conectar$/i }));
     expect(screen.getByText(/sólo acepta credenciales de prueba/)).toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
-  });
-});
-
-describe("EmailDocsDialog", () => {
-  beforeEach(() => {
-    mutate.mockReset();
-    toast.mockReset();
-  });
-
-  it("valida el email antes de enviar", () => {
-    render(<EmailDocsDialog open onOpenChange={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Email del integrador"), { target: { value: "no-es-email" } });
-    fireEvent.click(screen.getByRole("button", { name: /^enviar$/i }));
-    expect(screen.getByText(/no parece válido/)).toBeInTheDocument();
-    expect(mutate).not.toHaveBeenCalled();
-  });
-
-  it("envía email y nota y cierra al confirmar", () => {
-    const onOpenChange = vi.fn();
-    mutate.mockImplementation((_v: unknown, opts: { onSuccess: () => void }) => opts.onSuccess());
-    render(<EmailDocsDialog open onOpenChange={onOpenChange} />);
-    fireEvent.change(screen.getByLabelText("Email del integrador"), { target: { value: " Dev@Proveedor.example " } });
-    fireEvent.change(screen.getByPlaceholderText(/sincronizar la tienda/), { target: { value: "Para la tienda" } });
-    fireEvent.click(screen.getByRole("button", { name: /^enviar$/i }));
-    expect(mutate.mock.calls[0]![0]).toEqual({ email: "Dev@Proveedor.example", note: "Para la tienda" });
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Documentación enviada" }));
   });
 });

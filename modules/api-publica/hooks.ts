@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiScope } from "@/lib/api-publica/scopes";
-import { apiPublicaApi, type ApiEnvironment } from "./api";
+import { apiPublicaApi, type ApiEnvironment, type SendDocsEmailInput } from "./api";
 
 const KEY = ["api-publica"] as const;
 
@@ -34,5 +34,5 @@ export function useApiClientMutations() {
 
 /** Enviar la documentación por email (ADR-163). Sin caché que invalidar. */
 export function useSendApiDocs() {
-  return useMutation({ mutationFn: (v: { email: string; note: string | null }) => apiPublicaApi.sendDocs(v.email, v.note) });
+  return useMutation({ mutationFn: (v: SendDocsEmailInput) => apiPublicaApi.sendDocsEmail(v) });
 }

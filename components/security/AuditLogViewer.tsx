@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { Download, FileSearch, Lock } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
@@ -11,12 +10,20 @@ import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import { BranchDot } from "@/components/branches/BranchSwitcher";
 import { useFeatureGate } from "@/components/saas/GatedAction";
-import { EYEBROW, FLAT_PANEL } from "@/components/security/styles";
+import { FLAT_PANEL } from "@/components/security/styles";
 import { useBranches } from "@/modules/branches/hooks";
 import { useStaffPeople } from "@/modules/staff/hooks";
 import { securityApi, type AuditRow } from "@/modules/security/api";
 import { useAuditFacets, useAuditSearch } from "@/modules/security/hooks";
-import { auditActionLabel, auditDiff, auditEntityLabel, auditTone, auditValue } from "@/lib/security/auditLabels";
+import { auditActionLabel, auditEntityLabel } from "@/lib/security/auditLabels";
+import { presentAuditEvent } from "@/lib/audit/present";
+import {
+  AuditEventBody,
+  AuditEventHeader,
+  useAuditPresentation,
+  type AuditDetailEvent,
+  type KnownNames,
+} from "@/components/audit/AuditEventDetail";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -73,6 +80,18 @@ export function AuditLogViewer() {
   const total = data?.total ?? 0;
   const storeName = (id: string | null) => branches.find((b) => b.id === id) ?? null;
   const users = people.filter((p) => p.user_id);
+  // La RLS de `users` no deja al dueño leer a su personal: los nombres salen de staff_people.
+  const known = useMemo<KnownNames>(() => {
+    const user: Record<string, string> = {};
+    const cashier_profile: Record<string, string> = {};
+    const store: Record<string, string> = {};
+    for (const p of people) {
+      if (p.user_id) user[p.user_id] = capitalizeName(p.name);
+      if (p.profile_id) cashier_profile[p.profile_id] = capitalizeName(p.name);
+    }
+    for (const b of branches) store[b.id] = b.name;
+    return { user, cashier_profile, store };
+  }, [people, branches]);
 
   function resetPage<T>(set: (v: T) => void) {
     return (v: T) => {
@@ -101,7 +120,7 @@ export function AuditLogViewer() {
           rows: all.rows.map((r) => ({
             date: new Date(r.created_at),
             actor: r.actor_name ?? "Sistema",
-            action: auditActionLabel(r.action),
+            action: presentAuditEvent(r).title,
             entity: auditEntityLabel(r.entity_type),
             store: storeName(r.store_id)?.name ?? "",
             reason: r.reason ?? "",
@@ -225,6 +244,7 @@ export function AuditLogViewer() {
             ) : (
               rows.map((r) => {
                 const b = storeName(r.store_id);
+                const p = presentAuditEvent(r);
                 return (
                   <tr key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setOpen(r)}>
                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground">
@@ -242,10 +262,10 @@ export function AuditLogViewer() {
                               warning: "bg-warning",
                               info: "bg-info",
                               neutral: "bg-muted-foreground/50",
-                            }[auditTone(r.action)],
+                            }[p.tone],
                           )}
                         />
-                        {auditActionLabel(r.action)}
+                        {p.title}
                       </span>
                       {r.reason && <span className="block truncate text-xs text-muted-foreground">{r.reason}</span>}
                     </td>
@@ -283,7 +303,7 @@ export function AuditLogViewer() {
         </div>
       )}
 
-      <AuditDetail row={open} onClose={() => setOpen(null)} storeLabel={(id) => storeName(id)?.name ?? null} />
+      <AuditDetail row={open} onClose={() => setOpen(null)} storeLabel={(id) => storeName(id)?.name ?? null} known={known} />
     </div>
   );
 }
@@ -293,65 +313,42 @@ function AuditDetail({
   row,
   onClose,
   storeLabel,
+  known,
 }: {
   row: AuditRow | null;
   onClose: () => void;
   storeLabel: (id: string | null) => string | null;
+  known: KnownNames;
 }) {
-  const diff = row ? auditDiff(row.before_data, row.after_data) : [];
-  const hasBefore = Boolean(row?.before_data);
+  const event = useMemo<AuditDetailEvent | null>(
+    () =>
+      row
+        ? {
+            id: row.id,
+            created_at: row.created_at,
+            entity_type: row.entity_type,
+            entity_id: row.entity_id,
+            action: row.action,
+            before_data: row.before_data,
+            after_data: row.after_data,
+            reason: row.reason,
+            actorName: row.actor_name,
+            storeName: storeLabel(row.store_id),
+          }
+        : null,
+    // storeLabel cambia de identidad en cada render; la sucursal sale de la fila.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [row],
+  );
+  const { presented, resolving } = useAuditPresentation(event, known);
   return (
     <Modal
       open={Boolean(row)}
       onOpenChange={(o) => !o && onClose()}
-      title={row ? auditActionLabel(row.action) : "Detalle"}
-      description={
-        row
-          ? `${new Date(row.created_at).toLocaleString("es-AR")} · ${row.actor_name ? capitalizeName(row.actor_name) : "Sistema"}${
-              storeLabel(row.store_id) ? ` · ${storeLabel(row.store_id)}` : ""
-            }`
-          : undefined
-      }
+      title={presented?.title ?? "Detalle"}
+      header={event && presented ? <AuditEventHeader event={event} presented={presented} /> : undefined}
     >
-      {row && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Badge tone="neutral">{auditEntityLabel(row.entity_type)}</Badge>
-            {row.entity_id && <Badge tone="neutral">ID {row.entity_id.slice(0, 8)}</Badge>}
-          </div>
-          {row.reason && (
-            <div className="rounded-md bg-muted px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Motivo: </span>
-              {row.reason}
-            </div>
-          )}
-          {diff.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin datos adicionales.</p>
-          ) : (
-            <div>
-              <p className={EYEBROW}>{hasBefore ? "Cambios" : "Datos"}</p>
-              <dl className="mt-2 divide-y divide-border rounded-md border border-border text-sm">
-                {diff.map((d) => (
-                  <div key={d.key} className={cn("grid gap-1 px-3 py-2 sm:grid-cols-[160px_1fr]", d.changed && hasBefore && "bg-warning/5")}>
-                    <dt className="font-mono text-xs text-muted-foreground">{d.key}</dt>
-                    <dd className="min-w-0 break-words">
-                      {hasBefore && d.changed ? (
-                        <>
-                          <span className="text-muted-foreground line-through">{auditValue(d.before)}</span>
-                          <span className="mx-1.5 text-muted-foreground">a</span>
-                          <span className="font-medium">{auditValue(d.after)}</span>
-                        </>
-                      ) : (
-                        auditValue(d.after ?? d.before)
-                      )}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
-        </div>
-      )}
+      {event && presented && <AuditEventBody event={event} presented={presented} resolving={resolving} />}
     </Modal>
   );
 }

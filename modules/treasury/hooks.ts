@@ -4,7 +4,13 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFeature } from "@/modules/saas/gating";
 import type { ChequeKind, ChequeStatus } from "@/lib/treasury/cheques";
-import { treasuryApi, type ChequeInput, type MovementInput, type TreasuryAccountInput } from "./api";
+import {
+  treasuryApi,
+  type BankStatementLine,
+  type ChequeInput,
+  type MovementInput,
+  type TreasuryAccountInput,
+} from "./api";
 
 /** Estado de la feature para la UI (la barrera real es el servidor). */
 export function useTreasuryAccess() {
@@ -114,6 +120,38 @@ export function useMyOpenShift(enabled = true) {
   });
 }
 
+/** ¿El plan trae la conciliación bancaria? (H152; la barrera real es el servidor). */
+export function useBankStatementAccess() {
+  const f = useFeature("conciliacion_bancaria");
+  return { ready: f !== undefined, enabled: f === true, locked: f === false };
+}
+
+/** Cajas fuertes y bancos para el retiro del cajón (H151). */
+export function useDropDestinations(enabled = true) {
+  return useQuery({
+    queryKey: ["treasury", "drop-destinations"],
+    queryFn: () => treasuryApi.dropDestinations(),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useStatementImports(accountId: string | null) {
+  return useQuery({
+    queryKey: ["treasury", "statement-imports", accountId],
+    queryFn: () => treasuryApi.statementImports(accountId!),
+    enabled: Boolean(accountId),
+  });
+}
+
+export function useStatementLines(f: { accountId: string | null; status?: BankStatementLine["match_status"] | null }) {
+  return useQuery({
+    queryKey: ["treasury", "statement-lines", f],
+    queryFn: () => treasuryApi.statementLines({ accountId: f.accountId!, status: f.status ?? null }),
+    enabled: Boolean(f.accountId),
+  });
+}
+
 export function useTreasuryMutations() {
   const qc = useQueryClient();
   const inv = () => {
@@ -140,6 +178,29 @@ export function useTreasuryMutations() {
       },
     }),
     createMovement: useMutation({ mutationFn: (v: MovementInput) => treasuryApi.createMovement(v), onSuccess: inv }),
+    setSettlementProviders: useMutation({
+      mutationFn: (v: { accountId: string; providers: string[] }) => treasuryApi.setSettlementProviders(v.accountId, v.providers),
+      onSuccess: () => {
+        inv();
+        void qc.invalidateQueries({ queryKey: ["accounting"] });
+      },
+    }),
+    importStatement: useMutation({
+      mutationFn: (v: Parameters<typeof treasuryApi.importStatement>[0]) => treasuryApi.importStatement(v),
+      onSuccess: inv,
+    }),
+    resolveStatementLine: useMutation({
+      mutationFn: (v: Parameters<typeof treasuryApi.resolveStatementLine>[0]) => treasuryApi.resolveStatementLine(v),
+      onSuccess: () => {
+        inv();
+        void qc.invalidateQueries({ queryKey: ["accounting"] });
+      },
+    }),
+    rematchStatement: useMutation({ mutationFn: (accountId: string) => treasuryApi.rematchStatement(accountId), onSuccess: inv }),
+    deleteStatement: useMutation({
+      mutationFn: (v: { importId: string; reason: string }) => treasuryApi.deleteStatement(v.importId, v.reason),
+      onSuccess: inv,
+    }),
     transfer: useMutation({
       mutationFn: (v: Parameters<typeof treasuryApi.transfer>[0]) => treasuryApi.transfer(v),
       onSuccess: inv,

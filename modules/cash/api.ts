@@ -125,17 +125,21 @@ export const cashApi = {
     type: "income" | "expense",
     amount: number,
     reason: string,
+    treasuryAccountId: string | null = null,
   ): Promise<void> => {
     const supabase = createClient();
     // ADR-051 (H114 + H116): sólo en el turno propio; el retiro o ingreso sobre
     // el umbral pide PIN de supervisor y se reintenta con el token.
+    // ADR-162 (H151): el retiro puede ir a una caja fuerte o un banco de
+    // Tesorería (y el ingreso salir de ahí); el servidor valida la cuenta.
     const run = async () => {
       const { error } = await supabase.from("cash_movements").insert({
         cash_shift_id: shiftId,
         type,
         amount,
         reason,
-      });
+        ...(treasuryAccountId ? { treasury_account_id: treasuryAccountId } : {}),
+      } as never);
       if (error) throw error;
     };
     await withSupervisor(run, { cash_out: amount, cash_in: amount });

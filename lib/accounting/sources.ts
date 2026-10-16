@@ -17,6 +17,7 @@ export type SourceType =
   | "iibb_liquidation"
   | "treasury_account"
   | "cheque"
+  | "nubceo_ledger"
   | "acc_entry";
 
 export const SOURCE_LABEL: Record<SourceType, string> = {
@@ -34,6 +35,7 @@ export const SOURCE_LABEL: Record<SourceType, string> = {
   iibb_liquidation: "Liquidación de IIBB",
   treasury_account: "Saldo inicial de cuenta",
   cheque: "Cheque",
+  nubceo_ledger: "Asiento de NubCeo",
   acc_entry: "Reversión",
 };
 
@@ -53,7 +55,21 @@ export const EVENT_LABEL: Record<string, string> = {
   opening: "Saldo inicial",
   receive: "Recepción",
   reject: "Rechazo",
+  import: "Importado de NubCeo",
 };
+
+/**
+ * Etiqueta del evento de un asiento. Los asientos por estado (ADR-162) tienen
+ * versiones ('release#2') y reversiones ('release:rev'): se leen como el
+ * evento base, "(otra vez)" o "Reversión de ...".
+ */
+export function eventLabel(ev: string | null | undefined): string {
+  if (!ev) return "Asiento";
+  if (ev.endsWith(":rev")) return `Reversión de ${eventLabel(ev.slice(0, -4)).toLowerCase()}`;
+  const hash = ev.indexOf("#");
+  if (hash > 0) return `${eventLabel(ev.slice(0, hash))} (otra vez)`;
+  return EVENT_LABEL[ev] ?? ev;
+}
 
 export const ENTRY_KIND_LABEL: Record<string, string> = {
   auto: "Automático",
@@ -94,6 +110,8 @@ export function sourceHref(type: string | null | undefined, id: string | null | 
       return "/tesoreria/conciliacion?vista=procesadores";
     case "payment_dispute":
       return "/ventas?alertas=1";
+    case "nubceo_ledger":
+      return "/tesoreria/nubceo";
     case "tax_suffered":
       return "/impuestos/sufridas";
     case "iibb_liquidation":
@@ -132,6 +150,11 @@ export function accErrorMessage(e: unknown): string {
     [/acc_range_invalid/, "Elegí un rango de hasta un año."],
     [/duplicate key|acc_accounts_code_key/, "Ya existe una cuenta con ese código."],
     [/reason_required/, "Escribí el motivo."],
+    [/acc_source_from_not_month_start/, "El cambio vale desde el primer día de un mes."],
+    [/invalid_source/, "Elegí NinjaPOS o NubCeo."],
+    [/nubceo_account_unmapped/, "Hay cuentas de NubCeo sin equivalencia en tu plan de cuentas. Cargalas en Tesorería, NubCeo, Cuentas."],
+    [/nubceo_entry_unbalanced/, "El asiento de NubCeo no balancea: revisalo en NubCeo."],
+    [/invalid_code/, "Escribí el código de la cuenta de NubCeo."],
   ];
   for (const [re, text] of map) if (re.test(msg)) return text;
   return msg || "No se pudo completar la operación.";

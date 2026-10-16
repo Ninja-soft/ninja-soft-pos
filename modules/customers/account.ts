@@ -241,6 +241,8 @@ export const accountApi = {
     allocations?: { id: string; amount: number }[] | null;
     idempotencyKey: string;
     note?: string | null;
+    /** ADR-162: cuenta de cobro de la transferencia (entra a su banco en Tesorería). */
+    transferAccountId?: string | null;
   }) =>
     rpc<CollectResult>("account_collect", {
       p_customer_id: input.customerId,
@@ -251,6 +253,8 @@ export const accountApi = {
         : null) as unknown as Json,
       p_idempotency_key: input.idempotencyKey,
       p_note: input.note || null,
+      // Sólo se manda si hay cuenta: así funciona igual con la base sin ADR-162.
+      ...(input.method === "transfer" && input.transferAccountId ? { p_transfer_account: input.transferAccountId } : {}),
     }),
 
   voidPayment: (movementId: string, reason: string) =>

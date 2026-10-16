@@ -228,7 +228,15 @@ export const CONCEPTS: ConceptDef[] = [
   },
   { key: "acreditacion", label: "Acreditación de procesadores", group: "procesadores", help: "Dónde entra el neto liquidado (saldo de Mercado Pago, banco).", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
   { key: "comision_procesador", label: "Comisiones de procesadores", group: "procesadores", help: "Comisiones descontadas en la liquidación.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
-  { key: "impuestos_procesador", label: "Impuestos y retenciones de procesadores", group: "procesadores", help: "IVA sobre comisiones, retenciones y percepciones descontadas en la liquidación.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
+  {
+    key: "iva_comision",
+    label: "IVA de las comisiones de procesadores",
+    group: "procesadores",
+    help: "IVA de la factura del procesador por la comisión. Si discriminás IVA va a crédito fiscal (regla general); si no, a la regla \"gasto\" (IVA sobre comisiones, 5.2.05).",
+    qualifiers: [{ value: "gasto", label: "No discrimina IVA" }],
+    qualifierLabel: "Condición",
+  },
+  { key: "impuestos_procesador", label: "Impuestos y retenciones de procesadores", group: "procesadores", help: "Retenciones y percepciones descontadas en la liquidación (el IVA de la comisión va aparte).", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
   { key: "diferencia_procesador", label: "Diferencias de liquidación", group: "procesadores", help: "Lo que no cierra entre bruto, comisión, impuestos y neto.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
   { key: "contracargos", label: "Contracargos y devoluciones", group: "procesadores", help: "Contracargos perdidos y devoluciones hechas desde el procesador.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
   // Impuestos como sujeto (ADR-095): retenciones sufridas y liquidación de IIBB.

@@ -25,6 +25,7 @@ import { Isotype } from "@/components/brand/Logo";
 import { useDefaultRegister, useOpenShift } from "@/modules/pos/hooks";
 import { locationLabel } from "@/modules/branches/logic";
 import { useShiftMovements, useAddMovement } from "@/modules/cash/hooks";
+import { useDropDestinations } from "@/modules/treasury/hooks";
 import { summarize } from "@/modules/cash/api";
 import { ZClosuresHistory } from "@/components/cash/ZClosuresHistory";
 import { usePrintProfiles } from "@/modules/tickets/hooks";
@@ -51,6 +52,8 @@ export default function CajaPage() {
   const where = locationLabel(registerStore, register);
   const { data: movements } = useShiftMovements(shift?.id ?? null);
   const addMovement = useAddMovement();
+  const [destination, setDestination] = useState("");
+  const { data: destinations } = useDropDestinations(Boolean(shift));
   // Perfil de impresión del "cierre Z" (H22): copias configuradas por el negocio.
   const { data: printProfiles } = usePrintProfiles();
   const zCopies = printProfiles?.z_close.copies ?? 1;
@@ -89,11 +92,13 @@ export default function CajaPage() {
         type: modalType,
         amount: amt,
         reason: reason.trim(),
+        treasuryAccountId: destination || null,
       });
       toast({ title: "Movimiento registrado", variant: "success" });
       setModalType(null);
       setAmount("");
       setReason("");
+      setDestination("");
     } catch (e) {
       if (e instanceof SupervisorCancelled) return;
       toast({
@@ -341,6 +346,32 @@ export default function CajaPage() {
             onChange={(e) => setReason(e.target.value)}
             placeholder={modalType === "expense" ? "Compra de bolsas" : "Aporte"}
           />
+          {(destinations ?? []).length > 0 && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-muted-foreground">
+                {modalType === "expense" ? "¿A dónde va la plata?" : "¿De dónde sale la plata?"}
+              </span>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+              >
+                <option value="" className="bg-popover text-popover-foreground">
+                  {modalType === "expense" ? "Es un gasto o un retiro sin destino" : "Aporte de afuera"}
+                </option>
+                {(destinations ?? []).map((d) => (
+                  <option key={d.id} value={d.id} className="bg-popover text-popover-foreground">
+                    {d.kind === "bank" ? "Banco" : "Caja"} · {d.name}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {modalType === "expense"
+                  ? "Si lo guardás en la caja fuerte o lo depositás, elegí la cuenta: suma ahí solo en Tesorería."
+                  : "Si traés cambio de la caja fuerte o del banco, elegí la cuenta: se resta de ahí en Tesorería."}
+              </span>
+            </label>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setModalType(null)}>
               Cancelar

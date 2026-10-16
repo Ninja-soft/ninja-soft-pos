@@ -12,10 +12,16 @@ import { TableWrap } from "@/components/ui/Table";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { agingBySupplier } from "@/lib/purchases/aging";
-import { buildCashFlow, firstShortfall, type CashFlowGranularity } from "@/lib/treasury/cashflow";
+import { buildCashFlow, firstShortfall, pendingToDated, type CashFlowGranularity } from "@/lib/treasury/cashflow";
 import { treasuryTotals } from "@/lib/treasury/totals";
 import { usePaymentAllocations, useSupplierEntries } from "@/modules/purchases/hooks";
-import { useCheques, useReceivables, useTreasuryAccess, useTreasuryBalances } from "@/modules/treasury/hooks";
+import {
+  useCheques,
+  usePendingCollections,
+  useReceivables,
+  useTreasuryAccess,
+  useTreasuryBalances,
+} from "@/modules/treasury/hooks";
 import { today } from "@/components/purchases/shared";
 import { TreasuryFrame } from "./TreasuryFrame";
 
@@ -47,6 +53,8 @@ function CashFlowTable() {
   const { data: entries = [] } = useSupplierEntries(null);
   const { data: allocations = [] } = usePaymentAllocations();
   const { data: cheques = [] } = useCheques({ statuses: ["en_cartera", "entregado"] });
+  // H152 (ADR-162): lo que los procesadores tienen que acreditar, por fecha.
+  const { data: pending = [] } = usePendingCollections(null);
 
   const start = treasuryTotals(balances).total;
   const payables = useMemo(() => {
@@ -63,6 +71,7 @@ function CashFlowTable() {
     to,
     granularity,
     receivables: receivables.map((r) => ({ date: r.due_date, amount: r.amount })),
+    settlements: pendingToDated(pending),
     chequesIn: cheques
       .filter((c) => c.kind === "third_party" && c.status === "en_cartera")
       .map((c) => ({ date: c.payment_date, amount: c.amount })),
@@ -122,6 +131,7 @@ function CashFlowTable() {
             <tr>
               <th className="px-4 py-3">Período</th>
               <th className="px-4 py-3 text-right">Cobros de clientes</th>
+              <th className="px-4 py-3 text-right">A acreditar</th>
               <th className="hidden px-4 py-3 text-right md:table-cell">Cheques a cobrar</th>
               <th className="px-4 py-3 text-right">Pagos a proveedores</th>
               <th className="hidden px-4 py-3 text-right md:table-cell">Cheques propios</th>
@@ -133,6 +143,7 @@ function CashFlowTable() {
               <tr key={r.key}>
                 <td className="px-4 py-3">{r.label}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-success">{r.receivables ? formatCurrency(r.receivables) : ""}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-success">{r.settlements ? formatCurrency(r.settlements) : ""}</td>
                 <td className="hidden px-4 py-3 text-right tabular-nums text-success md:table-cell">
                   {r.chequesIn ? formatCurrency(r.chequesIn) : ""}
                 </td>
@@ -151,6 +162,8 @@ function CashFlowTable() {
       <p className="text-xs text-muted-foreground">
         Lo vencido y sin pagar (o sin cobrar) se proyecta en el primer período. Los comprobantes de proveedor salen de
         la cuenta corriente con la imputación de las órdenes de pago; los cobros, de la cuenta corriente de clientes.
+        &quot;A acreditar&quot; es lo que cobraste con tarjeta, QR o billeteras y todavía no te depositaron, en la fecha de la
+        liquidación o en la estimada (bruto: las comisiones se descuentan cuando llega la liquidación).
       </p>
     </div>
   );

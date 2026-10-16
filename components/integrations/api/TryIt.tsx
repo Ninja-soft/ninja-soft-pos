@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/Callout";
 import { CredentialInput } from "@/components/ui/CredentialInput";
 import { Input } from "@/components/ui/Input";
 import { API_BASE_PATH, type EndpointSpec } from "@/lib/api/spec";
+import { DEMO_CLIENT_ID, DEMO_CLIENT_SECRET, isDemoClient } from "@/lib/api/sandboxConstants";
 import {
   checkBody,
   checkSandboxCreds,
@@ -21,11 +22,17 @@ import { CodeBlock } from "./CodeBlock";
 // "Probar" del portal (ADR-159): consola contra el sandbox. Sólo credenciales
 // de prueba (nsc_test_): las escrituras hacen dry_run en la base y no guardan
 // nada. Credenciales y token viven sólo en memoria (este estado de React).
+// En la página pública /developers (ADR-163) el mismo componente apunta a
+// /api/sandbox/v1 y ofrece las credenciales de ejemplo (dataset ficticio).
 
 type Session = { clientId: string; clientSecret: string; token: string | null; expiresAt: number };
 
 type SandboxCtx = {
   session: Session | null;
+  /** /api/v1 (panel) o /api/sandbox/v1 (página pública). */
+  basePath: string;
+  /** Ofrece las credenciales de ejemplo (sólo la página pública). */
+  demo: boolean;
   /** Precarga credenciales (p. ej. la credencial de prueba recién creada). */
   loadCredentials: (clientId: string, clientSecret: string) => void;
   connect: (clientId: string, clientSecret: string) => Promise<TryResult>;
@@ -43,9 +50,13 @@ export type TryResult = {
   body: string;
 };
 
-async function requestToken(clientId: string, clientSecret: string): Promise<{ result: TryResult; token?: string; expiresIn?: number }> {
+async function requestToken(
+  basePath: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<{ result: TryResult; token?: string; expiresIn?: number }> {
   const started = performance.now();
-  const res = await fetch(`${API_BASE_PATH}/oauth/token`, {
+  const res = await fetch(`${basePath}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }).toString(),
@@ -81,7 +92,15 @@ function pickHeaders(h: Headers): [string, string][] {
   return out;
 }
 
-export function SandboxProvider({ children }: { children: React.ReactNode }) {
+export function SandboxProvider({
+  children,
+  basePath = API_BASE_PATH,
+  demo = false,
+}: {
+  children: React.ReactNode;
+  basePath?: string;
+  demo?: boolean;
+}) {
   const [session, setSession] = useState<Session | null>(null);
 
   const loadCredentials = useCallback((clientId: string, clientSecret: string) => {
@@ -89,7 +108,7 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connect = useCallback(async (clientId: string, clientSecret: string) => {
-    const r = await requestToken(clientId.trim(), clientSecret.trim());
+    const r = await requestToken(basePath, clientId.trim(), clientSecret.trim());
     if (r.token) {
       setSession({
         clientId: clientId.trim(),
@@ -99,22 +118,22 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
       });
     }
     return r.result;
-  }, []);
+  }, [basePath]);
 
   const disconnect = useCallback(() => setSession(null), []);
 
   const ensureToken = useCallback(async () => {
     if (!session) return null;
     if (session.token && Date.now() < session.expiresAt - 60_000) return session.token;
-    const r = await requestToken(session.clientId, session.clientSecret);
+    const r = await requestToken(basePath, session.clientId, session.clientSecret);
     if (!r.token) return null;
     setSession({ ...session, token: r.token, expiresAt: Date.now() + (r.expiresIn ?? 3600) * 1000 });
     return r.token;
-  }, [session]);
+  }, [session, basePath]);
 
   const value = useMemo(
-    () => ({ session, loadCredentials, connect, disconnect, ensureToken }),
-    [session, loadCredentials, connect, disconnect, ensureToken],
+    () => ({ session, basePath, demo, loadCredentials, connect, disconnect, ensureToken }),
+    [session, basePath, demo, loadCredentials, connect, disconnect, ensureToken],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -145,7 +164,7 @@ function ResultView({ r }: { r: TryResult }) {
 
 /** Conexión al sandbox (pantalla de token y cabecera de cada consola). */
 export function SandboxConnect({ compact = false }: { compact?: boolean }) {
-  const { session, connect, disconnect } = useSandbox();
+  const { session, connect, disconnect, demo } = useSandbox();
   const [clientId, setClientId] = useState(session?.clientId ?? "");
   const [secret, setSecret] = useState(session?.clientSecret ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +185,7 @@ export function SandboxConnect({ compact = false }: { compact?: boolean }) {
         <div className="min-w-0 text-xs">
           <span className="flex items-center gap-2 font-medium text-foreground">
             <Plug size={14} aria-hidden /> Conectado al sandbox
-            <Badge tone="info">Prueba</Badge>
+            <Badge tone="info">{isDemoClient(session.clientId) ? "Datos ficticios" : "Prueba"}</Badge>
           </span>
           <span className="mt-0.5 block break-all font-mono text-muted-foreground">
             {session.clientId} · token hasta{" "}
@@ -230,9 +249,24 @@ export function SandboxConnect({ compact = false }: { compact?: boolean }) {
       {error && <p className="text-xs text-danger">{error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">Queda sólo en esta pestaña: no se guarda en el navegador.</p>
-        <Button size="sm" onClick={() => void submit()} disabled={busy}>
-          <Plug size={15} /> Conectar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {demo && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setClientId(DEMO_CLIENT_ID);
+                setSecret(DEMO_CLIENT_SECRET);
+                setError(null);
+              }}
+            >
+              <FlaskConical size={15} /> Usar credenciales de ejemplo
+            </Button>
+          )}
+          <Button size="sm" onClick={() => void submit()} disabled={busy}>
+            <Plug size={15} /> Conectar
+          </Button>
+        </div>
       </div>
       {result && <ResultView r={result} />}
     </div>
@@ -241,7 +275,7 @@ export function SandboxConnect({ compact = false }: { compact?: boolean }) {
 
 /** Consola de un endpoint. */
 export function TryIt({ endpoint }: { endpoint: EndpointSpec }) {
-  const { session, ensureToken } = useSandbox();
+  const { session, ensureToken, basePath } = useSandbox();
   const [query, setQuery] = useState<Record<string, string>>(() => initialQuery(endpoint));
   const [body, setBody] = useState(() => (endpoint.body ? JSON.stringify(endpoint.body.example, null, 2) : ""));
   const [idemKey, setIdemKey] = useState("");
@@ -285,7 +319,7 @@ export function TryIt({ endpoint }: { endpoint: EndpointSpec }) {
       if (payload) headers["Content-Type"] = "application/json";
       if (hasIdem && idemKey.trim()) headers["Idempotency-Key"] = idemKey.trim();
       const started = performance.now();
-      const res = await fetch(tryUrl(endpoint, query), { method: endpoint.method, headers, body: payload });
+      const res = await fetch(tryUrl(endpoint, query, basePath), { method: endpoint.method, headers, body: payload });
       const text = await res.text();
       let pretty = text;
       try {
@@ -344,7 +378,9 @@ export function TryIt({ endpoint }: { endpoint: EndpointSpec }) {
           )}
           {endpoint.method !== "GET" && (
             <Callout tone="info" icon={FlaskConical}>
-              Sandbox: se valida y se simula, pero no se guarda nada (dry_run).
+              {session && isDemoClient(session.clientId)
+                ? "Datos ficticios: se valida contra el negocio de ejemplo y se simula. No se guarda nada."
+                : "Sandbox: se valida y se simula, pero no se guarda nada (dry_run)."}
             </Callout>
           )}
           {error && <p className="text-xs text-danger">{error}</p>}

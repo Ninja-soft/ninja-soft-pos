@@ -9,6 +9,7 @@ import { useApiClients } from "@/modules/api-publica/hooks";
 import { apiPublicaErrorMessage, type ApiClientWithSecret } from "@/modules/api-publica/api";
 import { ApiCredentials } from "./ApiCredentials";
 import { ApiPortal, PORTAL_START } from "./ApiPortal";
+import { EmailDocsDialog } from "./EmailDocsDialog";
 import { PostmanDialog } from "./PostmanDialog";
 import { SandboxProvider, useSandbox } from "./TryIt";
 
@@ -16,7 +17,9 @@ import { SandboxProvider, useSandbox } from "./TryIt";
 // desarrolladores. La documentación, el OpenAPI y el Probar (sólo sandbox)
 // los ve cualquiera que entre a la sección; las credenciales y la colección
 // de Postman con credencial precargada, sólo el dueño. El secreto recién
-// creado o rotado vive sólo en memoria de esta página.
+// creado o rotado vive sólo en memoria de esta página. El dueño también puede
+// mandar la documentación por email con una credencial (ADR-163): el secreto
+// sólo si está en esa memoria (recién creado o rotado), auditado sin él.
 
 function Inner() {
   const { data: me, isLoading: meLoading } = useMyTenant();
@@ -26,6 +29,7 @@ function Inner() {
   const [section, setSection] = useState<string>(PORTAL_START);
   const [fresh, setFresh] = useState<ApiClientWithSecret | null>(null);
   const [postman, setPostman] = useState<{ open: boolean; clientId: string | null }>({ open: false, clientId: null });
+  const [emailOpen, setEmailOpen] = useState(false);
 
   if (meLoading) return <SpinnerBlock className="py-16" />;
 
@@ -50,6 +54,7 @@ function Inner() {
         state={q.data}
         onSecret={setFresh}
         onPostman={(c) => setPostman({ open: true, clientId: c.client_id })}
+        onEmail={() => setEmailOpen(true)}
         onSandbox={(c) => {
           sandbox.loadCredentials(c.client_id, c.client_secret);
           setSection("oauth.token");
@@ -65,7 +70,17 @@ function Inner() {
         onNavigate={setSection}
         credentials={credentials}
         onPostman={() => setPostman({ open: true, clientId: null })}
+        onEmail={isOwner ? () => setEmailOpen(true) : undefined}
       />
+      {isOwner && (
+        <EmailDocsDialog
+          open={emailOpen}
+          onOpenChange={setEmailOpen}
+          clients={q.data?.clients ?? []}
+          fresh={fresh}
+          onRotated={setFresh}
+        />
+      )}
       <PostmanDialog
         open={postman.open}
         onOpenChange={(open) => setPostman((p) => ({ ...p, open }))}

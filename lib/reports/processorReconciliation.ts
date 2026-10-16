@@ -431,6 +431,7 @@ export type ImportField =
   | "operation_at"
   | "gross"
   | "fee"
+  | "fee_vat"
   | "taxes"
   | "net"
   | "release_date"
@@ -448,6 +449,9 @@ export const IMPORT_FIELDS: { key: ImportField; label: string; required?: boolea
   { key: "operation_at", label: "Fecha de la operación", required: true, synonyms: ["fecha de operacion", "fecha operacion", "fecha de compra", "fecha de venta", "fecha origen", "fecha presentacion", "fecha"] },
   { key: "gross", label: "Importe bruto", required: true, synonyms: ["importe bruto", "monto bruto", "bruto", "importe venta", "importe", "monto", "total"] },
   { key: "fee", label: "Arancel / comisión", synonyms: ["arancel", "comision", "cargo", "costo financiero", "costo"] },
+  // ADR-162: el IVA del arancel va a crédito fiscal, no a retenciones. Si el
+  // archivo lo trae sumado en "Impuestos", se deja vacío.
+  { key: "fee_vat", label: "IVA del arancel (si viene aparte)", synonyms: ["iva arancel", "iva s arancel", "iva sobre arancel", "iva comision", "iva s comision", "iva costo financiero"] },
   { key: "taxes", label: "Impuestos y retenciones", synonyms: ["retenciones", "retencion", "impuestos", "iva", "percepciones", "iibb"] },
   { key: "net", label: "Neto", synonyms: ["importe neto", "neto a cobrar", "neto liquidado", "neto"] },
   { key: "release_date", label: "Fecha de pago / acreditación", synonyms: ["fecha de pago", "fecha pago", "fecha de acreditacion", "fecha acreditacion", "fecha de liquidacion", "fecha liquidacion"] },
@@ -473,13 +477,72 @@ export const normHeader = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** Mapeo sugerido por encabezado: el sinónimo más largo que coincide gana. */
-export function guessMapping(header: string[]): ColumnMapping {
+/**
+ * Presets por proveedor (ADR-162, T21): encabezados típicos del archivo que
+ * descarga cada portal, con prioridad sobre los genéricos, y una línea que
+ * dice de dónde bajarlo.
+ */
+export const IMPORT_PRESETS: Record<string, { hint: string; synonyms: Partial<Record<ImportField, string[]>> }> = {
+  ualabis: {
+    hint: "Ualá Bis > Movimientos > Descargar (Excel). Cruza sólo con los cobros con Ualá Bis.",
+    synonyms: {
+      operation_at: ["fecha de la operacion", "fecha y hora", "fecha"],
+      gross: ["monto bruto", "importe bruto", "monto de la venta"],
+      fee: ["comision", "costo del servicio"],
+      fee_vat: ["iva comision", "iva"],
+      net: ["monto neto", "neto a recibir", "neto"],
+      external_id: ["id de transaccion", "id transaccion", "numero de operacion"],
+      release_date: ["fecha de acreditacion", "fecha de disponibilidad"],
+    },
+  },
+  modo: {
+    hint: "MODO Comercios > Ventas > Exportar. Cruza sólo con los QR y tarjetas cobrados con MODO.",
+    synonyms: {
+      operation_at: ["fecha de pago", "fecha de la transaccion", "fecha"],
+      gross: ["monto", "importe"],
+      fee: ["arancel", "comision"],
+      fee_vat: ["iva arancel", "iva"],
+      net: ["neto", "monto neto"],
+      external_id: ["id de pago", "id transaccion", "numero de operacion"],
+      release_date: ["fecha de liquidacion", "fecha de acreditacion"],
+    },
+  },
+  transfer: {
+    hint: "El extracto de las transferencias recibidas (CSV o Excel). Cruza sólo con los cobros por transferencia.",
+    synonyms: {
+      operation_at: ["fecha", "fecha de la transferencia"],
+      gross: ["importe", "monto", "credito", "creditos"],
+      external_id: ["numero de operacion", "id de operacion", "referencia", "comprobante"],
+    },
+  },
+  directo: {
+    hint: "Portal de Directo > Liquidaciones > Descargar. Cruza sólo con los cobros con Directo.",
+    synonyms: {
+      operation_at: ["fecha de la operacion", "fecha"],
+      gross: ["importe bruto", "monto"],
+      fee: ["comision", "arancel"],
+      fee_vat: ["iva comision", "iva"],
+      net: ["importe neto", "neto"],
+      external_id: ["id de operacion", "numero de operacion", "transaccion"],
+      release_date: ["fecha de liquidacion", "fecha de pago"],
+    },
+  },
+};
+
+/** Mapeo sugerido por encabezado: el sinónimo más largo que coincide gana (los del preset primero). */
+export function guessMapping(header: string[], provider?: string | null): ColumnMapping {
   const cols = header.map(normHeader);
   const taken = new Set<number>();
   const out: ColumnMapping = {};
   const candidates: { field: ImportField; col: number; score: number }[] = [];
+  const preset = provider ? IMPORT_PRESETS[provider] : undefined;
   for (const f of IMPORT_FIELDS) {
+    for (const syn of preset?.synonyms[f.key] ?? []) {
+      cols.forEach((c, i) => {
+        if (c === syn) candidates.push({ field: f.key, col: i, score: 300 + syn.length });
+        else if (c.includes(syn)) candidates.push({ field: f.key, col: i, score: 150 + syn.length });
+      });
+    }
     for (const syn of f.synonyms) {
       cols.forEach((c, i) => {
         if (c === syn) candidates.push({ field: f.key, col: i, score: 100 + syn.length });
@@ -600,7 +663,11 @@ export function rowsToLines(
     if (!at) return { line: null, error: "Fecha inválida", row };
     if (gross == null) return { line: null, error: "Importe inválido", row };
     const fee = Math.abs(parseAmount(get(r, "fee")) ?? 0);
-    const taxes = Math.abs(parseAmount(get(r, "taxes")) ?? 0);
+    const feeVat = Math.abs(parseAmount(get(r, "fee_vat")) ?? 0);
+    const otherTaxes = Math.abs(parseAmount(get(r, "taxes")) ?? 0);
+    // El IVA del arancel suma en impuestos (sale de lo bruto) pero se informa
+    // aparte para que vaya a crédito fiscal (ADR-162).
+    const taxes = round2(otherTaxes + feeVat);
     const netRaw = parseAmount(get(r, "net"));
     const net = netRaw ?? round2(gross - fee - taxes);
     const release = parseArDate(get(r, "release_date"));
@@ -608,7 +675,8 @@ export function rowsToLines(
     const inst = parseAmount(get(r, "installments"));
     const fees: ProcessorFee[] = [];
     if (fee > 0) fees.push({ label: "Arancel", amount: round2(fee), kind: "fee" });
-    if (taxes > 0) fees.push({ label: "Impuestos y retenciones", amount: round2(taxes), kind: "tax" });
+    if (feeVat > 0) fees.push({ label: "IVA sobre el arancel", amount: round2(feeVat), kind: "tax", code: "iva_comision" });
+    if (otherTaxes > 0) fees.push({ label: "Impuestos y retenciones", amount: round2(otherTaxes), kind: "tax" });
     return {
       row,
       error: null,

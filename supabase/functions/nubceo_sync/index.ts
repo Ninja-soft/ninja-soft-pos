@@ -15,6 +15,9 @@
 //        { action: "preview", sync_id }        arma el JSON sin mandarlo
 //        { action: "ledger_import", since? }   trae asientos de NubCeo
 //        { action: "ledger_status", ids, status } confirma o desconfirma
+//        { action: "reconciliation_pull", days? } estado de conciliación de
+//                                               las ventas enviadas (ADR-162);
+//                                               el cron lo trae una vez por día
 //
 // Una vuelta: siembra (red del trigger) → toma con lease (nubceo_claim) →
 // snapshot → clasifica y arma → "solo simular" guarda el JSON sin mandar; si
@@ -43,8 +46,10 @@ import {
   nextAttemptAt,
   normalizeMapping,
   parseLedgerPage,
+  parseReconciledSales,
   payloadHash,
   pickCompany,
+  reconciledQuery,
   readDeleteResponse,
   readInsertResponse,
   type NubceoApi,
@@ -508,6 +513,60 @@ async function importLedger(
 }
 
 // -----------------------------------------------------------------------------
+// Estado de conciliación por venta (ADR-162, H153)
+// -----------------------------------------------------------------------------
+const RECON_PAGE_SIZE = 200;
+const RECON_MAX_PAGES = 25;
+const RECON_DAYS = 45;
+
+async function pullReconciliation(
+  admin: SupabaseClient,
+  tenantId: string,
+  days = RECON_DAYS,
+): Promise<{ ok: boolean; rows: number; updated: number; message: string }> {
+  const s = await loadSettings(admin, tenantId);
+  const env = s?.environment ?? "prod";
+  const creds = await loadCreds(admin, tenantId, env);
+  if (!creds) return { ok: false, rows: 0, updated: 0, message: "Faltan las credenciales" };
+  const api = apiFor(creds);
+  if ("error" in api) return { ok: false, rows: 0, updated: 0, message: api.error };
+  const to = new Date();
+  const from = new Date(to.getTime() - Math.max(1, Math.min(days, 93)) * 86_400_000);
+  let rows = 0;
+  let updated = 0;
+  let ok = true;
+  let message = "";
+  for (let page = 1; page <= RECON_MAX_PAGES; page++) {
+    const r = await api.reconciledSales(
+      reconciledQuery({ page, pageSize: RECON_PAGE_SIZE, from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }),
+    );
+    if (r.status !== 200) {
+      ok = false;
+      message = r.status === 401 ? "NubCeo rechazó las credenciales" : `NubCeo respondió ${r.status || "sin respuesta"}`;
+      break;
+    }
+    const parsed = parseReconciledSales(r.body);
+    rows += parsed.rows.length;
+    if (parsed.rows.length > 0) {
+      const { data, error } = await admin.rpc("nubceo_reconciliation_apply", { p_tenant: tenantId, p_rows: parsed.rows });
+      if (error) {
+        ok = false;
+        message = `No se pudo guardar: ${error.message}`;
+        break;
+      }
+      updated += Number(data) || 0;
+    }
+    if (parsed.count < RECON_PAGE_SIZE || (parsed.total > 0 && page * RECON_PAGE_SIZE >= parsed.total)) break;
+  }
+  if (ok) message = `${rows} ventas leídas, ${updated} con estado nuevo`;
+  await admin
+    .from("nubceo_settings")
+    .update({ reconciliation_last_pull_at: new Date().toISOString(), reconciliation_last_message: message })
+    .eq("tenant_id", tenantId);
+  return { ok, rows, updated, message };
+}
+
+// -----------------------------------------------------------------------------
 // Entrada
 // -----------------------------------------------------------------------------
 Deno.serve(async (req: Request) => {
@@ -545,6 +604,17 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         console.error(JSON.stringify({ fn: "nubceo_sync", tenant: d.tenant_id, error: String(e) }));
         out.push({ tenant: d.tenant_id, error: "failed" });
+      }
+    }
+    // Una vez por día, el estado de conciliación de lo enviado (ADR-162).
+    const { data: recDue } = await admin.rpc("nubceo_reconciliation_due", { p_limit: 5 });
+    for (const d of (recDue ?? []) as { tenant_id: string }[]) {
+      if (Date.now() - t0 > CRON_BUDGET_MS) break;
+      try {
+        const rec = await pullReconciliation(admin, d.tenant_id);
+        out.push({ tenant: d.tenant_id, reconciliation: rec.ok });
+      } catch (e) {
+        console.error(JSON.stringify({ fn: "nubceo_sync", tenant: d.tenant_id, step: "reconciliation", error: String(e) }));
       }
     }
     return json({ ok: true, tenants: out, ms: Date.now() - t0 });
@@ -635,6 +705,13 @@ Deno.serve(async (req: Request) => {
     const since = typeof body.since === "string" && /^\d{4}-\d{2}-\d{2}/.test(body.since) ? body.since : null;
     const r = await importLedger(admin, tenantId, since);
     await audit("nubceo_ledger_import_api", { ok: r.ok, headers: r.headers, since });
+    return json(r);
+  }
+
+  if (action === "reconciliation_pull") {
+    const days = typeof body.days === "number" && body.days > 0 ? Math.min(93, Math.trunc(body.days)) : RECON_DAYS;
+    const r = await pullReconciliation(admin, tenantId, days);
+    await audit("nubceo_reconciliation_pull", { ok: r.ok, rows: r.rows, updated: r.updated, days });
     return json(r);
   }
 

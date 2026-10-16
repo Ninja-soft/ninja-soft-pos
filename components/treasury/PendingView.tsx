@@ -13,6 +13,7 @@ import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { formatCurrency } from "@/lib/utils/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { providerLabel } from "@/lib/treasury/accounts";
+import { groupPendingByDate, pendingWithin } from "@/lib/treasury/cashflow";
 import { usePendingCollections, useTreasuryAccess, useTreasuryPosition } from "@/modules/treasury/hooks";
 import { fmtDate } from "@/components/purchases/shared";
 import { TreasuryFrame, TreasuryStat } from "./TreasuryFrame";
@@ -44,6 +45,8 @@ function PendingBody() {
     [position],
   );
   const total = receivables.reduce((t, r) => t + (r.currency === "ARS" ? r.balance : 0), 0);
+  const byDate = useMemo(() => groupPendingByDate(rows), [rows]);
+  const week = useMemo(() => pendingWithin(rows, 7), [rows]);
   const options = [
     { value: "all", label: "Todos" },
     ...receivables.filter((r) => r.provider_key).map((r) => ({ value: r.provider_key!, label: providerLabel(r.provider_key) })),
@@ -53,7 +56,8 @@ function PendingBody() {
     <div className="mt-4 space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <TreasuryStat label="Total a acreditar" value={formatCurrency(total)} hint="Estimado" />
-        {receivables.slice(0, 2).map((r) => (
+        <TreasuryStat label="Entra en los próximos 7 días" value={formatCurrency(week)} hint="Por la fecha de cada liquidación o la estimada" />
+        {receivables.slice(0, 1).map((r) => (
           <TreasuryStat
             key={r.account_id}
             label={providerLabel(r.provider_key)}
@@ -65,6 +69,22 @@ function PendingBody() {
       {options.length > 2 && (
         <Segmented<string> scrollOnMobile aria-label="Procesador" value={provider} onChange={setProvider} size="sm" options={options} />
       )}
+      {byDate.length > 0 && (
+        <div className="slim-scrollbar flex gap-2 overflow-x-auto pb-1">
+          {byDate.slice(0, 10).map((d) => (
+            <div key={d.date} className="min-w-[8.5rem] shrink-0 rounded-md bg-muted/40 px-3 py-2">
+              <div className="text-xs text-muted-foreground">
+                {d.date ? fmtDate(d.date) : "Sin fecha"}
+                {d.estimated ? " · estimado" : ""}
+              </div>
+              <div className="font-semibold tabular-nums">{formatCurrency(d.amount)}</div>
+              <div className="text-xs text-muted-foreground">
+                {d.count} {d.count === 1 ? "cobro" : "cobros"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <TableWrap>
         <table className="w-full text-sm">
           <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -72,13 +92,14 @@ function PendingBody() {
               <th className="px-4 py-3">Fecha</th>
               <th className="px-4 py-3">Cobro</th>
               <th className="hidden px-4 py-3 md:table-cell">Procesador</th>
+              <th className="px-4 py-3">Se acredita</th>
               <th className="px-4 py-3 text-right">Importe</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {isLoading && <TableStateRow colSpan={4} loading />}
+            {isLoading && <TableStateRow colSpan={5} loading />}
             {!isLoading && rows.length === 0 && (
-              <TableStateRow colSpan={4}>
+              <TableStateRow colSpan={5}>
                 <EmptyState
                   compact
                   icon={Clock3}
@@ -110,6 +131,12 @@ function PendingBody() {
                   <div className="text-xs text-muted-foreground md:hidden">{providerLabel(r.provider_key)}</div>
                 </td>
                 <td className="hidden px-4 py-3 md:table-cell">{providerLabel(r.provider_key)}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {r.expected_date ? fmtDate(r.expected_date) : "Sin fecha"}
+                  {r.expected_date && !r.expected_known && (
+                    <span className="block text-xs text-muted-foreground">estimado</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatCurrency(r.amount)}</td>
               </tr>
             ))}
@@ -118,7 +145,8 @@ function PendingBody() {
       </TableWrap>
       <p className="text-xs text-muted-foreground">
         Mercado Pago se concilia solo todos los días. Para tarjetas con posnet (Payway, Fiserv, Getnet, Nave) subí la
-        liquidación en Conciliación: lo que coincide deja de figurar acá.
+        liquidación en Conciliación: lo que coincide deja de figurar acá y el neto entra al banco o billetera donde te
+        acreditan. Sin liquidación, la fecha es un estimado: débito 2 días, crédito 14, QR y billeteras 1.
       </p>
     </div>
   );

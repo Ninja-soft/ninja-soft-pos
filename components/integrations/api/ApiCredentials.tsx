@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FlaskConical, KeyRound, Lock, Plus, RefreshCw, ShieldOff, SquarePen } from "lucide-react";
+import { Download, FlaskConical, KeyRound, Lock, Mail, Plus, RefreshCw, ShieldOff, SquarePen } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -205,11 +205,13 @@ function SecretModal({
   onClose,
   onPostman,
   onSandbox,
+  onEmail,
 }: {
   secret: ApiClientWithSecret | null;
   onClose: () => void;
   onPostman: (c: ApiClientWithSecret) => void;
   onSandbox: (c: ApiClientWithSecret) => void;
+  onEmail?: (c: ApiClientWithSecret) => void;
 }) {
   const env = secret ? envOf(secret) : "live";
   return (
@@ -223,6 +225,11 @@ function SecretModal({
           {secret && (
             <Button variant="secondary" onClick={() => onPostman(secret)}>
               <Download size={15} /> Colección de Postman
+            </Button>
+          )}
+          {secret && onEmail && (
+            <Button variant="secondary" onClick={() => onEmail(secret)}>
+              <Mail size={15} /> Enviar por email
             </Button>
           )}
           {secret && env === "test" && (
@@ -314,12 +321,15 @@ export function ApiCredentials({
   onSecret,
   onPostman,
   onSandbox,
+  onEmail,
 }: {
   state: ApiClientsState;
   /** Secreto recién creado o rotado (vive sólo en memoria de la página). */
   onSecret: (c: ApiClientWithSecret) => void;
   onPostman: (c: ApiClientWithSecret) => void;
   onSandbox: (c: ApiClientWithSecret) => void;
+  /** Mandar la documentación con esta credencial por email (ADR-163). */
+  onEmail?: (c: ApiClientWithSecret) => void;
 }) {
   const { toast } = useToast();
   const { rotate, revoke } = useApiClientMutations();
@@ -394,6 +404,14 @@ export function ApiCredentials({
           setSecret(null);
           onPostman(c);
         }}
+        onEmail={
+          onEmail
+            ? (c) => {
+                setSecret(null);
+                onEmail(c);
+              }
+            : undefined
+        }
         onSandbox={(c) => {
           setSecret(null);
           onSandbox(c);

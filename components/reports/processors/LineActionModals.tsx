@@ -173,6 +173,61 @@ export function IgnoreLineModal({ line, onClose }: { line: SettlementLineRow; on
 }
 
 /**
+ * Aceptar la diferencia de monto (ADR-162): la línea queda conciliada con la
+ * venta vinculada y la diferencia va a "Diferencias de redondeo y
+ * conciliación". Con Tesorería, el neto entra a la billetera o banco.
+ */
+export function AcceptDiffModal({ line, onClose }: { line: SettlementLineRow; onClose: () => void }) {
+  const { toast } = useToast();
+  const resolve = useResolveLine();
+  const [note, setNote] = useState("");
+  const valid = note.trim().length >= 3;
+  async function save() {
+    try {
+      await resolve.mutateAsync({ lineId: line.id, action: "accept_diff", note: note.trim() });
+      toast({ title: "Diferencia aceptada", description: "La línea quedó conciliada.", variant: "success" });
+      onClose();
+    } catch (e) {
+      toast({ title: "No se pudo aceptar", description: settlementErrorMessage(e), variant: "error" });
+    }
+  }
+  return (
+    <Modal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Aceptar la diferencia"
+      description="Usalo cuando ya sabés por qué no coincide (un recargo, un redondeo, una devolución parcial) y no hay nada que corregir en la venta."
+      className="sm:max-w-md"
+      footer={
+        <div className="flex w-full justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={!valid || resolve.isPending}>
+            Aceptar la diferencia
+          </Button>
+        </div>
+      }
+    >
+      <LineSummary line={line} />
+      <Callout tone="neutral" className="mt-3">
+        La diferencia de {formatCurrency(Number(line.diff_amount))} va a la cuenta &quot;Diferencias de redondeo y
+        conciliación&quot; y la línea cuenta como conciliada.
+      </Callout>
+      <label className="mt-3 block">
+        <span className="text-xs text-muted-foreground">Motivo (obligatorio)</span>
+        <Input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={300}
+          placeholder="Ej.: recargo por cuotas cobrado aparte"
+        />
+      </label>
+    </Modal>
+  );
+}
+
+/**
  * Cobro de Mercado Pago sin venta: registra una venta libre por el monto
  * cobrado con el cobro como referencia (el intent aprobado si existe, si no el
  * id del pago de Mercado Pago) en la caja abierta del usuario, y la vincula.

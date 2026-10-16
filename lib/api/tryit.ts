@@ -34,8 +34,11 @@ export function initialQuery(e: EndpointSpec): Record<string, string> {
   return out;
 }
 
-/** URL relativa al mismo origen, sin parámetros vacíos. */
-export function tryUrl(e: EndpointSpec, query: Record<string, string>): string {
+/**
+ * URL relativa al mismo origen, sin parámetros vacíos. `basePath` es /api/v1
+ * en el portal del panel y /api/sandbox/v1 en la página pública (ADR-163).
+ */
+export function tryUrl(e: EndpointSpec, query: Record<string, string>, basePath: string = API_BASE_PATH): string {
   const qs = new URLSearchParams();
   for (const p of e.params) {
     if (p.in !== "query") continue;
@@ -43,7 +46,7 @@ export function tryUrl(e: EndpointSpec, query: Record<string, string>): string {
     if (v) qs.set(p.name, v);
   }
   const s = qs.toString();
-  return `${API_BASE_PATH}${e.path}${s ? `?${s}` : ""}`;
+  return `${basePath}${e.path}${s ? `?${s}` : ""}`;
 }
 
 export type BodyCheck = { ok: true; text: string } | { ok: false; message: string };

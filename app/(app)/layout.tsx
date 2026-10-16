@@ -40,17 +40,17 @@ export default async function AppLayout({
 
   // Sin negocio activo el panel no tiene qué cargar: staff → panel interno,
   // resto → onboarding. Evita un panel vacío o con errores al entrar.
-  const { data: membership } = await supabase
-    .from("tenant_users")
-    .select("tenant_id")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
+  // ADR-161: en paralelo, si es Repartidor (no usa el panel: ni ventas ni
+  // caja, va directo a su app). Sin la migración la RPC no existe y no cambia nada.
+  const [{ data: membership }, { data: isDriver }] = await Promise.all([
+    supabase.from("tenant_users").select("tenant_id").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle(),
+    supabase.rpc("is_driver_member" as never),
+  ]);
   if (!membership) {
     const isInternal = (user.app_metadata as { is_internal?: boolean } | null)?.is_internal === true;
     redirect(homePath({ isInternal, hasTenant: false }));
   }
+  if (isDriver === true) redirect(homePath({ isInternal: false, hasTenant: true, isDriver: true }));
 
   return <AppShell email={user.email ?? ""}>{children}</AppShell>;
 }

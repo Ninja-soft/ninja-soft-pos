@@ -1545,7 +1545,7 @@ Objetivo: que todo lo que sale hacia un cliente o una sucursal sea **una entrega
   - [x] *Criterio:* test PGlite del circuito venta repartida → agregar entrega → anular → stock correcto por sucursal; los 196 tests actuales de logística siguen verdes. *Hecho en `feat/logistica-l0` (ADR-149 § L0): A1 a A9, A11 a A13, A15, A24, A25, A27, A28 y R18; migración `20261221100000_logistica_l0_arreglos` sin aplicar. PGlite 148 chequeos con guardarraíles en 0; suite completa verde (los dos casos que probaban el código muerto se fueron con él). El recorrido del dueño por Logística queda para la revisión del PR.*
 - [x] **H144 · L1: cliente obligatorio y direcciones reales.** (ADR-157: migración `20261226100000_logistica_l1_direcciones` y Edge `geo` sin aplicar; mapa con Leaflet + tiles de OSM por pedido del dueño) `customer_addresses` con lat/lng, snapshot en la entrega, Edge `geo` (Photon, Georef, Nominatim inverso) con caché, `AddressAutocomplete` con lista flotante y mini mapa, hoja de cobro con pestañas Pago / Cliente / Envío y cliente obligatorio en el servidor, zonas por localidad.
   - [ ] *Criterio:* cobrar un envío a un cliente nuevo con dirección autocompletada en menos de 45 s en 390 px; el servidor rechaza envío sin cliente; 0 pedidos a Nominatim por tipeo.
-- [ ] **H145 · L2: flota, hojas de ruta y app del repartidor.** Vehículos con fotos, repartidores, orígenes, hojas de ruta, paradas, eventos con geo, foto y firma, Configuración > Logística, capacidades `logistics.*`, rol de sistema Repartidor (con venta y caja pasadas a capacidad antes), remitos con copias y modelos, hoja de ruta imprimible, app `/reparto` offline.
+- [x] **H145 · L2: flota, hojas de ruta y app del repartidor.** (ADR-161: migración `20261230100000_logistica_l2_flota` sin aplicar, sin Edges) Vehículos con fotos (bucket privado `logistics-media`), repartidores, orígenes, hojas de ruta con paradas y orden por cercanía, eventos con geo, foto, firma y foto del remito firmado, motivos configurables, Configuración › Logística, capacidades `logistics.*`, rol de sistema **Repartidor** (venta y caja ya pedían `sales.create` y `cash.open` en `role_write_guard`; ahora además sin sucursales ni clientes por RLS), plantilla Expedicionista, remitos con copias y modelos (A4, medio A4, ticket 80 mm, preimpreso), hoja de ruta imprimible con planilla de carga, app `/reparto` con cola offline. Feature `reparto_propio` (Pro+). Quedan para después: remito de transferencia en el mismo sistema, punto de venta del remito configurable, override por sucursal de la configuración y el service worker para abrir `/reparto` sin señal (hoy sigue andando sin señal si ya estaba abierta).
   - [ ] *Criterio:* reparto real de 10 paradas en el piloto con evidencia en cada entrega; 3 entregas en modo avión se sincronizan sin duplicar; un Repartidor no puede vender ni ver clientes fuera de su hoja (test de RLS).
 - [ ] **H146 · L3: mapa, optimización, varios camiones y seguimiento.** Planificar reparto por localidad y capacidad entre camiones (ORS y heurística), seguimiento con envío en lote, mapa en vivo con polling, desvíos de ruta y detalle de cada entrega en el mapa.
   - [ ] *Criterio:* 40 entregas en 3 camiones planificadas en menos de 10 s (ORS) o 2 s (heurística); posición con menos de 60 s de atraso; aviso de desvío a 600 m por 5 minutos.
@@ -1758,7 +1758,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F11** | 76/93 | 13 | 4 | 82% | 89% |
 | **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
-| **F14** | 5/68 | 39 | 24 | 7% | 36% |
+| **F14** | 6/68 | 39 | 23 | 9% | 38% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
@@ -1766,10 +1766,10 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
-| **F22** | 3/14 | 0 | 11 | 21% | 21% |
-| **F23** | 0/15 | 0 | 15 | 0% | 0% |
+| **F22** | 4/14 | 0 | 10 | 29% | 29% |
+| **F23** | 7/15 | 0 | 8 | 47% | 47% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 657/1204 | 305 | 242 | 55% | 67% |
+| **Total** | 666/1204 | 305 | 233 | 55% | 68% |
 <!-- roadmap-progress:end -->
 
 ---

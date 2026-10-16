@@ -116,6 +116,11 @@ export interface Dispatch {
   shipment_status?: string | null;
   /** ADR-157: copia de la dirección al vender (calle, localidad, lat/lng, referencia). */
   ship_to?: GeoAddress | null;
+  /** ADR-161: hoja de ruta en la que viaja, intentos fallidos y el último motivo. */
+  route_id?: string | null;
+  route?: { number: number; status: string } | null;
+  delivery_attempts?: number;
+  last_failure_reason?: string | null;
 }
 
 export interface DispatchPartItem {
@@ -143,6 +148,9 @@ const MISSING_L0_COLS = /shipped_at|shipment_status/;
 // ADR-157 (L1): dirección estructurada de la entrega.
 const DISPATCH_COLS_L1 = `${DISPATCH_COLS_L0}, ship_to`;
 const MISSING_L1_COLS = /ship_to/;
+// ADR-161 (L2): hoja de ruta, intentos y motivo de no entrega.
+const DISPATCH_COLS_L2 = `${DISPATCH_COLS_L1}, route_id, delivery_attempts, last_failure_reason, route:delivery_routes!dispatches_route_id_fkey(number, status)`;
+const MISSING_L2_COLS = /route_id|delivery_attempts|last_failure_reason|delivery_routes|relationship/;
 
 /** Lo que falta entregar de una venta (dispatch_sale_pending, ADR-149). */
 export interface SalePending {
@@ -276,7 +284,8 @@ export const ordersApi = {
         ? q.in("status", ["pendiente", "armando", "listo", "en_transito", "despachado"])
         : q.in("status", ["entregado", "cancelado"]);
     };
-    let { data, error } = await run(DISPATCH_COLS_L1, true);
+    let { data, error } = await run(DISPATCH_COLS_L2, true);
+    if (error && MISSING_L2_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_L1, true));
     if (error && MISSING_L1_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_L0, true));
     if (error && MISSING_L0_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_PARTS, true));
     if (error && MISSING_PART_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS, false));

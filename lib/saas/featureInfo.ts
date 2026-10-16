@@ -130,6 +130,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, la dirección del envío se escribe a mano como texto, sin sugerencias, sin mapa y sin guardarla en el cliente (el servidor rechaza las direcciones estructuradas).",
     minPlan: "Start",
   },
+  reparto_propio: {
+    desc: "Reparto propio: cargá tus camiones y motos con fotos, capacidad y vencimientos (seguro, VTV, SENASA), armá hojas de ruta por camión con las paradas ordenadas por cercanía, imprimí la hoja y la planilla de carga, y emití los remitos con copias y modelo. El repartidor entra con su propio rol (no ve ventas, caja ni clientes) a una app en el celular que funciona sin señal: sale, marca llegué, entregado con firma en pantalla, foto y foto del remito firmado, o no se pudo entregar con el motivo, y todo queda con la ubicación del momento.",
+    impact: "Desactivado, no hay flota, hojas de ruta ni app del repartidor: los envíos propios se entregan a mano desde Expedición (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["pedidos_despacho"],
+  },
   entregas_remitos: {
     desc: "Entregas partidas y remitos: vendé desde el POS el stock de otra sucursal o de un depósito habilitado (retira allá o se envía), partí la entrega de una venta (una parte se la lleva ahora, otra la retira en otra sucursal y otra se envía) con estados por entrega en Expedición, y emití remitos de entrega y de envío con numeración propia, bultos, transporte, COT y PDF A4 para imprimir o mandar por email.",
     impact: "Desactivado, cada venta sale entera del salón de la sucursal que cobra y no se emiten remitos desde el sistema (el servidor lo rechaza).",

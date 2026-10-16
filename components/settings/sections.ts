@@ -78,6 +78,7 @@ export type SettingsSectionKey =
   | "datos-facturacion"
   | "presupuestos"
   | "pedidos"
+  | "logistica"
   | "imagenes-ia";
 
 export type SettingsSectionDef = {
@@ -396,10 +397,23 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         key: "pedidos",
         label: "Pedidos y expedición",
         title: "Pedidos de salón y expedición",
-        description: "Minutos de reserva del stock, qué pasa al vencer, los tipos de entrega (también en otra sucursal) y los remitos con COT.",
+        description: "Minutos de reserva del stock, qué pasa al vencer y los tipos de entrega (también en otra sucursal). Los remitos están en Logística.",
         icon: ClipboardList,
         feature: "pedidos_despacho",
-        keywords: "pedido salon vendedor caja reserva stock minutos vencer expedicion despacho entrega retiro sucursal envio domicilio codigo remito cot arba agip traslado",
+        keywords: "pedido salon vendedor caja reserva stock minutos vencer expedicion despacho entrega retiro sucursal envio domicilio codigo",
+      },
+      // ADR-161 (L2 de ADR-149): cómo se trabajan los envíos (remitos, copias,
+      // modelos, exigencias de cada entrega, motivos y orígenes del reparto).
+      {
+        key: "logistica",
+        label: "Logística",
+        title: "Logística y reparto",
+        description:
+          "Cuándo se emite el remito y en cuántas copias, el modelo de impresión, qué se pide en cada entrega (firma, foto, ubicación), los motivos de no entrega y de dónde sale el reparto.",
+        icon: Truck,
+        feature: "pedidos_despacho",
+        keywords:
+          "logistica reparto repartidor camion flota hoja de ruta remito cot arba agip traslado copias original duplicado triplicado modelo talonario preimpreso ticket firma foto ubicacion gps motivo no estaba domicilio origen deposito",
       },
       {
         key: "facturacion",
@@ -554,8 +568,10 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   meli: "mercadolibre",
   "mercado-libre": "mercadolibre",
   "api-publica": "api",
-  logistica: "envios",
   logisticas: "envios",
+  reparto: "logistica",
+  flota: "logistica",
+  repartidor: "logistica",
   andreani: "envios",
   pedidosya: "canales-delivery",
   rappi: "canales-delivery",

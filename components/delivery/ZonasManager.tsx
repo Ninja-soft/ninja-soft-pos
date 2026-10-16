@@ -13,6 +13,7 @@ import {
 } from "@/modules/delivery/hooks";
 import type { DeliveryZone } from "@/modules/delivery/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { parseLocalities } from "@/lib/geo/address";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -31,11 +32,15 @@ function ZoneModal({
   const [name, setName] = useState("");
   const [fee, setFee] = useState("0");
   const [eta, setEta] = useState("");
+  const [localities, setLocalities] = useState("");
+  const [freeFrom, setFreeFrom] = useState("");
 
   function sync() {
     setName(zone?.name ?? "");
     setFee(zone ? String(zone.fee) : "0");
     setEta(zone?.eta_minutes != null ? String(zone.eta_minutes) : "");
+    setLocalities((zone?.localities ?? []).join(", "));
+    setFreeFrom(zone?.free_from != null ? String(zone.free_from) : "");
   }
 
   async function save() {
@@ -53,10 +58,17 @@ function ZoneModal({
       toast({ title: "El tiempo estimado no es válido", variant: "error" });
       return;
     }
+    const freeNum = freeFrom.trim() === "" ? null : Number(freeFrom);
+    if (freeNum !== null && (!Number.isFinite(freeNum) || freeNum < 0)) {
+      toast({ title: "El monto para envío sin cargo no es válido", variant: "error" });
+      return;
+    }
     const payload = {
       name: name.trim(),
       fee: feeNum,
       eta_minutes: etaNum === null ? null : Math.round(etaNum),
+      localities: parseLocalities(localities),
+      free_from: freeNum,
     };
     try {
       if (zone) {
@@ -113,6 +125,31 @@ function ZoneModal({
             placeholder="Ej. 30"
           />
         </div>
+        <div>
+          <label htmlFor="zone-localities" className="mb-2 block text-sm font-medium text-muted-foreground">
+            Localidades que cubre
+          </label>
+          <textarea
+            id="zone-localities"
+            rows={2}
+            value={localities}
+            onChange={(e) => setLocalities(e.target.value)}
+            placeholder="Pilar, Del Viso, Villa Rosa"
+            className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Separadas por coma. Al cobrar un envío a una de estas localidades, el costo se completa solo (y se puede cambiar).
+          </p>
+        </div>
+        <Input
+          label="Envío sin cargo desde (opcional)"
+          type="number"
+          min="0"
+          step="1"
+          value={freeFrom}
+          onChange={(e) => setFreeFrom(e.target.value)}
+          placeholder="Ej. 50000"
+        />
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
@@ -218,6 +255,10 @@ export function ZonasManager() {
                       <Clock size={11} /> {z.eta_minutes} min
                     </span>
                   )}
+                  {(z.localities ?? []).length > 0 && (
+                    <span className="min-w-0 truncate">{(z.localities ?? []).join(", ")}</span>
+                  )}
+                  {z.free_from != null && <span>Sin cargo desde {formatCurrency(Number(z.free_from))}</span>}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-0.5">

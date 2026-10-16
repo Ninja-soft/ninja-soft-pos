@@ -39,6 +39,8 @@ type Ctx = {
   depNorte: string;
   saleId: string;
   partNorte: string;
+  /** ADR-157: el envío exige cliente en la venta. */
+  customer: string;
 };
 const ctx = {} as Ctx;
 
@@ -132,6 +134,9 @@ describe.skipIf(!enabled)("ADR-149 · L0: entregas, anulación y stock por sucur
       .single();
     if (prod.error || !prod.data) throw prod.error ?? new Error("product");
     ctx.mesa = (prod.data as { id: string }).id;
+    const cust = await admin.from("customers").insert({ tenant_id: ctx.tenant, name: `Juan ${STAMP}` }).select("id").single();
+    if (cust.error || !cust.data) throw cust.error ?? new Error("customer");
+    ctx.customer = (cust.data as { id: string }).id;
     for (const store of [ctx.centro, ctx.norte]) {
       const adj = await rpc(owner.client, "adjust_store_stock", {
         p_store_id: store,
@@ -184,6 +189,8 @@ describe.skipIf(!enabled)("ADR-149 · L0: entregas, anulación y stock por sucur
         p_items: [{ product_id: ctx.mesa, quantity: 6, unit_price: 1000, discount: 0 }],
         p_payments: [{ method: "cash", amount: 6000 }],
         p_cash_shift_id: ctx.shift,
+        // ADR-157: la entrega por envío que se agrega después pide cliente.
+        p_customer_id: ctx.customer,
       },
       p_plan: {
         deliveries: [

@@ -740,7 +740,7 @@ export function SubscriptionCard() {
                     {sub.status === "cancelled" || sub.status === "past_due"
                       ? "Reactivar y pagar"
                       : isTrial
-                        ? "Dejar listo el pago"
+                        ? "Activar cobro automático"
                         : "Pagar y activar"}
                   </Button>
                 )}

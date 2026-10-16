@@ -617,16 +617,25 @@ function SignupWizard() {
   const accountErrors = accountForm.formState.errors;
   const businessErrors = businessForm.formState.errors;
 
-  const planNote = planNeedsContact && (
+  // Nadie paga al crear la cuenta (pedido del dueño): el botón invita a probar
+  // y abajo se aclara cuándo empieza el cobro. Acá no se conecta Mercado Pago.
+  const trialDaysForCta = chosenPlan && chosenPlan.trialDays > 0 ? chosenPlan.trialDays : 14;
+  const trialCta = `Probá gratis ${trialDaysForCta} días`;
+  const planNote = (
     <p className="text-center text-xs text-muted-foreground sm:text-right">
-      No pagás nada ahora: el cobro empieza recién al terminar la prueba.{" "}
-      <button
-        type="button"
-        onClick={contactSales}
-        className="rounded-sm font-medium text-ninja-flameSoft outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        ¿Preferís hablar con ventas?
-      </button>
+      No pagás nada ahora: el cobro empieza recién al terminar la prueba.
+      {planNeedsContact && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={contactSales}
+            className="rounded-sm font-medium text-ninja-flameSoft outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            ¿Preferís hablar con ventas?
+          </button>
+        </>
+      )}
     </p>
   );
 
@@ -804,7 +813,7 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitAccount}
                 >
-                  {planNeedsContact ? "Continuar" : "Crear cuenta"}
+                  {trialCta}
                 </Button>
               </StepActions>
               {planNote}
@@ -864,7 +873,7 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitBusiness}
                 >
-                  {planNeedsContact ? "Continuar" : "Crear cuenta"}
+                  {trialCta}
                 </Button>
               </StepActions>
               {planNote}
@@ -940,7 +949,7 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitBusiness}
                 >
-                  {planNeedsContact ? "Continuar" : "Crear mi negocio"}
+                  {trialCta}
                 </Button>
               </StepActions>
               {planNote}

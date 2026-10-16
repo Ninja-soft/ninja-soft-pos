@@ -233,6 +233,12 @@ export interface CheckoutSheetProps {
   itemsSlot?: React.ReactNode;
   /** Comprobante de la venta y "Cambiar tipo" (ADR-133). Lo provee CheckoutSheetConnected. */
   fiscalSlot?: React.ReactNode;
+  /**
+   * ADR-155: lo que impide cobrar todavía (p. ej. "Elegí Factura o Sólo
+   * ticket" en el modo Preguntar). Se muestra en el botón y no deja empezar
+   * ningún cobro (tampoco QR, Point ni terminal).
+   */
+  commitBlocker?: string | null;
   /** Entrega de la venta (ADR-146): bloque plegable debajo del cliente. */
   deliverySlot?: React.ReactNode;
   /**
@@ -308,6 +314,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     pause = null,
     itemsSlot = null,
     fiscalSlot = null,
+    commitBlocker = null,
     deliverySlot = null,
     shippingFee = 0,
     restore = null,
@@ -708,7 +715,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     !belowMin &&
     !receivedShort &&
     !electronic &&
-    !terminalCharge;
+    !terminalCharge &&
+    !commitBlocker;
 
   // Reset de los campos al cambiar de medio.
   useEffect(() => {
@@ -1045,7 +1053,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // Con percepciones en cálculo no se confirma (el servidor exige cubrirlas).
   const readyToConfirm = lines.length > 0 && totals.settled && !percQ.loading;
   let ctaLabel = "Elegí cómo paga";
-  if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
+  if (commitBlocker && (readyToConfirm || active)) ctaLabel = commitBlocker;
+  else if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
   else if (active) {
     const amt = money(settle.amount);
     // El modal del QR suma solo el recargo del medio (checkout propio o
@@ -1063,7 +1072,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   }
   const posnetNext = !readyToConfirm && isPosnet && cardStep < 4;
   const ctaDisabled = readyToConfirm
-    ? loading
+    ? loading || Boolean(commitBlocker)
     : posnetNext
       ? posnetNextStep === null || portion <= 0
       : !canCommit || loading;
@@ -1076,6 +1085,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   }, [autoCommitRef, opRef, canCommit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onCta() {
+    if (commitBlocker) return;
     if (readyToConfirm) finalize(lines);
     else if (posnetNext) {
       if (posnetNextStep) setCardStep(posnetNextStep);

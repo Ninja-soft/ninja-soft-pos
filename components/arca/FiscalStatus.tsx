@@ -17,7 +17,18 @@ import { letterOfTipo } from "@/supabase/functions/_shared/arca/comprobante";
 
 // Estado fiscal en el detalle de la venta (ADR-072): comprobante, estado, CAE
 // o CAEA con vencimiento, QR, y reproceso o emisión para dueño y encargado.
-export function FiscalStatus({ saleId, docs, saleStatus }: { saleId: string; docs: FiscalDocument[]; saleStatus: string }) {
+export function FiscalStatus({
+  saleId,
+  docs,
+  saleStatus,
+  nonFiscal = false,
+}: {
+  saleId: string;
+  docs: FiscalDocument[];
+  saleStatus: string;
+  /** ADR-155: se cobró con sólo ticket (no va a ARCA salvo que se pida). */
+  nonFiscal?: boolean;
+}) {
   const m = useArcaMutations();
   const { toast } = useToast();
   const { data: me } = useMyTenant();
@@ -28,7 +39,11 @@ export function FiscalStatus({ saleId, docs, saleStatus }: { saleId: string; doc
     if (!status.data?.enabled || !manager || saleStatus !== "completed") return null;
     return (
       <div className="flex flex-col gap-2 rounded-md bg-muted p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-muted-foreground">Esta venta no tiene factura electrónica.</p>
+        <p className="text-muted-foreground">
+          {nonFiscal
+            ? "Se cobró con sólo ticket (no fiscal). Si el cliente la pide, podés hacer la factura ahora."
+            : "Esta venta no tiene factura electrónica."}
+        </p>
         <Button
           size="sm"
           variant="secondary"
@@ -42,7 +57,7 @@ export function FiscalStatus({ saleId, docs, saleStatus }: { saleId: string; doc
             }
           }}
         >
-          <FileCheck2 size={15} /> Emitir factura
+          <FileCheck2 size={15} /> {nonFiscal ? "Hacer la factura" : "Emitir factura"}
         </Button>
       </div>
     );

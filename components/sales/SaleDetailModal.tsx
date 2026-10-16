@@ -402,10 +402,20 @@ export function SaleDetailModal(props: Props) {
           {(fiscalDocs.data ?? []).length > 0 ? (
             <section aria-labelledby="sd-fiscal">
               <SectionTitle id="sd-fiscal">Factura electrónica</SectionTitle>
-              <FiscalStatus saleId={sale.id} docs={fiscalDocs.data ?? []} saleStatus={sale.status} />
+              <FiscalStatus
+                saleId={sale.id}
+                docs={fiscalDocs.data ?? []}
+                saleStatus={sale.status}
+                nonFiscal={Boolean((sale as { non_fiscal?: boolean }).non_fiscal)}
+              />
             </section>
           ) : manager && !fiscalDocs.isLoading ? (
-            <FiscalStatus saleId={sale.id} docs={[]} saleStatus={sale.status} />
+            <FiscalStatus
+              saleId={sale.id}
+              docs={[]}
+              saleStatus={sale.status}
+              nonFiscal={Boolean((sale as { non_fiscal?: boolean }).non_fiscal)}
+            />
           ) : null}
 
           {/* Línea de tiempo */}

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { ArcaEnv, AuthMode, ConnectionState, FiscalStatus } from "@/lib/arca/labels";
+import type { TicketMode } from "@/lib/billing/ticketMode";
 
 // Facturación electrónica ARCA (F3 · ADR-072). Las tablas y RPC nuevas no
 // están en types/database.ts (no se regenera en este PR): cliente suelto,
@@ -76,6 +77,8 @@ export interface ArcaSettings {
   caea_next_check_at: string | null;
   caea_last_message: string | null;
   contingency_since: string | null;
+  /** ADR-155: qué propone la hoja de cobro (sin la migración no viene). */
+  ticket_mode?: TicketMode;
 }
 
 export interface ArcaCertificate {
@@ -197,6 +200,8 @@ export interface ArcaStatus {
   contingency_since: string | null;
   pending: number;
   needs_action: number;
+  /** ADR-155: factura o sólo ticket por defecto (sin la migración no viene). */
+  ticket_mode?: TicketMode;
 }
 
 export interface TestStep {
@@ -264,6 +269,14 @@ export const arcaApi = {
     rpc<ArcaSettings>("arca_settings_save", { p }),
   setEnvironment: (env: ArcaEnv, reason?: string) =>
     rpc<{ ok: boolean }>("arca_set_environment", { p_environment: env, p_reason: reason ?? null }),
+  // ADR-155: factura o sólo ticket.
+  setTicketMode: (mode: TicketMode) => rpc<{ ok: boolean; ticket_mode: TicketMode }>("arca_ticket_mode_set", { p_mode: mode }),
+  ticketOnlySet: (customerId: string | null, reason?: string | null) =>
+    rpc<{ ok: boolean; id: string; letter: string | null; warnings: string[] }>("sale_ticket_only_set", {
+      p_customer: customerId,
+      p_reason: reason ?? null,
+    }),
+  ticketOnlyClear: () => rpc<void>("sale_ticket_only_clear"),
   retryDocument: (id: string) => rpc<{ ok: boolean; status: string; blocker: string | null }>("arca_document_retry", { p_id: id }),
   enqueueSale: (saleId: string) => rpc<{ ok: boolean; id: string }>("arca_enqueue_sale_manual", { p_sale_id: saleId }),
   deleteCertificate: (id: string) => rpc<{ ok: boolean }>("arca_certificate_delete", { p_id: id }),

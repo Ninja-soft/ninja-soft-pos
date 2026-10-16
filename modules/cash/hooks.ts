@@ -79,3 +79,11 @@ export function useAddMovement() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cash", "movements"] }),
   });
 }
+
+export function useReviewZ() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; kind: string; reason: string }) => cashApi.reviewZ(v.id, v.kind, v.reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cash", "z-closures"] }),
+  });
+}

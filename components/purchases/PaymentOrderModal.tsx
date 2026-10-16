@@ -117,7 +117,8 @@ export function PaymentOrderModal({
   const docs = useMemo(() => openDocs.filter((d) => d.open_ars > 0.004), [openDocs]);
 
   const bankAccounts = accounts.filter((a) => a.is_active && a.kind === "bank");
-  const activeAccounts = accounts.filter((a) => a.is_active);
+  // Las cajas del POS y lo a acreditar las mueve el sistema (ADR-158): no se pagan desde acá.
+  const activeAccounts = accounts.filter((a) => a.is_active && (a.kind === "cash" || a.kind === "bank" || a.kind === "wallet"));
 
   const draftLines: PaymentLineDraft[] = lines.map((l) => ({
     method: l.method,

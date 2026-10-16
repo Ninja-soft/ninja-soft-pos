@@ -15,6 +15,8 @@ export type SourceType =
   | "payment_dispute"
   | "tax_suffered"
   | "iibb_liquidation"
+  | "treasury_account"
+  | "cheque"
   | "acc_entry";
 
 export const SOURCE_LABEL: Record<SourceType, string> = {
@@ -30,6 +32,8 @@ export const SOURCE_LABEL: Record<SourceType, string> = {
   payment_dispute: "Contracargo o devolución",
   tax_suffered: "Retención sufrida",
   iibb_liquidation: "Liquidación de IIBB",
+  treasury_account: "Saldo inicial de cuenta",
+  cheque: "Cheque",
   acc_entry: "Reversión",
 };
 
@@ -46,6 +50,9 @@ export const EVENT_LABEL: Record<string, string> = {
   loss: "Pérdida",
   loss_reversal: "Reversión",
   reverse: "Reversión",
+  opening: "Saldo inicial",
+  receive: "Recepción",
+  reject: "Rechazo",
 };
 
 export const ENTRY_KIND_LABEL: Record<string, string> = {
@@ -78,9 +85,13 @@ export function sourceHref(type: string | null | undefined, id: string | null | 
     case "supplier_payment":
       return "/compras/facturas";
     case "treasury_movement":
+      return `/tesoreria/movimientos?mov=${id}`;
+    case "treasury_account":
       return "/tesoreria";
+    case "cheque":
+      return "/tesoreria/cheques";
     case "settlement_line":
-      return "/reportes/conciliacion?vista=procesadores";
+      return "/tesoreria/conciliacion?vista=procesadores";
     case "payment_dispute":
       return "/ventas?alertas=1";
     case "tax_suffered":

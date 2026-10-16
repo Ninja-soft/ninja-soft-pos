@@ -141,6 +141,14 @@ export const cashApi = {
     await withSupervisor(run, { cash_out: amount, cash_in: amount });
   },
 
+  // Conciliación del Z (H156, ADR-158): el encargado revisa una diferencia y
+  // deja el tipo y el motivo. Auditado en el servidor.
+  reviewZ: async (id: string, kind: string, reason: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("cash_z_review" as never, { p_id: id, p_kind: kind, p_reason: reason } as never);
+    if (error) throw error;
+  },
+
   // Historial inmutable de cierres Z (más reciente primero).
   // storeId (F17 · H90): sucursal del filtro global; null = todas las visibles.
   // registerId (F17 · H97): sólo los Z de esa caja.

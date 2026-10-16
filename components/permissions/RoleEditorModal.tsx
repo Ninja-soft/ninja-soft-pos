@@ -21,7 +21,7 @@ import {
   MODULES,
   ROLE_COLORS,
   ROLE_ICONS,
-  SYSTEM_ROLES,
+  ROLE_TEMPLATES,
   baseAllows,
   capabilitiesOfModule,
   levelsOfModule,
@@ -75,7 +75,7 @@ const BASE_HINT: Record<BaseRole, string> = {
   cashier: "Lo que no está en esta lista lo hace como un cajero.",
   viewer: "Nunca cambia datos: sólo mira.",
 };
-const TEMPLATES = SYSTEM_ROLES.filter((r) => r.key !== "owner");
+const TEMPLATES = ROLE_TEMPLATES;
 
 /**
  * Editor de un rol: modo simple (tarjetas por módulo con Ver / Operar /
@@ -153,7 +153,7 @@ export function RoleEditorModal({
   }
 
   function applyTemplate(key: string) {
-    const t = SYSTEM_ROLES.find((r) => r.key === key);
+    const t = ROLE_TEMPLATES.find((r) => r.key === key);
     if (!t) return;
     update({ base: t.base, capabilities: [...t.capabilities], template: t.key });
     setNotice(`Partís de ${t.name}. Cambiá lo que quieras.`);

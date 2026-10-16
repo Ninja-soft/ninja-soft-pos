@@ -305,6 +305,17 @@ export default function ExpedicionPage() {
                     )}
                     {d.has_pickup_code && d.delivery_type === "retiro" && <span>· pide código</span>}
                     {soldElsewhere && <span>· vendida en {storeName(d.sale_store_id ?? null)}</span>}
+                    {d.route && d.status !== "entregado" && (
+                      <Link href={`/logistica/reparto?hoja=${d.route_id}` as Route} className="font-semibold text-ninja-flameSoft hover:underline">
+                        En hoja N° {d.route.number}
+                      </Link>
+                    )}
+                    {(d.delivery_attempts ?? 0) > 0 && d.status !== "entregado" && (
+                      <Badge tone="danger">
+                        {d.delivery_attempts === 1 ? "1 intento" : `${d.delivery_attempts} intentos`}
+                        {d.last_failure_reason ? `: ${d.last_failure_reason}` : ""}
+                      </Badge>
+                    )}
                   </div>
                   <ul className="mt-3 space-y-0.5 text-sm">
                     {items.slice(0, 6).map((i, idx) => (

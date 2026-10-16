@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -27,7 +27,16 @@ import { buildSeedSql } from "@/lib/permissions/seedSql";
 import { can, deniedReasonByCapability, type RoleAction } from "@/lib/permissions/roles";
 import { roleErrorMessage } from "@/lib/permissions/errors";
 
-const MIGRATION = join(process.cwd(), "supabase/migrations/20261204100100_permisos_capacidades.sql");
+// La última migración con el seed del catálogo (cada cambio del catálogo va en
+// una migración nueva con los marcadores; ADR-161 sumó logistics.*).
+const MIGRATIONS_DIR = join(process.cwd(), "supabase/migrations");
+const MIGRATION = join(
+  MIGRATIONS_DIR,
+  readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql") && readFileSync(join(MIGRATIONS_DIR, f), "utf8").includes("-- @@SEED-INICIO@@"))
+    .sort()
+    .at(-1)!,
+);
 const caps = (k: string) => [...SYSTEM_ROLE_BY_KEY.get(k)!.capabilities];
 
 describe("catálogo de capacidades (ADR-138)", () => {
@@ -268,7 +277,7 @@ describe("edición", () => {
   });
 
   it("búsqueda sin acentos por etiqueta, clave o módulo", () => {
-    expect(searchCapabilities("anular").map((c) => c.key)).toEqual(["sales.void", "sales.void.past_days"]);
+    expect(searchCapabilities("anular").map((c) => c.key)).toEqual(["sales.void", "sales.void.past_days", "logistics.remito.void"]);
     expect(searchCapabilities("auditoria").map((c) => c.key)).toContain("audit.view");
     expect(searchCapabilities("finanzas")).toHaveLength(3);
   });

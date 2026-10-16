@@ -16,6 +16,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { InvoiceFit } from "@/components/invoices/InvoiceFit";
 import { RemitoDocument } from "@/components/remitos/RemitoDocument";
+import { RemitoPrintSet, copyLabels } from "@/components/remitos/RemitoPrintSet";
+import { SignedImage } from "@/components/logistics/SignedImage";
+import { REMITO_MODEL_LABEL } from "@/lib/logistics/logic";
+import { useLogisticsSettings } from "@/modules/logistics/api";
 import { downloadInvoicePdf, exportInvoicePdfBase64 } from "@/lib/invoices/exportPdf";
 import { printTicketIsolated } from "@/lib/print/webPrint";
 import {
@@ -48,8 +52,19 @@ export function RemitoDetailModal({
   const { data: cfg } = useRemitoConfig(Boolean(id));
   const { data: ticketBrand } = useTicketBranding(Boolean(id), r?.store_id ?? null);
   const { style } = useInvoiceStyle(ticketBrand ?? null, Boolean(id));
+  // ADR-161: copias y modelo (los del remito; si no, los de Configuración › Logística).
+  const { data: logi } = useLogisticsSettings(Boolean(id));
+  const printOptions = {
+    copies: r?.copies ?? logi?.remito_copies ?? 1,
+    labels: logi?.remito_copy_labels ?? [],
+    model: r?.model_key ?? logi?.remito_model ?? "a4",
+    offsetXmm: logi?.preprinted_offset_x_mm ?? 0,
+    offsetYmm: logi?.preprinted_offset_y_mm ?? 0,
+  } as const;
   const m = useRemitoMutations();
   const printRef = useRef<HTMLDivElement>(null);
+  // El PDF (descarga y email) sale siempre en A4, una sola copia.
+  const pdfRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [busy, setBusy] = useState<"pdf" | "mail" | null>(null);
   const [to, setTo] = useState("");
@@ -108,10 +123,10 @@ export function RemitoDetailModal({
   }
 
   async function pdf() {
-    if (!printRef.current || !r) return;
+    if (!pdfRef.current || !r) return;
     setBusy("pdf");
     try {
-      await downloadInvoicePdf(printRef.current, remitoFileName(r));
+      await downloadInvoicePdf(pdfRef.current, remitoFileName(r));
     } catch {
       toast({ title: "No se pudo generar el PDF", variant: "error" });
     } finally {
@@ -120,10 +135,10 @@ export function RemitoDetailModal({
   }
 
   async function mail() {
-    if (!printRef.current || !r) return;
+    if (!pdfRef.current || !r) return;
     setBusy("mail");
     try {
-      const b64 = await exportInvoicePdfBase64(printRef.current);
+      const b64 = await exportInvoicePdfBase64(pdfRef.current);
       await m.email.mutateAsync({ id: r.id, to: to.trim().toLowerCase(), pdf: b64 });
       toast({ title: `Remito enviado a ${to.trim()}`, variant: "success" });
     } catch (e) {
@@ -141,11 +156,16 @@ export function RemitoDetailModal({
   const offscreen =
     r && mounted
       ? createPortal(
-          <div ref={printRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
-            <div className="ticket-print">
-              <RemitoDocument remito={r} style={style} printable />
+          <>
+            <div ref={printRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
+              <div className="ticket-print">
+                <RemitoPrintSet remito={r} style={style} options={printOptions} printable />
+              </div>
             </div>
-          </div>,
+            <div ref={pdfRef} aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
+              <RemitoDocument remito={r} style={style} />
+            </div>
+          </>,
           document.body,
         )
       : null;
@@ -179,6 +199,16 @@ export function RemitoDetailModal({
                 ) : null}
                 {r.emailed_at && <Badge tone="neutral">Enviado por email</Badge>}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Sale en {printOptions.copies === 1 ? "1 copia" : `${printOptions.copies} copias (${copyLabels(printOptions).join(", ")})`} ·{" "}
+                {REMITO_MODEL_LABEL[printOptions.model]}
+              </p>
+              {r.signed_copy_path && (
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Remito firmado</p>
+                  <SignedImage path={r.signed_copy_path} alt="Foto del remito firmado" className="h-40 w-full rounded-lg" contain />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="secondary" onClick={pdf} loading={busy === "pdf"}>

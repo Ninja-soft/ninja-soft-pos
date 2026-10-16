@@ -7,6 +7,7 @@ import {
   Crown,
   Eye,
   Landmark,
+  MapPinned,
   Package,
   Plug,
   Search,
@@ -57,6 +58,7 @@ export const MODULE_ICON: Record<ModuleKey, LucideIcon> = {
   configuracion: Settings,
   equipo: UserCog,
   integraciones: Plug,
+  logistica: MapPinned,
 };
 
 const RISK_TONE: Record<CapabilityRisk, BadgeTone> = {

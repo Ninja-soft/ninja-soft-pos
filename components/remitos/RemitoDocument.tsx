@@ -85,6 +85,7 @@ export function RemitoDocument({
   logoUrl,
   printable,
   className,
+  copyLabel,
 }: {
   remito: Remito;
   style: ResolvedInvoiceStyle;
@@ -93,6 +94,8 @@ export function RemitoDocument({
   /** Reglas de impresión A4 (@page). Sólo en el nodo que se imprime. */
   printable?: boolean;
   className?: string;
+  /** ADR-161: leyenda de la copia ("Original: cliente", "Duplicado: vuelve firmado"). */
+  copyLabel?: string | null;
 }) {
   const pages = remitoPages(r.items.length);
   const totals = remitoTotals(r.items);
@@ -191,6 +194,9 @@ export function RemitoDocument({
                   {REMITO_KIND_LABEL[r.kind]}
                 </div>
                 <div style={{ ...NUM, fontSize: fs(12), fontWeight: 700, marginTop: sp(2) }}>N° {number}</div>
+                {copyLabel && (
+                  <div style={{ fontSize: fs(9), fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", marginTop: sp(2) }}>{copyLabel}</div>
+                )}
                 <div style={{ fontSize: fs(10), color: MUTED }}>Fecha {dateAr(r.issued_at)}</div>
                 {r.sale?.number != null && <div style={{ fontSize: fs(10), color: MUTED }}>Venta #{r.sale.number}</div>}
                 <div style={{ fontSize: fs(9), color: MUTED, marginTop: sp(4), lineHeight: 1.3 }}>

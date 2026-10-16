@@ -14,8 +14,9 @@ export function callbackUrl(origin: string, next: string): string {
 
 // Destino al entrar según el rol: staff sin negocio propio → panel interno;
 // usuario sin negocio → el registro, que retoma el alta guardada (rubro, plan,
-// IA y código) sin volver a pedir nada; el resto → panel.
-export function homePath({ isInternal, hasTenant }: { isInternal: boolean; hasTenant: boolean }): string {
-  if (hasTenant) return "/dashboard";
+// IA y código) sin volver a pedir nada; Repartidor (ADR-161) → su app de
+// reparto; el resto → panel.
+export function homePath({ isInternal, hasTenant, isDriver = false }: { isInternal: boolean; hasTenant: boolean; isDriver?: boolean }): string {
+  if (hasTenant) return isDriver ? "/reparto" : "/dashboard";
   return isInternal ? "/internal/tenants" : "/signup";
 }

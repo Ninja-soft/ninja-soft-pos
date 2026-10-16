@@ -89,6 +89,11 @@ export interface Remito {
   voided_at: string | null;
   items: RemitoItem[];
   sale?: { number: number } | null;
+  /** ADR-161: copias y modelo con que se emitió; hoja de ruta y foto del remito firmado. */
+  copies?: number | null;
+  model_key?: "a4" | "a4_medio" | "ticket80" | "preimpreso" | null;
+  route_id?: string | null;
+  signed_copy_path?: string | null;
 }
 
 export interface RemitoConfig {

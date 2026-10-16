@@ -213,7 +213,7 @@ describe("Delivery cobrado antes de salir (A7)", () => {
 
 describe("Menú Logística (A24)", () => {
   it("una entrada con Expedición, Remitos y Envíos como sub-páginas", () => {
-    expect(LOGISTICS_SECTIONS.map((s) => s.href)).toEqual(["/expedicion", "/remitos", "/envios"]);
+    expect(LOGISTICS_SECTIONS.map((s) => s.href)).toEqual(["/expedicion", "/logistica/reparto", "/logistica/flota", "/remitos", "/envios"]);
     expect(isLogisticsPath("/expedicion")).toBe(true);
     expect(isLogisticsPath("/envios")).toBe(true);
     expect(isLogisticsPath("/logistica")).toBe(true);

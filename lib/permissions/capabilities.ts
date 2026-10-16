@@ -44,7 +44,8 @@ export type ModuleKey =
   | "reportes"
   | "configuracion"
   | "equipo"
-  | "integraciones";
+  | "integraciones"
+  | "logistica";
 
 export interface CapabilityDef {
   key: string;
@@ -79,6 +80,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "configuracion", label: "Configuración", description: "Ajustes del POS, seguridad y plan.", icon: "settings" },
   { key: "equipo", label: "Equipo", description: "Personal, roles y permisos.", icon: "user-cog" },
   { key: "integraciones", label: "Integraciones", description: "Logísticas y medios de pago.", icon: "plug" },
+  { key: "logistica", label: "Logística", description: "Expedición, hojas de ruta, flota y reparto.", icon: "truck" },
 ] as const;
 
 const cap = (
@@ -163,6 +165,16 @@ export const CAPABILITIES: readonly CapabilityDef[] = [
   cap("team.roles", "equipo", "Crear y editar roles", "Crear roles, cambiar sus permisos y dar permisos puntuales.", "admin", "critical", ["team.manage"], "owner"),
   // Integraciones
   cap("integrations.manage", "integraciones", "Conectar logísticas y medios de pago", "Credenciales de logísticas y comisiones de los medios de pago.", "admin", "high", [], "manager"),
+  // Logística (ADR-161 · H145): reparto propio, flota y app del repartidor.
+  cap("logistics.view", "logistica", "Ver Logística", "Ver expedición, hojas de ruta, flota y el detalle de cada entrega.", "view", "low", [], "viewer", "server"),
+  cap("logistics.prepare", "logistica", "Armar y despachar entregas", "Pasar entregas a armando y listo, despacharlas y emitir sus remitos.", "operate", "medium", ["logistics.view"], "cashier", "ui"),
+  cap("logistics.route.manage", "logistica", "Armar hojas de ruta", "Crear hojas de ruta, sumar entregas, ordenar paradas, asignar camión y repartidor, y cancelar.", "operate", "medium", ["logistics.view"]),
+  cap("logistics.deliver", "logistica", "Repartir con la app", "Usar la app de reparto en sus hojas: salir, llegar, entregar con firma y foto o marcar que no se pudo.", "operate", "medium", []),
+  cap("logistics.track", "logistica", "Ver el seguimiento", "Ver en el mapa dónde está cada camión y lo entregado (llega con el mapa en vivo).", "view", "low", ["logistics.view"], "viewer", "ui"),
+  cap("logistics.fleet.manage", "logistica", "Flota, repartidores y orígenes", "Alta y edición de vehículos con fotos, perfiles de repartidores y orígenes de reparto.", "admin", "medium", ["logistics.view"], "manager"),
+  cap("logistics.remito.void", "logistica", "Anular remitos", "Anular un remito emitido con motivo.", "admin", "high", ["logistics.view"], "manager", "ui"),
+  cap("logistics.cot.manage", "logistica", "COT: credenciales y reintentos", "Cargar la clave de transporte de ARBA o AGIP y reintentar pedidos de COT (llega con el COT automático).", "admin", "critical", [], "owner", "ui"),
+  cap("logistics.settings", "logistica", "Configurar Logística", "Remitos, copias y modelos, qué se exige en cada entrega y motivos de no entrega.", "admin", "high", ["logistics.view"], "manager"),
 ] as const;
 
 export const CAPABILITY_BY_KEY: ReadonlyMap<string, CapabilityDef> = new Map(CAPABILITIES.map((c) => [c.key, c]));
@@ -201,7 +213,10 @@ export function dependents(key: string): string[] {
 // Roles de sistema
 // -----------------------------------------------------------------------------
 
-export type SystemRoleKey = "owner" | "manager" | "cashier" | "viewer" | "seller" | "auditor";
+export type SystemRoleKey = "owner" | "manager" | "cashier" | "viewer" | "seller" | "auditor" | "driver";
+
+/** uuid del rol de sistema Repartidor (ADR-161): sólo reparte, no vende ni ve caja. */
+export const DRIVER_ROLE_ID = "00000000-0000-4000-8000-0000000000a7";
 
 export interface SystemRoleDef {
   key: SystemRoleKey;
@@ -223,18 +238,24 @@ export type RoleIcon = (typeof ROLE_ICONS)[number];
 const ALL_KEYS = CAPABILITIES.map((c) => c.key);
 const VIEW_KEYS = CAPABILITIES.filter((c) => c.level === "view" && c.minBase === "viewer").map((c) => c.key);
 
-// Encargado: todo lo que no es del dueño, salvo la configuración del POS y lo
-// que se suma aparte (aprobar ajustes y configurar la aprobación).
-const MANAGER_CAPS = CAPABILITIES.filter((c) => c.minBase !== "owner" && c.key !== "config.edit" && !c.optIn).map((c) => c.key);
+// Encargado: todo lo que no es del dueño, salvo la configuración del POS y de
+// Logística y lo que se suma aparte (aprobar ajustes y configurar la aprobación).
+const MANAGER_EXCLUDED = new Set(["config.edit", "logistics.settings"]);
+const MANAGER_CAPS = CAPABILITIES.filter((c) => c.minBase !== "owner" && !MANAGER_EXCLUDED.has(c.key) && !c.optIn).map((c) => c.key);
 const CASHIER_CAPS = [
   "sales.view", "sales.create", "sales.void", "sales.return",
   "cash.view", "cash.open", "cash.close", "cash.movements",
   "products.view", "stock.view",
   "customers.view", "customers.create", "customers.edit",
   "reports.view", "team.view",
+  "logistics.view", "logistics.prepare",
 ];
-const VIEWER_CAPS = ["sales.view", "cash.view", "products.view", "stock.view", "stock.valuation", "stock.export", "customers.view", "reports.view", "team.view"];
-const SELLER_CAPS = ["sales.view", "products.view", "stock.view", "customers.view", "customers.create", "customers.edit", "team.view"];
+const VIEWER_CAPS = ["sales.view", "cash.view", "products.view", "stock.view", "stock.valuation", "stock.export", "customers.view", "reports.view", "team.view", "logistics.view"];
+const SELLER_CAPS = ["sales.view", "products.view", "stock.view", "customers.view", "customers.create", "customers.edit", "team.view", "logistics.view"];
+// Repartidor (ADR-161): sólo la app de reparto. Nivel base cajero porque
+// escribe (eventos de entrega), pero sin vender, sin caja y sin ver clientes
+// ni ventas (is_driver_member() en la RLS).
+const DRIVER_CAPS = ["logistics.deliver"];
 const AUDITOR_CAPS = [...VIEW_KEYS, "stock.valuation", "stock.export", "reports.costs", "audit.view"];
 
 export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
@@ -244,7 +265,28 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
   { key: "viewer", id: "00000000-0000-4000-8000-0000000000a4", name: "Solo lectura", description: "Mira ventas, caja, stock y reportes. No cambia nada.", base: "viewer", color: "slate", icon: "eye", capabilities: VIEWER_CAPS },
   { key: "seller", id: "00000000-0000-4000-8000-0000000000a5", name: "Vendedor", description: "Atiende y arma pedidos para que cobre la caja. No abre caja, no cobra ni anula.", base: "cashier", color: "green", icon: "tag", capabilities: SELLER_CAPS },
   { key: "auditor", id: "00000000-0000-4000-8000-0000000000a6", name: "Auditor", description: "Mira todo, incluso costos y auditoría, sin tocar nada.", base: "viewer", color: "violet", icon: "search", capabilities: AUDITOR_CAPS },
+  { key: "driver", id: DRIVER_ROLE_ID, name: "Repartidor", description: "Sólo la app de reparto: sus hojas de ruta, entregas con firma, foto y ubicación. No vende ni ve caja.", base: "cashier", color: "teal", icon: "truck", capabilities: DRIVER_CAPS },
 ] as const;
+
+/**
+ * Plantillas para crear un rol propio: los roles de sistema (menos el dueño)
+ * y las que no son rol de sistema (Expedicionista, doc 45 §12).
+ */
+export interface RoleTemplateDef {
+  key: string;
+  name: string;
+  base: BaseRole;
+  capabilities: string[];
+}
+export const ROLE_TEMPLATES: readonly RoleTemplateDef[] = [
+  ...SYSTEM_ROLES.filter((r) => r.key !== "owner").map((r) => ({ key: r.key, name: r.name, base: r.base, capabilities: r.capabilities })),
+  {
+    key: "expeditor",
+    name: "Expedicionista",
+    base: "cashier",
+    capabilities: ["logistics.view", "logistics.prepare", "logistics.route.manage", "logistics.track", "stock.view"],
+  },
+];
 
 export const SYSTEM_ROLE_BY_KEY: ReadonlyMap<string, SystemRoleDef> = new Map(SYSTEM_ROLES.map((r) => [r.key, r]));
 export const SYSTEM_ROLE_BY_ID: ReadonlyMap<string, SystemRoleDef> = new Map(SYSTEM_ROLES.map((r) => [r.id, r]));

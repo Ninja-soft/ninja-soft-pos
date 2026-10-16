@@ -417,6 +417,7 @@ const ERRORS: [RegExp, string][] = [
   [/cross_branch_not_allowed/, "Ese tipo de entrega no se puede hacer en otra sucursal (revisá Configuración)."],
   [/delivery_type_disabled/, "Ese tipo de entrega está apagado en Configuración."],
   [/ship_address_required/, "Cargá el domicilio del envío."],
+  [/customer_required_for_shipping/, "Para enviar, la venta tiene que tener cliente. Una venta sin cliente se entrega en el mostrador o con retiro."],
   [/pickup_name_required/, "Cargá a nombre de quién se retira."],
   [/cart_required/, "El pedido no tiene productos."],
   [/seller_not_found/, "No encontramos al vendedor."],

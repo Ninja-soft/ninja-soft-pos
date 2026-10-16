@@ -7,6 +7,7 @@
 // generados: se castean.
 
 import { createClient } from "@/lib/supabase/client";
+import type { GeoAddress } from "@/lib/geo/address";
 import type { CheckoutSnapshot } from "@/components/pos/checkout/types";
 import type { PausedCart } from "@/modules/paused-sales/logic";
 import type {
@@ -113,6 +114,8 @@ export interface Dispatch {
   /** ADR-149 (A6): cuándo se despachó y el último estado del envío con logística. */
   shipped_at?: string | null;
   shipment_status?: string | null;
+  /** ADR-157: copia de la dirección al vender (calle, localidad, lat/lng, referencia). */
+  ship_to?: GeoAddress | null;
 }
 
 export interface DispatchPartItem {
@@ -137,6 +140,9 @@ const MISSING_PART_COLS = /part|sale_store_id|dispatch_items|relationship/;
 // ADR-149 (L0): despacho y estado del envío. Sin la migración, se reintenta sin ellos.
 const DISPATCH_COLS_L0 = `${DISPATCH_COLS_PARTS}, shipped_at, shipment_status`;
 const MISSING_L0_COLS = /shipped_at|shipment_status/;
+// ADR-157 (L1): dirección estructurada de la entrega.
+const DISPATCH_COLS_L1 = `${DISPATCH_COLS_L0}, ship_to`;
+const MISSING_L1_COLS = /ship_to/;
 
 /** Lo que falta entregar de una venta (dispatch_sale_pending, ADR-149). */
 export interface SalePending {
@@ -270,7 +276,8 @@ export const ordersApi = {
         ? q.in("status", ["pendiente", "armando", "listo", "en_transito", "despachado"])
         : q.in("status", ["entregado", "cancelado"]);
     };
-    let { data, error } = await run(DISPATCH_COLS_L0, true);
+    let { data, error } = await run(DISPATCH_COLS_L1, true);
+    if (error && MISSING_L1_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_L0, true));
     if (error && MISSING_L0_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS_PARTS, true));
     if (error && MISSING_PART_COLS.test(error.message)) ({ data, error } = await run(DISPATCH_COLS, false));
     if (error) throw error;

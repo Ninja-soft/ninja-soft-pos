@@ -9,7 +9,7 @@ import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 import { effectivePlans } from "@/lib/payments/planScope";
 import { getnetSlotsOf } from "@/lib/payments/getnetSlots";
 import { parseOfflinePolicy, type OfflinePolicy } from "@/lib/pos/offline/policy";
-import type { PlanPayload } from "@/lib/stock/fulfillment";
+import { planRpc, type PlanPayload } from "@/lib/stock/fulfillment";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -1733,7 +1733,7 @@ export const posApi = {
       ...(service ? { p_service: service } : {}),
     };
     const { data, error } = fulfillment
-      ? await supabase.rpc("pos_sale_create_fulfilled" as never, { p_sale: args, p_plan: fulfillment } as never)
+      ? await supabase.rpc(planRpc(fulfillment) as never, { p_sale: args, p_plan: fulfillment } as never)
       : await supabase.rpc("create_sale", args as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

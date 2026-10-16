@@ -107,6 +107,10 @@ export interface DeliveryZone {
   eta_minutes: number | null;
   is_active: boolean;
   sort_order: number;
+  /** ADR-157: localidades que cubre (el cobro sugiere el costo por la dirección). */
+  localities: string[];
+  /** ADR-157: sin cargo desde este total. */
+  free_from: number | null;
 }
 
 export interface DeliveryZoneInput {
@@ -115,6 +119,8 @@ export interface DeliveryZoneInput {
   eta_minutes?: number | null;
   is_active?: boolean;
   sort_order?: number;
+  localities?: string[];
+  free_from?: number | null;
 }
 
 export interface DeliveryOrder {
@@ -436,7 +442,7 @@ export const deliveryZonesApi = {
     const supabase = createClient();
     let query = supabase
       .from("delivery_zones" as never)
-      .select("id, name, fee, eta_minutes, is_active, sort_order")
+      .select("id, name, fee, eta_minutes, is_active, sort_order, localities, free_from")
       .is("deleted_at", null);
     if (!includeInactive) query = query.eq("is_active", true);
     const { data, error } = await query.order("sort_order").order("name");
@@ -454,8 +460,10 @@ export const deliveryZonesApi = {
         eta_minutes: input.eta_minutes ?? null,
         is_active: input.is_active ?? true,
         sort_order: input.sort_order ?? 0,
+        localities: input.localities ?? [],
+        free_from: input.free_from ?? null,
       } as never)
-      .select("id, name, fee, eta_minutes, is_active, sort_order")
+      .select("id, name, fee, eta_minutes, is_active, sort_order, localities, free_from")
       .single();
     if (error) throw error;
     return data as unknown as DeliveryZone;

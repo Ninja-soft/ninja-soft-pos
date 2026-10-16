@@ -98,6 +98,9 @@ export type SettingsSectionDef = {
   // gating de plan sino un toggle del tenant: se oculta, sin candado.
   requiresDining?: boolean;
   requiresDelivery?: boolean;
+  // ADR-157: también se muestra con el envío a domicilio de Expedición
+  // (pedidos_despacho en el plan), aunque el delivery gastronómico esté apagado.
+  orShipping?: boolean;
 };
 
 export type SettingsGroup = { title: string; sections: SettingsSectionDef[] };
@@ -212,10 +215,11 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         label: "Zonas de envío",
         title: "Zonas de envío",
         description:
-          "Zonas de reparto con tarifa y tiempo estimado. Al tomar un pedido elegís la zona y el envío se completa solo.",
+          "Zonas de reparto con tarifa, tiempo estimado y localidades. Al cobrar un envío a una de esas localidades o al tomar un pedido, el costo se completa solo.",
         icon: Bike,
         requiresDelivery: true,
-        keywords: "delivery reparto envio tarifa",
+        orShipping: true,
+        keywords: "delivery reparto envio tarifa localidad zona costo",
       },
       {
         key: "profesionales",

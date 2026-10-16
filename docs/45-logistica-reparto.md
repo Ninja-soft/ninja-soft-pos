@@ -623,6 +623,8 @@ Sin funciones nuevas grandes; deja la base sana.
 
 ### L1 · Cliente obligatorio y direcciones reales (H144)
 
+> **Hecho (ADR-157).** Diferencias con este plan: mini mapa con **Leaflet + tiles de OSM** (pedido del dueño) en lugar de MapLibre + OpenFreeMap; el cliente obligatorio se valida con un trigger en `dispatches` y el envoltorio `pos_sale_create_delivery` (sin recrear `pos_sale_create_fulfilled`); las entregas de pedidos (catálogo y salón) quedan afuera de la exigencia hasta L2; zonas por localidad con `free_from`, sin `days` ni `cutoff_time` todavía.
+
 - `customer_addresses`, `dispatches.address_id` y `ship_to`, `geocode_cache`.
 - Edge `geo` (suggest con Photon, normalize con Georef, reverse con Nominatim) con caché, rate limit e interruptores.
 - `AddressAutocomplete` con lista flotante y mini mapa (MapLibre + OpenFreeMap), en la ficha del cliente y en la hoja de cobro.

@@ -71,7 +71,8 @@ const ENTITIES: Record<string, string> = {
 };
 
 export function auditActionLabel(action: string): string {
-  if (ACTIONS[action]) return ACTIONS[action]!;
+  const known = ACTIONS[action] ?? ACTIONS[action.toLowerCase()];
+  if (known) return known;
   const t = action.replace(/_/g, " ");
   return t.charAt(0).toUpperCase() + t.slice(1);
 }

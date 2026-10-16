@@ -61,6 +61,13 @@ import {
   PackageSearch,
   Radar,
   ShieldAlert,
+  ArrowDownUp,
+  Clock3,
+  Banknote,
+  LineChart,
+  RefreshCcw,
+  Settings2,
+  CalendarCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isLogisticsPath } from "@/components/logistics/LogisticsNav";
@@ -85,7 +92,7 @@ import {
   BlockingNotificationBanner,
   NotificationBell,
 } from "@/components/notifications/NotificationBell";
-import { useFeature, useGating } from "@/modules/saas/gating";
+import { useGating } from "@/modules/saas/gating";
 import {
   HIDDEN_ID,
   TOP_GROUP,
@@ -242,6 +249,9 @@ type Item = {
   label: string;
   icon: React.ElementType;
   feature?: string;
+  // Gating "cualquiera de" (T12, ADR-158): el ítem se habilita si el plan trae
+  // al menos una de estas features. Tiene prioridad sobre `feature`.
+  featureAny?: string[];
   // Sólo visible con el modo gastronómico (pos_settings.dining_enabled · H43)
   // activo. No es gating de plan: es un toggle del tenant → se oculta, sin candado.
   requiresDining?: boolean;
@@ -358,10 +368,27 @@ const NAV: { groups: Group[] } = {
         { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
         { href: "/compras/lotes", label: "Lotes y despachos", icon: Boxes, feature: "compras" },
         { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
-        // Retenciones practicadas como agente (F18 · H106, ADR-079).
-        { href: "/compras/retenciones", label: "Retenciones practicadas", icon: Stamp, feature: "percepciones_retenciones", managersOnly: true },
-        // Tesorería (F18 · H111, ADR-059): cuentas, cheques y flujo de fondos.
-        { href: "/tesoreria", label: "Tesorería", icon: Landmark, feature: "tesoreria", managersOnly: true },
+      ],
+    },
+    {
+      // Tesorería (F23 · H155, ADR-158): dónde está la plata, qué entró y salió,
+      // qué falta acreditar, conciliación, cheques, flujo y NubCeo.
+      id: "tesoreria",
+      label: "Tesorería",
+      items: [
+        { href: "/tesoreria", label: "Posición", icon: Landmark, feature: "tesoreria", managersOnly: true },
+        { href: "/tesoreria/movimientos", label: "Movimientos", icon: ArrowDownUp, feature: "tesoreria", managersOnly: true },
+        { href: "/tesoreria/a-acreditar", label: "A acreditar", icon: Clock3, feature: "tesoreria", managersOnly: true },
+        // Conciliación (ADR-044, ADR-061): con cualquiera de las dos features (T12).
+        {
+          href: "/tesoreria/conciliacion",
+          label: "Conciliación",
+          icon: CreditCard,
+          featureAny: ["conciliacion_procesadores", "conciliacion_tarjetas"],
+        },
+        { href: "/tesoreria/cheques", label: "Cheques", icon: Banknote, feature: "tesoreria", managersOnly: true },
+        { href: "/tesoreria/flujo", label: "Flujo de fondos", icon: LineChart, feature: "tesoreria", managersOnly: true },
+        { href: "/tesoreria/nubceo", label: "NubCeo", icon: RefreshCcw, feature: "integracion_nubceo", managersOnly: true },
       ],
     },
     {
@@ -374,13 +401,21 @@ const NAV: { groups: Group[] } = {
         { href: "/contabilidad/asientos", label: "Asientos", icon: FileText, feature: "contabilidad", managersOnly: true },
         { href: "/contabilidad/libros", label: "Libros", icon: BookText, feature: "contabilidad", managersOnly: true },
         { href: "/contabilidad/plan-de-cuentas", label: "Plan de cuentas", icon: ListTree, feature: "contabilidad", managersOnly: true },
-        // Libro IVA Digital (F18 · H108, ADR-076): va con la facturación
-        // electrónica, no con la contabilidad.
-        { href: "/contabilidad/libro-iva", label: "Libro IVA Digital", icon: FileArchive, feature: "facturacion_afip", managersOnly: true },
-        // Impuestos como sujeto (F18 · H106, ADR-095): retenciones sufridas y
-        // liquidación de Ingresos Brutos.
+        // Mapeos y cierres a la vista (H155, ADR-158).
+        { href: "/contabilidad/mapeos", label: "Mapeos", icon: Settings2, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/cierres", label: "Cierres", icon: CalendarCheck, feature: "contabilidad", managersOnly: true },
+      ],
+    },
+    {
+      // Impuestos como grupo propio (H155, ADR-158): como sujeto (ADR-095),
+      // como agente (ADR-079) y el Libro IVA Digital (ADR-076).
+      id: "impuestos",
+      label: "Impuestos",
+      items: [
         { href: "/impuestos/sufridas", label: "Retenciones sufridas", icon: Receipt, feature: "percepciones_retenciones", managersOnly: true },
         { href: "/impuestos/iibb", label: "Ingresos Brutos", icon: Landmark, feature: "percepciones_retenciones", managersOnly: true },
+        { href: "/compras/retenciones", label: "Retenciones practicadas", icon: Stamp, feature: "percepciones_retenciones", managersOnly: true },
+        { href: "/contabilidad/libro-iva", label: "Libro IVA Digital", icon: FileArchive, feature: "facturacion_afip", managersOnly: true },
       ],
     },
     {
@@ -394,8 +429,6 @@ const NAV: { groups: Group[] } = {
         // Cockpit de comercio unificado y riesgo operativo (F16 · H76, H82, ADR-091).
         { href: "/cockpit", label: "Cockpit", icon: Radar, feature: "cockpit_comercio", managersOnly: true },
         { href: "/riesgo", label: "Riesgo operativo", icon: ShieldAlert, feature: "prevencion_fraude", managersOnly: true },
-        // Conciliación de tarjetas (ADR-044) y de procesadores (ADR-061, pestaña). Con candado si el plan no trae la de tarjetas.
-        { href: "/reportes/conciliacion", label: "Conciliación", icon: CreditCard, feature: "conciliacion_tarjetas" },
         // Importar y exportar en Excel (TX-4, ADR-078). Dueño o encargado; el
         // plan se chequea por importación (importacion_excel / export_xlsx).
         // Control comercial (F14 · H63, H67, ADR-092): aprobaciones y márgenes.
@@ -422,6 +455,19 @@ function isActiveHref(pathname: string, href: string) {
   );
 }
 
+// Features que habilitan el ítem (featureAny gana sobre feature). Vacío = sin gating.
+function itemFeatureKeys(it: Item): string[] {
+  if (it.featureAny?.length) return it.featureAny;
+  return it.feature ? [it.feature] : [];
+}
+
+/** true si el plan no trae ninguna de las features del ítem. */
+function itemLocked(it: Item, features: Record<string, boolean> | undefined): boolean {
+  const keys = itemFeatureKeys(it);
+  if (keys.length === 0 || !features) return false;
+  return !keys.some((k) => features[k] === true);
+}
+
 // Datos de cada ítem para el modo personalizar (con el candado del plan).
 function customizerItems(
   l: MenuLayout,
@@ -438,7 +484,7 @@ function customizerItems(
       id,
       label: it.label,
       icon: it.icon,
-      locked: Boolean(it.feature) && Boolean(features) && !(features?.[it.feature!] ?? false),
+      locked: Boolean(features) && itemLocked(it, features),
     };
   }
   return out;
@@ -492,10 +538,10 @@ function NavLink({
   const Icon = item.icon;
   // Gating del módulo entero: si el plan no incluye la feature, el ítem queda
   // deshabilitado (candado) y el click abre el UpgradeModal en lugar de navegar.
-  // useFeature siempre se llama (key vacía = sin gating → permitido).
-  const allowed = useFeature(item.feature ?? "");
+  // Sin features en el ítem = sin gating (permitido).
+  const { data: gating } = useGating();
   const [upOpen, setUpOpen] = useState(false);
-  const locked = Boolean(item.feature) && allowed === false;
+  const locked = Boolean(gating) && itemLocked(item, gating?.features);
 
   if (locked) {
     return (
@@ -513,7 +559,7 @@ function NavLink({
         <UpgradeModal
           open={upOpen}
           onOpenChange={setUpOpen}
-          featureKey={item.feature!}
+          featureKey={itemFeatureKeys(item)[0]!}
           featureLabel={item.label}
         />
       </>

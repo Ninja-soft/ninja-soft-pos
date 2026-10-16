@@ -9,7 +9,7 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Banknote,
@@ -79,6 +79,8 @@ import { KpiTile } from "./ui";
 
 type View = "procesadores" | "tarjetas" | "pendientes";
 
+// Ruta por defecto; el hub vive también en /tesoreria/conciliacion (H155) y
+// mantiene la ruta desde la que se abrió.
 const BASE = "/reportes/conciliacion";
 
 function localISODate(d: Date): string {
@@ -111,6 +113,8 @@ function Locked() {
 
 export function ConciliacionHub() {
   const router = useRouter();
+  const pathname = usePathname();
+  const base = pathname?.startsWith("/tesoreria") ? "/tesoreria/conciliacion" : BASE;
   const params = useSearchParams();
   const { toast } = useToast();
 
@@ -161,9 +165,9 @@ export function ConciliacionHub() {
     (v: View, provider?: string | null) => {
       const q = new URLSearchParams({ vista: v });
       if (provider) q.set("p", provider);
-      router.replace(`${BASE}?${q.toString()}` as Route, { scroll: false });
+      router.replace(`${base}?${q.toString()}` as Route, { scroll: false });
     },
-    [router],
+    [router, base],
   );
 
   // ── Tarjetas (ADR-044) ─────────────────────────────────────────────────────

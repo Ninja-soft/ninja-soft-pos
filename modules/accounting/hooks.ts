@@ -46,6 +46,15 @@ export function useAccEntries(f: EntryFilters, page: number, pageSize: number, e
   });
 }
 
+/** Asientos de un documento ("Ver asiento", ADR-158). Se pide al abrir. */
+export function useEntriesForSource(sourceType: string | null, sourceId: string | null) {
+  return useQuery({
+    queryKey: [...K, "for-source", sourceType, sourceId],
+    queryFn: () => accountingApi.entriesForSource(sourceType!, sourceId!),
+    enabled: Boolean(sourceType && sourceId),
+  });
+}
+
 export function useEntryLines(entryId: string | null) {
   return useQuery({
     queryKey: [...K, "entry-lines", entryId],

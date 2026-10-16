@@ -1,6 +1,6 @@
 # 42 · Listas de precios, costos y actualización por dólar
 
-Fecha: 2026-10-15 · Decisión: [ADR-140](./17-decision-log.md) · Base: [ADR-056](./17-decision-log.md) (precio en el servidor), [ADR-058](./17-decision-log.md) (listas PRO), [ADR-050](./17-decision-log.md) (costos de compra), [ADR-068](./17-decision-log.md) (IVA e internos), [ADR-135](./17-decision-log.md) (cotización del dólar).
+Fecha: 2026-10-15 · Decisión: [ADR-140](./17-decision-log.md) y [ADR-151](./17-decision-log.md) (precio libre, editor rápido y auditoría de listas) · Base: [ADR-056](./17-decision-log.md) (precio en el servidor), [ADR-058](./17-decision-log.md) (listas PRO), [ADR-050](./17-decision-log.md) (costos de compra), [ADR-068](./17-decision-log.md) (IVA e internos), [ADR-135](./17-decision-log.md) (cotización del dólar).
 
 > Pedido del dueño: "En la configuración de listas de precios ofrecer actualizar precios en las listas que quiero o categorías que quiera por costo del dólar usando la API de dólar. Debo poder configurar costo de producto, costo final, utilidad calculada; bien robusto las listas de precios y configurable fácil y con configuración avanzada. Auditá en ERP robustos cómo lo hacen."
 
@@ -88,9 +88,48 @@ Al aplicar: lote auditado (`audit_logs`), historial de precios y de costos con *
 | `listas_precios` | OPTIONAL (existe) | Business, Enterprise | listas destino del asistente (`_price_bulk_v2_assert`) |
 | `listas_precios_pro` | OPTIONAL (existe) | Business, Enterprise | base "costo final" (`trg_price_lists_pro`), piso global (`price_settings_save`, y el resolver sólo lo aplica con PRO), aprobación |
 
-## 7. Pendiente
+## 7. Precio libre, editor rápido y auditoría de listas (ADR-151)
+
+### 7.1 Precio a definir al cobrar
+
+- `products.price_mode` (`fixed` u `open`), `open_price_min` y `open_price_max`. El precio de venta queda como **sugerido**.
+- El POS pide el precio al agregar el producto (foco directo, teclado numérico, sugerido y rango) y no lo reprecia. `create_sale` acepta el precio informado **porque el producto es libre** (lo lee de la tabla, nunca de una marca del POS), sólo si es mayor a 0 y está dentro del rango (`_open_price_ok`); si no, `open_price_out_of_range`. Queda en `audit_logs` (`sale_open_price`) con el sugerido. Mesas y delivery (`trg_order_item_price`) igual.
+- Feature `precio_libre` BASE. Sin la feature, el producto se cobra por su precio de lista.
+
+### 7.2 Editor rápido de precios
+
+- Productos › **Editor de precios** (dueño o encargado, feature `editor_precios` BASE). Planilla con costo, precio, margen, markup y una columna por lista activa (precio fijo o el calculado por la regla). Teclado tipo Excel, edición masiva, deshacer, vista previa con alertas y motivo.
+- Lectura `price_editor_rows` (paginada, precios por lista con `_resolve_unit_price`, sin listas si no hay `listas_precios`). Guardado `price_editor_save`: lote `price_bulk_batches` **engine 3** (modo `edit`, origen `editor`) con líneas explícitas; aprobación como el asistente; **Deshacer** con `price_bulk_revert` (precio, costo en pesos y precio fijo de lista; si no existía, se borra y vuelve la regla). Costos en USD y listas en moneda extranjera no se editan desde la planilla.
+
+### 7.3 Cómo se elige la lista (resumen para la pantalla)
+
+1. La que el cajero elige en el carrito (sólo las **elegibles en el POS**).
+2. La del **cliente**, después la de su **grupo**.
+3. La de la **sucursal**, después la de su **grupo de sucursales** (con `multi_sucursal`).
+4. La del canal **Mostrador**.
+5. Si ninguna aplica (o está apagada o vencida), el **precio de venta**.
+
+El catálogo público usa la del canal **Catálogo** y Mercado Libre la de la cuenta o la regla de ML. Los canales **Mayorista** y **Personalizada** no se aplican solos: hay que asignarlos o hacerlos elegibles. La pantalla de listas muestra en cada una cómo se calcula ("Precio de venta −10 %", "Sale de Mayorista +5 %", "Costo de reposición + 60 % de markup", "En USD con dólar oficial") y dónde se usa, y avisa si no se usa en ningún lado.
+
+### 7.4 Hallazgos de la auditoría (2026-10-15)
+
+| # | Hallazgo | Arreglo |
+|---|---|---|
+| 1 | La ficha del producto calculaba cada lista como `precio × (1 + %)`: mal en derivadas, sobre costo, con monto, redondeo, precio fijo, piso y listas netas. | `resolveUnitPrice` con la foto de precios, los precios fijos del producto y el precio tipeado; la regla en palabras (`describeListRule`). |
+| 2 | "Precios por producto" de una lista tenía el mismo cálculo simple y mostraba en pesos los precios de una lista en dólares. | Mismo resolver que el POS (`worldWithList`) y la moneda aclarada. |
+| 3 | Deshacer un cambio masivo sobre una lista escribía el precio calculado viejo como **precio fijo**: la lista quedaba congelada. | `price_bulk_revert` borra el precio fijo que creó el lote y vuelve la regla. |
+| 4 | Al crear una lista no se podía elegir dónde se usa hasta reabrirla. | El modal sigue abierto con la lista creada. |
+| 5 | El resolver usaba la lista del grupo de sucursales pero la pantalla no la ofrecía. | Grupos de sucursales en "Dónde se usa". |
+| 6 | Nada decía que una lista Mayorista o Personalizada sin asignar no cambia ningún precio. | Ayuda por canal, "Se usa en", aviso "Todavía no se usa", orden de resolución y aviso al borrar una lista madre. |
+| 7 | La ficha llamaba "Margen %" a un markup sin IVA. | Margen sobre el precio sin IVA contra el costo final, con el markup al lado. |
+
+Verificado sin cambios: POS, cobro en espera, mesas y delivery, catálogo público y Mercado Libre resuelven con `_resolve_unit_price`.
+
+## 8. Pendiente
 
 - Costo en USD por variante (hoy el costo es por producto, como en ADR-050).
 - Precio de lista en USD por producto sin lista en moneda (hoy: lista en moneda extranjera con ítems en USD).
 - Simulación de listas derivadas y sobre costo en la vista previa (hoy se informan sólo los precios fijos que cambian; las reglas se recalculan solas al cobrar).
 - Regla automática por otra moneda que no sea USD.
+- Producto con precio libre en el catálogo público y Mercado Libre: hoy muestran el sugerido ("consultar precio" u ocultarlo).
+- Variantes en el editor rápido y borrar un precio fijo desde la planilla.

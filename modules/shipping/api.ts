@@ -7,6 +7,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import type { QuoteChoice } from "@/lib/shipping/form";
+import type { DispatchShipmentSource } from "@/lib/shipping/fromDispatch";
 
 export interface ShippingProvider {
   key: string;
@@ -201,6 +202,79 @@ export const shippingApi = {
       .order("occurred_at", { ascending: true })) as Res;
     if (error) throw new Error(error.message);
     return (data ?? []) as ShipmentEvent[];
+  },
+
+  /**
+   * ADR-149 (A11): lo que necesita "Crear envío con logística" desde una
+   * entrega: dirección de entrega, cliente, productos de esa entrega y su
+   * precio neto en la venta.
+   */
+  async dispatchSource(dispatchId: string): Promise<DispatchShipmentSource> {
+    const { data, error } = (await db()
+      .from("dispatches")
+      .select(
+        "id, number, sale_id, store_id, ship_address, customer_name, " +
+          "items:dispatch_items(product_id, variant_id, product_name, variant_label, qty), " +
+          "sale:sales(number, customer:customers(name, email, phone, document_number, address), " +
+          "lines:sale_items(product_id, variant_id, quantity, subtotal, product_name))",
+      )
+      .eq("id", dispatchId)
+      .maybeSingle()) as Res;
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("dispatch_not_found");
+    type Line = { product_id: string | null; variant_id: string | null; quantity: number; subtotal: number; product_name: string };
+    const d = data as {
+      id: string;
+      number: number;
+      sale_id: string;
+      store_id: string;
+      ship_address: string | null;
+      customer_name: string | null;
+      items: { product_id: string; variant_id: string | null; product_name: string; variant_label: string | null; qty: number }[] | null;
+      sale: { number: number; customer: DispatchShipmentSource["customer"]; lines: Line[] | null } | null;
+    };
+    const lines = d.sale?.lines ?? [];
+    const unitPrice = (pid: string | null, vid: string | null) => {
+      const same = lines.filter((l) => l.product_id === pid && (l.variant_id ?? null) === (vid ?? null));
+      const q = same.reduce((t, l) => t + Number(l.quantity || 0), 0);
+      return q > 0 ? same.reduce((t, l) => t + Number(l.subtotal || 0), 0) / q : null;
+    };
+    const parts = d.items ?? [];
+    const items =
+      parts.length > 0
+        ? parts.map((i) => ({
+            name: i.variant_label ? `${i.product_name} (${i.variant_label})` : i.product_name,
+            qty: Number(i.qty),
+            unitPrice: unitPrice(i.product_id, i.variant_id),
+          }))
+        : lines.map((l) => ({ name: l.product_name, qty: Number(l.quantity), unitPrice: unitPrice(l.product_id, l.variant_id) }));
+    return {
+      dispatchId: d.id,
+      dispatchNumber: d.number,
+      saleId: d.sale_id,
+      saleNumber: d.sale?.number ?? null,
+      storeId: d.store_id,
+      shipAddress: d.ship_address,
+      customerName: d.customer_name,
+      customer: d.sale?.customer ?? null,
+      items,
+    };
+  },
+
+  /** ADR-149 (A12): dirección de ENTREGA cargada al cobrar (la del envío abierto de la venta). */
+  async saleShipAddress(saleId: string): Promise<string | null> {
+    const { data, error } = (await db()
+      .from("dispatches")
+      .select("ship_address, status")
+      .eq("sale_id", saleId)
+      .eq("delivery_type", "envio")
+      .neq("status", "cancelado")
+      .not("ship_address", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)) as Res;
+    if (error) return null;
+    const row = ((data ?? []) as { ship_address: string | null }[])[0];
+    return row?.ship_address ?? null;
   },
 
   async saleByNumber(storeId: string | null, number: number) {

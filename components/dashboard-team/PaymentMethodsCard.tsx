@@ -39,7 +39,7 @@ import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/t
 import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { posApi } from "@/modules/pos/api";
-import { onlyActiveTenant } from "@/lib/tenant/scope";
+import { fetchMyMembership } from "@/lib/tenant/myMembership";
 
 // Alcances con credencial propia (F17 · ADR-057). Sin la migración la RPC no
 // existe: no hay credenciales por sucursal.
@@ -136,16 +136,7 @@ export function PaymentMethodsCard() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data: mem } = await onlyActiveTenant(
-        supabase
-          .from("tenant_users")
-          .select("tenant_id, role")
-          .eq("user_id", user.id)
-          .eq("status", "active"),
-        user,
-      )
-        .limit(1)
-        .maybeSingle();
+      const mem = await fetchMyMembership<{ tenant_id: string; role: string }>(supabase, user, "tenant_id, role");
       if (!mem) return null;
       return { tenantId: mem.tenant_id, canManage: ["owner", "manager"].includes(mem.role) };
     },

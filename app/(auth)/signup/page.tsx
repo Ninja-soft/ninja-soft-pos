@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, type UseFormRegister, type FieldValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, MailCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createTenant } from "@/modules/tenants/api";
 import { redeemInviteCode } from "@/modules/auth/invite";
@@ -13,6 +13,13 @@ import { applySignupPlan } from "@/modules/auth/plan";
 import { startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
 import { signupTrialDays, trialCopy, useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
 import { activateAiAddon } from "@/modules/saas/aiPublicConfig";
+import {
+  isPendingSignupComplete,
+  readPendingSignup,
+  toPendingSignupMeta,
+} from "@/modules/auth/pendingSignup";
+import { VERTICAL_LABELS } from "@/lib/verticals/config";
+import { salesContactHref } from "@/lib/support/contact";
 import {
   SignupAccountSchema,
   SignupBusinessSchema,
@@ -194,7 +201,12 @@ function SignupWizard() {
   // - "account": flujo email, paso 1 (cuenta) → paso 2 (negocio) → paso 3 (plan).
   // - "sso": usuario autenticado por Google sin tenant → negocio + plan en una
   //   sola vista (las credenciales ya vienen de Google).
-  const [mode, setMode] = useState<"loading" | "account" | "sso">("loading");
+  // - "check-email": el alta pide confirmar el email; los datos quedan
+  //   guardados en user_metadata.signup.
+  // - "resume": volvió de confirmar el email con el alta pendiente completa →
+  //   resumen y un solo botón (no se vuelve a pedir nada).
+  const [mode, setMode] = useState<"loading" | "account" | "sso" | "check-email" | "resume">("loading");
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [industry, setIndustry] = useState<Vertical | null>(null);
   const [industryError, setIndustryError] = useState<string | null>(null);
@@ -212,7 +224,9 @@ function SignupWizard() {
   // Autoselección del plan recomendado (Pro) en cuanto cargan los planes, sin
   // pisar una elección manual previa del usuario.
   useEffect(() => {
-    if (selectedPlan || !signupPlans || signupPlans.length === 0) return;
+    if (!signupPlans || signupPlans.length === 0) return;
+    // Un plan guardado en el alta pendiente que ya no se ofrece cae al recomendado.
+    if (selectedPlan && signupPlans.some((p) => p.key === selectedPlan)) return;
     const fallback = signupPlans.find((p) => p.isRecommended) ?? signupPlans[0];
     if (fallback) setSelectedPlan(fallback.key);
   }, [signupPlans, selectedPlan]);
@@ -252,8 +266,24 @@ function SignupWizard() {
           router.replace("/dashboard");
           return;
         }
-        // Sesión sin tenant (típico de Google SSO): completar negocio.
-        setMode("sso");
+        // Sesión sin tenant: Google SSO, o volvió de confirmar el email. Si el
+        // alta quedó guardada, la retomamos sin volver a pedir los datos.
+        const pending = readPendingSignup(
+          (user.user_metadata as { signup?: unknown } | undefined)?.signup,
+        );
+        if (pending) {
+          businessForm.reset({
+            businessName: pending.businessName,
+            cuit: pending.cuit ?? undefined,
+            legalName: pending.legalName ?? undefined,
+            ivaCondition: pending.ivaCondition ?? undefined,
+            inviteCode: pending.inviteCode ?? undefined,
+          });
+          if (pending.industry) setIndustry(pending.industry);
+          if (pending.planKey) setSelectedPlan(pending.planKey);
+          setAddonAi(pending.addonAi);
+        }
+        setMode(isPendingSignupComplete(pending) ? "resume" : "sso");
         setStep(2);
       } else {
         // Sin sesión: flujo email desde el paso 1. (Si volvió de OAuth con
@@ -410,8 +440,7 @@ function SignupWizard() {
 
   // CTA secundaria: contacto con ventas (queda como alternativa al self-service).
   function contactSales() {
-    const subject = encodeURIComponent("Quiero el plan Enterprise (Sensei)");
-    window.location.href = `mailto:ventas@ninjapos.com.ar?subject=${subject}`;
+    window.location.href = salesContactHref("Quiero el plan Enterprise (Sensei)");
   }
 
   // Submit del flujo EMAIL (paso 3 → crear cuenta).
@@ -427,10 +456,28 @@ function SignupWizard() {
     try {
       // 1. Crear usuario (si no se creó en un intento previo).
       if (!userCreatedRef.current) {
+        // Todo lo cargado viaja en la metadata del usuario: si el alta pide
+        // confirmar el email, al volver se retoma sin pedir nada de nuevo
+        // (bug: se perdían rubro, plan, IA y código, y se volvía a pedir el
+        // nombre del negocio).
         const { data, error } = await supabase.auth.signUp({
           email: v.email,
           password: v.password,
-          options: { data: { full_name: v.fullName } },
+          options: {
+            data: {
+              full_name: v.fullName.trim(),
+              signup: toPendingSignupMeta({
+                businessName: v.businessName,
+                industry,
+                planKey: selectedPlan,
+                addonAi,
+                inviteCode: v.inviteCode ?? null,
+                cuit: v.cuit ?? null,
+                legalName: v.legalName ?? null,
+                ivaCondition: v.ivaCondition ?? null,
+              }),
+            },
+          },
         });
         if (error) {
           const m = error.message.toLowerCase();
@@ -447,15 +494,12 @@ function SignupWizard() {
           return;
         }
         userCreatedRef.current = true;
-        // Si hay confirmación por email activa, no hay sesión: avisamos.
+        // Si hay confirmación por email activa, no hay sesión: pantalla de
+        // "revisá tu email". Los datos ya quedaron guardados en la cuenta.
         if (!data.session) {
-          toast({
-            title: "Revisá tu email",
-            description: "Confirmá tu cuenta y volvé a ingresar para terminar.",
-            variant: "info",
-          });
+          setPendingEmail(v.email);
           setSubmitting(false);
-          router.push("/login");
+          setMode("check-email");
           return;
         }
       }
@@ -571,11 +615,21 @@ function SignupWizard() {
     <div>
       <AuthHeading
         className="mb-6"
-        title="Creá tu cuenta"
+        title={
+          mode === "check-email"
+            ? "Revisá tu email"
+            : mode === "resume"
+              ? "Terminá de crear tu negocio"
+              : "Creá tu cuenta"
+        }
         description={
-          signupTrialDays(signupPlans) > 0
-            ? trialCopy(signupTrialDays(signupPlans))
-            : "Elegí tu plan y empezá a vender."
+          mode === "check-email"
+            ? "Te mandamos un link para confirmar tu cuenta."
+            : mode === "resume"
+              ? "Ya tenemos todos tus datos. Revisalos y listo."
+              : signupTrialDays(signupPlans) > 0
+                ? trialCopy(signupTrialDays(signupPlans))
+                : "Elegí tu plan y empezá a vender."
         }
       />
 
@@ -740,7 +794,7 @@ function SignupWizard() {
                 Contanos de tu negocio
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Ya entraste con Google. Solo falta crear tu negocio.
+                Tu cuenta ya está lista. Solo falta crear tu negocio.
               </p>
 
               <form className="mt-5 space-y-4" noValidate>
@@ -791,7 +845,95 @@ function SignupWizard() {
             </div>
           </div>
         )}
+
+        {/* ---------- Confirmación de email pendiente ---------- */}
+        {mode === "check-email" && (
+          <div className="space-y-5">
+            <div className="flex items-start gap-3 rounded-lg border border-border bg-muted p-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-background text-ninja-flameSoft">
+                <MailCheck size={20} aria-hidden />
+              </span>
+              <div className="min-w-0 text-sm">
+                <p className="font-semibold text-foreground">
+                  Confirmá tu cuenta desde el email que te mandamos
+                  {pendingEmail ? (
+                    <>
+                      {" "}a <span className="break-all">{pendingEmail}</span>
+                    </>
+                  ) : null}
+                  .
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Tus datos ya quedaron guardados: el negocio, el rubro, el plan y el
+                  Asistente IA si lo sumaste. Cuando confirmes, entrá con tu email y
+                  contraseña y lo terminás con un clic, sin volver a cargar nada.
+                </p>
+              </div>
+            </div>
+            <StepActions>
+              <Button type="button" className={ACTION_CLS} onClick={() => router.push("/login")}>
+                Ir a iniciar sesión
+                <ArrowRight size={16} aria-hidden />
+              </Button>
+            </StepActions>
+          </div>
+        )}
+
+        {/* ---------- Alta retomada (volvió de confirmar el email) ---------- */}
+        {mode === "resume" && (
+          <div className="space-y-6">
+            <dl className="divide-y divide-border rounded-lg border border-border bg-card text-sm">
+              <ResumeRow label="Negocio" value={businessForm.getValues("businessName")} />
+              <ResumeRow label="Rubro" value={industry ? VERTICAL_LABELS[industry] : null} />
+              <ResumeRow label="Plan" value={chosenPlan?.name ?? null} />
+              <ResumeRow
+                label="Asistente IA"
+                value={addonAi ? "Lo sumás a tu plan" : "No, por ahora"}
+              />
+              {businessForm.getValues("inviteCode") ? (
+                <ResumeRow label="Código" value={businessForm.getValues("inviteCode") ?? null} mono />
+              ) : null}
+            </dl>
+            <div className="space-y-3">
+              <StepActions
+                start={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className={ACTION_CLS}
+                    disabled={submitting}
+                    onClick={() => setMode("sso")}
+                  >
+                    Cambiar datos
+                  </Button>
+                }
+              >
+                <Button
+                  type="button"
+                  className={ACTION_CLS}
+                  loading={submitting}
+                  onClick={submitBusiness}
+                >
+                  {planNeedsContact ? "Pagar y activar" : "Crear mi negocio"}
+                </Button>
+              </StepActions>
+              {planNote}
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Fila del resumen del alta retomada.
+function ResumeRow({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 px-4 py-3">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className={cn("min-w-0 truncate text-right font-medium text-foreground", mono && "font-mono")}>
+        {value || "Sin definir"}
+      </dd>
     </div>
   );
 }

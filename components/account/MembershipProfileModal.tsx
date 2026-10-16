@@ -5,7 +5,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileModalBody } from "@/components/account/ProfileModalBody";
-import { onlyActiveTenant } from "@/lib/tenant/scope";
+import { fetchMyMembership } from "@/lib/tenant/myMembership";
+import { activeTenantIdOf } from "@/lib/tenant/scope";
+import { invalidateMyProfile } from "@/hooks/useMyMembershipProfile";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dueño",
@@ -43,20 +45,14 @@ export function MembershipProfileModal({
       } = await supabase.auth.getUser();
       if (!user) return;
       setEmail(user.email ?? null);
-      setTenantId(
-        ((user.app_metadata as { current_tenant_id?: string } | null)
-          ?.current_tenant_id) ?? null,
-      );
-      const { data } = await onlyActiveTenant(
-        supabase
-          .from("tenant_users")
-          .select("display_name, avatar, role, tenants(name)")
-          .eq("user_id", user.id)
-          .eq("status", "active"),
-        user,
-      )
-        .limit(1)
-        .maybeSingle();
+      setTenantId(activeTenantIdOf(user));
+      // Membresía del negocio ACTIVO: es la que guarda update_my_profile.
+      const data = await fetchMyMembership<{
+        display_name: string | null;
+        avatar: string | null;
+        role: string;
+        tenants: { name?: string | null } | { name?: string | null }[] | null;
+      }>(supabase, user, "display_name, avatar, role, tenants(name)");
       setName(data?.display_name ?? "");
       setAvatar(data?.avatar ?? null);
       setRole(data?.role ?? null);
@@ -75,7 +71,7 @@ export function MembershipProfileModal({
     },
     onSuccess: () => {
       toast({ title: "Perfil actualizado", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["my-membership-profile"] });
+      invalidateMyProfile(qc);
       qc.invalidateQueries({ queryKey: ["tenant-members"] });
       onOpenChange(false);
     },

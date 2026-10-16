@@ -9,7 +9,7 @@ import dynamic from "next/dynamic";
 import { KeyRound } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { SpinnerBlock } from "@/components/ui/Spinner";
-import { usePinStatus } from "@/modules/security/hooks";
+import { useMyPins, usePinStatus } from "@/modules/security/hooks";
 
 const MyPinsPanel = dynamic(() => import("@/components/security/MyPins").then((m) => m.MyPinsPanel), {
   ssr: false,
@@ -18,8 +18,12 @@ const MyPinsPanel = dynamic(() => import("@/components/security/MyPins").then((m
 
 export function PinQuickAccess() {
   const { data } = usePinStatus();
+  const { data: pins } = useMyPins();
   const [open, setOpen] = useState(false);
-  if (!data?.can_have_pin) return null;
+  // Sólo si el usuario ya activó algún PIN (fijo, rotativo o app autenticadora):
+  // sin PINes en uso, el acceso rápido no aparece (se activa desde Seguridad).
+  const active = Boolean(pins?.fixed?.has_pin || pins?.rotating?.enabled || pins?.totp?.enabled);
+  if (!data?.can_have_pin || !active) return null;
   return (
     <>
       <button

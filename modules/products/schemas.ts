@@ -94,6 +94,21 @@ export const ProductSchema = z.object({
     .union([z.string().uuid(), z.literal(""), z.null()])
     .transform((v) => (v ? v : null))
     .optional(),
+  // ADR-151: precio a definir al cobrar. undefined = no se tocó (producto fijo).
+  price_mode: z.enum(["fixed", "open"]).optional(),
+  // Vacío = sin límite (null). Se limpia antes de convertir: "" no es 0.
+  open_price_min: z.preprocess(
+    (v) => (v === "" || v === undefined ? null : v),
+    z.coerce.number().min(0, "Debe ser ≥ 0").lt(1_000_000_000).nullable().optional(),
+  ),
+  open_price_max: z.preprocess(
+    (v) => (v === "" || v === undefined ? null : v),
+    z.coerce.number().positive("Debe ser mayor a 0").lt(1_000_000_000).nullable().optional(),
+  ),
+}).superRefine((v, ctx) => {
+  if (v.price_mode === "open" && v.open_price_min != null && v.open_price_max != null && v.open_price_min > v.open_price_max) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["open_price_max"], message: "Tiene que ser mayor o igual al mínimo" });
+  }
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

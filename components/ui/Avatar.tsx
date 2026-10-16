@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import {
   Cat,
   Dog,
@@ -57,8 +60,10 @@ function hash(s: string): number {
   return Math.abs(h);
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+export function initials(name: string): string {
+  // Un email no es un nombre: las iniciales salen de la parte antes del @.
+  const base = name.includes("@") ? (name.split("@")[0] ?? "") : name;
+  const parts = base.trim().split(/[\s._-]+/).filter(Boolean);
   const first = parts[0] ?? "";
   if (!first) return "?";
   if (parts.length === 1) return first.slice(0, 2).toUpperCase();
@@ -79,6 +84,9 @@ export function Avatar({
   loading?: boolean;
   className?: string;
 }) {
+  // Foto que no carga (borrada, sin permiso, link viejo): se muestran las
+  // iniciales generadas en lugar de una imagen rota.
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   if (loading) {
     return (
       <span
@@ -96,7 +104,7 @@ export function Avatar({
       </span>
     );
   }
-  const isUrl = !!avatar && /^https?:\/\//.test(avatar);
+  const isUrl = !!avatar && /^https?:\/\//.test(avatar) && avatar !== brokenSrc;
   const Icon = avatar && !isUrl ? AVATAR_ICONS[avatar] : undefined;
   const color = COLORS[hash(name || avatar || "?") % COLORS.length];
 
@@ -106,6 +114,7 @@ export function Avatar({
       <img
         src={avatar!}
         alt={name}
+        onError={() => setBrokenSrc(avatar)}
         className={cn("shrink-0 rounded-full object-cover", className)}
         style={{ width: size, height: size }}
       />

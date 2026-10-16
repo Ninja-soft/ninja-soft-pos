@@ -98,7 +98,8 @@ import { QuickKeypadPanel, QuickScanPane } from "@/components/pos/screen/QuickSc
 import { CategoryRail } from "@/components/pos/ui/CategoryBar";
 import { applyKey, type KeypadKey } from "@/components/pos/ui/Keypad";
 import { accentVars } from "@/components/pos/ui/posStyles";
-import type { PriceOverrideTarget } from "@/components/pos/screen/PosDialogs";
+import type { OpenPriceTarget, PriceOverrideTarget } from "@/components/pos/screen/PosDialogs";
+import { isOpenPrice, openPriceRange } from "@/lib/prices/openPrice";
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
 import { useQuoteOrigin } from "@/modules/quotes/useQuoteOrigin";
@@ -185,6 +186,7 @@ const SalonTablesConnected = dynamic(() => loadSalon().then((m) => m.SalonTables
 const CustomerPickerDialog = dynamic(() => loadPosDialogs().then((m) => m.CustomerPickerDialog), { ssr: false });
 const FreeSaleDialog = dynamic(() => loadPosDialogs().then((m) => m.FreeSaleDialog), { ssr: false });
 const PriceOverrideDialog = dynamic(() => loadPosDialogs().then((m) => m.PriceOverrideDialog), { ssr: false });
+const OpenPriceDialog = dynamic(() => loadPosDialogs().then((m) => m.OpenPriceDialog), { ssr: false });
 const SerialDialog = dynamic(() => loadPosDialogs().then((m) => m.SerialDialog), { ssr: false });
 const WeighDialog = dynamic(() => loadPosDialogs().then((m) => m.WeighDialog), { ssr: false });
 const ClearBlockedDialog = dynamic(() => loadPausedDialogs().then((m) => m.ClearBlockedDialog), { ssr: false });
@@ -202,6 +204,11 @@ const FulfillmentModal = dynamic(() => import("@/components/pos/fulfillment/Fulf
 // ADR-146: entrega dentro de la hoja de cobro y remito después de cobrar.
 const CheckoutDeliveryBlock = dynamic(
   () => import("@/components/pos/checkout/CheckoutDeliveryBlock").then((m) => m.CheckoutDeliveryBlock),
+  { ssr: false },
+);
+// Pestaña "Ítems" de la hoja de cobro (cantidad, precio y comentario por renglón).
+const CheckoutItemsBlock = dynamic(
+  () => import("@/components/pos/checkout/CheckoutItemsBlock").then((m) => m.CheckoutItemsBlock),
   { ssr: false },
 );
 const RemitoIssueModal = dynamic(() => import("@/components/remitos/RemitoIssueModal").then((m) => m.RemitoIssueModal), { ssr: false });
@@ -550,9 +557,42 @@ function PosPageInner() {
   // F18 · H100 (ADR-056): cambio manual de precio con motivo.
   const setLinePrice = useCartStore((s) => s.setLinePrice);
   const [priceTarget, setPriceTarget] = useState<PriceOverrideTarget | null>(null);
+  // ADR-151: precio a definir al cobrar. Al agregar (pick) o al editar la línea.
+  const addOpenPrice = useCartStore((s) => s.addOpenPrice);
+  const setOpenLinePrice = useCartStore((s) => s.setOpenLinePrice);
+  const [openPick, setOpenPick] = useState<
+    { pick: PickInput; qty: number; lineId?: undefined } | { pick?: undefined; qty?: undefined; lineId: string } | null
+  >(null);
+  const [openTarget, setOpenTarget] = useState<OpenPriceTarget | null>(null);
+  function askOpenPrice(p: PickInput, qty: number) {
+    const r = openPriceRange({ price_mode: p.price_mode, open_price_min: p.open_price_min, open_price_max: p.open_price_max, price: p.price });
+    setOpenPick({ pick: p, qty });
+    setOpenTarget({ name: p.name, min: r.min, max: r.max, suggested: r.suggested, isService: p.is_service });
+  }
+  function confirmOpenPrice(price: number) {
+    if (openPick?.pick) {
+      const p = openPick.pick;
+      const r = openPriceRange({ price_mode: p.price_mode, open_price_min: p.open_price_min, open_price_max: p.open_price_max, price: p.price });
+      addOpenPrice(
+        { id: p.id, name: p.name, sku: p.sku, unit: p.unit, warrantyMonths: p.warranty_months ?? 0, categoryId: p.categoryId ?? null },
+        price,
+        r,
+        openPick.qty,
+      );
+    } else if (openPick?.lineId) {
+      setOpenLinePrice(openPick.lineId, price);
+    }
+    setOpenPick(null);
+    setOpenTarget(null);
+  }
   function openPriceEdit(lineId: string) {
     const l = useCartStore.getState().lines.find((x) => x.lineId === lineId);
     if (!l) return;
+    if (l.openPrice) {
+      setOpenPick({ lineId });
+      setOpenTarget({ name: l.name, ...l.openPrice, current: l.unitPrice });
+      return;
+    }
     setPriceTarget({
       lineId,
       name: l.name,
@@ -605,6 +645,14 @@ function PosPageInner() {
   // va directo al carrito (precio por lista mostrador). `qty` sólo aplica a
   // productos simples por unidad (Caja rápida).
   function pickProduct(p: PickInput, qty = 1) {
+    // ADR-151: precio a definir al cobrar (producto simple o servicio): se pide
+    // el precio antes de sumarlo. Con variantes, serie, opciones o peso sigue el
+    // camino de siempre (el precio de venta queda como sugerido).
+    if (isOpenPrice(p) && !p.has_variants && !p.is_serialized && !withMods?.has(p.id) && p.unit !== "kg") {
+      if (!branchStockGate(p.id, null, qty)) return;
+      askOpenPrice(p, qty);
+      return;
+    }
     if (p.has_variants) {
       setVariantProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price, warrantyMonths: p.warranty_months ?? 0, categoryId: p.categoryId ?? null });
     } else if (p.is_serialized) {
@@ -633,6 +681,10 @@ function PosPageInner() {
   }, []);
 
   function favQuickUnits(p: Product, qty: number) {
+    if (isOpenPrice(p)) {
+      pickProduct(toPick(p), qty);
+      return;
+    }
     if (!branchStockGate(p.id, null, qty)) return;
     addProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price, qty), unit: p.unit, warrantyMonths: p.warranty_months ?? 0, categoryId: p.category_id }, qty);
   }
@@ -867,6 +919,20 @@ function PosPageInner() {
     }
     return map;
   }, [allProducts, topProducts]);
+  // Foto de cada línea para la pestaña "Ítems" de la hoja de cobro (lo que ya
+  // está cargado en el POS; sin foto, ícono).
+  const productImages = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of [...(allProducts ?? []), ...(topProducts ?? []), ...(quickKeyProducts ?? [])]) {
+      const url = (p as { image_url?: string | null }).image_url;
+      if (url) map.set(p.id, url);
+    }
+    return map;
+  }, [allProducts, topProducts, quickKeyProducts]);
+  const imageForLine = useCallback(
+    (l: CartLine) => (l.productId ? productImages.get(l.productId) ?? null : null),
+    [productImages],
+  );
   const fLines = useMemo(
     () =>
       fulfillEnabled
@@ -2336,6 +2402,20 @@ function PosPageInner() {
             },
             onClear: () => setCustomer(null),
           }}
+          itemsSlot={
+            <CheckoutItemsBlock
+              open={checkoutOpen}
+              lines={lines}
+              imageFor={imageForLine}
+              promoByLine={pricing.promoByLine}
+              onQty={setQuantity}
+              onRemove={removeLine}
+              onEditPrice={openPriceEdit}
+              onNote={(lineId, note) => setLineService(lineId, { lineNote: note })}
+              isServiceLine={servicesOn ? isServiceLine : undefined}
+              onEditService={servicesOn ? setServiceLineId : undefined}
+            />
+          }
           deliverySlot={
             fulfillEnabled && fLines.length > 0 && posStoreId ? (
               <CheckoutDeliveryBlock
@@ -2575,6 +2655,14 @@ function PosPageInner() {
           if (priceTarget) setLinePrice(priceTarget.lineId, price, reason);
           setPriceTarget(null);
         }}
+      />
+      <OpenPriceDialog
+        target={openTarget}
+        onClose={() => {
+          setOpenPick(null);
+          setOpenTarget(null);
+        }}
+        onConfirm={confirmOpenPrice}
       />
       <FreeSaleDialog
         open={freeOpen}

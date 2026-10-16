@@ -26,6 +26,7 @@ import {
   unitsCount,
 } from "@/lib/sales/salesList";
 import { formatCurrency } from "@/lib/utils/format";
+import { FULFILLMENT_MODE_LABEL, fulfillmentModeOf } from "@/lib/orders/logic";
 import { cn } from "@/lib/utils/cn";
 
 type Branch = Parameters<typeof BranchDot>[0]["branch"];
@@ -68,6 +69,8 @@ export function SaleCard(p: SaleCardProps) {
   const voided = sale.status === "voided";
   const canReturn = sale.status === "completed" && ret !== "full" && !p.returnDenied;
   const canVoid = sale.status === "completed";
+  // ADR-149 (R18): retiro o envío. "Se lo llevó" es lo normal y no se marca.
+  const mode = fulfillmentModeOf((sale as { fulfillment_mode?: unknown }).fulfillment_mode);
 
   const meta = [
     extras ? CHANNEL_LABEL[extras.channel] : null,
@@ -113,6 +116,7 @@ export function SaleCard(p: SaleCardProps) {
                 {fiscal.label}
               </Badge>
             )}
+            {mode && mode !== "en_mostrador" && <Badge tone="info">{FULFILLMENT_MODE_LABEL[mode]}</Badge>}
             {p.alerts.map((a) => (
               <Badge key={a.key} tone={a.tone} title={a.title}>
                 {a.label}

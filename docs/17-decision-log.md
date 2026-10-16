@@ -5803,3 +5803,35 @@ Una cuenta nueva de prueba (rubro Servicios) reportó: el rubro elegido no se gu
 - Sin la migración aplicada: Medios de pago cae a "Mercado Pago conectado" y Marca y Email quedan pendientes; los códigos con IA no se aplican (la RPC vieja ignora los campos nuevos).
 - **Deuda:** no existe un chat de soporte dentro de la app. El contacto por cuenta corriente (y por el plan Enterprise) desde el registro va por email a `soporte@soft.ninja`, el contacto de soporte que ya declara la app (antes `ventas@ninjapos.com.ar`, un dominio que no es el de la app) (`lib/support/contact.ts`, único lugar a cambiar cuando exista el chat).
 - El alta pendiente vive en la metadata del usuario (editable por él mismo): no se confía en ella para nada sensible; el código se valida al canjearlo y el rubro y los fiscales se revalidan en `create_tenant`.
+
+---
+
+## ADR-160: Detalle de auditoría legible: presentador tipado, sólo lo que cambió, ids resueltos con la RLS del usuario y datos técnicos plegados (TX-AUD)
+
+**Fecha:** 2026-10-15 · **Estado:** aceptada (sin migración, sin Edges) · **Base:** ADR-051 (visor de auditoría del dueño), ADR-073 (timeline del panel interno), ADR-152 (aislamiento por negocio).
+
+### Contexto
+
+El detalle de un evento de auditoría listaba todas las columnas crudas de la fila (`allow_negative`, `cost_fx_date`, ids, `tenant_id`) con "vacío", aunque no hubieran cambiado, con la clave técnica como etiqueta y el título genérico de la acción ("UPDATE", "Modificación"). Había además dos lógicas parecidas y separadas: `lib/security/auditLabels.ts` (dueño) y `lib/internal/auditTimeline.ts` (internal).
+
+### Decisión
+
+1. **Un presentador puro y tipado, `lib/audit/present.ts`,** que usan los dos paneles:
+   - Diccionario de entidades con singular y género (`products` → "Producto", `stores` → "Sucursal"…) para titular los INSERT/UPDATE/DELETE de `write_audit_log()`: "Producto editado: Arroz 1 kg", "Sucursal creada: Norte". Un UPDATE que llena `deleted_at` se titula "dado de baja", el que lo vacía "restaurado" y el que apaga `is_active` "desactivado".
+   - Acciones con nombre (`sale_ticket_only`, `arca_ticket_mode_changed`, `member_profile_updated`, supervisor, caja, precios, stock, plataforma…) con su frase; las `<sustantivo>_<verbo>` que no están (p. ej. `staff_expense_created`) se arman con un diccionario de sustantivos y participios; el resto cae a la etiqueta humanizada del snake_case.
+   - Sujeto tomado de los datos (`name`, `display_name`, `full_name`, `title`, `sale_number`…).
+   - Diff que sólo muestra cambios reales: null, "", ausente, `[]` y `{}` son lo mismo; `"900.00"` es igual a `900`; dos timestamps iguales con distinto formato también. Los objetos (`limits`, `metadata`) se comparan por dentro hasta dos niveles ("Límites › Funciones › Garantias").
+   - Etiquetas en español por campo, agrupadas en secciones fijas (Datos generales, Precios y montos, Impuestos y facturación, Stock, Clasificación, Personas, Sucursal y caja, Estado, Configuración, Fechas, Otros datos).
+   - Formateo: pesos (`price`, `cost`, `total`…), centavos (`*_cents`), dólares (`*_usd`), porcentajes (`*_pct`, `tax_rate`), fechas y horas de Argentina (una fecha sola no se corre de día), Sí/No y valores de enumeraciones (rol, estado, unidad, modo de ticket, ambiente de ARCA, condición de IVA).
+   - Campos ocultos de la lista (siguen en el JSON): `id`, `tenant_id`, `created_at`, `updated_at`, `created_by`, `updated_by`, hashes, tokens y todo `*_id` o uuid que no tenga nombre que resolver.
+   - Alta, baja o acción con un solo lado: lista los datos no vacíos ("Datos cargados", "Datos al eliminar", "Detalle").
+2. **Ids a nombres en lote, del lado del cliente con la sesión del usuario** (`modules/audit/names.ts`): categoría, marca, proveedor, sucursal, depósito, cliente, grupo de clientes, caja, lista de precios, producto, perfil de cajero y usuario. Una consulta por tabla con `in (ids)` en tandas de 100; cada una pasa por la RLS de su tabla y la que falla se ignora (se muestra el id corto `#abcd1234`). La RLS de `users` no deja al dueño leer a su personal, así que el visor del dueño suma los nombres que ya trae `staff_people` y las sucursales de `useBranches`. Sin RPC nueva ni service_role.
+3. **Componente `components/audit/AuditEventDetail.tsx`:** encabezado con título, punto de tono y Quién / Cuándo / Dónde; badge de la entidad y cantidad de cambios (rounded-md); motivo; lista Antes → Después por sección (en mobile, etiqueta arriba y valores abajo); y **Ver datos técnicos** plegado con `entity_type`, `action`, ids y el JSON de antes y después. En Seguridad › Auditoría se abre en el modal (la fila de la tabla y el XLSX también usan el título nuevo); en el panel interno se expande en línea dentro del timeline, que además busca por el título nuevo.
+
+### Consecuencias
+
+- Sin cambios de esquema: no hace falta `20261229100000_audit_legible.sql`.
+- Lo nuevo que se audite sin diccionario se ve igual de prolijo en formato, con la etiqueta humanizada; conviene sumar al diccionario las acciones y campos frecuentes que aparezcan.
+- El género de las entidades que no están en el diccionario cae a masculino ("Tabla nueva editado").
+- `auditDiff`/`auditValue` (dueño) y `auditChanges` (internal) quedan sin uso en la UI; se mantienen por sus tests y se pueden borrar en una limpieza aparte.
+- Tests: `tests/unit/auditPresent.test.ts` (diff, equivalencias, formateo, títulos, secciones y refs).

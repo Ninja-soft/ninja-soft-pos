@@ -4,6 +4,7 @@ import { decodeIdCursor, decodeKeyset, nextCursor } from "./cursor";
 import {
   apiError,
   callApiRpc,
+  environmentHeaders,
   idempotencyKey,
   isResponse,
   queryObject,
@@ -35,7 +36,7 @@ export async function batchHandler(req: Request, schema: z.ZodTypeAny, rpc: stri
     p_idempotency_key: key,
   });
   const replayed = Boolean((env as { replayed?: boolean }).replayed);
-  return respond(env, replayed ? { "Idempotent-Replayed": "true" } : undefined);
+  return respond(env, { ...environmentHeaders(token), ...(replayed ? { "Idempotent-Replayed": "true" } : {}) });
 }
 
 /**
@@ -72,7 +73,7 @@ export async function listHandler<S extends z.ZodTypeAny>(
     const b = env.body as Body;
     env.body = { data: b.data ?? [], next_cursor: nextCursor(b.next, timeKey ?? undefined) };
   }
-  return respond(env);
+  return respond(env, environmentHeaders(token));
 }
 
 /** Respuesta 405 con Allow. */

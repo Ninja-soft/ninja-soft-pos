@@ -641,7 +641,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Cuenta Envíopack con API key y secret key.",
   },
   api_publica: {
-    desc: "API pública v1: API REST versionada para conectar tu tienda online, ERP o planillas. Credenciales OAuth2 por integración con permisos por alcance (productos, stock, precios, ventas y clientes), secreto que se muestra una vez, rotación, revocación y último uso. Productos y precios en lote hasta 500 por pedido con Idempotency-Key, stock por sucursal con motivo, ventas por rango (sólo lectura), límite de pedidos por minuto y todo en la auditoría.",
+    desc: "API pública v1: API REST versionada para conectar tu tienda online, ERP o planillas. Credenciales OAuth2 por integración con permisos por alcance (productos, stock, precios, ventas y clientes), secreto que se muestra una vez, rotación, revocación y último uso. Productos y precios en lote hasta 500 por pedido con Idempotency-Key, stock por sucursal con motivo, ventas por rango (sólo lectura), límite de pedidos por minuto y todo en la auditoría. Portal para desarrolladores con referencia por endpoint, ejemplos en curl, JavaScript y Python, colección de Postman, OpenAPI 3.1 y credenciales de prueba (sandbox) que validan sin guardar nada.",
     impact: "Desactivado, no se emiten tokens y la API rechaza cada pedido (el servidor lo exige); las credenciales existentes se pueden ver y revocar.",
     minPlan: "Enterprise",
     needs: "Un sistema que se integre por HTTP y guarde el client_id y el secreto de forma segura.",

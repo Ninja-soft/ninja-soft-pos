@@ -73,6 +73,7 @@ export const PUBLIC_FUNCTIONS = [
   "mp_billing_webhook",
   "mp_oauth_callback",
   "mp_orders_webhook",
+  "mp_token_broker",
   "mp_webhook",
   "nave_webhook",
   "payway_checkout",

@@ -12,9 +12,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Callout } from "@/components/ui/Callout";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { useInternalAudit } from "@/modules/internal/hooks";
+import { presentAuditEvent } from "@/lib/audit/present";
+import { AuditEventBody, useAuditPresentation, type AuditDetailEvent } from "@/components/audit/AuditEventDetail";
+import type { AuditEntry } from "@/modules/internal/api";
 import {
   AUDIT_CATEGORY_LABELS,
-  auditChanges,
   describeAuditAction,
   filterAuditEntries,
   groupAuditByDay,
@@ -145,9 +147,10 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
               <ul className="divide-y divide-border">
                 {g.items.map((e) => {
                   const d = describeAuditAction(e.entity_type, e.action);
-                  const changes = auditChanges(e.before_data, e.after_data);
+                  const p = presentAuditEvent(e);
+                  const preview = p.sections.flatMap((s) => s.fields).slice(0, 3);
                   const open = openId === e.id;
-                  const expandable = changes.length > 0 || e.before_data != null || e.after_data != null;
+                  const expandable = e.before_data != null || e.after_data != null || Boolean(e.reason);
                   return (
                     <li key={e.id}>
                       <button
@@ -159,15 +162,18 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
                       >
                         <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${CATEGORY_DOT[d.category]}`} />
                         <span className="min-w-0 flex-1">
-                          <span className="block break-words text-sm font-medium text-foreground">{d.label}</span>
+                          <span className="block break-words text-sm font-medium text-foreground">{p.title}</span>
                           {e.reason && (
                             <span className="mt-0.5 block break-words text-sm text-muted-foreground">Motivo: {e.reason}</span>
                           )}
-                          {!open && changes.length > 0 && (
+                          {!open && preview.length > 0 && (
                             <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                              {changes
-                                .slice(0, 3)
-                                .map((c) => (c.before ? `${c.key}: ${c.before} a ${c.after}` : `${c.key}: ${c.after}`))
+                              {preview
+                                .map((c) =>
+                                  p.mode === "changes"
+                                    ? `${c.label}: ${c.before ?? "sin dato"} a ${c.after ?? "sin dato"}`
+                                    : `${c.label}: ${c.after ?? "sin dato"}`,
+                                )
                                 .join(" · ")}
                             </span>
                           )}
@@ -184,32 +190,8 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
                           ))}
                       </button>
                       {open && (
-                        <div className="px-4 pb-3 pl-9">
-                          {changes.length > 0 ? (
-                            <div className="slim-scrollbar overflow-x-auto"><table className="w-full min-w-[320px] text-xs">
-                              <thead className="text-left text-muted-foreground">
-                                <tr>
-                                  <th className="py-1 pr-3 font-medium">Campo</th>
-                                  <th className="py-1 pr-3 font-medium">Antes</th>
-                                  <th className="py-1 font-medium">Después</th>
-                                </tr>
-                              </thead>
-                              <tbody className="text-foreground">
-                                {changes.map((c) => (
-                                  <tr key={c.key} className="align-top">
-                                    <td className="py-1 pr-3 font-mono">{c.key}</td>
-                                    <td className="break-all py-1 pr-3 text-muted-foreground">{c.before}</td>
-                                    <td className="break-all py-1">{c.after}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table></div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">Sin cambios de datos registrados.</p>
-                          )}
-                          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                            {e.entity_type} · {e.action}
-                          </p>
+                        <div className="px-4 pb-3 sm:pl-9">
+                          <InlineAuditDetail entry={e} />
                         </div>
                       )}
                     </li>
@@ -229,4 +211,22 @@ export function TenantAuditTimeline({ tenantId }: { tenantId: string }) {
       )}
     </Card>
   );
+}
+
+function InlineAuditDetail({ entry }: { entry: AuditEntry }) {
+  // El motivo ya se ve en la fila: no se repite en el detalle.
+  const event = useMemo<AuditDetailEvent>(() => ({
+    id: entry.id,
+    created_at: entry.created_at,
+    entity_type: entry.entity_type,
+    entity_id: entry.entity_id,
+    action: entry.action,
+    before_data: entry.before_data,
+    after_data: entry.after_data,
+    reason: null,
+    actorName: entry.actorName ?? entry.actorEmail,
+  }), [entry]);
+  const { presented, resolving } = useAuditPresentation(event);
+  if (!presented) return null;
+  return <AuditEventBody event={event} presented={presented} resolving={resolving} />;
 }

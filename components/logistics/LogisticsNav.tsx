@@ -8,7 +8,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { FileText, Lock, PackageCheck, Route as RouteIcon, Send, Truck, type LucideIcon } from "lucide-react";
+import { FileText, Lock, Map as MapIcon, PackageCheck, Route as RouteIcon, Send, Truck, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useFeature } from "@/modules/saas/gating";
 
@@ -23,6 +23,8 @@ export const LOGISTICS_SECTIONS: LogisticsSection[] = [
   { href: "/expedicion", label: "Expedición", icon: PackageCheck, feature: "pedidos_despacho" },
   // ADR-161 (L2): hojas de ruta y flota del reparto propio.
   { href: "/logistica/reparto", label: "Reparto", icon: RouteIcon, feature: "reparto_propio" },
+  // ADR-164 (L3): camiones en el mapa con sus entregas y desvíos.
+  { href: "/logistica/mapa", label: "Mapa", icon: MapIcon, feature: "reparto_propio" },
   { href: "/logistica/flota", label: "Flota", icon: Truck, feature: "reparto_propio" },
   { href: "/remitos", label: "Remitos", icon: FileText, feature: "entregas_remitos" },
   { href: "/envios", label: "Envíos", icon: Send, feature: "envios" },
@@ -30,7 +32,7 @@ export const LOGISTICS_SECTIONS: LogisticsSection[] = [
 
 /** ¿Esta ruta es parte de Logística? (para marcar el ítem del menú). */
 export function isLogisticsPath(pathname: string): boolean {
-  return pathname === "/logistica" || LOGISTICS_SECTIONS.some((s) => pathname === s.href || pathname.startsWith(`${s.href}/`));
+  return pathname === "/logistica" || pathname.startsWith("/logistica/") || LOGISTICS_SECTIONS.some((s) => pathname === s.href || pathname.startsWith(`${s.href}/`));
 }
 
 function SectionLink({ s, active }: { s: LogisticsSection; active: boolean }) {

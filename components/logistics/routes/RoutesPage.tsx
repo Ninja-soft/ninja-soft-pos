@@ -5,11 +5,12 @@
 // de la elegida. En el teléfono la lista va arriba y el detalle abajo.
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route as NextRoute } from "next";
-import { ChevronLeft, ChevronRight, Plus, Route as RouteIcon, Truck } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Route as RouteIcon, Truck, Wand2 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -66,9 +67,15 @@ export function RoutesPage() {
       description="Hojas de ruta por camión: qué lleva, en qué orden y cómo le fue a cada entrega."
       actions={
         enabled && canManage ? (
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={16} /> Nueva hoja de ruta
-          </Button>
+          <>
+            {/* ADR-164 (L3): varias hojas de una vez, por zona y capacidad. */}
+            <Link href={"/logistica/planificar" as NextRoute} className={buttonVariants({ variant: "secondary" })}>
+              <Wand2 size={16} /> Planificar reparto
+            </Link>
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={16} /> Nueva hoja de ruta
+            </Button>
+          </>
         ) : undefined
       }
     />

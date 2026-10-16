@@ -6,7 +6,9 @@
 // Antes de salir: sumar entregas, ordenar por cercanía o a mano, planificar,
 // controlar la carga, emitir los remitos que falten e imprimir la hoja.
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import type { Route as NextRoute } from "next";
 import { useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import {
@@ -15,6 +17,7 @@ import {
   CheckCircle2,
   FileText,
   MapPin,
+  Map as MapIcon,
   Navigation,
   Pencil,
   Plus,
@@ -35,6 +38,9 @@ import { SignedImage } from "@/components/logistics/SignedImage";
 import { AddDispatchesModal } from "@/components/logistics/routes/AddDispatchesModal";
 import { RouteFormModal } from "@/components/logistics/routes/RouteFormModal";
 import { RouteSheetPrint } from "@/components/logistics/routes/RouteSheetPrint";
+import { RouteMap } from "@/components/logistics/map/RouteMap";
+import { routePath } from "@/lib/logistics/tracking";
+import { formatDuration } from "@/lib/logistics/planning";
 import { RemitoDetailModal } from "@/components/remitos/RemitoDetailModal";
 import { printTicketIsolated } from "@/lib/print/webPrint";
 import { cn } from "@/lib/utils/cn";
@@ -124,6 +130,16 @@ export function RouteDetailPanel({ routeId, onClosed }: { routeId: string; onClo
   const [cancelling, setCancelling] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [remitoId, setRemitoId] = useState<string | null>(null);
+  // ADR-164: la hoja en el mapa (paradas por estado y recorrido planificado).
+  const map = useMemo(() => {
+    if (!d || !d.stops.some((s) => s.lat != null)) return null;
+    const o = d.origin?.lat != null && d.origin.lng != null ? { lat: d.origin.lat, lng: d.origin.lng } : null;
+    return {
+      origin: o ? ([o.lat, o.lng] as [number, number]) : null,
+      routes: [{ id: d.route.id, color: "#f97316", planned: routePath(d.route.planned_path ?? null, o, d.stops, d.route.return_to_origin), plannedInColor: true }],
+      stops: d.stops.map((s) => ({ id: s.id, seq: s.seq, lat: s.lat, lng: s.lng, status: s.status, color: "#f97316", title: s.contact_name ?? undefined })),
+    };
+  }, [d]);
 
   if (isLoading) return <Skeleton className="h-96 w-full rounded-lg" />;
   if (error || !d) {
@@ -264,6 +280,26 @@ export function RouteDetailPanel({ routeId, onClosed }: { routeId: string; onClo
           </div>
         </div>
       </div>
+
+      {map && (
+        <div className="space-y-2">
+          <RouteMap routes={map.routes} stops={map.stops} origin={map.origin} fitKey={`${r.id}:${detail.stops.length}`} height={260} label={`Mapa de la hoja N° ${r.number}`} />
+          <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>
+              {r.planned_duration_s ? `Unas ${formatDuration(r.planned_duration_s)} de recorrido` : "Paradas en orden"}
+              {detail.stops.some((s) => s.lat == null) ? " · las que no tienen ubicación no se ven en el mapa" : ""}
+            </span>
+            {(r.status === "en_curso" || r.status === "cerrada") && (
+              <Link
+                href={`/logistica/mapa?dia=${r.service_date}&hoja=${r.id}` as NextRoute}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-ninja-flameSoft hover:bg-muted"
+              >
+                <MapIcon size={15} aria-hidden /> {r.status === "en_curso" ? "Seguir en vivo" : "Ver el recorrido"}
+              </Link>
+            )}
+          </p>
+        </div>
+      )}
 
       {editable && (
         <div className="flex flex-wrap gap-2">

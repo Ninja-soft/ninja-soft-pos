@@ -175,7 +175,13 @@ export interface RouteStop {
 }
 
 export interface RouteDetail {
-  route: Omit<RouteRow, "vehicle" | "stops"> & { return_to_origin: boolean; load_checked_at: string | null };
+  route: Omit<RouteRow, "vehicle" | "stops"> & {
+    return_to_origin: boolean;
+    load_checked_at: string | null;
+    /** ADR-164: recorrido planificado [[lat, lng]] y duración (sin la migración L3, no vienen). */
+    planned_path?: [number, number][] | null;
+    planned_duration_s?: number | null;
+  };
   store: { id: string; name: string; address: string | null } | null;
   origin: { id: string; name: string; address_text: string | null; lat: number | null; lng: number | null } | null;
   vehicle: {

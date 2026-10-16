@@ -546,7 +546,12 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
         saleHref={data ? `/ventas?venta=${data.sale.id}` : "/ventas"}
         fiscalDetail={
           data && showFiscalDetail ? (
-            <FiscalStatus saleId={data.sale.id} docs={docs} saleStatus={data.sale.status} />
+            <FiscalStatus
+              saleId={data.sale.id}
+              docs={docs}
+              saleStatus={data.sale.status}
+              nonFiscal={Boolean((data.sale as { non_fiscal?: boolean }).non_fiscal)}
+            />
           ) : null
         }
         fiscalDetailOpen={fiscalOpen}

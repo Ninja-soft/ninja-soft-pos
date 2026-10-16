@@ -67,6 +67,7 @@ export function useArcaMutations() {
       mutationFn: (v: { env: ArcaEnv; reason?: string }) => arcaApi.setEnvironment(v.env, v.reason),
       onSuccess: done,
     }),
+    setTicketMode: useMutation({ mutationFn: arcaApi.setTicketMode, onSuccess: done }),
     retry: useMutation({
       mutationFn: async (id: string) => {
         const r = await arcaApi.retryDocument(id);

@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { Activity, AlertTriangle, FileText, ListChecks, Lock, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Segmented } from "@/components/ui/Segmented";
 import { Select } from "@/components/ui/Select";
@@ -30,6 +28,8 @@ import { ArcaMonitor } from "./ArcaMonitor";
 import { ArcaRequirements, CertificateIsNotTheLetter, LetterGuide } from "./InvoiceLettersGuide";
 import { Dot, Term } from "./shared";
 import { ArcaIcon } from "@/components/settings/brandIcons";
+import { ArcaModeCard } from "./ModeSwitch";
+import { TicketModeCard } from "./TicketModeCard";
 
 type Tab = "asistente" | "monitor" | "ajustes";
 
@@ -55,6 +55,19 @@ export function ArcaSettings() {
   return (
     <div className="space-y-5">
       <ArcaSummary config={config} />
+      {config.settings && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ArcaModeCard
+            config={config}
+            canWrite={canWrite}
+            onGoStep={(step) => {
+              setWizardStep(step);
+              setTab("asistente");
+            }}
+          />
+          <TicketModeCard config={config} canWrite={canWrite} />
+        </div>
+      )}
       <Disclosure
         title="Qué facturas vas a emitir y qué necesitás de ARCA"
         icon={<FileText size={15} />}
@@ -150,7 +163,6 @@ function ArcaAdjustments({ config, canWrite }: { config: ArcaConfig; canWrite: b
   const m = useArcaMutations();
   const { toast } = useToast();
   const s = config.settings;
-  const [back, setBack] = useState(false);
   const save = async (p: Parameters<typeof m.saveSettings.mutateAsync>[0]) => {
     try {
       await m.saveSettings.mutateAsync(p);
@@ -188,13 +200,6 @@ function ArcaAdjustments({ config, canWrite }: { config: ArcaConfig; canWrite: b
             aria-label="Facturas de prueba"
           />
         </SettingRow>
-        {s?.environment === "produccion" && (
-          <SettingRow label="Volver al modo prueba" description="Las facturas nuevas dejan de tener validez fiscal. Lo que ya está en cola sigue en real.">
-            <Button variant="secondary" onClick={() => setBack(true)} disabled={!canWrite}>
-              Volver a prueba
-            </Button>
-          </SettingRow>
-        )}
       </SettingsCard>
 
       <SettingsCard title="Certificados" description="La clave privada nunca se muestra: queda cifrada en el servidor.">
@@ -222,23 +227,6 @@ function ArcaAdjustments({ config, canWrite }: { config: ArcaConfig; canWrite: b
         )}
       </SettingsCard>
 
-      <ConfirmDialog
-        open={back}
-        onOpenChange={setBack}
-        title="¿Volver al modo prueba?"
-        description="Las ventas nuevas van a generar facturas de prueba, sin validez fiscal."
-        confirmLabel="Volver a prueba"
-        withReason
-        loading={m.setEnvironment.isPending}
-        onConfirm={async (reason) => {
-          try {
-            await m.setEnvironment.mutateAsync({ env: "homologacion", reason });
-            setBack(false);
-          } catch (e) {
-            toast({ title: "No se pudo cambiar", description: arcaErrorMessage(e), variant: "error" });
-          }
-        }}
-      />
     </div>
   );
 }

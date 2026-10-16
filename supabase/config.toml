@@ -102,6 +102,9 @@ verify_jwt = false
 [functions.mp_oauth_callback]
 verify_jwt = false
 
+[functions.mp_token_broker]
+verify_jwt = false
+
 [functions.mp_orders_webhook]
 verify_jwt = false
 

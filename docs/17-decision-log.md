@@ -6134,3 +6134,30 @@ Pedido del dueño: "si tengo que entregar un producto el expedicionista debe ten
 - Verificado: dry-run en producción (transacción revertida) con los tres guardarraíles de RLS en 0 y dos escenarios completos (escaneo obligatorio con cruce, ajeno, excedente e idempotencia; rotura al armar con foto; carga obligatoria del repartidor; entrega con 1 roto y 1 rechazado; resolver con nota; pedido de stock de la cajera rechazado y del dueño con traslado recibido; depósito de merma; nada entregado de vuelta a Listo; escaneo de entrega obligatorio que frena también `delivery_event_record`; retiro parcial con escaneo; otro negocio sin acceso; `products.stock` consistente). Tests `tests/unit/logisticaL5.test.ts`, `tests/components/ExpedicionL5.test.tsx` y `tests/integration/rls-logistica-l5.test.ts`.
 - **Catálogo de capacidades:** la migración re-siembra el catálogo (marcadores del test `permissionsCatalog`) desde `lib/permissions/capabilities.ts`, idéntico al vivo en producción salvo `logistics.prepare` (RPC de L5) y `logistics.track` (`route_live` y `route_track` de L3, ADR-164), que pasan de `ui` a `server`. Roles de sistema sin cambios.
 - **Deuda:** las RPC viejas de Expedición (`dispatch_advance`, `dispatch_deliver`) siguen controladas por nivel, no por `logistics.prepare`. Con problemas todavía no muestra "sin dirección válida", "sin remito" ni "sin COT" (llegan con L3 y L4). Una devolución de la venta no cierra sola el problema abierto: se marca resuelto a mano. El escaneo en la puerta sin señal registra las lecturas ajenas al sincronizar (no en el momento).
+
+## ADR-166: MP token broker, el token vigente de Mercado Pago para otro sistema del mismo negocio sin entregar el refresh token
+
+**Fecha:** 2026-10-16 · **Estado:** aceptada
+
+### Contexto
+
+Un negocio (La Jamonera) conectó Mercado Pago por OAuth en NinjaPos y quiere usar la misma cuenta desde otro sistema propio. El access token de OAuth vence y NinjaPos lo renueva con el refresh token; si el otro sistema usara ese refresh token, el primero que lo usa invalida al otro y se rompe uno de los dos.
+
+### Decisión
+
+1. Edge **`mp_token_broker`** (pública, `verify_jwt = false`): con el header `x-api-key: nsmp_<clave>` devuelve `{ access_token, public_key, mp_user_id, expires_at, env: "prod" }` del negocio dueño de la clave. Usa `tenantMpCredential` con `forceEnv = "prod"` y la credencial a nivel negocio, así que si el token está por vencer lo renueva antes de responder, igual que los cobros del POS. **Nunca devuelve el refresh token**: NinjaPos sigue siendo el único que renueva.
+2. Tabla **`mp_token_broker_keys`**: una clave = un negocio; sólo se guarda el SHA-256 (`key_hash`) y un prefijo para reconocerla; `revoked_at` para revocar, `allowed_ips` opcional. RLS activa **sin policies** y sin grants a `anon`/`authenticated`: sólo la Edge con `service_role` la lee.
+3. Cada entrega audita `mp_token_broker_read` (IP y vencimiento); una IP fuera de la lista audita `mp_token_broker_denied_ip`. Respuestas con `Cache-Control: no-store`.
+4. Las claves las genera el staff de NinjaSoft a pedido del dueño (32 bytes aleatorios, base64url) y se entregan una sola vez fuera del chat.
+
+### Alternativas descartadas
+
+- **Dar el refresh token al otro sistema**: dos renovadores sobre el mismo token se invalidan entre sí.
+- **Copiar el access token a mano**: funciona hasta que vence (unos 6 meses) y hay que volver a copiarlo.
+- **Usar la API pública (ADR-163)** con un alcance nuevo: mezcla una credencial de pago con datos del negocio y la API pública es Enterprise.
+
+### Consecuencias
+
+- Quien tenga la clave opera la cuenta de Mercado Pago del negocio: va sólo en el servidor del otro sistema. Revocar es `update mp_token_broker_keys set revoked_at = now() where id = ...`.
+- **Categoría:** integración operativa a pedido, sin feature de plan (no es una función del panel). **Deuda:** pantalla en internal (o en Configuración › Integraciones) para generar, listar y revocar claves.
+- Orden de deploy: migración `20270105100000_mp_token_broker`, después la Edge `mp_token_broker` con `--no-verify-jwt`.

@@ -1,6 +1,6 @@
 # API pública de NinjaSoft POS (v1)
 
-> Para quien integra una tienda online, un ERP o una planilla con NinjaSoft. Plan **Enterprise**. Decisión técnica: [ADR-094](17-decision-log.md). Especificación completa: **OpenAPI 3.1** en [`/api/openapi.json`](../public/api/openapi.json).
+> Para quien integra una tienda online, un ERP o una planilla con NinjaSoft. Plan **Enterprise**. Decisión técnica: [ADR-094](17-decision-log.md). Especificación completa: **OpenAPI 3.1** en `/api/openapi.json` (generada desde [`lib/api/spec.ts`](../lib/api/spec.ts), ADR-159). Portal con referencia, colección de Postman y Probar contra el sandbox en **Configuración > Integraciones > API**.
 
 ## 1. En dos minutos
 
@@ -16,7 +16,7 @@
 
 Las crea **el dueño** en **Configuración > Integraciones > API**:
 
-1. **Nueva credencial**: nombre (por ejemplo "Tienda online"), permisos y pedidos por minuto.
+1. **Nueva credencial**: ambiente (**Prueba** o **Producción**), nombre (por ejemplo "Tienda online"), permisos y pedidos por minuto.
 2. Se muestra el **secreto una sola vez**. NinjaSoft guarda sólo su huella (sha256): si se pierde, se **rota**.
 3. **Rotar** genera un secreto nuevo; el anterior y los tokens emitidos dejan de servir en el acto.
 4. **Revocar** corta el acceso para siempre (con motivo). Siempre se puede, aunque el plan ya no incluya la API.
@@ -143,6 +143,15 @@ curl -s -X POST $API/customers/batch -H "Authorization: Bearer $TOKEN" -H "Conte
   -d '{"items":[{"external_id":"WEB-1001","name":"Ana Pérez","email":"ana@example.com","document_type":"dni","document_number":"30123456"}]}'
 curl -s "$API/customers?external_id=WEB-1001" -H "Authorization: Bearer $TOKEN"
 ```
+
+## 6 bis. Sandbox (credenciales de prueba, ADR-159)
+
+- Se crean igual que las de producción eligiendo el ambiente **Prueba**. Prefijos: `client_id` `nsc_test_`, secreto `nss_test_`, token `nsat_test_`. El ambiente se fija al crear y no cambia.
+- **Escrituras** (`products/batch`, `prices/batch`, `stock/adjustments`, `customers/batch`): la base valida y ejecuta todo dentro de un subbloque y lo deshace antes de responder (*dry_run*). Misma respuesta que en producción con `"dry_run": true`; los `id` de altas son simulados. No queda nada: ni productos, ni stock, ni movimientos, ni auditoría del lote, ni la `Idempotency-Key`, ni lo que encolarían los triggers (Mercado Libre, catálogo).
+- **Lecturas:** datos reales del negocio, sólo lectura, con los alcances de la credencial.
+- Nunca factura en ARCA, no cobra ni publica: la API v1 no expone esas operaciones.
+- Mismo plan (Enterprise), límite y errores que producción. Las respuestas traen `X-Ninja-Environment: test`.
+- El **Probar** del portal sólo acepta credenciales de prueba; credenciales y token quedan en memoria de la pestaña.
 
 ## 7. Rendimiento
 

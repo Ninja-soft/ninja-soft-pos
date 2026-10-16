@@ -232,7 +232,7 @@ Cada Edge Function tiene tests que verifican:
 
 ## 11. API pública (Fase 5)
 
-> **Implementada en v1 (ADR-094).** Guía para el cliente en [`api-publica.md`](api-publica.md) y OpenAPI 3.1 en `public/api/openapi.json`. Diferencias con el adelanto de abajo: base `https://pos.soft.ninja/api/v1` (route handlers de Next, sin dominio propio todavía), límite configurable por credencial (600 por minuto por defecto, hasta 10.000) y webhooks como deuda.
+> **Implementada en v1 (ADR-094).** Guía para el cliente en [`api-publica.md`](api-publica.md) y OpenAPI 3.1 en `/api/openapi.json`, generado desde `lib/api/spec.ts` junto con el portal, la colección de Postman y el sandbox (ADR-159). Diferencias con el adelanto de abajo: base `https://pos.soft.ninja/api/v1` (route handlers de Next, sin dominio propio todavía), límite configurable por credencial (600 por minuto por defecto, hasta 10.000) y webhooks como deuda.
 
 Adelanto original:
 

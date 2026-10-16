@@ -48,7 +48,7 @@ const D = (over: Partial<{
 
 describe("Expedición: pestañas, sucursal y modo (R14, A25)", () => {
   it("cada estado cae en una sola pestaña; despachado sigue En camino", () => {
-    expect(EXPEDITION_TABS.map((t) => t.label)).toEqual(["Pendientes", "Armando", "Listos", "En camino", "Entregados"]);
+    expect(EXPEDITION_TABS.map((t) => t.label)).toEqual(["Pendientes", "Armando", "Listos", "En camino", "Con problemas", "Entregados"]);
     expect(dispatchTab("pendiente")).toBe("pendientes");
     expect(dispatchTab("armando")).toBe("armando");
     expect(dispatchTab("listo")).toBe("listos");

@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowRight, FileText, Lock, PackageCheck, Plus, Send, Truck } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, FileText, Lock, PackageCheck, PackageX, Plus, ScanLine, Send, Split, Truck, Wrench } from "lucide-react";
 import { RemitoIssueModal, type RemitoSource } from "@/components/remitos/RemitoIssueModal";
 import { RemitoDetailModal } from "@/components/remitos/RemitoDetailModal";
 import { LogisticsNav } from "@/components/logistics/LogisticsNav";
 import { ShipmentFormModal } from "@/components/shipping/ShipmentFormModal";
+import { DispatchScanModal } from "@/components/logistics/expedition/ScanModal";
+import { DamageModal, PartialDeliverModal, RequestStockModal, ResolveIssueModal } from "@/components/logistics/expedition/ExpeditionModals";
+import { useExpeditionSettings } from "@/modules/logistics/expedition";
 import { Switch } from "@/components/ui/Switch";
 import { shippingApi } from "@/modules/shipping/api";
 import { shippingErrorMessage } from "@/lib/shipping/form";
@@ -29,6 +32,8 @@ import { formatQty } from "@/lib/utils/format";
 import {
   DELIVERY_TYPE_LABEL,
   DISPATCH_ACTION_LABEL,
+  DISPATCH_PROBLEM_LABEL,
+  dispatchProblems,
   DISPATCH_STATUS_LABEL,
   EXPEDITION_TABS,
   crossBranchAllowed,
@@ -90,6 +95,29 @@ export default function ExpedicionPage() {
   const [cancelling, setCancelling] = useState<Dispatch | null>(null);
   const [adding, setAdding] = useState(false);
   const m = useOrderMutations();
+  // ADR-165 (L5): escaneo, roturas, entrega parcial, problemas y pedido de stock.
+  const { data: exp } = useExpeditionSettings(enabled === true);
+  const traslados = useFeature("traslados") === true;
+  const [scanning, setScanning] = useState<{ d: Dispatch; stage: "armado" | "entrega" } | null>(null);
+  const [damaging, setDamaging] = useState<Dispatch | null>(null);
+  const [partial, setPartial] = useState<Dispatch | null>(null);
+  const [resolving, setResolving] = useState<Dispatch | null>(null);
+  const [requesting, setRequesting] = useState<Dispatch | null>(null);
+  const hasItems = (d: Dispatch) => (d.items ?? []).some((i) => Boolean(i.id) && i.qty > 0);
+  const scanStage = (d: Dispatch): "armado" | "entrega" | null => {
+    if (!exp || !hasItems(d)) return null;
+    if (exp.scan_on_pick !== "no" && (d.status === "pendiente" || d.status === "armando")) return "armado";
+    if (exp.scan_on_deliver !== "no" && d.status === "listo" && d.delivery_type === "retiro" && !d.route_id) return "entrega";
+    return null;
+  };
+  const canPartial = (d: Dispatch) =>
+    hasItems(d) &&
+    !d.route_id &&
+    ((d.status === "listo" && d.delivery_type === "retiro" && !d.has_pickup_code && (d.fulfillment_store_id === d.store_id || Boolean(d.arrived_at))) ||
+      (d.status === "despachado" && d.delivery_type === "envio" && !d.shipment_id));
+  const canDamage = (d: Dispatch) => hasItems(d) && ["pendiente", "armando", "listo"].includes(d.status);
+  const canRequest = (d: Dispatch) =>
+    traslados && canManage && stores.length > 1 && hasItems(d) && ["pendiente", "armando"].includes(d.status) && !d.awaiting_transfer_id;
   // ADR-149 (A11): crear el envío con logística desde la entrega, precargado.
   const enviosOn = useFeature("envios") === true;
   const [shipSource, setShipSource] = useState<DispatchShipmentSource | null>(null);
@@ -258,7 +286,7 @@ export default function ExpedicionPage() {
         ) : list.length === 0 ? (
           <EmptyState
             icon={PackageCheck}
-            title={tab === "entregados" ? "Todavía no hay entregas cerradas" : "No hay nada acá"}
+            title={tab === "entregados" ? "Todavía no hay entregas cerradas" : tab === "problemas" ? "Nada con problemas" : "No hay nada acá"}
             description="Cuando la caja cobra con retiro o envío, la entrega aparece en Pendientes. También podés sumar una entrega a una venta ya cobrada."
           />
         ) : (
@@ -310,6 +338,13 @@ export default function ExpedicionPage() {
                         En hoja N° {d.route.number}
                       </Link>
                     )}
+                    {d.parent && <span>· reprogramada de la N° {d.parent.number}</span>}
+                    {d.issue_open && d.issue_summary && <Badge tone="danger">{d.issue_summary}</Badge>}
+                    {d.awaiting_transfer_id && <Badge tone="info">Esperando stock de otra sucursal</Badge>}
+                    {!d.awaiting_transfer_id && d.stock_arrived_at && ["pendiente", "armando"].includes(d.status) && <Badge tone="success">Llegó el stock</Badge>}
+                    {(d.scan_alerts ?? 0) > 0 && !["entregado", "cancelado"].includes(d.status) && (
+                      <Badge tone="warning">{d.scan_alerts === 1 ? "1 lectura ajena" : `${d.scan_alerts} lecturas ajenas`}</Badge>
+                    )}
                     {(d.delivery_attempts ?? 0) > 0 && d.status !== "entregado" && (
                       <Badge tone="danger">
                         {d.delivery_attempts === 1 ? "1 intento" : `${d.delivery_attempts} intentos`}
@@ -340,8 +375,40 @@ export default function ExpedicionPage() {
                       {d.cancel_reason && <p>Motivo: {d.cancel_reason}</p>}
                     </div>
                   )}
-                  {canOperate && d.status !== "cancelado" && (remitosOn || canCreateShipment(d)) && (
+                  {tab === "problemas" && (
+                    <ul className="mt-2 space-y-0.5 text-xs text-warning">
+                      {dispatchProblems(d).map((p) => (
+                        <li key={p}>{DISPATCH_PROBLEM_LABEL[p]}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {canOperate && d.status !== "cancelado" && (remitosOn || canCreateShipment(d) || hasItems(d) || d.issue_open) && (
                     <div className={cn("flex flex-wrap gap-1 pt-3", !action && "mt-auto")}>
+                      {d.issue_open && (
+                        <Button size="sm" variant="secondary" onClick={() => setResolving(d)}>
+                          <Wrench size={15} /> Resolver
+                        </Button>
+                      )}
+                      {scanStage(d) && (
+                        <Button size="sm" variant="ghost" onClick={() => setScanning({ d, stage: scanStage(d)! })}>
+                          <ScanLine size={15} /> Escanear
+                        </Button>
+                      )}
+                      {canPartial(d) && (
+                        <Button size="sm" variant="ghost" onClick={() => setPartial(d)}>
+                          <Split size={15} /> Entrega parcial
+                        </Button>
+                      )}
+                      {canDamage(d) && (
+                        <Button size="sm" variant="ghost" onClick={() => setDamaging(d)}>
+                          <PackageX size={15} /> Algo se rompió
+                        </Button>
+                      )}
+                      {canRequest(d) && (
+                        <Button size="sm" variant="ghost" onClick={() => setRequesting(d)}>
+                          <ArrowLeftRight size={15} /> Pedir a otra sucursal
+                        </Button>
+                      )}
                       {remitosOn && (
                         <Button size="sm" variant="ghost" onClick={() => void openRemito(d)} loading={remitoBusy === d.id}>
                           <FileText size={15} /> Remito
@@ -410,6 +477,11 @@ export default function ExpedicionPage() {
         />
       )}
       <CancelDispatchModal dispatch={cancelling} onClose={() => setCancelling(null)} />
+      <DispatchScanModal dispatch={scanning?.d ?? null} stage={scanning?.stage ?? "armado"} onClose={() => setScanning(null)} />
+      <DamageModal dispatch={damaging} onClose={() => setDamaging(null)} />
+      <PartialDeliverModal dispatch={partial} onClose={() => setPartial(null)} />
+      <ResolveIssueModal dispatch={resolving} onClose={() => setResolving(null)} />
+      <RequestStockModal dispatch={requesting} onClose={() => setRequesting(null)} />
       <AddSaleModal open={adding} onOpenChange={setAdding} stores={stores} defaultStoreId={storeId || null} />
       <RemitoIssueModal
         source={remitoIssue}

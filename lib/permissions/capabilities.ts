@@ -167,10 +167,10 @@ export const CAPABILITIES: readonly CapabilityDef[] = [
   cap("integrations.manage", "integraciones", "Conectar logísticas y medios de pago", "Credenciales de logísticas y comisiones de los medios de pago.", "admin", "high", [], "manager"),
   // Logística (ADR-161 · H145): reparto propio, flota y app del repartidor.
   cap("logistics.view", "logistica", "Ver Logística", "Ver expedición, hojas de ruta, flota y el detalle de cada entrega.", "view", "low", [], "viewer", "server"),
-  cap("logistics.prepare", "logistica", "Armar y despachar entregas", "Pasar entregas a armando y listo, despacharlas y emitir sus remitos.", "operate", "medium", ["logistics.view"], "cashier", "ui"),
+  cap("logistics.prepare", "logistica", "Armar y despachar entregas", "Pasar entregas a armando y listo, despacharlas y emitir sus remitos.", "operate", "medium", ["logistics.view"], "cashier", "server"),
   cap("logistics.route.manage", "logistica", "Armar hojas de ruta", "Crear hojas de ruta, sumar entregas, ordenar paradas, asignar camión y repartidor, y cancelar.", "operate", "medium", ["logistics.view"]),
   cap("logistics.deliver", "logistica", "Repartir con la app", "Usar la app de reparto en sus hojas: salir, llegar, entregar con firma y foto o marcar que no se pudo.", "operate", "medium", []),
-  cap("logistics.track", "logistica", "Ver el seguimiento", "Ver en el mapa dónde está cada camión y lo entregado (llega con el mapa en vivo).", "view", "low", ["logistics.view"], "viewer", "ui"),
+  cap("logistics.track", "logistica", "Ver el seguimiento", "Ver en el mapa dónde está cada camión y lo entregado (llega con el mapa en vivo).", "view", "low", ["logistics.view"], "viewer", "server"),
   cap("logistics.fleet.manage", "logistica", "Flota, repartidores y orígenes", "Alta y edición de vehículos con fotos, perfiles de repartidores y orígenes de reparto.", "admin", "medium", ["logistics.view"], "manager"),
   cap("logistics.remito.void", "logistica", "Anular remitos", "Anular un remito emitido con motivo.", "admin", "high", ["logistics.view"], "manager", "ui"),
   cap("logistics.cot.manage", "logistica", "COT: credenciales y reintentos", "Cargar la clave de transporte de ARBA o AGIP y reintentar pedidos de COT (llega con el COT automático).", "admin", "critical", [], "owner", "ui"),

@@ -12,6 +12,7 @@ import { isPermanentEventError } from "@/lib/logistics/logic";
 import { repartoKv, repartoQueueStore } from "@/lib/logistics/idb";
 import { syncQueue, type QueuedAction, type Transport } from "@/lib/logistics/offline";
 import { LOGISTICS_BUCKET, normalizeRouteDetail, type RouteDetail } from "@/modules/logistics/api";
+import { normalizeRouteItems, type RouteItems } from "@/modules/logistics/expedition";
 import type { RouteStatus, VehicleKind } from "@/lib/logistics/logic";
 
 export interface MyRoute {
@@ -73,6 +74,22 @@ export function useDriverRoute(id: string | null) {
   });
 }
 
+/** ADR-165: renglones de la hoja con sus códigos (para escanear sin señal en la entrega). */
+export function useDriverRouteItems(id: string | null) {
+  return useQuery({
+    queryKey: ["reparto", "items", id],
+    queryFn: () =>
+      withFallback<RouteItems>(`items:${id}`, async () => {
+        const { data, error } = await createClient().rpc("route_items" as never, { p_route: id } as never);
+        if (error) throw error;
+        return normalizeRouteItems(data);
+      }),
+    enabled: Boolean(id),
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+}
+
 /** Negocio activo (del token guardado: sirve sin señal) para la carpeta de las fotos. */
 export async function currentTenantId(): Promise<string | null> {
   const { data } = await createClient().auth.getSession();
@@ -92,7 +109,9 @@ const transport: Transport = {
         ? sb.rpc("route_start" as never, { p_route: a.routeId, p_event: a.payload } as never)
         : a.kind === "close"
           ? sb.rpc("route_close" as never, { p_route: a.routeId, p_event: a.payload } as never)
-          : sb.rpc("delivery_event_record" as never, { p: a.payload } as never);
+          : a.eventType === "parcial"
+            ? sb.rpc("delivery_items_record" as never, { p: a.payload } as never)
+            : sb.rpc("delivery_event_record" as never, { p: a.payload } as never);
     const { data, error } = await call;
     if (error) throw error;
     return data;

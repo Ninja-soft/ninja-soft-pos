@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Switch } from "@/components/ui/Switch";
 import { Spinner } from "@/components/ui/Spinner";
 import { lineSubtotal, type CartLine } from "@/modules/pos/store";
+import { linePriceToDefine } from "@/lib/pos/cartLine";
 import type { ResolvedTender } from "@/lib/pos/tenders";
 import { formatQty } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -31,9 +32,9 @@ import { POS_CTA, POS_QUIET, money } from "../ui/posStyles";
 // CartSummary (cliente, descuento/cupón, total y cobro). Cada preset las ubica
 // donde le conviene; en el celular viven dentro de una hoja.
 
-// Botón del stepper: 32px con mouse, 44px en pantallas táctiles.
+// Botón del stepper: 28px con mouse, 40px en pantallas táctiles.
 const stepBtn =
-  "grid h-8 w-8 place-items-center rounded-md text-foreground transition-colors hover:bg-fg-10 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11";
+  "grid h-7 w-7 place-items-center rounded-md text-foreground transition-colors hover:bg-fg-10 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10";
 // Acción secundaria de una línea abierta.
 const lineAction =
   "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors [@media(pointer:coarse)]:h-10";
@@ -97,21 +98,24 @@ export function CartLines({
         const editable = !l.giftPromoId;
         // ADR-116: aclaración del renglón de servicio (se ve sin abrir la línea).
         const service = Boolean(onEditService && isServiceLine?.(l));
-        const meta =
-          [
-            l.variantLabel,
-            l.serial ? `S/N ${l.serial}` : null,
-            l.modifiersLabel,
-            l.unit === "kg"
-              ? `${formatQty(l.quantity)} kg × ${money(l.unitPrice)}/kg`
-              : l.quantity > 1
-                ? `${l.quantity} × ${money(l.unitPrice)}`
-                : null,
-            l.packCreditId ? "Cubierto por el pack" : null,
-            l.priceOverride && l.listPrice != null ? `Lista ${money(l.listPrice)}` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || money(l.unitPrice);
+        // Producto a $0 sin precio (precio libre): se define antes de cobrar.
+        const toDefine = linePriceToDefine(l);
+        // Precio unitario siempre a la vista (primero), después los datos de la línea.
+        const unitText = l.giftPromoId
+          ? null
+          : l.unit === "kg"
+            ? `${formatQty(l.quantity)} kg × ${money(l.unitPrice)}/kg`
+            : `${money(l.unitPrice)} c/u`;
+        const meta = [
+          toDefine ? null : unitText,
+          l.variantLabel,
+          l.serial ? `S/N ${l.serial}` : null,
+          l.modifiersLabel,
+          l.packCreditId ? "Cubierto por el pack" : null,
+          l.priceOverride && l.listPrice != null ? `Lista ${money(l.listPrice)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
         return (
           <li
             key={l.lineId}
@@ -123,14 +127,22 @@ export function CartLines({
                   {idx + 1}
                 </span>
               )}
+              <div className="min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => setOpenId(open ? null : l.lineId)}
-                className="min-w-0 flex-1 rounded-md text-left"
+                className="block w-full min-w-0 rounded-md text-left"
                 aria-expanded={open}
+                title={l.name}
               >
                 <span className="flex min-w-0 items-start gap-1.5">
-                  <span className="line-clamp-2 break-words text-[13px] font-medium leading-snug text-foreground">{l.name}</span>
+                  <span className="line-clamp-2 min-w-0 break-words text-[13px] font-medium leading-snug text-foreground">{l.name}</span>
+                  {l.lineNote && (
+                    <>
+                      <MessageSquareText size={13} className="mt-[3px] shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="sr-only">, con comentario</span>
+                    </>
+                  )}
                   {l.giftPromoId && (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[11px] font-semibold text-success">
                       <Gift size={12} aria-hidden /> Regalo
@@ -148,11 +160,14 @@ export function CartLines({
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>
-                {service && l.lineNote && (
-                  <span className="mt-0.5 flex min-w-0 items-start gap-1 text-xs text-muted-foreground">
+                {meta && <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>}
+                {/* Comentario del renglón (sale en la factura): una línea, entero en el título. */}
+                {l.lineNote && (
+                  <span className="mt-0.5 flex min-w-0 items-start gap-1 text-xs text-muted-foreground" title={l.lineNote}>
                     <MessageSquareText size={12} className="mt-[2px] shrink-0" aria-hidden />
-                    <span className="line-clamp-2 whitespace-pre-line break-words">{l.lineNote}</span>
+                    <span className={cn("whitespace-pre-line break-words", service ? "line-clamp-2" : "line-clamp-1")}>
+                      {l.lineNote}
+                    </span>
                   </span>
                 )}
                 {(promoByLine?.[l.lineId] ?? []).map((pr) => (
@@ -166,24 +181,39 @@ export function CartLines({
                   </span>
                 ))}
               </button>
+              {toDefine && (
+                onEditPrice ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditPrice(l.lineId)}
+                    className="mt-1 inline-flex h-7 items-center gap-1 rounded-md bg-warning/15 px-2 text-xs font-semibold text-warning transition-colors hover:bg-warning/20 [@media(pointer:coarse)]:h-9"
+                    aria-label={`Definir el precio de ${l.name}`}
+                  >
+                    <Tag size={12} aria-hidden /> Precio a definir
+                  </button>
+                ) : (
+                  <span className="mt-0.5 block text-xs font-semibold text-warning">Precio a definir</span>
+                )
+              )}
+              </div>
               {editable && l.unit !== "kg" && (
-                <div className="flex shrink-0 items-center rounded-lg bg-fg-6 p-0.5">
+                <div className="flex shrink-0 items-center rounded-md bg-fg-6 p-0.5">
                   <button
                     type="button"
                     onClick={() => onQty(l.lineId, l.quantity - 1)}
                     className={stepBtn}
                     aria-label={`Restar ${l.name}`}
                   >
-                    <Minus size={16} aria-hidden />
+                    <Minus size={14} aria-hidden />
                   </button>
-                  <span className="w-7 text-center text-[13px] font-semibold tabular-nums">{l.quantity}</span>
+                  <span className="w-6 text-center text-[13px] font-semibold tabular-nums">{l.quantity}</span>
                   <button
                     type="button"
                     onClick={() => onQty(l.lineId, l.quantity + 1)}
                     className={stepBtn}
                     aria-label={`Sumar ${l.name}`}
                   >
-                    <Plus size={16} aria-hidden />
+                    <Plus size={14} aria-hidden />
                   </button>
                 </div>
               )}
@@ -192,6 +222,7 @@ export function CartLines({
                 className={cn(
                   "w-[5.25rem] shrink-0 text-right font-price text-sm font-semibold tabular-nums",
                   free && "text-success",
+                  toDefine && "text-muted-foreground",
                 )}
               >
                 {free ? "Gratis" : money(lineSubtotal(l))}

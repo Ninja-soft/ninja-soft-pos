@@ -90,8 +90,17 @@ describe.skipIf(!enabled)("ADR-156 · email de NinjaSoft y cobro de addons", () 
       .is("tenant_id", null)
       .eq("is_active", true)
       .order("monthly_price_ars", { ascending: true });
-    const base = ((plans ?? []) as { id: string; monthly_price_ars: number }[]).find((p) => Number(p.monthly_price_ars) > 0);
-    if (!base) throw new Error("No hay planes globales pagos");
+    let base = ((plans ?? []) as { id: string; monthly_price_ars: number }[]).find((p) => Number(p.monthly_price_ars) > 0);
+    if (!base) {
+      // La base de CI no siembra planes pagos: el test crea el suyo.
+      const { data: created, error: planErr } = await ctx.admin
+        .from("plans")
+        .insert({ key: `${STAMP}-plan`, name: `Plan ${STAMP}`, monthly_price_ars: 20000, is_active: true } as never)
+        .select("id, monthly_price_ars")
+        .single();
+      if (planErr) throw planErr;
+      base = created as { id: string; monthly_price_ars: number };
+    }
     for (const t of [ctx.tenantA, ctx.tenantB]) {
       await ctx.admin.from("subscriptions").insert({
         tenant_id: t,

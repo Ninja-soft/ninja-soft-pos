@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 import { IDLE_COOKIE, isIdleExpired } from "@/lib/auth/idle";
 import { homePath } from "@/lib/auth/redirect";
+import { isDevelopersPath } from "@/lib/api-publica/paths";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -61,7 +62,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/p/") ||
     pathname.startsWith("/pagar/") ||
     // Link de aceptación de un presupuesto (ADR-122): lo abre el cliente.
-    pathname.startsWith("/presupuesto/");
+    pathname.startsWith("/presupuesto/") ||
+    // Portal público de desarrolladores de la API (ADR-163): docs y sandbox.
+    isDevelopersPath(pathname);
 
   // Inactividad (8 h): la marca vive en una cookie que escribe el
   // InactivityGuard. Se corta acá, antes de renderizar, para que una sesión

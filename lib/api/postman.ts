@@ -16,6 +16,10 @@ export interface PostmanOptions {
   environment?: "live" | "test";
   /** Para tests: id fijo. */
   id?: string;
+  /** Base de la API (por defecto /api/v1; el sandbox público usa /api/sandbox/v1, ADR-163). */
+  basePath?: string;
+  /** Colección del sandbox público: credenciales de ejemplo (públicas) y dataset ficticio. */
+  demo?: boolean;
 }
 
 type Json = Record<string, unknown>;
@@ -138,14 +142,16 @@ function fallbackId(): string {
 }
 
 export function buildPostmanCollection(opts: PostmanOptions): Json {
-  const baseUrl = opts.origin.replace(/\/+$/, "") + API_BASE_PATH;
+  const baseUrl = opts.origin.replace(/\/+$/, "") + (opts.basePath ?? API_BASE_PATH);
   const env = opts.environment ?? (opts.clientId?.startsWith("nsc_test_") ? "test" : "live");
   const hasSecret = Boolean(opts.clientSecret);
-  const name = `${API_TITLE} v1${env === "test" ? " (prueba)" : ""}`;
+  const name = `${API_TITLE} v1${opts.demo ? " (sandbox público)" : env === "test" ? " (prueba)" : ""}`;
   const intro = [
     API_DESCRIPTION,
     "**Cómo se usa:** completá `client_id` y `client_secret` en las variables de la colección (o en un entorno). El primer pedido obtiene el token solo y lo renueva antes de que venza; también podés correr \"Obtener un token\" a mano.",
-    hasSecret
+    opts.demo
+      ? "**Sandbox público:** apunta a un negocio ficticio con las credenciales de ejemplo, que son públicas. Las escrituras se simulan y no se guardan. Para tu negocio, cambiá base_url a /api/v1 y cargá tu credencial."
+      : hasSecret
       ? "**Atención:** esta colección incluye el client_secret. Tratala como una contraseña: no la compartas ni la subas a un repositorio."
       : "El client_secret no viene incluido: pegalo en la variable `client_secret`.",
     env === "test" ? `**Sandbox:** ${SANDBOX_DOC.summary}` : "",

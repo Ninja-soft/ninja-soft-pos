@@ -66,11 +66,17 @@ export const apiPublicaApi = {
     }),
   rotate: (id: string) => call<ApiClientWithSecret>("api_client_rotate", { p_id: id }),
   revoke: (id: string, reason: string) => call<ApiClientView>("api_client_revoke", { p_id: id, p_reason: reason }),
+  // ADR-163: link a la documentación pública por el sistema de emails, auditado.
+  sendDocs: (email: string, note: string | null) =>
+    call<{ ok: true; email: string }>("api_docs_send_email", { p_recipient: email, p_note: note }),
 };
 
 export function apiPublicaErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e ?? "");
   if (/forbidden|42501/.test(msg)) return "Sólo el dueño del negocio gestiona las credenciales de la API.";
+  if (/invalid_email/.test(msg)) return "Revisá el email: no parece válido.";
+  if (/note_too_long/.test(msg)) return "La nota puede tener hasta 500 caracteres.";
+  if (/too_many_emails/.test(msg)) return "Llegaste al máximo de 20 envíos de la documentación por día. Probá mañana o mandá el link.";
   if (/feature_not_in_plan/.test(msg)) return "Tu plan no incluye la API pública. Está en el plan Enterprise.";
   if (/invalid_environment/.test(msg)) return "Elegí producción o prueba.";
   if (/p_environment/.test(msg)) return "Falta aplicar la migración del sandbox de la API (credenciales de prueba).";

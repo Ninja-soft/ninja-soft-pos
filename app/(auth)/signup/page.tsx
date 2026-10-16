@@ -550,6 +550,7 @@ function SignupWizard() {
         cuit: v.cuit || undefined,
         legal_name: v.legalName || undefined,
         iva_condition: v.ivaCondition || undefined,
+        plan_key: selectedPlan || undefined,
       });
       await supabase.auth.refreshSession();
 
@@ -590,6 +591,7 @@ function SignupWizard() {
         cuit: v.cuit || undefined,
         legal_name: v.legalName || undefined,
         iva_condition: v.ivaCondition || undefined,
+        plan_key: selectedPlan || undefined,
       });
       await supabase.auth.refreshSession();
       if (await finishAfterCreate(tenantId, v.inviteCode)) return;
@@ -619,8 +621,14 @@ function SignupWizard() {
 
   // Nadie paga al crear la cuenta (pedido del dueño): el botón invita a probar
   // y abajo se aclara cuándo empieza el cobro. Acá no se conecta Mercado Pago.
-  const trialDaysForCta = chosenPlan && chosenPlan.trialDays > 0 ? chosenPlan.trialDays : 14;
-  const trialCta = `Probá gratis ${trialDaysForCta} días`;
+  // Días según la configuración de planes (internal): los del plan elegido o,
+  // si no tiene, los que muestra el registro.
+  const trialDaysForCta =
+    chosenPlan && chosenPlan.trialDays > 0 ? chosenPlan.trialDays : signupTrialDays(signupPlans);
+  const trialCta =
+    trialDaysForCta > 0
+      ? `Probá gratis ${trialDaysForCta === 1 ? "1 día" : `${trialDaysForCta} días`}`
+      : "Crear mi negocio";
   const planNote = (
     <p className="text-center text-xs text-muted-foreground sm:text-right">
       No pagás nada ahora: el cobro empieza recién al terminar la prueba.

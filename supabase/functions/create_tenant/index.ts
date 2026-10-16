@@ -2,7 +2,7 @@
 // Edge Function: create_tenant
 // Onboarding de un tenant nuevo. Ver docs/08-multi-tenant.md §8.
 //   1. Valida usuario autenticado (JWT).
-//   2. Crea tenant (trial 14d) + subscription (plan start) + tenant_users(owner).
+//   2. Crea tenant (trial según plans.trial_days) + subscription (plan start) + tenant_users(owner).
 //   3. Setea app_metadata.current_tenant_id en el usuario (service_role).
 //      Siembra efectivo y transferencia habilitados en tenant_payment_methods.
 //   4. Audita la creación.
@@ -129,6 +129,7 @@ Deno.serve(async (req: Request) => {
     cuit?: string;
     legal_name?: string;
     iva_condition?: string;
+    plan_key?: string;
   };
   try {
     body = await req.json();
@@ -215,8 +216,21 @@ Deno.serve(async (req: Request) => {
     slug = `${slugify(name)}-${1000 + i * 1111}`;
   }
 
+  // Días de prueba: los del plan elegido en el registro según el editor de
+  // planes de internal (plans.trial_days); si no tiene, los del plan start.
+  // 14 sólo si la configuración no existe.
+  const planKey = (typeof body.plan_key === "string" ? body.plan_key.trim() : "") || pendingStr("plan_key").trim();
+  const { data: trialPlans } = await admin
+    .from("plans")
+    .select("key, trial_days")
+    .is("tenant_id", null)
+    .eq("is_active", true)
+    .in("key", planKey ? [planKey, "start"] : ["start"]);
+  const tdOf = (k: string) =>
+    Number(((trialPlans ?? []) as { key: string; trial_days: number | null }[]).find((p) => p.key === k)?.trial_days ?? 0);
+  const trialDays = (planKey && tdOf(planKey) > 0 ? tdOf(planKey) : tdOf("start")) || 14;
   const trialEnds = new Date(
-    Date.now() + 14 * 24 * 60 * 60 * 1000,
+    Date.now() + trialDays * 24 * 60 * 60 * 1000,
   ).toISOString();
 
   // 1. Tenant.
@@ -329,7 +343,7 @@ Deno.serve(async (req: Request) => {
   });
   await enqueueSystemEmail(admin, tenant.id, recipient, "trial_started", {
     negocio: name,
-    dias: "14",
+    dias: String(trialDays),
     vence: venceLabel,
   });
 

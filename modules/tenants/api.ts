@@ -14,6 +14,8 @@ export interface CreateTenantPayload {
   cuit?: string;
   legal_name?: string;
   iva_condition?: string;
+  /** Plan elegido: define los días de prueba (plans.trial_days). */
+  plan_key?: string;
 }
 
 // Llama a la Edge Function create_tenant (lógica sensible server-side).

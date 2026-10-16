@@ -90,10 +90,15 @@ export function PlanPage() {
   const storeId = filterStoreId ?? posStoreId;
   const [date, setDate] = useState(arToday());
   const on = enabled === true && canManage;
-  const { data: candidates = [], isLoading } = usePlanCandidates(storeId, on);
-  const { data: vehicles = [] } = useVehicles(on);
+  // Sin datos todavía: arrays estables (los efectos de abajo dependen de ellos).
+  const candidatesQ = usePlanCandidates(storeId, on);
+  const vehiclesQ = useVehicles(on);
+  const originsQ = useOrigins(on);
   const { data: drivers = [] } = useDrivers(on);
-  const { data: origins = [] } = useOrigins(on);
+  const isLoading = candidatesQ.isLoading;
+  const candidates = useMemo(() => candidatesQ.data ?? [], [candidatesQ.data]);
+  const vehicles = useMemo(() => vehiclesQ.data ?? [], [vehiclesQ.data]);
+  const origins = useMemo(() => originsQ.data ?? [], [originsQ.data]);
   const { data: cfg = DEFAULT_TRACKING } = useTrackingSettings(on);
   const { data: ors = false } = useRoutingAvailable(on);
   const m = useMapMutations();
@@ -110,10 +115,15 @@ export function PlanPage() {
   const [chosen, setChosen] = useState<string[]>([]);
   const [driverOf, setDriverOf] = useState<Record<string, string | null>>({});
   useEffect(() => {
-    setChosen((c) => (c.length ? c.filter((id) => active.some((v) => v.id === id)) : active.slice(0, 3).map((v) => v.id)));
+    setChosen((c) => {
+      const next = c.length ? c.filter((id) => active.some((v) => v.id === id)) : active.slice(0, 3).map((v) => v.id);
+      return next.length === c.length && next.every((x, i) => x === c[i]) ? c : next;
+    });
     setDriverOf((d) => {
+      const missing = active.filter((v) => !(v.id in d));
+      if (!missing.length) return d;
       const next = { ...d };
-      for (const v of active) if (!(v.id in next)) next[v.id] = v.default_driver_user_id;
+      for (const v of missing) next[v.id] = v.default_driver_user_id;
       return next;
     });
   }, [active]);

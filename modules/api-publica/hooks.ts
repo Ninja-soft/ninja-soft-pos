@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiScope } from "@/lib/api-publica/scopes";
-import { apiPublicaApi } from "./api";
+import { apiPublicaApi, type ApiEnvironment } from "./api";
 
 const KEY = ["api-publica"] as const;
 
@@ -15,8 +15,8 @@ export function useApiClientMutations() {
   const invalidate = () => qc.invalidateQueries({ queryKey: KEY });
   return {
     create: useMutation({
-      mutationFn: (v: { name: string; scopes: ApiScope[]; rateLimit: number }) =>
-        apiPublicaApi.create(v.name, v.scopes, v.rateLimit),
+      mutationFn: (v: { name: string; scopes: ApiScope[]; rateLimit: number; environment?: ApiEnvironment }) =>
+        apiPublicaApi.create(v.name, v.scopes, v.rateLimit, v.environment),
       onSuccess: invalidate,
     }),
     update: useMutation({

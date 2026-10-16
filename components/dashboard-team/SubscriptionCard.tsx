@@ -715,7 +715,7 @@ export function SubscriptionCard() {
                     ) : (
                       <p className="text-muted-foreground">
                         {isTrial
-                          ? "Todavía no tenés un cobro automático activo. Se configura al pagar tu plan: el cobro mensual se hace solo por Mercado Pago."
+                          ? `No pagás nada ahora. Podés dejar listo el cobro automático de Mercado Pago y el primer cobro se hace recién al terminar tu prueba${sub.current_period_end ? `, el ${fmtDate(sub.current_period_end)}` : ""}.`
                           : "Tu suscripción no tiene un pago activo. Activala para no perder acceso."}
                       </p>
                     )}
@@ -739,7 +739,9 @@ export function SubscriptionCard() {
                     <Zap size={15} />{" "}
                     {sub.status === "cancelled" || sub.status === "past_due"
                       ? "Reactivar y pagar"
-                      : "Pagar y activar"}
+                      : isTrial
+                        ? "Dejar listo el pago"
+                        : "Pagar y activar"}
                   </Button>
                 )}
               </div>

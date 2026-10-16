@@ -178,6 +178,31 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   });
 
+  // Idempotencia: si el mismo dueño ya creó un negocio con este nombre en los
+  // últimos 30 minutos (un reintento del registro tras un error de red o de un
+  // paso posterior), se devuelve ese en vez de crear un duplicado.
+  {
+    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: mine } = await admin
+      .from("tenant_users")
+      .select("tenant_id, tenants!inner(id, slug, name, created_at, deleted_at)")
+      .eq("user_id", user.id)
+      .eq("role", "owner");
+    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    const recent = ((mine ?? []) as unknown as {
+      tenants: { id: string; slug: string; name: string; created_at: string; deleted_at: string | null };
+    }[])
+      .map((r) => r.tenants)
+      .filter((tn) => tn && !tn.deleted_at && tn.created_at >= since && norm(tn.name) === norm(name))
+      .sort((x, y) => (x.created_at < y.created_at ? 1 : -1))[0];
+    if (recent) {
+      await admin.auth.admin.updateUserById(user.id, {
+        app_metadata: { ...(user.app_metadata ?? {}), current_tenant_id: recent.id },
+      });
+      return json({ tenant_id: recent.id, slug: recent.slug, reused: true });
+    }
+  }
+
   // Slug unico.
   let slug = slugify(name);
   for (let i = 0; i < 5; i++) {

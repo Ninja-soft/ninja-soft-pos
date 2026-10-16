@@ -125,6 +125,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["pos"],
   },
+  direcciones_geo: {
+    desc: "Direcciones con mapa: al cobrar un envío se elige el cliente y su dirección se busca escribiendo (sugerencias de OpenStreetMap), se normaliza con los datos oficiales de Georef (localidad, partido y provincia) y se ve en un mini mapa con el pin para corregirla. Cada cliente guarda varias direcciones con una predeterminada, la entrega se lleva una copia y el costo de envío se sugiere por la zona de la localidad.",
+    impact: "Desactivado, la dirección del envío se escribe a mano como texto, sin sugerencias, sin mapa y sin guardarla en el cliente (el servidor rechaza las direcciones estructuradas).",
+    minPlan: "Start",
+  },
   entregas_remitos: {
     desc: "Entregas partidas y remitos: vendé desde el POS el stock de otra sucursal o de un depósito habilitado (retira allá o se envía), partí la entrega de una venta (una parte se la lleva ahora, otra la retira en otra sucursal y otra se envía) con estados por entrega en Expedición, y emití remitos de entrega y de envío con numeración propia, bultos, transporte, COT y PDF A4 para imprimir o mandar por email.",
     impact: "Desactivado, cada venta sale entera del salón de la sucursal que cobra y no se emiten remitos desde el sistema (el servidor lo rechaza).",

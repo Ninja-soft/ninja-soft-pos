@@ -1,6 +1,5 @@
-// Formatos de las credenciales de la API pública (ADR-094, prueba ADR-159) sin
-// dependencias de Node: los usa también el navegador (Probar del portal y
-// /developers). El hash y el parseo de headers viven en hashing.ts (servidor).
+// Formatos de las credenciales de la API pública (ADR-094 y ADR-159), sin
+// dependencias de Node: los importa también el navegador (Probar del portal).
 
 // Credenciales de prueba (sandbox, ADR-159): mismo formato con `test_`
 // después del prefijo. El ambiente real lo decide la base (api_clients.environment).

@@ -546,7 +546,9 @@ function ConfiguracionInner() {
   const visibleGroups = SETTINGS_GROUPS.map((g) => ({
     ...g,
     sections: g.sections.filter(
-      (s) => (!s.requiresDining || diningEnabled) && (!s.requiresDelivery || deliveryEnabled),
+      (s) =>
+        (!s.requiresDining || diningEnabled) &&
+        (!s.requiresDelivery || deliveryEnabled || (s.orShipping && gating?.features.pedidos_despacho === true)),
     ),
   })).filter((g) => g.sections.length > 0);
 

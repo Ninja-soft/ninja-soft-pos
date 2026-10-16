@@ -108,7 +108,7 @@ describe("envío y resumen", () => {
 
   it("planForChoice: envío con costo y retiro sin nombre", () => {
     const rules = { storeId: "A", retiroEnabled: true, envioEnabled: true, retiroCrossBranch: false };
-    const ctx = { lines: [lines[0]!], sources, rules, storeName: names, customerName: null };
+    const ctx = { lines: [lines[0]!], sources, rules, storeName: names, customerName: null, customerId: "cli-1" };
     const envio = planForChoice({ kind: "envio", address: "Calle 12 345", fee: 800 }, ctx);
     expect(envio.error).toBeNull();
     expect(envio.plan).toMatchObject({ shipping_fee: 800, deliveries: [{ mode: "envio", ship_address: "Calle 12 345" }] });
@@ -118,6 +118,9 @@ describe("envío y resumen", () => {
     expect(ok.plan?.deliveries[0]).toMatchObject({ mode: "retiro", fulfillment_store_id: "C", pickup_name: "Ana" });
     expect(planForChoice({ kind: "retiro", storeId: "B", pickupName: "Ana" }, ctx).error).toMatch(/No alcanza en Norte/);
     expect(planForChoice({ kind: "ahora" }, ctx)).toEqual({ choice: null, state: null, plan: null, error: null });
+    // ADR-157: sin cliente no hay envío.
+    const sinCliente = planForChoice({ kind: "envio", address: "Calle 12 345", fee: 0 }, { ...ctx, customerId: null });
+    expect(sinCliente).toMatchObject({ plan: null, error: "Para enviar elegí o cargá un cliente." });
   });
 
   it("errores nuevos del servidor en criollo", () => {

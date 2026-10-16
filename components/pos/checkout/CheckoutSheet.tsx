@@ -78,6 +78,7 @@ import { TransferPanel } from "./TransferPanel";
 import { useSalePerceptions } from "@/modules/tax/hooks";
 import type { PreviewItem } from "@/modules/tax/api";
 import { TransferAutoDetect } from "./TransferAutoDetect";
+import { CheckoutTabBar, CheckoutTabsProvider, useCheckoutTabsState } from "./CheckoutTabs";
 import { depositToApply } from "@/modules/agenda/deposits";
 import { displayDataOf, isMpCvuAccount, type TransferAccount } from "@/lib/payments/transfer";
 import type { DisplayTransfer } from "@/lib/pos/customerDisplay";
@@ -324,6 +325,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   // ADR-068: percepciones de la venta (se recalculan con el total sin ellas).
   const [perc, setPerc] = useState(0);
+  // ADR-157: pestañas Pago / Cliente / Envío.
+  const tabsState = useCheckoutTabsState();
+  const setSheetTab = tabsState.setTab;
 
   const [lines, setLines] = useState<PaidLine[]>([]);
   // Cuenta corriente: una sola línea por venta (el cargo, sus cuotas y el token
@@ -466,6 +470,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setConfirmLeave(false);
     setTransferAccId(transfer?.defaultAccountId ?? null);
     setPerc(0);
+    setSheetTab("pago");
     // Sólo al abrir: no re-resetear si cambian los tenders mientras se cobra.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -1912,7 +1917,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     content = (
       <div
         className={cn(
-          "grid min-h-0 flex-1 md:h-[min(92dvh,860px)]",
+          "grid min-h-0 flex-1",
           big ? "md:grid-cols-[minmax(0,1fr)_minmax(380px,430px)]" : "md:grid-cols-[minmax(0,1fr)_minmax(340px,390px)]",
         )}
       >
@@ -1970,9 +1975,43 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         "rounded-t-xl md:rounded-xl",
         layoutKind === "compact_list" && "md:h-[min(92dvh,860px)] md:max-w-xl",
         layoutKind === "keypad_first" && "md:h-[min(92dvh,860px)] md:max-w-4xl",
+        layoutKind !== "compact_list" && layoutKind !== "keypad_first" && "md:h-[min(92dvh,860px)]",
       )}
     >
-      {content}
+      <CheckoutTabsProvider value={tabsState.value}>
+        {tabsState.tabs.length > 1 && (
+          <CheckoutTabBar tabs={tabsState.tabs} tab={tabsState.tab} warnings={tabsState.registered} onTab={tabsState.setTab} />
+        )}
+        <div
+          id="checkout-panel-pago"
+          role={tabsState.tabs.length > 1 ? "tabpanel" : undefined}
+          aria-labelledby={tabsState.tabs.length > 1 ? "checkout-tab-pago" : undefined}
+          className={tabsState.tab === "pago" ? "contents" : "hidden"}
+        >
+          {content}
+        </div>
+        {/* Cliente y Envío: contenedores fijos (lo de adentro no se desmonta al cambiar de pestaña). */}
+        <div className={cn("min-h-0 flex-1 flex-col", tabsState.tab === "pago" ? "hidden" : "flex")}>
+          <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-6 md:pt-4">
+            {(["cliente", "envio"] as const).map((t) => (
+              <div
+                key={t}
+                id={`checkout-panel-${t}`}
+                role="tabpanel"
+                aria-labelledby={`checkout-tab-${t}`}
+                ref={tabsState.panelRef(t)}
+                hidden={tabsState.tab !== t}
+                className="mx-auto w-full max-w-2xl"
+              />
+            ))}
+          </div>
+          <div className="shrink-0 border-t border-border px-4 py-3 md:px-6">
+            <Button size="lg" className="w-full" onClick={() => tabsState.setTab("pago")}>
+              Seguir con el pago · {money(totals.grandTotal)}
+            </Button>
+          </div>
+        </div>
+      </CheckoutTabsProvider>
 
       {/* Confirmación inline: salir con cobros electrónicos aprobados */}
       {confirmLeave && (

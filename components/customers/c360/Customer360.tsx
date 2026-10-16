@@ -34,6 +34,7 @@ import { fetchAllTimeline, useCustomer360Summary, type TimelineFilters } from "@
 import { C360Charts } from "./C360Charts";
 import { C360Timeline } from "./C360Timeline";
 import { C360Notes } from "./C360Notes";
+import { C360Addresses } from "./C360Addresses";
 
 const fmtDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "Sin dato";
@@ -334,6 +335,7 @@ export function Customer360({ customerId }: { customerId: string | null }) {
         <div className="space-y-6 lg:col-span-2">
           <C360Charts summary={s} />
           {customerId && <C360Notes customerId={customerId} pinned={s.pinned_notes} />}
+          {customerId && <C360Addresses customerId={customerId} />}
           {customerId && <C360Warranties customerId={customerId} />}
         </div>
       </div>

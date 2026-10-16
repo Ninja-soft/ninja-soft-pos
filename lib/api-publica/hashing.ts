@@ -3,20 +3,19 @@ import { createHash } from "node:crypto";
 // Formatos y hash de las credenciales de la API pública (ADR-094). El
 // secreto y el token se generan en la base (gen_random_bytes) y se guardan
 // sólo como sha256 hex (_api_sha256). Acá: el mismo hash para tests y los
-// formatos que la ruta valida antes de ir a la base. Los formatos viven en
-// formats.ts (sin Node) para que el navegador los importe sin node:crypto.
-import { ACCESS_TOKEN_RE } from "./formats";
+// formatos que la ruta valida antes de ir a la base.
 
 export {
-  ACCESS_TOKEN_RE,
   CLIENT_ID_RE,
   CLIENT_SECRET_RE,
+  ACCESS_TOKEN_RE,
   SANDBOX_CLIENT_PREFIX,
   SANDBOX_SECRET_PREFIX,
   SANDBOX_TOKEN_PREFIX,
-  isSandboxClientId,
   isSandboxToken,
+  isSandboxClientId,
 } from "./formats";
+import { ACCESS_TOKEN_RE } from "./formats";
 
 export function sha256Hex(s: string): string {
   return createHash("sha256").update(s, "utf8").digest("hex");

@@ -1543,7 +1543,7 @@ Objetivo: que todo lo que sale hacia un cliente o una sucursal sea **una entrega
 
 - [x] **H143 · L0: ordenar y arreglar lo que hay.** Agregar entregas a ventas repartidas, anular o devolver una venta cierra sus entregas, cancelar una entrega cruzada devuelve el stock, la sucursal que vende ve y opera, envío correcto enganchado y estado de la logística que vuelve a la entrega, unicidad del remito por venta, un solo costo de envío, "Crear envío" con todo precargado, `sales.fulfillment_mode` con chip en Ventas, menú **Logística** con pestaña Pendientes, limpieza de código muerto y de docs.
   - [x] *Criterio:* test PGlite del circuito venta repartida → agregar entrega → anular → stock correcto por sucursal; los 196 tests actuales de logística siguen verdes. *Hecho en `feat/logistica-l0` (ADR-149 § L0): A1 a A9, A11 a A13, A15, A24, A25, A27, A28 y R18; migración `20261221100000_logistica_l0_arreglos` sin aplicar. PGlite 148 chequeos con guardarraíles en 0; suite completa verde (los dos casos que probaban el código muerto se fueron con él). El recorrido del dueño por Logística queda para la revisión del PR.*
-- [ ] **H144 · L1: cliente obligatorio y direcciones reales.** `customer_addresses` con lat/lng, snapshot en la entrega, Edge `geo` (Photon, Georef, Nominatim inverso) con caché, `AddressAutocomplete` con lista flotante y mini mapa, hoja de cobro con pestañas Pago / Cliente / Envío y cliente obligatorio en el servidor, zonas por localidad.
+- [x] **H144 · L1: cliente obligatorio y direcciones reales.** (ADR-157: migración `20261226100000_logistica_l1_direcciones` y Edge `geo` sin aplicar; mapa con Leaflet + tiles de OSM por pedido del dueño) `customer_addresses` con lat/lng, snapshot en la entrega, Edge `geo` (Photon, Georef, Nominatim inverso) con caché, `AddressAutocomplete` con lista flotante y mini mapa, hoja de cobro con pestañas Pago / Cliente / Envío y cliente obligatorio en el servidor, zonas por localidad.
   - [ ] *Criterio:* cobrar un envío a un cliente nuevo con dirección autocompletada en menos de 45 s en 390 px; el servidor rechaza envío sin cliente; 0 pedidos a Nominatim por tipeo.
 - [ ] **H145 · L2: flota, hojas de ruta y app del repartidor.** Vehículos con fotos, repartidores, orígenes, hojas de ruta, paradas, eventos con geo, foto y firma, Configuración > Logística, capacidades `logistics.*`, rol de sistema Repartidor (con venta y caja pasadas a capacidad antes), remitos con copias y modelos, hoja de ruta imprimible, app `/reparto` offline.
   - [ ] *Criterio:* reparto real de 10 paradas en el piloto con evidencia en cada entrega; 3 entregas en modo avión se sincronizan sin duplicar; un Repartidor no puede vender ni ver clientes fuera de su hoja (test de RLS).
@@ -1758,7 +1758,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F11** | 76/93 | 13 | 4 | 82% | 89% |
 | **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
-| **F14** | 5/61 | 39 | 17 | 8% | 40% |
+| **F14** | 5/68 | 39 | 24 | 7% | 36% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
@@ -1766,12 +1766,10 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
-| **F22** | 0/14 | 0 | 14 | 0% | 0% |
-| **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 654/1182 | 305 | 223 | 55% | 68% |
+| **F22** | 3/14 | 0 | 11 | 21% | 21% |
 | **F23** | 0/15 | 0 | 15 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 654/1183 | 305 | 224 | 55% | 68% |
+| **Total** | 657/1204 | 305 | 242 | 55% | 67% |
 <!-- roadmap-progress:end -->
 
 ---

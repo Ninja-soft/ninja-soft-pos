@@ -28,6 +28,7 @@ import { decodeIdCursor, decodeKeyset, encodeIdCursor, encodeKeyset, nextCursor 
 import { API_SCOPES, cleanScopes } from "@/lib/api-publica/scopes";
 import { isPublicApiPath } from "@/lib/api-publica/paths";
 import { FEATURE_INFO } from "@/lib/saas/featureInfo";
+import { buildOpenApi } from "@/lib/api/openapi";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const MIG_DIR = path.join(ROOT, "supabase", "migrations");
@@ -371,8 +372,8 @@ describe("feature api_publica (CLAUDE.md §6)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe("OpenAPI 3.1 (public/api/openapi.json)", () => {
-  const spec = JSON.parse(fs.readFileSync(path.join(ROOT, "public", "api", "openapi.json"), "utf8")) as {
+describe("OpenAPI 3.1 (/api/openapi.json, generado desde lib/api/spec.ts, ADR-159)", () => {
+  const spec = buildOpenApi("https://pos.soft.ninja") as unknown as {
     openapi: string;
     paths: Record<string, unknown>;
     components: { securitySchemes: { oauth2: { flows: { clientCredentials: { scopes: Record<string, string> } } } } };

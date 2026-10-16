@@ -8,6 +8,8 @@
 import { createClient } from "@/lib/supabase/client";
 import type { ApiScope } from "@/lib/api-publica/scopes";
 
+export type ApiEnvironment = "live" | "test";
+
 export interface ApiClientView {
   id: string;
   name: string;
@@ -15,6 +17,8 @@ export interface ApiClientView {
   secret_hint: string;
   scopes: ApiScope[];
   rate_limit_per_min: number;
+  /** live = producción; test = sandbox (ADR-159). Sin la migración, ausente (= live). */
+  environment?: ApiEnvironment;
   created_at: string;
   updated_at: string;
   rotated_at: string | null;
@@ -44,8 +48,15 @@ async function call<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
 
 export const apiPublicaApi = {
   list: () => call<ApiClientsState>("api_clients_list"),
-  create: (name: string, scopes: ApiScope[], rateLimit: number) =>
-    call<ApiClientWithSecret>("api_client_create", { p_name: name, p_scopes: scopes, p_rate_limit: rateLimit }),
+  // p_environment sólo viaja en prueba: así el alta de producción sigue
+  // andando aunque la migración de ADR-159 no esté aplicada.
+  create: (name: string, scopes: ApiScope[], rateLimit: number, environment: ApiEnvironment = "live") =>
+    call<ApiClientWithSecret>("api_client_create", {
+      p_name: name,
+      p_scopes: scopes,
+      p_rate_limit: rateLimit,
+      ...(environment === "test" ? { p_environment: "test" } : {}),
+    }),
   update: (id: string, v: { name?: string; scopes?: ApiScope[]; rateLimit?: number }) =>
     call<ApiClientView>("api_client_update", {
       p_id: id,
@@ -61,6 +72,8 @@ export function apiPublicaErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e ?? "");
   if (/forbidden|42501/.test(msg)) return "Sólo el dueño del negocio gestiona las credenciales de la API.";
   if (/feature_not_in_plan/.test(msg)) return "Tu plan no incluye la API pública. Está en el plan Enterprise.";
+  if (/invalid_environment/.test(msg)) return "Elegí producción o prueba.";
+  if (/p_environment/.test(msg)) return "Falta aplicar la migración del sandbox de la API (credenciales de prueba).";
   if (/too_many_clients/.test(msg)) return "Llegaste al máximo de 10 credenciales activas. Revocá una que no uses.";
   if (/scopes_required|invalid_scope/.test(msg)) return "Elegí al menos un permiso válido.";
   if (/name_required/.test(msg)) return "Poné un nombre para reconocer la integración.";

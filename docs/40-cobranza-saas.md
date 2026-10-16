@@ -1714,3 +1714,36 @@ Código en `feat/h136-cobranza-360`, decisión [ADR-131](./17-decision-log.md). 
 - `assigned_staff_id` vive en `tenant_billing_terms` como dice §6.2; el estado `en_gestion` de §5.1 no se agregó a `platform_collection_status`: la cartera muestra el cobrador aparte.
 
 **Pendiente:** revalidación mensual del padrón (`platform-padron-refresh`, sin certificado de la plataforma), tarea automática al cobrador cuando se rompe una promesa, NC por downgrade inmediato (H130).
+
+
+## 28. Complemento de email de NinjaSoft y auditoría del cobro (2026-10-15)
+
+Código en `feat/addon-emails-y-cobro`, decisión [ADR-156](./17-decision-log.md) (tabla de hallazgos con severidad). Migración **sin aplicar**: `20261224100000_addon_email_cobro`. Edges **sin desplegar**: `email_addon_admin` (nueva), `mp_billing_webhook`, `mp_update_subscription_amount`, `mp_subscription_checkout`, `send_receipt_email`, `send_quote_email`, `account_reminders`, `set_tenant_smtp`.
+
+| Pieza | Cómo quedó |
+|---|---|
+| Complemento | `plan_addons 'email_ninjasoft'`, escalones `email_addon_tiers` (emails por mes y precio), `email_addon_settings` (dominio, remitente, política al pasar el cupo, estado del dominio en Resend), key en `platform_secrets 'email_addon'`. Staff: Plataforma › Complementos › Configurar. Dueño: Configuración › Email del negocio › Email de NinjaSoft. |
+| Uso | `email_addon_usage` por negocio y mes; `email_addon_consume` y `email_addon_release` (service_role) desde `_shared/ninjaEmail.ts`; avisos al 80 % y al 100 %; excedente cobrado el día 1 (`email-addon-overage`). |
+| Addon vigente | `platform_addon_billable`, `platform_addon_usable`, `platform_addon_price_on` (espejo `_shared/billing/mpAmount.ts`); cron `platform-addons-daily` (03:20 ART). |
+| Monto del débito | `platform_mp_expected_amount` = período que arranca en la fecha del cobro + ajustes abiertos (`proration`, `addon`) que vencen hasta esa fecha; `subscriptions.mp_amount_synced`; cron `platform-mp-amount-sync` (08:30 ART) por la Edge; resincroniza el webhook al acreditar. |
+| Prueba | El checkout difiere el primer débito al fin de la prueba (`start_date`); `platform_trial_debit_pending` frena la baja de la prueba 5 días si el débito ya está autorizado. |
+
+### 28.1 Checklist de verificación manual con Mercado Pago sandbox
+
+Con **credenciales de prueba** de la cuenta de NinjaSoft (Pagos de plataforma › ambiente prueba), usuarios de prueba de MP como pagadores y tarjetas de prueba. **Nunca con credenciales de producción ni tarjetas reales.** Antes de empezar: migración aplicada en un proyecto de staging, Edges desplegadas en ese proyecto, `webhook_secret` de prueba cargado y la URL del webhook apuntando al staging.
+
+1. **Alta en prueba.** Negocio nuevo con plan con prueba de 14 días → Pagar y activar. En MP el preapproval tiene `start_date` = fin de la prueba y no hay cobro. En la base: `subscriptions.status = 'trial'`, `mp_preapproval_status = 'authorized'`, sin `billing_records` nuevos. Notificación "Autorizaste el débito automático".
+2. **Fin de la prueba.** Adelantar `tenants.trial_ends_at` a hace 1 día y correr `select run_saas_dunning()`: el negocio NO se da de baja. Cuando MP procesa el primer débito: un solo `billing_records` (receipt_ref = id del cobro), `tenants.status = 'active'`, período +1 mes desde el fin de la prueba.
+3. **Doble acreditación.** Reenviar desde el panel de MP la notificación del preapproval autorizado y la del cobro: sigue habiendo un solo pago en Cuenta corriente y el período no se mueve (`subscription_webhook_duplicate` en la auditoría).
+4. **Checkout sin autorizar.** Con un negocio activo, generar el checkout y no pagarlo: la notificación `pending` deja `subscriptions.status` como estaba.
+5. **Alta del email con débito.** Configurar el complemento (key de prueba de Resend con dominio de prueba verificado), escalón de $ 5.000. Desde el negocio activo con débito: Agregar a mi suscripción → la confirmación dice "hoy no se cobra nada" y el monto del próximo débito con el prorrateo. Confirmar → en MP el `transaction_amount` del preapproval = período + prorrateo; en Cuenta corriente un cargo "Email NinjaSoft hasta el fin del período".
+6. **Débito con ajuste.** Al procesarse ese débito: el pago cubre el cargo del período y el del prorrateo (sin saldo vencido) y el `transaction_amount` vuelve solo al monto del período (`subscription_amount_synced` con `via: webhook`).
+7. **Precio cambiado.** Con el modal de confirmación abierto, cambiar el precio del escalón desde el staff y confirmar: "El precio cambió mientras lo mirabas", sin alta.
+8. **Cupo.** Escalón de 10 emails, política Bloquear: mandar 8 comprobantes (aviso del 80 %), 10 (aviso del 100 %) y el 11 no sale con el mensaje del cupo. Política Cobrar excedente con bloque de 5 a $ 1.000: mandar 13, correr `select email_addon_bill_overage(to_char(now(), 'YYYY-MM'))`, un cargo de $ 1.000 y en MP el próximo débito lo suma.
+9. **Subir y bajar de escalón.** Subir: cupo nuevo ya y cargo por la diferencia prorrateada. Bajar: "rige desde el próximo período", el débito del próximo período ya viene con el precio chico (`platform-mp-amount-sync`).
+10. **Baja del complemento.** Dar de baja: sigue andando hasta el fin del período; el `transaction_amount` del próximo débito ya no lo incluye. Adelantar `current_period_end` y correr `select platform_addons_daily()`: pasa a `cancelled` y los emails vuelven a la cuenta propia del negocio con aviso.
+11. **Asistente IA.** Activar con `addon_trial_days = 7`: el próximo débito no lo suma si el período arranca antes del fin de la prueba; darlo de baja en el período siguiente: deja de cobrarse en el período siguiente (antes se cobraba para siempre).
+12. **Cuenta corriente.** Negocio en cuenta corriente: el alta del email carga el prorrateo con vencimiento en el próximo cobro y el aviso de cobro lo incluye; nunca se llama a MP.
+13. **Cancelación de la suscripción.** Programar la baja: `mp_subscription_pause` pausa el preapproval y no se pueden sumar complementos ("tiene la baja programada").
+14. **Cron de montos.** Cambiar a mano `mp_amount_synced` de un negocio y llamar a la Edge con `X-Cron-Secret` y `{ "mode": "cron" }`: lo corrige y deja `subscription_amount_synced` con `via: cron`.
+15. **Conciliación.** Correr `platform_mp_reconcile` en manual: sin faltantes ni duplicados para lo de los pasos anteriores.

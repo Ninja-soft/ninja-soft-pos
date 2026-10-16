@@ -20,7 +20,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { sendWithChain, type SendArgs } from "../_shared/mailer.ts";
-import { safeName, sendViaTenant, tenantProviderReady, type TenantEmailCfg } from "../_shared/tenantMailer.ts";
+import { safeName, sendTenantEmail, tenantProviderReady, type TenantEmailCfg } from "../_shared/tenantMailer.ts";
 import { buildQuoteEmailHtml } from "../_shared/quoteEmailTemplate.ts";
 
 const cors = {
@@ -177,7 +177,7 @@ Deno.serve(async (req: Request) => {
       };
       try {
         if (useTenant) {
-          await sendViaTenant(cfg as TenantEmailCfg, args);
+          await sendTenantEmail(admin, tenantId, cfg as TenantEmailCfg, args);
         } else {
           const res = await sendWithChain(admin, args);
           if (!res.providerUsed) throw new Error(res.noProvider ? "no_provider" : res.lastError || "send_failed");

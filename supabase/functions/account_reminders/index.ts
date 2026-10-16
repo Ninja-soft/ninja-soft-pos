@@ -24,6 +24,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 // @ts-ignore tipos de nodemailer no resuelven en Deno; mismo patrón que send_receipt_email.
 import nodemailer from "npm:nodemailer@6.9.16";
+import { sendViaNinja } from "../_shared/ninjaEmail.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -186,8 +187,18 @@ type TenantMailer = {
 };
 
 // deno-lint-ignore no-explicit-any
-function mailerFor(cfg: any, fromName: string): TenantMailer {
+function mailerFor(cfg: any, fromName: string, admin: SupabaseClient, tenantId: string): TenantMailer {
   const provider = String(cfg?.provider ?? "smtp");
+  // ADR-156: complemento de email de NinjaSoft (cupo y vigencia al enviar).
+  if (provider === "ninjasoft") {
+    return {
+      ready: true,
+      close: () => {},
+      send: async (to, subject, html, text) => {
+        await sendViaNinja(admin, tenantId, { to, subject, html, text, fromName });
+      },
+    };
+  }
   const resendKey = String(cfg?.resend_api_key ?? "");
   const ready =
     provider === "resend" ? !!resendKey && !!cfg?.from_email : !!cfg?.host && !!cfg?.from_email;
@@ -315,7 +326,7 @@ async function runCron(admin: SupabaseClient) {
   for (const [tenantId, list] of byTenant) {
     const { data: cfg } = await admin.from("tenant_email_smtp").select("*").eq("tenant_id", tenantId).maybeSingle();
     const brand = await brandFor(admin, tenantId, cfg);
-    const mailer = mailerFor(cfg, brand.name);
+    const mailer = mailerFor(cfg, brand.name, admin, tenantId);
     try {
       for (const c of list) {
         const to = String(c.email).trim().toLowerCase();
@@ -417,7 +428,7 @@ async function runManual(admin: SupabaseClient, req: Request, url: string, anonK
 
   const { data: cfg } = await admin.from("tenant_email_smtp").select("*").eq("tenant_id", cust.tenant_id).maybeSingle();
   const brand = await brandFor(admin, cust.tenant_id, cfg);
-  const mailer = mailerFor(cfg, brand.name);
+  const mailer = mailerFor(cfg, brand.name, admin, cust.tenant_id);
   if (!mailer.ready) {
     return json(
       { error: "tenant_smtp_not_configured", detail: "Configurá el email de tu negocio en Configuración → Email." },

@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { percentToBp, prorateCents } from "@/lib/billing/proration";
+import { addonBillable, addonPriceOn } from "@/supabase/functions/_shared/billing/mpAmount";
 
 const DAY = 86_400_000;
 
@@ -56,6 +57,11 @@ export interface BillingAddon {
   catalog_price_ars?: number | null;
   cancel_at_period_end?: boolean | null;
   current_period_end?: string | null;
+  /** Prueba gratis del complemento (ADR-156): sin cargo hasta esa fecha. */
+  trial_ends_at?: string | null;
+  /** Escalón programado (ADR-156): rige desde pending_from. */
+  pending_price_ars?: number | null;
+  pending_from?: string | null;
 }
 
 export interface BillingDiscount {
@@ -107,12 +113,11 @@ export function billingTotal(input: BillingTotalInput): BillingTotal {
       ? num(input.planYearly)
       : num(input.planMonthly) * 12
     : num(input.planMonthly);
+  // ADR-156 (C1): un addon dado de baja se cobra sólo en los cobros anteriores
+  // al fin de su período (el período que arranca ese día ya no lo incluye).
   const addonsMonthly = input.addons.reduce((acc, a) => {
-    if (a.source === "granted") return acc;
-    const billable =
-      a.status === "active" ||
-      (Boolean(a.cancel_at_period_end) && Boolean(a.current_period_end) && String(a.current_period_end).slice(0, 10) >= input.at);
-    return billable ? acc + num(a.monthly_price_ars ?? a.catalog_price_ars ?? 0) : acc;
+    if (!addonBillable(a.status, a.cancel_at_period_end, a.current_period_end, input.at)) return acc;
+    return acc + num(addonPriceOn(a, input.at));
   }, 0);
   const addonsAmount = yearly ? addonsMonthly * 12 : addonsMonthly;
   const gross = planAmount + addonsAmount;

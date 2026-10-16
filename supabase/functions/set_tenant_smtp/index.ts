@@ -4,10 +4,17 @@
 // tenant_email_smtp tiene RLS deny a todos.
 // Si password viene vacío, NO se sobrescribe (se conserva el guardado).
 // { test: true, test_to } → tras guardar, envía un email de prueba. H9b PR3.
+// ADR-156: provider 'ninjasoft' (complemento "Email con dominio NinjaSoft"):
+// sólo con el complemento vigente; guarda el proveedor, el nombre y el texto
+// del email SIN tocar la cuenta propia (host, usuario, claves), así el negocio
+// puede volver a ella. La prueba sale por el dominio de NinjaSoft y cuenta en
+// el cupo del mes.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 // @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
 import nodemailer from "npm:nodemailer@6.9.16";
+import { NinjaEmailError, sendViaNinja } from "../_shared/ninjaEmail.ts";
+import { addonUsable } from "../_shared/billing/mpAmount.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -133,9 +140,61 @@ Deno.serve(async (req: Request) => {
     ? bodyTemplateRaw
     : "brand";
 
-  // Proveedor de envío del negocio: 'resend' (API key) o 'smtp' (default).
+  // Proveedor de envío del negocio: 'resend' (API key), 'ninjasoft'
+  // (complemento, ADR-156) o 'smtp' (default).
   const providerRaw = String(b.provider ?? "smtp").trim();
-  const provider = providerRaw === "resend" ? "resend" : "smtp";
+  const provider = providerRaw === "resend" ? "resend" : providerRaw === "ninjasoft" ? "ninjasoft" : "smtp";
+
+  if (provider === "ninjasoft") {
+    const { data: addon } = await admin
+      .from("subscription_addons")
+      .select("status, cancel_at_period_end, current_period_end")
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", "email_ninjasoft")
+      .maybeSingle();
+    const todayAr = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+    if (!addon || !addonUsable(String(addon.status), addon.cancel_at_period_end, addon.current_period_end, todayAr)) {
+      return json({ error: "addon_inactive" }, 409);
+    }
+    const { error: nErr } = await admin.from("tenant_email_smtp").upsert(
+      {
+        tenant_id: tenantId,
+        provider: "ninjasoft",
+        from_name: String(b.from_name ?? "").trim().slice(0, 80),
+        body_text: String(b.body_text ?? "").trim().slice(0, 2000),
+        body_template: bodyTemplate,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "tenant_id" },
+    );
+    if (nErr) return json({ error: "save_failed", detail: nErr.message }, 500);
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "tenant",
+      entity_id: tenantId,
+      action: "tenant_smtp_updated",
+      after_data: { provider: "ninjasoft" },
+    });
+    if (b.test !== true) return json({ ok: true });
+    const testTo = String(b.test_to ?? "").trim().toLowerCase();
+    if (!EMAIL_RE.test(testTo)) return json({ error: "test_failed", detail: "invalid_test_to" });
+    const testText =
+      "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tus emails ya salen con el dominio de NinjaSoft.";
+    try {
+      const sent = await sendViaNinja(admin, tenantId, {
+        to: testTo,
+        subject: "Prueba de email del negocio",
+        html: `<p style="font-family:Arial,sans-serif;font-size:14px">${testText}</p>`,
+        text: testText,
+        fromName: String(b.from_name ?? "").trim() || null,
+      });
+      return json({ ok: true, tested: true, from: sent.from });
+    } catch (e) {
+      if (e instanceof NinjaEmailError) return json({ error: e.reason, detail: e.message });
+      return json({ error: "test_failed", detail: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   const patch: Record<string, unknown> = {
     tenant_id: tenantId,

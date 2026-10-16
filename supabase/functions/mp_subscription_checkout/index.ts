@@ -21,8 +21,15 @@
 // silencioso al mirar sólo `data`) para que un fallo se vea en los logs de la
 // función. El cuerpo de error sólo expone un `error` estable; los detalles
 // técnicos van al log, no al cliente.
+//
+// ADR-156: el monto es el del PRÓXIMO débito (platform_mp_expected_amount, con
+// fallback al total de hoy sin la migración) y, si el negocio está en prueba,
+// el primer débito se difiere al fin de la prueba (auto_recurring.start_date):
+// no se cobra nada hasta que termine. Lo enviado queda en
+// subscriptions.mp_amount_synced y el preapproval como 'pending'.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { debitStartDate } from "../_shared/billing/mpAmount.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -179,7 +186,7 @@ Deno.serve(async (req: Request) => {
   // por el viejo → doble cobro).
   const { data: sub, error: subErr } = await admin
     .from("subscriptions")
-    .select("id, billing_cycle, mp_preapproval_id, plans(name)")
+    .select("id, status, billing_cycle, mp_preapproval_id, plans(name), tenants(trial_ends_at)")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (subErr) return fail("subscription_lookup_failed", 400, subErr as PgError);
@@ -190,13 +197,28 @@ Deno.serve(async (req: Request) => {
   const plan = (Array.isArray(planRel) ? planRel[0] : planRel) ?? {};
   const yearly = sub.billing_cycle === "yearly";
 
-  // Monto canónico: plan + addons facturables (RPC, fuente de verdad).
-  const { data: billing, error: billErr } = await admin.rpc(
-    "subscription_billing_total",
-    { p_tenant: tenantId },
-  );
-  if (billErr) return fail("billing_total_failed", 400, billErr as PgError);
-  const amount = Number((billing as { total?: number } | null)?.total);
+  // Monto canónico del próximo débito (plan + addons facturables − descuentos
+  // + ajustes abiertos). Sin la migración de ADR-156, el total de hoy.
+  let amount = NaN;
+  const { data: expected, error: expErr } = await admin.rpc("platform_mp_expected_amount", { p_tenant: tenantId });
+  if (!expErr && expected) {
+    amount = Number((expected as { amount?: number }).amount);
+  }
+  let billing: unknown = expected;
+  if (expErr || !Number.isFinite(amount)) {
+    const { data: b2, error: billErr } = await admin.rpc(
+      "subscription_billing_total",
+      { p_tenant: tenantId },
+    );
+    if (billErr) return fail("billing_total_failed", 400, billErr as PgError);
+    billing = b2;
+    amount = Number((b2 as { total?: number } | null)?.total);
+  }
+  amount = Math.round(amount * 100) / 100;
+  // Prueba vigente: el primer débito sale al terminarla (no se cobra antes).
+  const tenRel = (sub as { tenants?: { trial_ends_at?: string | null } | { trial_ends_at?: string | null }[] | null }).tenants;
+  const trialEndsAt = (Array.isArray(tenRel) ? tenRel[0] : tenRel)?.trial_ends_at ?? null;
+  const startDate = debitStartDate({ status: (sub as { status?: string }).status, trialEndsAt });
   if (!Number.isFinite(amount) || amount <= 0) {
     return fail("invalid_plan_price", 400, { billing });
   }
@@ -320,8 +342,9 @@ Deno.serve(async (req: Request) => {
       auto_recurring: {
         frequency: yearly ? 12 : 1,
         frequency_type: "months",
-        transaction_amount: Math.round(amount * 100) / 100,
+        transaction_amount: amount,
         currency_id: "ARS",
+        ...(startDate ? { start_date: startDate } : {}),
       },
       back_url: backUrl || undefined,
       notification_url: notificationUrl,
@@ -342,10 +365,22 @@ Deno.serve(async (req: Request) => {
   if (!pre.id) return json({ error: "no_preapproval" }, 502);
   const initPoint = pre.init_point || pre.sandbox_init_point || "";
 
-  await admin
-    .from("subscriptions")
-    .update({ mp_preapproval_id: pre.id })
-    .eq("id", sub.id);
+  {
+    const { error: upErr } = await admin
+      .from("subscriptions")
+      .update({
+        mp_preapproval_id: pre.id,
+        mp_preapproval_status: "pending",
+        mp_amount_synced: amount,
+        mp_amount_synced_at: new Date().toISOString(),
+      })
+      .eq("id", sub.id);
+    // Sin la migración de ADR-156 las columnas nuevas no existen: se guarda
+    // sólo el preapproval, como antes.
+    if (upErr) {
+      await admin.from("subscriptions").update({ mp_preapproval_id: pre.id }).eq("id", sub.id);
+    }
+  }
 
   await admin.from("audit_logs").insert({
     tenant_id: tenantId,
@@ -356,9 +391,10 @@ Deno.serve(async (req: Request) => {
     after_data: {
       preapproval_id: pre.id,
       amount,
+      start_date: startDate,
       via: isInternal ? "staff" : "owner",
     },
   });
 
-  return json({ init_point: initPoint, preapproval_id: pre.id });
+  return json({ init_point: initPoint, preapproval_id: pre.id, amount, start_date: startDate });
 });

@@ -3,10 +3,23 @@
 // Resend (API key) o SMTP (nodemailer). Mismo criterio que send_receipt_email
 // y account_reminders (465 = SSL directo, timeouts, sin caracteres de control
 // en el nombre). Lo usa send_quote_email (ADR-123).
+// ADR-156: provider 'ninjasoft' = el complemento "Email con dominio NinjaSoft"
+// (sale por la API de Resend de la plataforma con cupo mensual): usar
+// sendTenantEmail, que lo resuelve con _shared/ninjaEmail.ts.
 // =============================================================================
 // @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
 import nodemailer from "npm:nodemailer@6.9.16";
 import type { SendArgs } from "./mailer.ts";
+import { sendViaNinja } from "./ninjaEmail.ts";
+
+// deno-lint-ignore no-explicit-any
+type Admin = any;
+
+export const NINJA_PROVIDER = "ninjasoft";
+
+export function isNinjaProvider(cfg: { provider?: string | null } | null | undefined): boolean {
+  return String(cfg?.provider ?? "") === NINJA_PROVIDER;
+}
 
 export interface TenantEmailCfg {
   provider?: string | null;
@@ -40,6 +53,9 @@ export function safeName(name: string | null | undefined, fallback = "NinjaPos")
 
 /** ¿El negocio tiene su proveedor listo? */
 export function tenantProviderReady(cfg: TenantEmailCfg | null | undefined): boolean {
+  // El complemento se valida al enviar (email_addon_consume): cupo, vigencia y
+  // dominio. Acá sólo se elige el camino.
+  if (isNinjaProvider(cfg)) return true;
   if (!cfg?.from_email) return false;
   return String(cfg.provider ?? "smtp") === "resend" ? Boolean(cfg.resend_api_key) : Boolean(cfg.host);
 }
@@ -112,4 +128,22 @@ export async function sendViaTenant(cfg: TenantEmailCfg, args: SendArgs): Promis
       /* noop */
     }
   }
+}
+
+/**
+ * Envío con el proveedor del negocio, incluido el complemento de NinjaSoft
+ * (ADR-156). Para 'ninjasoft' descuenta del cupo del mes y puede lanzar
+ * NinjaEmailError (reason: quota_exceeded, addon_inactive, …).
+ */
+export async function sendTenantEmail(
+  admin: Admin,
+  tenantId: string,
+  cfg: TenantEmailCfg,
+  args: SendArgs,
+): Promise<void> {
+  if (isNinjaProvider(cfg)) {
+    await sendViaNinja(admin, tenantId, args);
+    return;
+  }
+  await sendViaTenant(cfg, args);
 }

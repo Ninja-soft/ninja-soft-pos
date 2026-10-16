@@ -3,7 +3,7 @@
 // Las credenciales y el token viven en memoria (estado de React), nunca en
 // localStorage ni en la URL.
 
-import { isSandboxClientId, SANDBOX_SECRET_PREFIX } from "@/lib/api-publica/hashing";
+import { isSandboxClientId, SANDBOX_SECRET_PREFIX } from "@/lib/api-publica/formats";
 import { API_BASE_PATH, type EndpointSpec } from "./spec";
 
 export type SandboxCredsCheck = { ok: true } | { ok: false; message: string };

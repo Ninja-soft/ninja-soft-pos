@@ -1,6 +1,9 @@
 // Timeline de auditoría por negocio en el panel interno (F7 · H11c, ADR-073).
 // Lógica pura: etiqueta legible, categoría, cambios antes/después, filtros y
 // agrupación por día. La UI vive en components/internal/TenantAuditTimeline.
+// El título y el detalle legibles salen de lib/audit/present.ts (ADR-160).
+
+import { presentAuditEvent } from "@/lib/audit/present";
 
 export type AuditCategory = "lifecycle" | "plan" | "access" | "config" | "operation";
 
@@ -168,7 +171,7 @@ export function filterAuditEntries<T extends AuditLike>(entries: T[], f: Timelin
     const d = describeAuditAction(e.entity_type, e.action);
     if (f.category !== "all" && d.category !== f.category) return false;
     if (!q) return true;
-    return [d.label, e.action, e.entity_type, e.reason, e.actorName, e.actorEmail]
+    return [d.label, presentAuditEvent(e).title, e.action, e.entity_type, e.reason, e.actorName, e.actorEmail]
       .filter(Boolean)
       .some((v) => (v as string).toLowerCase().includes(q));
   });

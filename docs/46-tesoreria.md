@@ -279,6 +279,27 @@ Toda función nueva sigue el checklist de §6 de `CLAUDE.md`: key en `features`,
 - **T5 (parcial):** `_treasury_move` sin fecha toma el día de Argentina (misma migración).
 - **T19 (pantalla):** totales de la pestaña Cuentas sólo en pesos y con cuentas activas; lo que está en otra moneda se muestra aparte. `lib/treasury/totals.ts`, tests en `tests/unit/treasuryTotals.test.ts`; el flujo de fondos usa la misma función.
 
+### 8.1 H150, H154, H155 y H156 (ADR-158, `feat/tesoreria-cuentas-unificadas`)
+
+Migraciones `20261227100000_tesoreria_cuentas_unificadas`, `20261227100100_tesoreria_asientos_por_cuenta` y `20261227100200_caja_controles_cierre` (sin aplicar, en ese orden). Sin Edges.
+
+| Hallazgo | Qué quedó |
+|---|---|
+| T1 | Cajas del POS (`pos_cash`), billeteras (`wallet`) y "a acreditar" (`receivable`) son cuentas de Tesorería. Las cuentas de cobro por transferencia se vinculan a un banco o billetera (`treasury_account_transfer_accounts`) y cada cobro suma un movimiento `sale_collection` (la anulación, `sale_collection_void`). |
+| T2 | El cobro por transferencia vinculado y los movimientos de cada cuenta van a la cuenta contable de esa cuenta (`acc_treasury_account`, subcuenta propia con "Crear su cuenta contable"). Mayor = saldo de Tesorería. |
+| T5, T22 | Fechas de Argentina en cheques, anulación de órdenes de pago, cierre de mes, reversión manual y problemas de Contabilidad. |
+| T10, T23 | Asiento de saldo inicial contra Resultados no asignados; saldo inicial, fecha y moneda fijos cuando hay movimientos. |
+| T11 | Cierre con $0 contados y esperado positivo sólo con confirmación y motivo; revisión del Z con tipo y motivo. |
+| T12 | Conciliación en el menú con cualquiera de sus dos features. |
+| T17 | Señas cobradas, devueltas y aplicadas con su asiento (cuenta "Señas recibidas de clientes"); Ualá Bis, MODO, Mercado Libre y plataformas con cuenta propia. |
+| T18 | Cheque de terceros con asiento al recibirlo y al rechazarlo sin depositar; cheque propio rechazado contra la deuda con el proveedor. |
+| T19 | Movimientos y saldos en otra moneda pasados a pesos con la cotización del día (o un problema en Contabilidad > Resumen si no hay). |
+| T20 | Regenerar un período da de baja sólo los asientos de los documentos del rango. |
+| T3 (preparado) | `acc_settings.settlement_source` (`ninjapos` por defecto): con `nubceo` la conciliación propia no arma asientos de liquidación. Supuesto hasta la respuesta del dueño: todos en `ninjapos`, sin forma de cambiarlo (H153). |
+| T8 (H155) | Grupo Tesorería (Posición, Movimientos, A acreditar, Conciliación, Cheques, Flujo de fondos, NubCeo), Mapeos y Cierres en Contabilidad, grupo Impuestos, "Ver asiento" y "Ver origen". |
+
+Gasto (H154): en un retiro se elige la cuenta de gasto, el número de comprobante, el IVA y un adjunto (bucket privado `treasury-proofs`). El asiento va a la cuenta de gasto y el IVA a crédito fiscal (si el negocio discrimina IVA). El cheque de terceros cancela "Otros medios de cobro a cobrar": si paga una venta o una cuenta corriente, ese cobro se registra con el medio Otro.
+
 ## 9. Preguntas para el dueño
 
 1. ¿Querés que NubCeo sea la fuente de los asientos de liquidación en los negocios que lo usen (como en ANDESMAR con su estudio), o preferís que NinjaPOS los arme y NubCeo quede como control?

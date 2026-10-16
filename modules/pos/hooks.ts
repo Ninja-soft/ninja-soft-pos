@@ -250,7 +250,8 @@ export function usePosMutations() {
         closing: number;
         notes?: string;
         pendingAction?: "cancel" | "carry" | null;
-      }) => posApi.close(vars.shiftId, vars.closing, vars.notes, vars.pendingAction),
+        zeroCloseReason?: string | null;
+      }) => posApi.close(vars.shiftId, vars.closing, vars.notes, vars.pendingAction, vars.zeroCloseReason),
       onSuccess: () => {
         invalidateShift();
         qc.invalidateQueries({ queryKey: ["pending-charges"] });

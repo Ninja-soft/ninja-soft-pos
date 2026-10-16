@@ -1212,23 +1212,34 @@ function PosPageInner() {
     }
   }
 
-  async function handleCloseShift(closing: number, notes: string, pendingAction: "cancel" | "carry" | null) {
+  async function handleCloseShift(
+    closing: number,
+    notes: string,
+    pendingAction: "cancel" | "carry" | null,
+    zeroCloseReason?: string | null,
+  ) {
     if (!shift) return;
     // Cobros en espera del turno que se cancelan: baja en el proveedor después.
     const toCancel = pendingAction === "cancel"
       ? pendingWatch.open.filter((c) => c.cash_shift_id === shift.id && c.status === "waiting")
       : [];
     try {
-      const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes, pendingAction });
+      const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes, pendingAction, zeroCloseReason });
       for (const c of toCancel) void cancelAtProvider(c.provider_key, c.channel, c.intent_id);
       setCloseShiftModal(false);
       toast({ title: "Caja cerrada", description: `Diferencia: ${formatCurrency(diff)}`, variant: diff === 0 ? "success" : "info" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : undefined;
-      const known = msg && (msg.includes("close_needs_reason") || msg.includes("pending_charges_decision_required"));
+      const known =
+        msg &&
+        (msg.includes("close_needs_reason") ||
+          msg.includes("pending_charges_decision_required") ||
+          msg.includes("close_zero_needs_confirmation"));
       toast({
         title: msg && msg.includes("close_needs_reason")
           ? "Escribí un motivo: la diferencia supera la tolerancia"
+          : msg && msg.includes("close_zero_needs_confirmation")
+            ? "Contaste $0 y el sistema espera efectivo: volvé a contar o escribí por qué cerrás así"
           : msg && msg.includes("pending_charges_decision_required")
             ? pendingChargeErrorCopy(msg)
             : "No se pudo cerrar",
@@ -2291,6 +2302,8 @@ function PosPageInner() {
           loading={close.isPending}
           locationLabel={locationLabel(registerStore, register)}
           pending={closePending}
+          shiftId={shift?.id ?? null}
+          opening={shift?.opening_amount ?? 0}
         />
       </MountWhenOpened>
 

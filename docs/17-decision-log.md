@@ -6161,3 +6161,38 @@ Un negocio (La Jamonera) conectó Mercado Pago por OAuth en NinjaPos y quiere us
 - Quien tenga la clave opera la cuenta de Mercado Pago del negocio: va sólo en el servidor del otro sistema. Revocar es `update mp_token_broker_keys set revoked_at = now() where id = ...`.
 - **Categoría:** integración operativa a pedido, sin feature de plan (no es una función del panel). **Deuda:** pantalla en internal (o en Configuración › Integraciones) para generar, listar y revocar claves.
 - Orden de deploy: migración `20270105100000_mp_token_broker`, después la Edge `mp_token_broker` con `--no-verify-jwt`.
+
+## ADR-167: Cobro SaaS robusto: excedente de emails fila por fila, IA y MRR con la regla de ADR-156 y re-sincronización del débito de MP al registrar un pago
+
+**Fecha:** 2026-10-19 · **Estado:** aceptada
+
+### Contexto
+
+La revisión de ADR-156 dejó tres deudas de la facturación de plataforma:
+
+- **B-3:** `email_addon_bill_overage` no tenía manejo de errores por negocio. Un error en uno cortaba el cron del excedente de todos. Además cobraba excedente a un complemento bonificado y no verificaba que existiera la suscripción.
+- **B-2:** `ai_available()` y `platform_mrr_cents()` seguían con la regla vieja (`status = 'active' or cancel...`, `current_date` en UTC, sin descontar la prueba del complemento). Esa regla difiere de la del gating (`platform_addon_usable`) y de la de la facturación (`platform_addon_billable` + `platform_addon_price_on`).
+- **M-b:** `platform_mp_expected_amount` suma al próximo débito de MP los ajustes abiertos (prorrateo y complementos). Si el dueño pagaba ese ajuste por otro medio después de la sincronización diaria (`platform-mp-amount-sync`, 08:30 de Argentina) y antes del débito, MP debitaba el monto inflado.
+
+### Decisión
+
+1. **Excedente fila por fila.** Cada negocio corre en su propio `begin ... exception` y el error queda en `audit_logs` (`email_overage_bill_failed`, con `sqlerrm` y `sqlstate`). Sin suscripción no se cobra (`email_overage_bill_skipped`). El resultado informa `charged`, `skipped` y `failed`. Se mantiene la clave idempotente `email_overage:<negocio>:<período>`, así que una nueva corrida del mes sólo intenta lo que falló.
+2. **El complemento bonificado no paga excedente.** Si `email_ninjasoft` es `source = 'granted'`, NinjaSoft lo regaló y no se le cobra el uso de más: se audita `email_overage_waived`. Si alguna vez corresponde cobrarlo, el staff lo carga como cargo manual.
+3. **Una sola regla para IA y MRR.** `ai_available()` usa `platform_addon_usable(..., platform_ar_date(now()))`, igual que `tenant_has_feature_for`. `platform_mrr_cents()` usa `platform_addon_billable` y `platform_addon_price_on`, igual que `platform_billing_breakdown_for`: la prueba del complemento vale 0, el escalón pendiente rige desde su fecha y lo bonificado vale 0. Sin cambio de firma.
+4. **El pago por otro medio re-sincroniza el débito.** El trigger `platform_payments_mp_amount_sync` (after insert or update of status) actúa ante un pago aprobado que no es `mp_preapproval` (transferencia, efectivo, checkout u otro) de un negocio con modalidad `mp_subscription`, preapproval y suscripción vigente. Llama a `platform_request_mp_amount_sync`, que encola con pg_net el modo cron de `mp_update_subscription_amount`. pg_net lo manda después del commit, así que la Edge ve el pago ya imputado. Ese modo corrige sólo los preapprovals cuyo monto difiere del esperado (`platform_mp_amount_targets`): es idempotente y no toca a quien ya está bien. El trigger nunca hace fallar el pago: un error queda en `platform_mp_amount_sync_failed`. Se audita `platform_mp_amount_sync_requested` con el id del pedido.
+5. **Red de seguridad, ya existente y verificada:** si MP igual debita de más (por ejemplo, porque MP ya había generado el cobro), el pago entra al ledger por el total y el excedente queda como saldo a favor, que la imputación FIFO aplica solo al próximo cargo (ADR de cobranza, `platform_auto_allocate`). No se pierde plata.
+
+### Alternativas descartadas
+
+- **Filtro por negocio en la Edge** (body con `tenant_id` en modo cron): requería desplegar la Edge. El modo cron global ya es idempotente y los pagos manuales son pocos.
+- **Recalcular el monto dentro del trigger:** el trigger corre antes de la imputación del pago y vería ajustes que todavía figuran abiertos.
+- **Cobrar el excedente al bonificado:** sorprende al dueño al que se le regaló el complemento.
+
+### Consecuencias
+
+- Verificado en un dry-run en producción (transacción revertida):
+  - excedente: uno cobrado, uno con error que no frenó al resto y uno bonificado sin cobrar, cada uno con su auditoría;
+  - MRR y `ai_available` sin cambios en los negocios actuales;
+  - una transferencia encola la sincronización y el débito de MP no;
+  - guardarraíles de RLS en 0.
+- Sin Edges que desplegar. Migración `20270106100000_billing_robusto`. Test `tests/unit/billingRobusto.test.ts`.

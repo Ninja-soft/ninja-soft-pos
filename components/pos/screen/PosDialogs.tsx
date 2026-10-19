@@ -90,22 +90,34 @@ export function CustomerPickerDialog({
           </p>
           {customers === undefined && <SpinnerBlock className="py-6" label="Buscando clientes" />}
           {customers?.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onPick({ id: c.id, name: c.name })}
-              className={cn(row, current?.id === c.id && "choice-on")}
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">{c.name}</span>
-                {(c.document_number || c.phone) && (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {c.document_number ?? c.phone}
-                  </span>
-                )}
-              </span>
-              {current?.id === c.id && <span className="shrink-0 text-xs font-bold text-success">Actual</span>}
-            </button>
+            <div key={c.id} className="flex items-stretch gap-1">
+              <button
+                type="button"
+                onClick={() => onPick({ id: c.id, name: c.name })}
+                className={cn(row, "min-w-0 flex-1", current?.id === c.id && "choice-on")}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold">{c.name}</span>
+                  {(c.document_number || c.phone) && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {c.document_number ?? c.phone}
+                    </span>
+                  )}
+                </span>
+                {current?.id === c.id && <span className="shrink-0 text-xs font-bold text-success">Actual</span>}
+              </button>
+              {/* Ficha 360 sin elegirlo ni perder el carrito (ADR-169). */}
+              <a
+                href={customerProfileHref(c.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Ver la ficha de ${c.name}`}
+                title="Ver ficha"
+                className="grid w-11 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-fg-6 hover:text-foreground"
+              >
+                <ExternalLink size={15} aria-hidden />
+              </a>
+            </div>
           ))}
           {customers?.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">

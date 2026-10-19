@@ -49,6 +49,8 @@ export interface TicketSummary {
   total: number;
   createdAt: string;
   customerName?: string | null;
+  /** Con cliente: link a su ficha 360 (ADR-169), en otra pestaña. */
+  customerId?: string | null;
   itemsCount: number;
   /** "Factura B 00003-00000012" cuando hay comprobante autorizado. */
   fiscalLabel?: string | null;
@@ -332,7 +334,19 @@ function SummaryBlock({
         {" · "}
         {summary.itemsCount} {summary.itemsCount === 1 ? "producto" : "productos"}
         {" · "}
-        {summary.customerName || "Consumidor final"}
+        {summary.customerId && summary.customerName ? (
+          <a
+            href={`/clientes/${encodeURIComponent(summary.customerId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground underline decoration-dotted underline-offset-2 hover:text-ninja-flameSoft"
+            title="Abrir la ficha del cliente"
+          >
+            {summary.customerName}
+          </a>
+        ) : (
+          summary.customerName || "Consumidor final"
+        )}
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {badge && <Badge tone={badge.tone}>{badge.label}</Badge>}

@@ -26,7 +26,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
-import { downloadStatementPdf } from "@/lib/account/statementPdf";
+import { downloadCustomerStatement, movementConcept as concept, statementRows } from "@/components/account/statementExport";
 import { todayIso } from "@/lib/account/terms";
 import { interestConcept } from "@/lib/account/interest";
 import { parseOverride, type AccountConfig } from "@/lib/account/config";
@@ -72,18 +72,6 @@ const KIND_FILTER: Record<KindFilter, string[]> = {
   adjust: ["adjust_debit", "adjust_credit"],
 };
 
-function concept(m: StatementMovement): string {
-  const base = KIND_LABEL[m.kind];
-  if (m.kind === "payment") {
-    return `${base}${m.receipt_no ? ` recibo #${m.receipt_no}` : ""}${m.method ? ` · ${METHOD_LABEL[m.method] ?? m.method}` : ""}`;
-  }
-  if (m.kind === "charge") return m.reason ?? base;
-  if (m.kind === "interest") {
-    const label = m.accrued_through ? interestConcept(m.period, m.accrued_through) : base;
-    return `${label}${m.note ? ` · ${m.note}` : ""}`;
-  }
-  return `${base}${m.note ? ` · ${m.note}` : m.reason ? ` · ${m.reason}` : ""}`;
-}
 
 function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "danger" | "success" }) {
   return (
@@ -153,30 +141,11 @@ export default function CustomerAccountPage() {
     }
   }
 
-  function exportRows(s: AccountStatement) {
-    return s.movements.map((x) => ({
-      date: fmtDateTime(x.created_at),
-      concept: `${concept(x)}${x.voided_at ? " (anulado)" : ""}`,
-      due: fmtDate(x.due_date),
-      debit: x.delta > 0 ? Number(x.delta) : null,
-      credit: x.delta < 0 ? -Number(x.delta) : null,
-      running: Number(x.running),
-    }));
-  }
+  const exportRows = (s: AccountStatement) => statementRows(s).map((r) => ({ ...r }));
 
   async function exportPdf() {
     if (!st) return;
-    await downloadStatementPdf({
-      business: "",
-      customer: st.customer.name,
-      from: fmtDate(st.from),
-      to: fmtDate(st.to),
-      opening: Number(st.opening_balance),
-      balance: Number(st.balance),
-      overdue: Number(st.overdue),
-      rows: exportRows(st),
-      fileName: `estado-de-cuenta-${st.customer.name.replace(/\W+/g, "-").toLowerCase()}.pdf`,
-    });
+    await downloadCustomerStatement(st);
   }
 
   async function exportXls() {

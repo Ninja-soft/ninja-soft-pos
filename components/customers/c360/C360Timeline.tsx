@@ -6,7 +6,9 @@ import {
   Banknote,
   Clock,
   HandCoins,
+  History,
   ListTodo,
+  Paperclip,
   Receipt,
   RotateCcw,
   StickyNote,
@@ -19,6 +21,7 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
+import { presentAuditEvent } from "@/lib/audit/present";
 import {
   KIND_LABEL,
   TIMELINE_KINDS,
@@ -40,7 +43,49 @@ const ICON: Record<TimelineKind, LucideIcon> = {
   mp_refund: HandCoins,
   dispute: AlertTriangle,
   note: StickyNote,
+  change: History,
+  attachment: Paperclip,
 };
+
+// Campos que cambiaron en una edición de la ficha (presentador de ADR-160).
+function ChangeFields({ extra }: { extra: Record<string, unknown> | null | undefined }) {
+  const [open, setOpen] = useState(false);
+  if (!extra) return null;
+  const p = presentAuditEvent({
+    entity_type: "customers",
+    action: String(extra.action ?? "UPDATE"),
+    before_data: extra.before ?? null,
+    after_data: extra.after ?? null,
+  });
+  const fields = p.sections.flatMap((x) => x.fields);
+  if (fields.length === 0) return null;
+  const shown = open ? fields : fields.slice(0, 3);
+  return (
+    <span className="mt-1 block text-xs">
+      <span className="block space-y-0.5">
+        {shown.map((f) => (
+          <span key={f.key} className="block break-words">
+            <span className="text-muted-foreground">{f.label}: </span>
+            {p.mode === "changes" ? (
+              <>
+                <span className="text-muted-foreground line-through">{f.before ?? "vacío"}</span>
+                <span className="text-muted-foreground"> a </span>
+                <span className="font-medium">{f.after ?? "vacío"}</span>
+              </>
+            ) : (
+              <span className="font-medium">{f.after ?? "vacío"}</span>
+            )}
+          </span>
+        ))}
+      </span>
+      {fields.length > 3 && (
+        <button type="button" className="mt-1 text-ninja-flameSoft underline" onClick={() => setOpen((v) => !v)}>
+          {open ? "Ver menos" : `Ver los ${fields.length} cambios`}
+        </button>
+      )}
+    </span>
+  );
+}
 
 const TONE: Record<ItemTone, string> = {
   success: "bg-success/15 text-success",
@@ -172,6 +217,7 @@ export function C360Timeline({
                       {d.detail && (
                         <span className="block whitespace-pre-wrap break-words text-xs text-muted-foreground">{d.detail}</span>
                       )}
+                      {it.kind === "change" && <ChangeFields extra={it.extra} />}
                       <span className="block text-xs text-muted-foreground">
                         {when(it.at)}
                         {it.store_name ? ` · ${it.store_name}` : ""}

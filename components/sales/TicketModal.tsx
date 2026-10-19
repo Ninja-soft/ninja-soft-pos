@@ -64,9 +64,14 @@ interface Props {
   silent?: boolean;
   /** Desde el POS: botón "Nueva venta" (Enter) que cierra y vuelve a vender. */
   onNewSale?: () => void;
+  /**
+   * Acción directa (ficha del cliente, ADR-169): "print" reimprime al quedar
+   * listo (sin el envío automático por email); "email" abre el envío.
+   */
+  startWith?: "print" | "email";
 }
 
-export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab, silent, onNewSale }: Props) {
+export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab, silent, onNewSale, startWith }: Props) {
   const { data } = useSaleDetail(saleId, open);
   // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
   const taxLines = useSaleTaxLines(open ? saleId : null);
@@ -201,7 +206,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   // Auto-imprimir: lo pide el perfil del negocio (Impresión → ticket de venta
   // en automático) o la preferencia del equipo "Imprimir ticket al cobrar".
   // Respeta la cantidad de copias del perfil (web print: N window.print()).
-  const autoPrintEnabled = Boolean(autoPrint) || Boolean(silent) || Boolean(saleProfile?.auto);
+  const reprint = startWith === "print";
+  const autoPrintEnabled = reprint || Boolean(autoPrint) || Boolean(silent) || Boolean(saleProfile?.auto);
   const saleCopies = saleProfile?.copies ?? 1;
 
   const printNow = useCallback((): boolean => {
@@ -229,7 +235,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
     if (!ready || !data || autoDoneRef.current) return;
     const to = data.sale.customers?.email;
     const shouldEmail = Boolean(
-      autoEmailEnabled &&
+      !reprint &&
+        autoEmailEnabled &&
         !data.sale.receipt_emailed_at &&
         to &&
         data.sale.status === "completed" &&
@@ -273,6 +280,11 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, ready]);
+
+  // Desde la ficha del cliente: "Reenviar" abre el envío por email directo.
+  useEffect(() => {
+    if (open && startWith === "email") setEmailOpen(true);
+  }, [open, startWith]);
 
   // "Imprimir provisorio": se imprime apenas el comprobante está montado.
   useEffect(() => {
@@ -493,6 +505,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
                 total: Number(data.sale.total) || 0,
                 createdAt: data.sale.created_at,
                 customerName: data.sale.customers?.name ?? null,
+                customerId: (data.sale as { customer_id?: string | null }).customer_id ?? null,
                 itemsCount: data.items.length,
                 fiscalLabel:
                   phase.kind === "ready" && fiscal?.numero ? `${fiscal.cbteLabel} N° ${fiscal.numero}` : null,

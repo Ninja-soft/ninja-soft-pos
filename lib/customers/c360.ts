@@ -20,7 +20,9 @@ export type TimelineKind =
   | "pending_charge"
   | "mp_refund"
   | "dispute"
-  | "note";
+  | "note"
+  | "change"
+  | "attachment";
 
 export const TIMELINE_KINDS: TimelineKind[] = [
   "sale",
@@ -32,6 +34,8 @@ export const TIMELINE_KINDS: TimelineKind[] = [
   "mp_refund",
   "dispute",
   "note",
+  "change",
+  "attachment",
 ];
 
 export interface C360Kpis {
@@ -85,6 +89,8 @@ export interface TimelineItem {
   store_name: string | null;
   sale_id: string | null;
   detail: string | null;
+  /** change: { action, before, after } de audit_logs; attachment: { mime_type, size_bytes }. */
+  extra?: Record<string, unknown> | null;
 }
 
 export interface TimelinePage {
@@ -204,6 +210,15 @@ export const KIND_LABEL: Record<TimelineKind, string> = {
   mp_refund: "Reintegros por Mercado Pago",
   dispute: "Contracargos y reclamos",
   note: "Notas",
+  change: "Cambios de la ficha",
+  attachment: "Adjuntos",
+};
+
+const CHANGE_SUB: Record<string, string> = {
+  INSERT: "Cliente dado de alta",
+  UPDATE: "Ficha editada",
+  DELETE: "Cliente eliminado",
+  customer_fiscal_verified: "Datos fiscales verificados en el padrón",
 };
 
 const ACCOUNT_SUB: Record<string, string> = {
@@ -323,12 +338,24 @@ export function describeItem(it: TimelineItem): { title: string; detail: string 
         detail: it.detail,
         tone: "neutral",
       };
+    case "change":
+      return {
+        title: CHANGE_SUB[it.sub ?? ""] ?? "Cambio en la ficha",
+        detail: it.ref ? `Por ${it.ref}` : null,
+        tone: "info",
+      };
+    case "attachment":
+      return {
+        title: it.sub === "deleted" ? "Adjunto quitado" : "Archivo adjuntado",
+        detail: [it.detail, it.ref ? `Por ${it.ref}` : null].filter(Boolean).join(" · ") || null,
+        tone: it.sub === "deleted" ? "neutral" : "brand",
+      };
   }
 }
 
 /** ¿El monto se muestra? (las notas y gestiones sin promesa no tienen monto) */
 export function showsAmount(it: TimelineItem): boolean {
-  if (it.kind === "note") return false;
+  if (it.kind === "note" || it.kind === "change" || it.kind === "attachment") return false;
   if (it.kind === "collection") return it.sub === "promise" && Math.abs(it.amount) > 0;
   return true;
 }

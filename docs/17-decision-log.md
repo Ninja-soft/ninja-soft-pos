@@ -6161,3 +6161,49 @@ Un negocio (La Jamonera) conectó Mercado Pago por OAuth en NinjaPos y quiere us
 - Quien tenga la clave opera la cuenta de Mercado Pago del negocio: va sólo en el servidor del otro sistema. Revocar es `update mp_token_broker_keys set revoked_at = now() where id = ...`.
 - **Categoría:** integración operativa a pedido, sin feature de plan (no es una función del panel). **Deuda:** pantalla en internal (o en Configuración › Integraciones) para generar, listar y revocar claves.
 - Orden de deploy: migración `20270105100000_mp_token_broker`, después la Edge `mp_token_broker` con `--no-verify-jwt`.
+
+## ADR-168: API pública, producto completo con include e ids
+
+**Fecha:** 2026-10-19 · **Estado:** aceptada · **Hito:** H68b (pendiente de ADR-163)
+
+### Contexto
+
+La API v1 (ADR-094) devolvía sólo los campos básicos del producto. Para armar una tienda online o sincronizar un ERP hacían falta atributos, imágenes, precios por lista, variantes y stock por sucursal, que hoy se ven sólo dentro de NinjaPOS.
+
+### Decisión
+
+1. `GET /api/v1/products` suma dos parámetros opcionales:
+   - `include`: lista separada por comas con `attributes`, `images`, `price_lists`, `variants` y `stock`.
+   - `ids`: hasta 100 ids, para leer uno o varios productos puntuales.
+
+   Sin ellos, la respuesta y la llamada a la base son idénticas a las de antes: los clientes existentes no cambian. Con algún `include`, la página máxima baja de 500 a 100.
+2. Qué trae cada `include` (`_api_product_full_json`, migración `20270107100000_api_producto_completo`):
+   - **attributes:** atributos libres (`{key, value}` en orden), categoría y marca con id y nombre, etiquetas, modelo, temporada y contenido neto.
+   - **images:** galería ordenada (la principal primero) con URL pública. Si una imagen vieja tiene sólo el path del bucket público `product-images`, la ruta Next completa la URL. La imagen única anterior (`products.image_url`) sale como principal cuando no hay galería.
+   - **price_lists:** el precio en cada lista vigente, resuelto con `_resolve_unit_price`, el mismo motor que el POS (fija, derivada, sobre costo o en moneda, con redondeo). Es el precio que cobraría la caja con esa lista, sin cliente ni condición de pago.
+   - **variants:** variantes activas con SKU, código de barras, opciones por eje (`variant_axes`), precio (el propio o el del producto) y stock. Con `stock`, también el stock de cada variante por sucursal.
+   - **stock:** `stock_by_store` con sucursal, cantidad, mínimo, máximo y ubicación. El total sigue en `stock`.
+3. Seguridad:
+   - Mismo scope `products:read` y mismo límite por credencial (`_api_auth`).
+   - Todo filtra por el negocio del token: un id de otro negocio no devuelve nada.
+   - Las funciones internas no se exponen (revoke a `public`, `anon` y `authenticated`); la pública se ejecuta sólo como `anon`.
+   - Un `include` desconocido da 422 en la ruta y 400 `invalid_include` en la RPC.
+4. Sandbox público (ADR-163): el dataset ficticio suma atributos, imágenes, dos listas, variantes de la remera y stock por sucursal, y responde `include` e `ids` con la misma forma. `lib/api/spec.ts` documenta los campos nuevos, así que OpenAPI, Postman, el HTML y el portal salen al día.
+
+### Alternativas descartadas
+
+- **`GET /products/{id}` aparte:** obligaba a sumar parámetros de ruta a los cinco generadores (OpenAPI, Postman, snippets, Probar y portal) y al sandbox. `ids` cubre el caso con la misma ruta, la misma paginación y el mismo código.
+- **Campos nuevos siempre, sin `include`:** cada producto pasaba a costar cinco subconsultas más, y el precio por lista corre el motor de precios. Quien sólo sincroniza stock o precio base no lo necesita.
+- **Precio de lista desde `price_list_items`:** daba mal en las listas derivadas, sobre costo o en moneda. Se usa el mismo resolvedor que la caja.
+
+### Consecuencias
+
+- **Orden de deploy:** primero la migración (recrea `api_v1_products_list` con dos parámetros más, con default) y después el front. El front viejo sigue funcionando con la migración aplicada; el front nuevo sin la migración falla sólo cuando se usa `include` o `ids`.
+- **Costo:** con `include=price_lists`, cada producto resuelve una vez por lista vigente. Con 100 productos y pocas listas es chico. Si un negocio tiene muchas listas, conviene pedir `price_lists` sólo cuando hace falta.
+- **Verificado:**
+  - Dry-run en producción (transacción revertida) con los tres guardarraíles de RLS en 0.
+  - Producto con galería, variante con talle y color, lista al -10 % (precio 232.560 sobre 258.400) y stock por sucursal.
+  - Sin include, la respuesta es idéntica a `_api_product_json`.
+  - Otro negocio no ve el producto; `include` desconocido rechazado; las internas no las ejecuta `anon`.
+
+  Tests: `tests/unit/apiProductoCompleto.test.ts` y el caso nuevo en `tests/integration/rls-api-publica.test.ts`.

@@ -23,6 +23,7 @@ import {
   productsQuerySchema,
   productsUpsertSchema,
   salesQuerySchema,
+  type ProductInclude,
   stockAdjustSchema,
   stockQuerySchema,
   tokenRequestSchema,
@@ -32,10 +33,13 @@ import { DEMO_CLIENT_ID, DEMO_CLIENT_SECRET, SANDBOX_BASE_PATH, isDemoClient } f
 import { ENDPOINTS, TOKEN_TTL_SECONDS, type EndpointSpec } from "./spec";
 import {
   DEMO_CUSTOMERS,
+  DEMO_PRICE_LISTS,
+  DEMO_PRODUCT_EXTRAS,
   DEMO_PRODUCTS,
   DEMO_SALES,
   DEMO_STOCK,
   DEMO_STORES,
+  DEMO_VARIANTS,
   type DemoCustomer,
   type DemoProduct,
 } from "./sandboxDataset";
@@ -229,9 +233,63 @@ function productsList(q: URLSearchParams): DemoResponse {
   if (!p.ok) return p.res;
   let rows = DEMO_PRODUCTS.filter((r) => p.data.include_deleted || !r.deleted_at);
   if (p.data.sku) rows = rows.filter((r) => r.sku === p.data.sku);
+  if (p.data.ids) rows = rows.filter((r) => p.data.ids!.includes(r.id));
   if (p.data.updated_since) rows = rows.filter((r) => ts(r.updated_at) >= ts(p.data.updated_since!));
   const page = keysetPage(rows, (r) => r.updated_at, p.data.cursor, p.data.limit ?? 100);
-  return page.ok ? ok(page.body) : page.res;
+  if (!page.ok) return page.res;
+  const inc = p.data.include ?? [];
+  if (!inc.length) return ok(page.body);
+  const body = page.body as { data: DemoProduct[]; next_cursor: string | null };
+  return ok({ ...body, data: body.data.map((r) => expandProduct(r, inc)) });
+}
+
+// Misma forma que _api_product_full_json (ADR-168), sobre el dataset ficticio.
+function expandProduct(r: DemoProduct, inc: readonly ProductInclude[]): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...r };
+  const x = DEMO_PRODUCT_EXTRAS[r.id];
+  const storeStock = inc.includes("stock");
+  if (inc.includes("attributes")) {
+    out.attributes = x?.attributes ?? [];
+    out.category = x?.category ?? null;
+    out.brand = x?.brand ?? null;
+    out.tags = x?.tags ?? [];
+    out.model = x?.model ?? null;
+    out.season = x?.season ?? null;
+    out.net_content = x?.net_content ?? null;
+    out.net_content_unit = x?.net_content_unit ?? null;
+  }
+  if (inc.includes("images")) out.images = x?.images ?? [];
+  if (inc.includes("price_lists")) {
+    const now = Date.now();
+    out.price_lists = DEMO_PRICE_LISTS.filter((l) => (!l.valid_from || ts(l.valid_from) <= now) && (!l.valid_to || now < ts(l.valid_to))).map((l) => ({
+      id: l.id,
+      name: l.name,
+      channel: l.channel,
+      kind: l.kind,
+      price: Math.round(r.price * (1 + l.adjustment_pct / 100) * 100) / 100,
+      prices_include_tax: l.prices_include_tax,
+      valid_from: l.valid_from,
+      valid_to: l.valid_to,
+    }));
+  }
+  if (inc.includes("variants")) {
+    out.variants = DEMO_VARIANTS.filter((v) => v.product_id === r.id).map(({ product_id: _p, stock_by_store, ...v }) => ({
+      ...v,
+      ...(storeStock ? { stock_by_store: stock_by_store.map((s) => ({ ...s, store_code: null })) } : {}),
+    }));
+  }
+  if (storeStock) {
+    out.stock_by_store = DEMO_STOCK.filter((s) => s.product_id === r.id).map((s) => ({
+      store_id: s.store_id,
+      store_code: null,
+      store_name: DEMO_STORES.find((st) => st.id === s.store_id)?.name ?? null,
+      qty: s.qty,
+      min_qty: s.min_qty,
+      max_qty: null,
+      location: null,
+    }));
+  }
+  return out;
 }
 
 function customersList(q: URLSearchParams): DemoResponse {

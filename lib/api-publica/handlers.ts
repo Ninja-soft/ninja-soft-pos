@@ -50,6 +50,7 @@ export async function listHandler<S extends z.ZodTypeAny>(
   rpc: string,
   timeKey: "updated_at" | "created_at" | null,
   toArgs: (q: z.infer<S>, cursor: { t?: string; id?: string }) => Record<string, unknown>,
+  mapRows?: (rows: unknown[]) => unknown[],
 ): Promise<NextResponse> {
   const token = requireBearer(req);
   if (isResponse(token)) return token;
@@ -71,7 +72,8 @@ export async function listHandler<S extends z.ZodTypeAny>(
   const env = await callApiRpc(rpc, { p_token: token, ...toArgs(q, cursor) });
   if (env.status === 200 && env.body && typeof env.body === "object") {
     const b = env.body as Body;
-    env.body = { data: b.data ?? [], next_cursor: nextCursor(b.next, timeKey ?? undefined) };
+    const rows = Array.isArray(b.data) ? b.data : [];
+    env.body = { data: mapRows ? mapRows(rows) : rows, next_cursor: nextCursor(b.next, timeKey ?? undefined) };
   }
   return respond(env, environmentHeaders(token));
 }

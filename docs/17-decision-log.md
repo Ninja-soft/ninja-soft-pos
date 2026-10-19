@@ -6162,35 +6162,6 @@ Un negocio (La Jamonera) conectó Mercado Pago por OAuth en NinjaPos y quiere us
 - **Categoría:** integración operativa a pedido, sin feature de plan (no es una función del panel). **Deuda:** pantalla en internal (o en Configuración › Integraciones) para generar, listar y revocar claves.
 - Orden de deploy: migración `20270105100000_mp_token_broker`, después la Edge `mp_token_broker` con `--no-verify-jwt`.
 
-## ADR-169: Ficha del cliente 360 completa: comprobantes, Debe / Haber, adjuntos, cambios auditados y accesos (H31b)
-
-**Fecha:** 2026-10-19 · **Estado:** aceptada (migración `20270108100000_cliente_360_completo` sin aplicar, sin Edges) · **Base:** ADR-067 (ficha 360), ADR-160 (presentador de auditoría), ADR-111 (impresión y email del comprobante)
-
-### Contexto
-
-ADR-067 dejó la ficha del cliente con perfil, indicadores, gráficos, notas y línea de tiempo. Quedaban pendientes de H31b: comprobantes con reimprimir y reenviar, la cuenta Debe / Haber con saldo acumulado y PDF, adjuntos, los cambios de la ficha en la línea de tiempo y el acceso desde el POS y desde cada venta.
-
-### Decisión
-
-1. **Comprobantes** (`C360Receipts`): las ventas del cliente (respetan la sucursal elegida arriba) con **Ver**, **Reimprimir** y **Reenviar**. Reusa el detalle de la venta (`TicketModal`) con la prop nueva `startWith`: `"print"` imprime al quedar listo (con CAE si es fiscal) sin el envío automático por email; `"email"` abre el envío con el email del cliente precargado. Mismo formato, perfil de impresión y email del negocio que el resto del sistema.
-2. **Cuenta Debe / Haber** (`C360Account`, si el plan tiene `cuenta_corriente`): los últimos 8 movimientos de `account_statement` con Debe, Haber y saldo corrido, saldo y vencido, **Estado de cuenta PDF** (todos los movimientos) y **Enviar por email** (el mismo envío de la ficha de cuenta corriente). El concepto y las filas del PDF salen de `components/account/statementExport.ts`, que ahora usan las dos pantallas: no hay dos PDF distintos.
-3. **Adjuntos** (`customer_attachments`): bucket privado `customer-files` (10 MB; PDF, JPG, PNG, WEBP, Word, Excel y texto), ruta `<negocio>/<cliente>/<uuid>-<nombre>`. Lectura y subida en storage con `customer_files_can()` (miembro activo, no repartidor, feature `clientes_360`); se abren con link firmado de 5 minutos. El alta pasa por `customer_attachment_add` (valida carpeta del negocio y del cliente, que el objeto exista, toma tipo y tamaño de storage, tope de 100 por cliente) y la baja por `customer_attachment_delete` (quien lo subió o un encargado, baja lógica, el archivo queda). Las dos auditan. RLS de lectura con `(select current_tenant_id())` o `internal_scope()` + RESTRICTIVE de repartidor; sin escritura directa.
-4. **Cambios de la ficha** auditados: triggers `audit_customers` (alta y baja) y `audit_customers_update` (sólo si cambió algo más que `updated_at`) con `write_audit_log`, el mismo de productos y ventas. `customer_360_timeline` (definición viva + columna `extra`) suma los tipos `change` (alta, edición y verificación en el padrón, con quién y el antes y después) y `attachment`. El front los muestra con el presentador de ADR-160 ("Teléfono: vacío a 3415550000"), hasta 3 campos y "Ver los N cambios".
-5. **Accesos:** en el selector de cliente del POS cada resultado tiene un ícono que abre su ficha en otra pestaña (sin elegirlo ni perder el carrito), además del link del cliente actual; en el detalle de la venta, el nombre del cliente es un link a su ficha.
-
-### Alternativas descartadas
-
-- **Guardar los cambios en una tabla propia del cliente:** `audit_logs` ya existe, lo lee Seguridad › Auditoría y lo presenta ADR-160.
-- **Un trigger de auditoría nuevo:** `write_audit_log` es el estándar; el `when` evita el ruido de las ediciones que sólo tocan `updated_at`.
-- **Bucket público con rutas difíciles de adivinar:** son documentos personales (DNI, contratos); privado y link firmado.
-- **Copiar la cuenta corriente en la ficha:** se lee `account_statement`, la fuente única.
-
-### Consecuencias
-
-- Plan (CLAUDE.md §6): sin feature nueva; todo es parte de `clientes_360` (OPTIONAL, Pro+), con gating real en `_c360_assert` y en `customer_files_can`. La cuenta Debe / Haber sigue además a `cuenta_corriente`.
-- La auditoría de `customers` suma una fila por alta, edición y baja (también las importaciones). Si molesta en volumen, el `when` se puede afinar.
-- Orden de deploy: migración `20270108100000_cliente_360_completo`, después el front. Front tolerante: sin la migración, los adjuntos muestran error al cargar y la línea de tiempo funciona igual (los tipos nuevos no llegan).
-- Verificado: dry-run en producción con rollback (cambio auditado visible, edición que sólo toca `updated_at` sin auditar, ruta ajena rechazada, archivo no subido rechazado, guardarraíles de RLS en 0). Tests `tests/unit/c360Completo.test.ts`, `tests/components/Cliente360Completo.test.tsx` y `tests/integration/rls-cliente-360-completo.test.ts` (aislamiento entre negocios en adjuntos, storage y línea de tiempo).
 ## ADR-167: Cobro SaaS robusto: excedente de emails fila por fila, IA y MRR con la regla de ADR-156 y re-sincronización del débito de MP al registrar un pago
 
 **Fecha:** 2026-10-19 · **Estado:** aceptada
@@ -6225,3 +6196,33 @@ La revisión de ADR-156 dejó tres deudas de la facturación de plataforma:
   - una transferencia encola la sincronización y el débito de MP no;
   - guardarraíles de RLS en 0.
 - Sin Edges que desplegar. Migración `20270106100000_billing_robusto`. Test `tests/unit/billingRobusto.test.ts`.
+
+## ADR-169: Ficha del cliente 360 completa: comprobantes, Debe / Haber, adjuntos, cambios auditados y accesos (H31b)
+
+**Fecha:** 2026-10-19 · **Estado:** aceptada (migración `20270108100000_cliente_360_completo` sin aplicar, sin Edges) · **Base:** ADR-067 (ficha 360), ADR-160 (presentador de auditoría), ADR-111 (impresión y email del comprobante)
+
+### Contexto
+
+ADR-067 dejó la ficha del cliente con perfil, indicadores, gráficos, notas y línea de tiempo. Quedaban pendientes de H31b: comprobantes con reimprimir y reenviar, la cuenta Debe / Haber con saldo acumulado y PDF, adjuntos, los cambios de la ficha en la línea de tiempo y el acceso desde el POS y desde cada venta.
+
+### Decisión
+
+1. **Comprobantes** (`C360Receipts`): las ventas del cliente (respetan la sucursal elegida arriba) con **Ver**, **Reimprimir** y **Reenviar**. Reusa el detalle de la venta (`TicketModal`) con la prop nueva `startWith`: `"print"` imprime al quedar listo (con CAE si es fiscal) sin el envío automático por email; `"email"` abre el envío con el email del cliente precargado. Mismo formato, perfil de impresión y email del negocio que el resto del sistema.
+2. **Cuenta Debe / Haber** (`C360Account`, si el plan tiene `cuenta_corriente`): los últimos 8 movimientos de `account_statement` con Debe, Haber y saldo corrido, saldo y vencido, **Estado de cuenta PDF** (todos los movimientos) y **Enviar por email** (el mismo envío de la ficha de cuenta corriente). El concepto y las filas del PDF salen de `components/account/statementExport.ts`, que ahora usan las dos pantallas: no hay dos PDF distintos.
+3. **Adjuntos** (`customer_attachments`): bucket privado `customer-files` (10 MB; PDF, JPG, PNG, WEBP, Word, Excel y texto), ruta `<negocio>/<cliente>/<uuid>-<nombre>`. Lectura y subida en storage con `customer_files_can()` (miembro activo, no repartidor, feature `clientes_360`); se abren con link firmado de 5 minutos. El alta pasa por `customer_attachment_add` (valida carpeta del negocio y del cliente, que el objeto exista, toma tipo y tamaño de storage, tope de 100 por cliente) y la baja por `customer_attachment_delete` (quien lo subió o un encargado, baja lógica, el archivo queda). Las dos auditan. RLS de lectura con `(select current_tenant_id())` o `internal_scope()` + RESTRICTIVE de repartidor; sin escritura directa.
+4. **Cambios de la ficha** auditados: triggers `audit_customers` (alta y baja) y `audit_customers_update` (sólo si cambió algo más que `updated_at`) con `write_audit_log`, el mismo de productos y ventas. `customer_360_timeline` (definición viva + columna `extra`) suma los tipos `change` (alta, edición y verificación en el padrón, con quién y el antes y después) y `attachment`. El front los muestra con el presentador de ADR-160 ("Teléfono: vacío a 3415550000"), hasta 3 campos y "Ver los N cambios".
+5. **Accesos:** en el selector de cliente del POS cada resultado tiene un ícono que abre su ficha en otra pestaña (sin elegirlo ni perder el carrito), además del link del cliente actual; en el detalle de la venta, el nombre del cliente es un link a su ficha.
+
+### Alternativas descartadas
+
+- **Guardar los cambios en una tabla propia del cliente:** `audit_logs` ya existe, lo lee Seguridad › Auditoría y lo presenta ADR-160.
+- **Un trigger de auditoría nuevo:** `write_audit_log` es el estándar; el `when` evita el ruido de las ediciones que sólo tocan `updated_at`.
+- **Bucket público con rutas difíciles de adivinar:** son documentos personales (DNI, contratos); privado y link firmado.
+- **Copiar la cuenta corriente en la ficha:** se lee `account_statement`, la fuente única.
+
+### Consecuencias
+
+- Plan (CLAUDE.md §6): sin feature nueva; todo es parte de `clientes_360` (OPTIONAL, Pro+), con gating real en `_c360_assert` y en `customer_files_can`. La cuenta Debe / Haber sigue además a `cuenta_corriente`.
+- La auditoría de `customers` suma una fila por alta, edición y baja (también las importaciones). Si molesta en volumen, el `when` se puede afinar.
+- Orden de deploy: migración `20270108100000_cliente_360_completo`, después el front. Front tolerante: sin la migración, los adjuntos muestran error al cargar y la línea de tiempo funciona igual (los tipos nuevos no llegan).
+- Verificado: dry-run en producción con rollback (cambio auditado visible, edición que sólo toca `updated_at` sin auditar, ruta ajena rechazada, archivo no subido rechazado, guardarraíles de RLS en 0). Tests `tests/unit/c360Completo.test.ts`, `tests/components/Cliente360Completo.test.tsx` y `tests/integration/rls-cliente-360-completo.test.ts` (aislamiento entre negocios en adjuntos, storage y línea de tiempo).

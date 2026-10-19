@@ -187,7 +187,7 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
     sku: "REM-BASICA",
     barcode: null,
     name: "Remera básica algodón",
-    description: "Talles S a XL, tres colores.",
+    description: "Talles S a XL, blanco y negro.",
     price: 12500,
     cost: 6900,
     unit: "un",
@@ -400,4 +400,94 @@ export const DEMO_SALES: DemoSale[] = [
     ],
     payments: [{ method: "transfer", amount: 25000, reference: "Transferencia 000123" }],
   },
+];
+
+// ── Producto completo (include de GET /products, ADR-168) ──────────────────
+// Lo que la API real arma desde categorías, marcas, imágenes, listas de
+// precios, variantes y stock por sucursal. Las imágenes son URLs .example
+// (no apuntan a nada real).
+
+export type DemoPriceList = {
+  id: string;
+  name: string;
+  channel: string;
+  kind: string;
+  /** Ajuste sobre el precio base (las listas derivadas del sandbox). */
+  adjustment_pct: number;
+  prices_include_tax: boolean;
+  valid_from: string | null;
+  valid_to: string | null;
+};
+
+export type DemoProductExtra = {
+  attributes: { key: string; value: string }[];
+  category: { id: string; name: string } | null;
+  brand: { id: string; name: string } | null;
+  tags: string[];
+  model: string | null;
+  season: string | null;
+  net_content: number | null;
+  net_content_unit: string | null;
+  images: { id: string; url: string; path: string | null; position: number; is_primary: boolean }[];
+};
+
+export type DemoVariant = {
+  id: string;
+  product_id: string;
+  sku: string;
+  barcode: string | null;
+  options: { axis: string; value: string }[];
+  price: number;
+  stock: number;
+  updated_at: string;
+  stock_by_store: { store_id: string; qty: number }[];
+};
+
+const L = (n: number) => `7c1e9a20-5d4b-4e8f-b2a6-${String(n).padStart(12, "0")}`;
+const CAT = (n: number) => `3d8f0b6c-1a2e-4b7d-9c3f-${String(n).padStart(12, "0")}`;
+const BR = (n: number) => `9a4b2c1d-6e7f-4a8b-8c9d-${String(n).padStart(12, "0")}`;
+const IMG = (n: number) => `b5e6f7a8-2c3d-4e5f-a6b7-${String(n).padStart(12, "0")}`;
+const VAR = (n: number) => `d2c3b4a5-8e9f-4a1b-9c2d-${String(n).padStart(12, "0")}`;
+
+export const DEMO_PRICE_LISTS: DemoPriceList[] = [
+  { id: L(1), name: "Mayorista", channel: "mostrador", kind: "derived", adjustment_pct: -10, prices_include_tax: true, valid_from: null, valid_to: null },
+  { id: L(2), name: "Tienda online", channel: "online", kind: "derived", adjustment_pct: 5, prices_include_tax: true, valid_from: "2026-10-01T03:00:00.000000+00:00", valid_to: null },
+];
+
+const img = (n: number, file: string, position: number) => ({
+  id: IMG(n),
+  url: `https://images.example/almacen-demo/${file}.webp`,
+  path: null,
+  position,
+  is_primary: position === 0,
+});
+const extra = (e: Partial<DemoProductExtra>): DemoProductExtra => ({
+  attributes: [],
+  category: null,
+  brand: null,
+  tags: [],
+  model: null,
+  season: null,
+  net_content: null,
+  net_content_unit: null,
+  images: [],
+  ...e,
+});
+const ALMACEN = { id: CAT(1), name: "Almacén" };
+
+export const DEMO_PRODUCT_EXTRAS: Record<string, DemoProductExtra> = {
+  [P(1)]: extra({ attributes: [{ key: "Contenido", value: "1 kg" }, { key: "Tipo", value: "Largo fino" }], category: ALMACEN, brand: { id: BR(1), name: "Granos del Sur" }, tags: ["sin TACC"], net_content: 1, net_content_unit: "kg", images: [img(1, "arroz-1kg", 0), img(2, "arroz-1kg-dorso", 1)] }),
+  [P(2)]: extra({ attributes: [{ key: "Contenido", value: "500 g" }], category: ALMACEN, brand: { id: BR(2), name: "Pastas Demo" }, net_content: 500, net_content_unit: "g", images: [img(3, "fideos-500", 0)] }),
+  [P(3)]: extra({ attributes: [{ key: "Contenido", value: "1 kg" }, { key: "Origen", value: "Misiones" }], category: ALMACEN, brand: { id: BR(3), name: "Yerbatera Demo" }, net_content: 1, net_content_unit: "kg", images: [img(4, "yerba-1kg", 0)] }),
+  [P(4)]: extra({ attributes: [{ key: "Contenido", value: "2 l" }], category: { id: CAT(2), name: "Bebidas" }, net_content: 2, net_content_unit: "l" }),
+  [P(5)]: extra({ attributes: [{ key: "Origen", value: "Córdoba" }], category: { id: CAT(3), name: "Fiambrería" }, tags: ["por peso"] }),
+  [P(6)]: extra({ attributes: [{ key: "Material", value: "Algodón 100%" }], category: { id: CAT(4), name: "Indumentaria" }, brand: { id: BR(4), name: "Básicos Demo" }, model: "Clásica", season: "Primavera 2026", images: [img(5, "remera-blanca", 0), img(6, "remera-negra", 1)] }),
+  [P(7)]: extra({ category: { id: CAT(5), name: "Limpieza" }, net_content: 750, net_content_unit: "ml" }),
+};
+
+export const DEMO_VARIANTS: DemoVariant[] = [
+  { id: VAR(1), product_id: P(6), sku: "REM-BASICA-S-BLA", barcode: "7790070066611", options: [{ axis: "Talle", value: "S" }, { axis: "Color", value: "Blanco" }], price: 12500, stock: 9, updated_at: "2026-10-09T17:00:00.000000+00:00", stock_by_store: [{ store_id: DEMO_STORE_CENTRAL, qty: 6 }, { store_id: DEMO_STORE_NORTE, qty: 3 }] },
+  { id: VAR(2), product_id: P(6), sku: "REM-BASICA-M-BLA", barcode: "7790070066612", options: [{ axis: "Talle", value: "M" }, { axis: "Color", value: "Blanco" }], price: 12500, stock: 14, updated_at: "2026-10-09T17:00:00.000000+00:00", stock_by_store: [{ store_id: DEMO_STORE_CENTRAL, qty: 10 }, { store_id: DEMO_STORE_NORTE, qty: 4 }] },
+  { id: VAR(3), product_id: P(6), sku: "REM-BASICA-M-NEG", barcode: "7790070066613", options: [{ axis: "Talle", value: "M" }, { axis: "Color", value: "Negro" }], price: 12500, stock: 11, updated_at: "2026-10-09T17:00:00.000000+00:00", stock_by_store: [{ store_id: DEMO_STORE_CENTRAL, qty: 11 }] },
+  { id: VAR(4), product_id: P(6), sku: "REM-BASICA-XL-NEG", barcode: null, options: [{ axis: "Talle", value: "XL" }, { axis: "Color", value: "Negro" }], price: 13900, stock: 7, updated_at: "2026-10-09T17:00:00.000000+00:00", stock_by_store: [{ store_id: DEMO_STORE_CENTRAL, qty: 5 }, { store_id: DEMO_STORE_NORTE, qty: 2 }] },
 ];

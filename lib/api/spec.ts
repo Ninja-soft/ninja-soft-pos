@@ -17,6 +17,9 @@ import {
   IVA_CONDITIONS,
   MAX_BATCH,
   MAX_BODY_BYTES,
+  MAX_LIMIT_WITH_INCLUDE,
+  MAX_PRODUCT_IDS,
+  PRODUCT_INCLUDES,
   MAX_SALES_RANGE_DAYS,
   STOCK_REASONS,
 } from "@/lib/api-publica/schemas";
@@ -280,6 +283,45 @@ const PRODUCT_EXAMPLE = {
   deleted_at: null,
 };
 
+// Producto con include=attributes,images,price_lists,variants,stock (ADR-168).
+const PRODUCT_FULL_EXAMPLE = {
+  ...PRODUCT_EXAMPLE,
+  attributes: [{ key: "Contenido", value: "1 kg" }],
+  category: { id: "3d8f0b6c-1a2e-4b7d-9c3f-000000000001", name: "Almacén" },
+  brand: { id: "9a4b2c1d-6e7f-4a8b-8c9d-000000000001", name: "Granos del Sur" },
+  tags: ["sin TACC"],
+  model: null,
+  season: null,
+  net_content: 1,
+  net_content_unit: "kg",
+  images: [
+    {
+      id: "b5e6f7a8-2c3d-4e5f-a6b7-000000000001",
+      url: "https://images.example/almacen-demo/arroz-1kg.webp",
+      path: null,
+      position: 0,
+      is_primary: true,
+    },
+  ],
+  price_lists: [
+    {
+      id: "7c1e9a20-5d4b-4e8f-b2a6-000000000001",
+      name: "Mayorista",
+      channel: "mostrador",
+      kind: "derived",
+      price: 1701,
+      prices_include_tax: true,
+      valid_from: null,
+      valid_to: null,
+    },
+  ],
+  variants: [],
+  stock_by_store: [
+    { store_id: "a1b2c3d4-0000-4000-8000-000000000001", store_code: "CEN", store_name: "Casa central", qty: 30, min_qty: 6, max_qty: null, location: null },
+    { store_id: "a1b2c3d4-0000-4000-8000-000000000002", store_code: "NOR", store_name: "Sucursal Norte", qty: 18, min_qty: 4, max_qty: null, location: null },
+  ],
+};
+
 const CUSTOMER_EXAMPLE = {
   id: "0f9d2c1a-7b3e-4c55-8f0a-9e1d2c3b4a50",
   external_id: "ERP-000123",
@@ -347,6 +389,109 @@ export const MODELS: Record<ModelId, ModelSpec> = {
       TS("created_at", "Alta."),
       TS("updated_at", "Última modificación (orden de la lista)."),
       TS("deleted_at", "Baja lógica (sólo con include_deleted).", true),
+      // Sólo vienen si se piden con include (ADR-168).
+      {
+        name: "attributes",
+        type: "array",
+        description: "Con include=attributes. Atributos libres en orden (Contenido, Color, Talle...).",
+        fields: [
+          { name: "key", type: "string", description: "Nombre del atributo." },
+          { name: "value", type: "string", description: "Valor." },
+        ],
+      },
+      {
+        name: "category",
+        type: "object",
+        nullable: true,
+        description: "Con include=attributes. Categoría del producto.",
+        fields: [ID("id", "Id de la categoría."), { name: "name", type: "string", description: "Nombre." }],
+      },
+      {
+        name: "brand",
+        type: "object",
+        nullable: true,
+        description: "Con include=attributes. Marca del producto.",
+        fields: [ID("id", "Id de la marca."), { name: "name", type: "string", description: "Nombre." }],
+      },
+      { name: "tags", type: "array", items: "string", description: "Con include=attributes. Etiquetas." },
+      { name: "model", type: "string", nullable: true, description: "Con include=attributes. Modelo." },
+      { name: "season", type: "string", nullable: true, description: "Con include=attributes. Temporada." },
+      { name: "net_content", type: "number", nullable: true, description: "Con include=attributes. Contenido neto (500, 1...)." },
+      { name: "net_content_unit", type: "string", nullable: true, description: "Con include=attributes. Unidad del contenido neto (g, kg, ml, l...)." },
+      {
+        name: "images",
+        type: "array",
+        description: "Con include=images. Imágenes en orden, la principal primero. url es pública.",
+        fields: [
+          ID("id", "Id de la imagen (null en imágenes cargadas antes de la galería).", true),
+          { name: "url", type: "string", description: "URL pública de la imagen." },
+          { name: "path", type: "string", nullable: true, description: "Ruta dentro del almacenamiento de NinjaSoft." },
+          { name: "position", type: "integer", description: "Orden (0 = primera)." },
+          { name: "is_primary", type: "boolean", description: "Si es la imagen principal." },
+        ],
+      },
+      {
+        name: "price_lists",
+        type: "array",
+        description:
+          "Con include=price_lists. Precio en cada lista vigente, resuelto con el mismo motor que el punto de venta (lista fija, derivada, sobre costo o en moneda, con su redondeo).",
+        fields: [
+          ID("id", "Id de la lista."),
+          { name: "name", type: "string", description: "Nombre de la lista." },
+          { name: "channel", type: "string", nullable: true, description: "Canal (mostrador, online, mayorista...)." },
+          { name: "kind", type: "string", nullable: true, description: "Tipo de lista (fixed, derived, cost, currency)." },
+          { name: "price", type: "number", nullable: true, description: "Precio unitario final en pesos en esa lista." },
+          { name: "prices_include_tax", type: "boolean", nullable: true, description: "Si los precios de la lista incluyen IVA." },
+          TS("valid_from", "Desde cuándo rige la lista.", true),
+          TS("valid_to", "Hasta cuándo rige la lista.", true),
+        ],
+      },
+      {
+        name: "variants",
+        type: "array",
+        description: "Con include=variants. Variantes activas (talle, color...).",
+        fields: [
+          ID("id", "Id de la variante."),
+          { name: "sku", type: "string", nullable: true, description: "SKU de la variante." },
+          { name: "barcode", type: "string", nullable: true, description: "Código de barras de la variante." },
+          {
+            name: "options",
+            type: "array",
+            description: "Valor de cada eje, en orden.",
+            fields: [
+              { name: "axis", type: "string", nullable: true, description: "Eje (Talle, Color...)." },
+              { name: "value", type: "string", description: "Valor (M, Rojo...)." },
+            ],
+          },
+          { name: "price", type: "number", description: "Precio de la variante (el del producto si no tiene uno propio)." },
+          { name: "stock", type: "number", description: "Stock consolidado de la variante." },
+          TS("updated_at", "Última modificación de la variante."),
+          {
+            name: "stock_by_store",
+            type: "array",
+            description: "Sólo con include=variants,stock. Stock de la variante por sucursal.",
+            fields: [
+              ID("store_id", "Id de la sucursal."),
+              { name: "store_code", type: "string", nullable: true, description: "Código de la sucursal." },
+              { name: "qty", type: "number", description: "Cantidad." },
+            ],
+          },
+        ],
+      },
+      {
+        name: "stock_by_store",
+        type: "array",
+        description: "Con include=stock. Stock del producto por sucursal (el total sigue en stock).",
+        fields: [
+          ID("store_id", "Id de la sucursal."),
+          { name: "store_code", type: "string", nullable: true, description: "Código de la sucursal." },
+          { name: "store_name", type: "string", description: "Nombre de la sucursal." },
+          { name: "qty", type: "number", description: "Cantidad." },
+          { name: "min_qty", type: "number", nullable: true, description: "Mínimo de la sucursal." },
+          { name: "max_qty", type: "number", nullable: true, description: "Máximo de la sucursal." },
+          { name: "location", type: "string", nullable: true, description: "Ubicación en el depósito." },
+        ],
+      },
     ],
   },
   Store: {
@@ -519,17 +664,37 @@ export const ENDPOINTS: EndpointSpec[] = [
       P_CURSOR,
       P_UPDATED_SINCE,
       { name: "sku", in: "query", type: "string", minLength: 1, maxLength: 64, description: "Filtra por un SKU exacto.", example: "ALM-ARROZ-1KG" },
+      {
+        name: "ids",
+        in: "query",
+        type: "string",
+        maxLength: 4000,
+        description: `Ids de producto separados por coma (hasta ${MAX_PRODUCT_IDS}). Sirve para leer uno o varios productos puntuales.`,
+      },
+      {
+        name: "include",
+        in: "query",
+        type: "string",
+        maxLength: 200,
+        description: `Datos extra separados por coma: ${PRODUCT_INCLUDES.join(", ")}. Sin include la respuesta es la de siempre. Con include, limit va hasta ${MAX_LIMIT_WITH_INCLUDE}.`,
+        example: PRODUCT_INCLUDES.join(","),
+      },
       P_INCLUDE_DELETED,
     ],
     response: {
       status: 200,
       shape: "page",
       model: "Product",
-      description: "Página de productos.",
-      example: { data: [PRODUCT_EXAMPLE], next_cursor: null },
+      description: "Página de productos. El ejemplo es con include de todo; sin include vienen sólo los campos básicos.",
+      example: { data: [PRODUCT_FULL_EXAMPLE], next_cursor: null },
     },
     errors: [...AUTH_ERRORS, "invalid_cursor", "validation_error"],
     sandbox: READ_ONLY_SANDBOX,
+    notes: [
+      "include=price_lists resuelve el precio de cada lista con el mismo motor que el punto de venta: es el precio que cobraría la caja con esa lista.",
+      "Las imágenes son URLs públicas: se pueden mostrar directo en una tienda online.",
+      "Para traer un producto puntual con todo: ids=<id>&include=attributes,images,price_lists,variants,stock.",
+    ],
   },
   {
     id: "products.batch",

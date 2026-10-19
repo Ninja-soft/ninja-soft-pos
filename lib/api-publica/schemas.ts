@@ -122,15 +122,48 @@ const bool = z
   .transform((v) => v === "true" || v === "1")
   .optional();
 
+/** Datos extra del producto que se piden con include (ADR-168). */
+export const PRODUCT_INCLUDES = ["attributes", "images", "price_lists", "variants", "stock"] as const;
+export type ProductInclude = (typeof PRODUCT_INCLUDES)[number];
+/** Con algún include, la página máxima baja a este tamaño. */
+export const MAX_LIMIT_WITH_INCLUDE = 100;
+export const MAX_PRODUCT_IDS = 100;
+
+/** Lista separada por comas: sin vacíos ni repetidos. */
+const csv = (s: string) => [...new Set(s.split(",").map((x) => x.trim()).filter(Boolean))];
+
+const productIncludes = z
+  .string()
+  .max(200)
+  .transform(csv)
+  .refine((v) => v.every((x) => (PRODUCT_INCLUDES as readonly string[]).includes(x)), {
+    message: `include acepta ${PRODUCT_INCLUDES.join(", ")}.`,
+  })
+  .transform((v) => v as ProductInclude[]);
+
+const productIds = z
+  .string()
+  .max(4000)
+  .transform(csv)
+  .refine((v) => v.length >= 1 && v.length <= MAX_PRODUCT_IDS, { message: `ids acepta entre 1 y ${MAX_PRODUCT_IDS} ids.` })
+  .refine((v) => v.every((x) => uuid.safeParse(x).success), { message: "ids tiene que ser una lista de ids (uuid)." })
+  .transform((v) => v.map((x) => x.toLowerCase()));
+
 export const productsQuerySchema = z
   .object({
     limit: limit(500),
     cursor: z.string().max(512).optional(),
     updated_since: isoDate.optional(),
     sku: sku.optional(),
+    ids: productIds.optional(),
+    include: productIncludes.optional(),
     include_deleted: bool,
   })
-  .strict();
+  .strict()
+  .refine((q) => !(q.include?.length && (q.limit ?? 0) > MAX_LIMIT_WITH_INCLUDE), {
+    message: `Con include, limit va hasta ${MAX_LIMIT_WITH_INCLUDE}.`,
+    path: ["limit"],
+  });
 
 export const customersQuerySchema = z
   .object({

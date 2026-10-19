@@ -264,6 +264,27 @@ describe.skipIf(!enabled)("API pública v1 · aislamiento, alcances, plan y rend
     const skus = (listAll.body.data as { sku: string; name: string }[]).map((p) => p.name);
     expect(skus).not.toContain("Producto de B");
     expect(skus).not.toContain("Compartido B");
+    // Producto completo (ADR-168): con el id de un producto de B e include, nada.
+    const { data: bRow } = await ctx.admin.from("products").select("id").eq("sku", `B-ONLY-${STAMP}`).single();
+    const fullA = await api("api_v1_products_list", {
+      p_token: ctx.tokenA,
+      p_ids: [(bRow as { id: string }).id],
+      p_include: ["attributes", "images", "price_lists", "variants", "stock"],
+    });
+    expect(fullA.status).toBe(200);
+    expect(fullA.body.data).toEqual([]);
+    const fullB = await api("api_v1_products_list", {
+      p_token: ctx.tokenB,
+      p_ids: [(bRow as { id: string }).id],
+      p_include: ["price_lists", "stock"],
+    });
+    const rowB = (fullB.body.data as Record<string, unknown>[])[0]!;
+    expect(rowB.price).toBe(500);
+    expect(Array.isArray(rowB.price_lists)).toBe(true);
+    expect(Array.isArray(rowB.stock_by_store)).toBe(true);
+    const badInclude = await api("api_v1_products_list", { p_token: ctx.tokenA, p_include: ["foo"] });
+    expect(badInclude.status).toBe(400);
+    expect(badInclude.body.error?.code).toBe("invalid_include");
 
     // Stock en una sucursal de B.
     const st = await api("api_v1_stock_adjust", {
@@ -304,6 +325,8 @@ describe.skipIf(!enabled)("API pública v1 · aislamiento, alcances, plan y rend
       p_updated_since: null,
       p_sku: null,
       p_include_deleted: false,
+      p_include: null,
+      p_ids: null,
     });
     expect(internal.error).not.toBeNull();
     const internalAuthed = await rpc(ctx.ownerA.client, "_api_v1_products_upsert", {

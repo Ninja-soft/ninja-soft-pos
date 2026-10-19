@@ -22,7 +22,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
 | **F9** | Motor de promociones PRO | 4–6 semanas | 🟢 Núcleo completo (ADR-074, `feat/promociones-v2`, migraciones `20261102100000` a `20261102100300` sin aplicar): motor con cálculo autoritativo en `create_sale`, combinables, topes, tarjeta/banco, sucursal, lista y combos; falta H55 (segmentos y fidelización) y la aprobación de H56. Devolución parcial con promo prorrateada por línea hecha (ADR-088) |
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
-| **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (H32 hecho en ADR-129; entregas partidas, venta de otra sucursal y remitos con COT en ADR-136; falta parte de H31b) |
+| **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (H32 hecho en ADR-129; entregas partidas, venta de otra sucursal y remitos con COT en ADR-136; H31b completo en ADR-169) |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081; ronda 2 ADR-097: ticket separado por comensal y partes iguales, KDS por curso con "marchar", prioridad urgente, anulación de delivery con motivo y aviso automático a la lista de espera; canales de delivery externos, ADR-102: pedidos de apps con comanda automática, facturación, repartidor y simulador) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 En curso (primer corte ADR-092 en `feat/f14-comercial`: aprobaciones comerciales, alertas de margen, conteo cíclico y garantías por serie; parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
@@ -673,7 +673,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] **Escaneo de DNI argentino para alta rápida de cliente** *(agregado 2026-06-06; hecho 2026-06-08, PR #263)*: lee el código **PDF417** del frente del DNI (scanner 2D USB tipo teclado vía `useScanner`, cámara con `BarcodeDetector` cuando soporta `pdf417`, o pegado manual) y parsea **offline** los campos separados por `@` (apellido, nombre, sexo, N° de DNI, fecha de nacimiento) con `parseDni` (`lib/customers/dniParse.ts`, +16 tests) para autocompletar la ficha del cliente en alta/edición (`CustomerFormModal`) y el alta rápida del selector del POS (`createQuick`). Sin servicios ni registros gubernamentales — el dato vive en el propio código del documento. Componente `DniScanModal` con **validación visual** de los datos parseados antes de guardar (no autocompleta sin confirmación); degrada honestamente si el navegador no lee `pdf417` por cámara.
   - [x] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar. ✓
 
-- [~] **H31b · Historial del cliente 360 PRO.** *(pedido de Lucas, 2026-10-12)* *Primer corte integrado en código (2026-10-12, rama `feat/reintegro-mp-cliente360`, ADR-067): página `/clientes/[id]` con perfil, segmentos, indicadores, sucursales, gráficos, notas, línea de tiempo unificada con filtros y cursor y XLSX; RPC `customer_360_summary` y `customer_360_timeline` con alcance de sucursal; feature `clientes_360` desde Pro. **Pasos:** aplicar `20261030100200`. **Pendiente:** comprobantes con reimprimir y reenviar, cuenta Debe / Haber con saldo acumulado y PDF, adjuntos, cambios de la ficha auditados en la línea de tiempo y acceso desde el selector del POS y desde cada venta.* Una ficha de cliente robusta y profesional para ver **todo** lo que pasó con ese cliente en un solo lugar. Hoy el historial (`CustomerHistoryModal`) muestra vale, compras y devoluciones; esto lo lleva a una vista completa, en página propia (no modal), accesible desde /clientes, desde el selector del POS y desde cada venta.
+- [x] **H31b · Historial del cliente 360 PRO.** *(pedido de Lucas, 2026-10-12)* *Primer corte integrado en código (2026-10-12, rama `feat/reintegro-mp-cliente360`, ADR-067): página `/clientes/[id]` con perfil, segmentos, indicadores, sucursales, gráficos, notas, línea de tiempo unificada con filtros y cursor y XLSX; RPC `customer_360_summary` y `customer_360_timeline` con alcance de sucursal; feature `clientes_360` desde Pro. **Pasos:** aplicar `20261030100200`. **Completado (2026-10-19, ADR-169, migración `20270108100000` sin aplicar):** comprobantes con reimprimir y reenviar, cuenta Debe / Haber con saldo corrido y PDF, adjuntos privados, cambios de la ficha auditados en la línea de tiempo y acceso desde el selector del POS y desde cada venta. Tests `c360Completo`, `Cliente360Completo` y `rls-cliente-360-completo`.* Una ficha de cliente robusta y profesional para ver **todo** lo que pasó con ese cliente en un solo lugar. Hoy el historial (`CustomerHistoryModal`) muestra vale, compras y devoluciones; esto lo lleva a una vista completa, en página propia (no modal), accesible desde /clientes, desde el selector del POS y desde cada venta.
   - [~] **Línea de tiempo unificada** de todos los movimientos, con filtros por tipo, fecha, sucursal y medio: ventas, devoluciones y cambios, notas de crédito, cobros de cuenta corriente, cargos y punitorios, ajustes, vales y saldo a favor, garantías, cobros en espera, turnos y reservas, señas, gift cards y puntos (cuando existan), y cambios de datos de la ficha (auditados). *Auditoría F11: `customer_360_timeline` (ADR-067) une ventas, devoluciones, cuenta corriente, cobranza, vales, cobros en espera, reintegros por MP, disputas y notas con filtros de tipo, fecha y sucursal. Faltan turnos, cambios de la ficha auditados y filtro por medio.*
   - [ ] **Cuenta corriente contable (Debe / Haber / Saldo)**: libro mayor del cliente con saldo acumulado por fila, saldo inicial del período, totales del período, aging y próximos vencimientos. Imputación visible de cada cobro contra sus cargos.
   - [ ] **Comprobantes**: listado de todos los comprobantes del cliente (tickets, facturas A/B/C cuando haya AFIP, notas de crédito y débito, recibos de cobro, remitos) con ver, reimprimir, descargar PDF y reenviar por email o WhatsApp.
@@ -1755,7 +1755,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F8** | 18/57 | 22 | 17 | 32% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 32/48 | 13 | 3 | 67% | 80% |
-| **F11** | 76/93 | 13 | 4 | 82% | 89% |
+| **F11** | 77/93 | 12 | 4 | 83% | 89% |
 | **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
 | **F14** | 8/68 | 41 | 19 | 12% | 42% |
@@ -1766,10 +1766,10 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
-| **F22** | 5/14 | 0 | 9 | 36% | 36% |
+| **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 675/1204 | 309 | 220 | 56% | 69% |
+| **Total** | 677/1204 | 308 | 219 | 56% | 69% |
 <!-- roadmap-progress:end -->
 
 ---

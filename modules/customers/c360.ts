@@ -12,6 +12,7 @@ import {
   type TimelineKind,
   type TimelinePage,
 } from "@/lib/customers/c360";
+import { CUSTOMER_FILES_BUCKET, attachmentPath } from "@/lib/customers/attachments";
 
 type Loose = {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
@@ -114,4 +115,93 @@ export async function fetchAllTimeline(customerId: string, f: TimelineFilters, m
     cursor = page.next_cursor;
   }
   return out;
+}
+
+// ── Adjuntos (ADR-169) ───────────────────────────────────────────────────────
+
+export interface CustomerAttachment {
+  id: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+type LooseFrom = {
+  from: (t: string) => {
+    select: (c: string) => {
+      eq: (k: string, v: string) => {
+        is: (k: string, v: null) => {
+          order: (k: string, o: { ascending: boolean }) => Promise<{ data: unknown; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
+};
+
+export function useCustomerAttachments(customerId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["customers", "c360", "attachments", customerId],
+    enabled: enabled && Boolean(customerId),
+    staleTime: 30_000,
+    retry: false,
+    queryFn: async (): Promise<CustomerAttachment[]> => {
+      const sb = createClient() as unknown as LooseFrom;
+      const { data, error } = await sb
+        .from("customer_attachments")
+        .select("id, storage_path, file_name, mime_type, size_bytes, note, created_by, created_at")
+        .eq("customer_id", customerId!)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return ((data as CustomerAttachment[]) ?? []).map((a) => ({ ...a, size_bytes: Number(a.size_bytes) }));
+    },
+  });
+}
+
+export function useCustomerAttachmentMutations(customerId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["customers", "c360"] });
+  const upload = useMutation({
+    mutationFn: async (v: { tenantId: string; file: File; note: string }) => {
+      const sb = createClient();
+      const path = attachmentPath(v.tenantId, customerId, crypto.randomUUID(), v.file.name);
+      const up = await sb.storage.from(CUSTOMER_FILES_BUCKET).upload(path, v.file, { contentType: v.file.type, upsert: false });
+      if (up.error) throw new Error(up.error.message);
+      const { error } = await loose().rpc("customer_attachment_add", {
+        p_customer: customerId,
+        p_path: path,
+        p_file_name: v.file.name,
+        p_mime_type: v.file.type,
+        p_size_bytes: v.file.size,
+        p_note: v.note.trim() || null,
+      });
+      if (error) {
+        // Sin registro el archivo quedaría huérfano: se intenta borrar.
+        await sb.storage.from(CUSTOMER_FILES_BUCKET).remove([path]).catch(() => null);
+        throw new Error(error.message);
+      }
+    },
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await loose().rpc("customer_attachment_delete", { p_id: id });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: invalidate,
+  });
+  return { upload, remove };
+}
+
+/** Link temporal (5 minutos) para ver o descargar un adjunto. */
+export async function attachmentUrl(path: string, download?: string): Promise<string> {
+  const { data, error } = await createClient()
+    .storage.from(CUSTOMER_FILES_BUCKET)
+    .createSignedUrl(path, 300, download ? { download } : undefined);
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? "signed_url");
+  return data.signedUrl;
 }

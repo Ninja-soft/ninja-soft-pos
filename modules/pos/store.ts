@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
 import type { ServicePeriod } from "@/lib/catalog/mode";
 
@@ -166,9 +167,29 @@ interface CartState {
     }[],
   ) => void;
   clear: () => void;
+  // H159 (ADR-172): de quién es el carrito guardado ("negocio:usuario"). Si
+  // entra otra persona u otro negocio en la pestaña, se vacía.
+  ownerKey: string | null;
+  claimOwner: (key: string) => void;
 }
 
-export const useCartStore = create<CartState>((set) => ({
+// H159 (ADR-172): el carrito sobrevive a recargar la página (sessionStorage:
+// sólo esta pestaña, se borra al cerrarla). Se guardan las líneas y el
+// descuento general; el precio lo vuelve a validar el servidor al cobrar.
+export const CART_STORAGE_KEY = "ninjapos.cart.v1";
+
+export const useCartStore = create<CartState>()(
+  persist(
+    (set) => ({
+  ownerKey: null,
+  claimOwner: (key) =>
+    set((state) =>
+      state.ownerKey === key
+        ? state
+        : state.ownerKey === null && state.lines.length === 0
+          ? { ownerKey: key }
+          : { ownerKey: key, lines: [], discountTotal: 0, servicePeriod: null },
+    ),
   lines: [],
   discountTotal: 0,
   servicePeriod: null,
@@ -469,7 +490,23 @@ export const useCartStore = create<CartState>((set) => ({
       return { lines: next };
     }),
   clear: () => set({ lines: [], discountTotal: 0, servicePeriod: null }),
-}));
+    }),
+    {
+      name: CART_STORAGE_KEY,
+      version: 1,
+      storage: createJSONStorage(() => {
+        try {
+          return window.sessionStorage;
+        } catch {
+          return { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+        }
+      }),
+      partialize: (s) => ({ lines: s.lines, discountTotal: s.discountTotal, ownerKey: s.ownerKey }),
+      // Se rehidrata en el POS al montar (evita diferencias con el HTML del servidor).
+      skipHydration: true,
+    },
+  ),
+);
 
 export function lineSubtotal(l: CartLine): number {
   // Línea cubierta por una sesión de pack (H41): no se cobra.

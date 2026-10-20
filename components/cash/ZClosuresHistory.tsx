@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
-import { useReviewZ, useZClosures } from "@/modules/cash/hooks";
+import { useConfirmZ, useReviewZ, useZClosures } from "@/modules/cash/hooks";
+import { countDetailBills, countDetailRows } from "@/lib/cash/arqueo";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { useMyTenant } from "@/modules/tenants/hooks";
@@ -43,6 +44,20 @@ function reviewOf(z: ZClosure): ZReviewCols {
   return z as ZClosure & ZReviewCols;
 }
 
+// Arqueo detallado y confirmación (H159, ADR-172): columnas nuevas.
+type ZCountCols = { count_detail?: unknown; confirmed_at?: string | null; confirmed_by?: string | null };
+function countOf(z: ZClosure): ZCountCols {
+  return z as ZClosure & ZCountCols;
+}
+
+function confirmErrorText(e: unknown): string {
+  const m = e instanceof Error ? e.message : String((e as { message?: string } | null)?.message ?? "");
+  if (m.includes("z_self_confirm")) return "Otra persona tiene que confirmar tu cierre (el encargado o el dueño).";
+  if (m.includes("z_already_confirmed")) return "Ese cierre ya estaba confirmado.";
+  if (m.includes("forbidden")) return "Sólo el dueño o un encargado confirman cierres.";
+  return "No se pudo confirmar el cierre.";
+}
+
 // Cobros de cuenta corriente del turno por medio (Cuenta corriente v2).
 function accountCollected(z: ZClosure): [string, number][] {
   const b = (z.account_collected ?? {}) as Record<string, number>;
@@ -70,6 +85,16 @@ export function ZClosuresHistory() {
   const [reviewing, setReviewing] = useState<ZClosure | null>(null);
   const { data: me } = useMyTenant();
   const canReview = Boolean(me?.canManage);
+  const confirmZ = useConfirmZ();
+  const { toast } = useToast();
+  async function confirm(z: ZClosure) {
+    try {
+      await confirmZ.mutateAsync(z.id);
+      toast({ title: `Cierre Z #${z.z_number} confirmado`, variant: "success" });
+    } catch (e) {
+      toast({ title: confirmErrorText(e), variant: "error" });
+    }
+  }
   // Series propias de la sucursal (sólo con varias) y de la caja.
   const seriesOf = (z: ZClosure) =>
     zSeriesLabel(z, {
@@ -235,12 +260,24 @@ export function ZClosuresHistory() {
                     ) : reviewOf(z).reviewed_at ? (
                       <Badge tone="neutral" className="mt-1">{zReviewLabel(reviewOf(z).review_kind)}</Badge>
                     ) : null}
+                    {"confirmed_at" in z && !countOf(z).confirmed_at && (
+                      <Badge tone="neutral" className="mt-1">Sin confirmar</Badge>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
                       {canReview && zNeedsReview({ difference: z.difference, reviewed_at: reviewOf(z).reviewed_at }) && (
                         <button onClick={() => setReviewing(z)} className="text-warning hover:underline">
                           Revisar
+                        </button>
+                      )}
+                      {canReview && "confirmed_at" in z && !countOf(z).confirmed_at && (
+                        <button
+                          onClick={() => void confirm(z)}
+                          disabled={confirmZ.isPending}
+                          className="text-success hover:underline disabled:opacity-50"
+                        >
+                          Confirmar
                         </button>
                       )}
                       <button
@@ -329,6 +366,10 @@ export function ZClosuresHistory() {
                     <Row key={`cc-${k}`} k={METHOD_LABELS[k] ?? k} v={formatCurrency(v)} />
                   ))}
                 </>
+              )}
+              <ZCountBlock z={sel} />
+              {countOf(sel).confirmed_at && (
+                <p className="pt-1 text-xs text-muted-foreground">Confirmado el {fdate(countOf(sel).confirmed_at ?? null)}.</p>
               )}
               <ZItemsBlock z={sel} />
             </div>
@@ -465,5 +506,45 @@ function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
         {v}
       </span>
     </div>
+  );
+}
+
+// Arqueo por medio y por billete (H159): esperado, contado y diferencia.
+function ZCountBlock({ z }: { z: ZClosure }) {
+  const detail = countOf(z).count_detail;
+  const rows = countDetailRows(detail);
+  const bills = countDetailBills(detail);
+  const coins = Number((detail as { coins?: number } | null)?.coins ?? 0);
+  if (rows.length <= 1 && bills.length === 0) return null;
+  return (
+    <>
+      <hr className="border-border" />
+      <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Arqueo por medio</div>
+      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+        <span className="text-muted-foreground">Medio</span>
+        <span className="text-right text-muted-foreground">Esperado</span>
+        <span className="text-right text-muted-foreground">Contado</span>
+        <span className="text-right text-muted-foreground">Dif.</span>
+        {rows.map((r) => (
+          <div key={r.method} className="contents">
+            <span>{r.label}</span>
+            <span className="text-right tabular-nums">{formatCurrency(r.expected)}</span>
+            <span className="text-right tabular-nums">{r.counted === null ? "Sin contar" : formatCurrency(r.counted)}</span>
+            <span className={`text-right tabular-nums ${r.diff ? (r.diff < 0 ? "text-danger" : "text-warning") : ""}`}>
+              {r.diff === null ? "" : formatCurrency(r.diff)}
+            </span>
+          </div>
+        ))}
+      </div>
+      {bills.length > 0 && (
+        <>
+          <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Billetes contados</div>
+          {bills.map((b) => (
+            <Row key={b.denom} k={`${b.qty} × ${formatCurrency(b.denom)}`} v={formatCurrency(b.subtotal)} />
+          ))}
+          {coins > 0 && <Row k="Monedas" v={formatCurrency(coins)} />}
+        </>
+      )}
+    </>
   );
 }

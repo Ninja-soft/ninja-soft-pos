@@ -85,6 +85,14 @@ export function useAddMovement() {
   });
 }
 
+export function useConfirmZ() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => cashApi.confirmZ(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cash", "z-closures"] }),
+  });
+}
+
 export function useReviewZ() {
   const qc = useQueryClient();
   return useMutation({

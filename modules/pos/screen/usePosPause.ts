@@ -25,6 +25,7 @@ import {
 } from "@/modules/paused-sales/logic";
 import { useCartStore } from "@/modules/pos/store";
 import { saleErrorTitle } from "./usePosSale";
+import { guardCartRemoval } from "@/modules/pos/cartGuard";
 
 // "Pausar venta" en el POS (ADR-106): guarda la venta en curso (carrito, hoja
 // de cobro y pagos) en el servidor o, sin conexión, en este equipo; deja el
@@ -376,9 +377,13 @@ export function usePosPause(ctx: PosPauseCtx) {
     });
   }
 
-  function confirmClear() {
+  async function confirmClear() {
     const c = ctxRef.current;
     setClearConfirmState(null);
+    // H159: limpiar queda registrado (con PIN si el negocio lo pide).
+    const guard = await guardCartRemoval("clear", useCartStore.getState().lines, c.registerId);
+    if (guard === "denied") toast({ title: "No se autorizó limpiar la venta", variant: "error" });
+    if (guard !== "ok") return;
     const checkout = clearSnap.current ?? checkoutRestore ?? null;
     clearSnap.current = null;
     const payments = paymentsFromCheckout(checkout, null);

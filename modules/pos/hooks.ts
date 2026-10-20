@@ -18,6 +18,7 @@ import {
   type SaleExtraInput,
 } from "./api";
 import { useCurrentRegister } from "@/modules/branches/hooks";
+import type { CloseCount } from "@/lib/cash/arqueo";
 import type { PlanPayload } from "@/lib/stock/fulfillment";
 import { emitOnboardingEvent } from "@/modules/onboarding/guidance";
 import { resolveEffective } from "@/lib/config/inheritance";
@@ -251,7 +252,8 @@ export function usePosMutations() {
         notes?: string;
         pendingAction?: "cancel" | "carry" | null;
         zeroCloseReason?: string | null;
-      }) => posApi.close(vars.shiftId, vars.closing, vars.notes, vars.pendingAction, vars.zeroCloseReason),
+        count?: CloseCount | null;
+      }) => posApi.close(vars.shiftId, vars.closing, vars.notes, vars.pendingAction, vars.zeroCloseReason, vars.count),
       onSuccess: () => {
         invalidateShift();
         qc.invalidateQueries({ queryKey: ["pending-charges"] });
@@ -302,4 +304,19 @@ export function usePosMutations() {
       onError: () => emitOnboardingEvent("venta_fallida"),
     }),
   };
+}
+
+/** H159: lo contado en el último cierre de la caja (para sugerir la apertura). */
+export function useLastClosing(registerId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["pos", "last-closing", registerId],
+    queryFn: () => posApi.lastClosing(registerId!),
+    enabled: enabled && Boolean(registerId),
+    staleTime: 30_000,
+  });
+}
+
+/** H159: tope de descuento propio del usuario (null = el de su rol). */
+export function useMyDiscountCap() {
+  return useQuery({ queryKey: ["pos", "my-discount-cap"], queryFn: posApi.myDiscountCap, staleTime: 5 * 60_000 });
 }

@@ -172,6 +172,7 @@ export function offlineErrorLabel(err: string | null): string | null {
   if (err.includes("product_not_found")) return "Un producto ya no existe";
   if (err.includes("variant")) return "Una variante ya no existe o falta";
   if (err.includes("insufficient_payment")) return "El pago no cubre el total";
+  if (err.includes("discount_exceeds_user_limit")) return "El descuento supera el tope personal del usuario";
   if (err.includes("discount_exceeds_limit")) return "El descuento supera el tope del rol";
   if (err.includes("free_sale")) return "La venta libre no está permitida o supera el tope";
   if (err.includes("feature_not_in_plan")) return "Usa algo que el plan no incluye";

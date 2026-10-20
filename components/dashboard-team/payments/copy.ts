@@ -62,6 +62,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   directo: "QR y link de Directo, o registro manual de la operación",
   ualabis: "Link de pago y QR por API, o registro de tu QR, POS o Tap",
   viumi: "Link de pago y QR con el checkout de Viumi",
+  talo: "Un CVU y un alias por venta: se confirma solo al llegar la plata",
 };
 
 // Explicación desplegable por canal: qué pasa al activarlo y cómo es el cobro.
@@ -198,6 +199,15 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "Viumi nos avisa, verificamos la orden y la venta se cierra sola.",
     ],
   },
+  talo: {
+    activa:
+      "Cada venta tiene su propio CVU y alias de Talo. El cliente transfiere desde cualquier banco o billetera y la venta se cierra sola cuando Talo confirma la plata, sin pedir comprobante.",
+    pasos: [
+      "En el POS elegís Transferencia, Talo.",
+      "El cliente transfiere el total al CVU o alias que aparece en pantalla, o abre el link o el QR de Talo.",
+      "Talo nos avisa, verificamos el pago y la venta se cierra sola. Si transfiere de menos, el POS muestra cuánto falta.",
+    ],
+  },
   pagos360: {
     activa: "Se genera una solicitud de pago y el cliente paga desde el link o el QR.",
     pasos: [
@@ -232,6 +242,7 @@ export const CHANNEL_CAPS: Record<string, ChannelCap[]> = {
   directo: ["qr", "link"],
   ualabis: ["qr", "link"],
   viumi: ["qr", "link"],
+  talo: ["qr", "link"],
   fiserv: ["point"],
   fiserv_point: ["point"],
 };
@@ -380,6 +391,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
     ],
     where: "Mail de credenciales de Viumi (consultas@viumi.com.ar)",
     note: "Prueba y producción tienen credenciales distintas. Las devoluciones se hacen desde la app o el panel de Viumi.",
+  },
+  talo: {
+    steps: [
+      { icon: "login", text: "Entrá al Dashboard de Talo (app.talo.com.ar) con tu cuenta." },
+      { icon: "code", text: "Abrí Usuario › Credenciales y generá tus credenciales." },
+      { icon: "key", text: "Copiá el User ID, el Client ID y el Client Secret." },
+    ],
+    where: "Dashboard de Talo › Usuario › Credenciales",
+    note: "La cuenta de sandbox de Talo es aparte de la de producción y tiene sus propias credenciales.",
   },
   mobbex: {
     steps: [

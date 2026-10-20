@@ -30,6 +30,9 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   // Viumi (ADR-173): link + QR por API (method 'qr' + intent viumi); lo gatea
   // el trigger vía payment_method_plan_key('viumi').
   viumi: "viumi",
+  // Talo (ADR-175): transferencia con CVU único por API (method 'qr' + intent
+  // talo); la gatea el trigger vía payment_method_plan_key('talo').
+  talo: "talo",
 };
 
 export function providerFeature(provider: string): string | null {

@@ -39,6 +39,7 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   cobros: "Cobros",
   disputas: "Contracargos y devoluciones",
   pedidos: "Pedidos",
+  alertas: "Alertas",
 };
 
 function severityBorder(severity: string): string {

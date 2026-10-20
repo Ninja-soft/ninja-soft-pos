@@ -264,6 +264,8 @@ export async function createProviderCharge(
       return posApi.createUalaBisLink(amount, title);
     case "viumi":
       return posApi.createViumiLink(amount, title);
+    case "talo":
+      return posApi.createTaloPayment(amount, title);
     default:
       void channel;
       throw new Error("provider_not_supported");
@@ -298,6 +300,8 @@ export async function syncProviderStatus(
         return posApi.ualabisIntentStatus(intentId);
       case "viumi":
         return posApi.viumiIntentStatus(intentId);
+      case "talo":
+        return posApi.taloIntentStatus(intentId);
       case "mobbex":
         return posApi.mpIntentStatus(intentId);
       default:
@@ -321,6 +325,7 @@ export async function cancelAtProvider(provider: string, channel: "qr" | "link",
     else if (provider === "directo") await posApi.cancelDirectoIntent(intentId);
     else if (provider === "ualabis") await posApi.cancelUalaBisIntent(intentId);
     else if (provider === "viumi") await posApi.cancelViumiIntent(intentId);
+    else if (provider === "talo") await posApi.cancelTaloIntent(intentId);
   } catch {
     /* el intent ya quedó cancelado localmente: un pago tardío queda para revisión */
   }

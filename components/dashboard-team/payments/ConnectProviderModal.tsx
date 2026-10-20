@@ -232,6 +232,16 @@ const FORMS: Record<string, FormSpec> = {
     ],
     envNote: "Prueba usa el sandbox de Talo (sandbox-api.talo.com.ar): cuenta aparte, sin plata real y con simulador de transferencias.",
   },
+  // dLocal Go (ADR-180): API Key + Secret Key del dashboard (Integraciones ›
+  // API Integration). Se prueban al guardar (set_payment_secret hace una
+  // consulta autenticada sin efectos en el ambiente).
+  dlocalgo: {
+    fields: [
+      { name: "api_key", label: "API Key", min: 6, placeholder: "Tu API Key de dLocal Go" },
+      { name: "secret_key", label: "Secret Key", secret: true, min: 8, placeholder: "Tu Secret Key de dLocal Go" },
+    ],
+    envNote: "Prueba usa el ambiente de testing de dLocal Go (api-sbx.dlocalgo.com): cuenta aparte, con sus propias claves y sin plata real.",
+  },
   // Clover Point (ADR-047): conexión de la marca Fiserv. Las terminales salen
   // de Clover (GET devices); las series cargadas acá acotan y nombran.
   fiserv: {
@@ -454,7 +464,14 @@ export function ConnectProviderModal({
         providerKey === "talo" && e instanceof Error && e.message === "talo_invalid_credentials"
           ? "Talo no aceptó estas credenciales en el ambiente elegido. Revisalas o probá el otro ambiente."
           : null;
-      setServerError(getnetMsg ?? ualaMsg ?? viumiMsg ?? taloMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
+      // dLocal Go (ADR-180): ídem, consulta autenticada antes de guardar.
+      const dlocalMsg =
+        providerKey === "dlocalgo" && e instanceof Error && e.message === "dlocalgo_invalid_credentials"
+          ? "dLocal Go no aceptó estas claves en el ambiente elegido. Revisalas o probá el otro ambiente."
+          : null;
+      setServerError(
+        getnetMsg ?? ualaMsg ?? viumiMsg ?? taloMsg ?? dlocalMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.",
+      );
     } finally {
       setSaving(false);
     }
@@ -991,6 +1008,11 @@ export function ConnectProviderModal({
               {providerKey === "viumi" && (
                 <NextStep n={2}>
                   Al cobrar elegís Viumi, Link o QR: la venta se cierra sola cuando Viumi acredita el pago.
+                </NextStep>
+              )}
+              {providerKey === "dlocalgo" && (
+                <NextStep n={2}>
+                  Al cobrar elegís dLocal Go, Link o QR: la venta se cierra sola cuando dLocal Go acredita el pago.
                 </NextStep>
               )}
               {providerKey === "talo" && (

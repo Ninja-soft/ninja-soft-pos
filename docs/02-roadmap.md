@@ -488,6 +488,8 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [~] **H21e** — **Directo** (Crédito Directo S.A.) como **tender manual**. — *Implementado (2026-10-11, ADR-034): sin API pública; el cajero cobra en el portal de comercios de Directo (QR o link) y en el POS elige "Directo (crédito)" y carga el número de operación (obligatorio). `payments.method = 'directo'` con `reference` = Nº de operación (constraint), gating coarse por `payment_method_plan_key('directo')`. Feature `directo` desde Pro. Bloque informativo `DirectoInfo` para Medios de pago. `DirectoInfo` cableado en Medios de pago (`PaymentMethodsCard`). Directo sí tiene API: canal QR y link con respaldo manual (ADR-041, Edges `directo` y `directo_webhook`). Falta: aplicar las migraciones y validar en QA.*
   - [~] **H21k · Viumi (Banco Macro)** por link de pago y QR. *Integrado en código (2026-10-20, ADR-173, `docs/47-viumi.md`): Edge `viumi` (probe/create/status/cancel; orden `POST /api/v2/orders` JSON:API con monto en centavos, intent como id del ítem y en el `webhookUrl`, vence a los 1440 min) y `viumi_webhook` (sin firma: re-consulta la orden, acredita sólo pago aprobado + orden propia + monto exacto). Token OAuth con hosts de la doc y del plugin en orden, cache con hash y reintento ante 401. Credenciales probadas al guardar, cron de cobros en espera, feature `viumi` desde Pro con gating server-side. Sin devoluciones por API (se hacen en la app de Viumi) y sin logo oficial todavía. Falta: aplicar `20270111100000_viumi`, deploy de las Edges y validar con credenciales de prueba.*
   - [~] **H21f · Talo** (transferencia con CVU y alias únicos por venta). *Integrado en código (2026-10-20, ADR-175, `docs/48-talo.md`): Edge `talo` (create → `POST /payments/` con `external_id` = intent y `webhook_url` por intent; status re-consulta `GET /payments/{id}`; cancel = baja local; probe; refund total o de la diferencia) y `talo_webhook` (verify_jwt false; sin firma: re-consulta y acredita SUCCESS u OVERPAID con el precio del intent; UNDERPAID sigue pendiente con lo que falta). Credencial del comercio (User ID + Client ID + Client Secret, token `TL-`), probada antes de guardar. Cobros en espera (3 días) y cron. Tabla `talo_refunds`, `mp_payment_intents.paid_amount`. Feature `talo` (Pro+). **Pasos:** aplicar `20270113100000_talo` y desplegar las Edges. **Pendiente:** primer cobro en sandbox, flujo de partners y conciliación de liquidaciones.*
+  - [~] **H21l · dLocal Go** por link de pago y QR. *Integrado en código (2026-10-20, ADR-180, `docs/49-dlocal-go.md`): Edge `dlocalgo` (create → `POST /v1/payments` en ARS con `order_id` = intent y `notification_url` por intent; status re-consulta `GET /v1/payments/{id}`; cancel = baja local; probe con `GET /v1/currency-exchanges`; refund total) y `dlocalgo_webhook` (verify_jwt false; firma `V2-HMAC-SHA256` obligatoria y re-consulta: acredita sólo PAID + ARS + monto exacto + order_id propio). Credencial API Key + Secret Key probada antes de guardar, cobros en espera (24 h) y cron, tabla `dlocalgo_refunds`, feature `dlocalgo` (Pro+), logos oficiales. **Pasos:** aplicar `20270118100000_dlocal_cupones` y desplegar las Edges. **Pendiente:** primer cobro en testing, devoluciones parciales y liquidaciones.*
+  - [~] **H21m · Cupones Rapipago / Pago Fácil** con la Orders API de Mercado Pago. *Integrado en código (2026-10-20, ADR-180): Edge `mp_cupon` (order `type: online` con `payment_method` ticket y vencimiento `P3D`, pagador del POS o del cliente), acreditación por `mp_orders_webhook` sin cambios (intent `mp_cupon` con `mp_order_id`), cupón en `mp_payment_intents.voucher`, tender en el grupo Mercado Pago con número copiable, cupón oficial como link y QR y cobros en espera de 3 días. Feature `cupones_efectivo` (Pro+, requiere `mercado_pago`). **Pendiente:** primer cupón en sandbox, cupón para deuda de cuenta corriente desde la ficha del cliente y devolución por API.*
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 
 - [~] **H21b — Orquestador de pagos estilo VTOL.** *Sólo la conciliación tiene base (ver abajo); router, estado central y monitoreo pendientes.*
@@ -1899,7 +1901,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F5** | 38/70 | 12 | 20 | 54% | 63% |
 | **F6** | 58/63 | 3 | 2 | 92% | 94% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
-| **F8** | 18/59 | 24 | 17 | 31% | 51% |
+| **F8** | 18/61 | 26 | 17 | 30% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 32/48 | 13 | 3 | 67% | 80% |
 | **F11** | 79/93 | 12 | 2 | 85% | 91% |
@@ -1917,7 +1919,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **F24** | 22/135 | 4 | 109 | 16% | 18% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 700/1341 | 315 | 326 | 52% | 64% |
+| **Total** | 700/1343 | 317 | 326 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

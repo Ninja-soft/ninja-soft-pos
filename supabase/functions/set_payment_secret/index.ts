@@ -32,6 +32,11 @@ import {
   viumiClient,
 } from "../_shared/viumi.ts";
 import { isAuthFailure as isTaloAuthFailure, parseCreds as parseTaloCreds, taloClient } from "../_shared/talo.ts";
+import {
+  dlocalgoClient,
+  isAuthFailure as isDlocalAuthFailure,
+  parseCreds as parseDlocalCreds,
+} from "../_shared/dlocalgo.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -77,6 +82,10 @@ const ALLOWED = new Set([
   // Usuario › Credenciales. El ambiente lo define el switch Sandbox del medio
   // (sandbox-api vs api). Se prueban antes de guardarlas.
   "talo",
+  // dLocal Go (ADR-180): api_key y secret_key de Integraciones › API
+  // Integration del dashboard. El ambiente lo define el switch Sandbox del
+  // medio (api-sbx vs api). Se prueban antes de guardarlas.
+  "dlocalgo",
 ]);
 
 Deno.serve(async (req: Request) => {
@@ -226,6 +235,18 @@ Deno.serve(async (req: Request) => {
     const env = clean.environment === "test" ? "sandbox" : "prod";
     const t = await taloClient({ creds, env }).token(true);
     if (!t.ok && isTaloAuthFailure(t.httpStatus)) return json({ error: "talo_invalid_credentials" }, 422);
+    delete clean.environment;
+  }
+
+  // dLocal Go (ADR-180): se prueban con una consulta autenticada sin efectos
+  // (cotizaciones) en el ambiente elegido. Rechazo de credenciales = no se
+  // guardan (un corte de red no frena el guardado).
+  if (providerKey === "dlocalgo") {
+    const creds = parseDlocalCreds(clean);
+    if (!creds) return json({ error: "dlocalgo_missing_fields" }, 400);
+    const env = clean.environment === "test" ? "sandbox" : "prod";
+    const t = await dlocalgoClient({ creds, env }).probe();
+    if (!t.ok && isDlocalAuthFailure(t.httpStatus)) return json({ error: "dlocalgo_invalid_credentials" }, 422);
     delete clean.environment;
   }
 

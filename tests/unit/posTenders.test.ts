@@ -45,6 +45,12 @@ describe("registro de tenders", () => {
         expect(t.featureKey, t.id).toBe("getnet_checkout_propio");
         continue;
       }
+      // El cupón Rapipago / Pago Fácil es un canal de Mercado Pago con su
+      // propia feature (ADR-180).
+      if (t.qrProvider === "mp_cupon") {
+        expect(t.featureKey, t.id).toBe(PROVIDER_FEATURE.mp_cupon);
+        continue;
+      }
       if (t.flow === "qr" || t.flow === "point" || t.flow === "terminal") {
         expect(t.featureKey, t.id).toBe(PROVIDER_FEATURE[t.provider ?? ""] ?? null);
       }
@@ -224,6 +230,8 @@ describe("preferencias del negocio", () => {
     expect(groups.map((g) => g.key)).toEqual(["nave", "cash", "card", "mercadopago"]);
     expect(groups.find((g) => g.key === "mercadopago")?.tenders.map((t) => t.id)).toEqual([
       "mercadopago:qr",
+      // Cupón Rapipago / Pago Fácil (ADR-180): mismo proveedor, sigue visible.
+      "mercadopago:cupon",
     ]);
   });
 

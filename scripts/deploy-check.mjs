@@ -63,6 +63,7 @@ export const PUBLIC_FUNCTIONS = [
   "clover_webhook",
   "delivery_channel_webhook",
   "directo_webhook",
+  "dlocalgo_webhook",
   "getnet_checkout",
   "getnet_webhook",
   "gocuotas_webhook",

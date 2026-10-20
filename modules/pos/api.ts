@@ -196,6 +196,31 @@ export interface TaloCreated {
   alias: string | null;
   expires_at: string | null;
 }
+/** Cupón Rapipago / Pago Fácil de Mercado Pago (ADR-180). */
+export interface MpCuponVoucher {
+  payment_method: "rapipago" | "pagofacil";
+  ticket_url: string;
+  barcode_content: string | null;
+  reference: string | null;
+  verification_code: string | null;
+  expires_at: string | null;
+}
+
+/** Pagador del cupón: Mercado Pago exige email, documento y nombre. */
+export interface MpCuponPayer {
+  method: "rapipago" | "pagofacil";
+  email?: string;
+  name?: string;
+  docNumber?: string;
+  customerId?: string | null;
+}
+
+export interface MpCuponStatus {
+  status: string;
+  mp_payment_id: string | null;
+  voucher: MpCuponVoucher | null;
+}
+
 export interface TaloStatus {
   status: string;
   mp_payment_id: string | null;
@@ -1485,6 +1510,132 @@ export const posApi = {
   cancelViumiIntent: async (id: string): Promise<void> => {
     const supabase = createClient();
     await supabase.functions.invoke("viumi", {
+      body: { action: "cancel", intent_id: id },
+    });
+  },
+
+  // ── dLocal Go (ADR-180): link de pago + QR de la Payments API ──────────────
+  // create devuelve el redirect_url (checkout hosted) como init_point. La
+  // confirmación llega por el webhook firmado (dlocalgo_webhook); status
+  // re-consulta el pago en dLocal Go (respaldo). Devolución total desde la
+  // conciliación de cobros QR.
+  createDlocalGoLink: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("dlocalgo", {
+      body: { action: "create", amount, title, ...posStoreBody() },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  dlocalgoIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("dlocalgo", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // Baja local best-effort (si el cliente ya pagó, gana el pago).
+  cancelDlocalGoIntent: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("dlocalgo", {
+      body: { action: "cancel", intent_id: id },
+    });
+  },
+
+  // Devolución total de un cobro aprobado sin venta vigente (dueño o
+  // encargado). El estado final llega por el webhook de la devolución.
+  refundDlocalGoIntent: async (
+    id: string,
+  ): Promise<{ refund_id?: string; status?: string; error?: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("dlocalgo", {
+      body: { action: "refund", intent_id: id },
+    });
+    if (error) {
+      // non-2xx: el código real viene en el cuerpo (error.context).
+      const ctx = (error as { context?: Response }).context;
+      const body = ctx ? ((await ctx.json().catch(() => null)) as { error?: string } | null) : null;
+      return { error: body?.error ?? "refund_failed" };
+    }
+    return data as { refund_id?: string; status?: string; error?: string };
+  },
+
+  // Devoluciones de dLocal Go de un conjunto de cobros (RLS por negocio).
+  listDlocalGoRefunds: async (
+    intentIds: string[],
+  ): Promise<{ intent_id: string; status: string; created_at: string }[]> => {
+    if (intentIds.length === 0) return [];
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("dlocalgo_refunds" as never)
+      .select("intent_id, status, created_at")
+      .in("intent_id", intentIds)
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return (data ?? []) as unknown as { intent_id: string; status: string; created_at: string }[];
+  },
+
+  // ── Cupón Rapipago / Pago Fácil de Mercado Pago (ADR-180) ─────────────────
+  // Orders API con la conexión de Mercado Pago del negocio. create devuelve el
+  // cupón (ticket_url como init_point). La acreditación llega por el webhook
+  // topic order (mp_orders_webhook); status re-lee la order y completa el
+  // cupón si Mercado Pago lo estaba procesando.
+  createMpCupon: async (
+    amount: number,
+    title: string,
+    payer: MpCuponPayer,
+  ): Promise<{ intent_id: string; init_point: string; voucher: MpCuponVoucher | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_cupon", {
+      body: {
+        action: "create",
+        amount,
+        title,
+        method: payer.method,
+        ...(payer.email ? { email: payer.email } : {}),
+        ...(payer.name ? { name: payer.name } : {}),
+        ...(payer.docNumber ? { doc_number: payer.docNumber } : {}),
+        ...(payer.customerId ? { customer_id: payer.customerId } : {}),
+        ...posStoreBody(),
+      },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string; voucher: MpCuponVoucher | null };
+  },
+
+  mpCuponStatus: async (id: string): Promise<MpCuponStatus> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_cupon", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as MpCuponStatus;
+  },
+
+  // Anula el cupón en Mercado Pago mientras no se pagó (best-effort).
+  cancelMpCupon: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("mp_cupon", {
       body: { action: "cancel", intent_id: id },
     });
   },

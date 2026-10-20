@@ -69,6 +69,8 @@ const PROVIDER_LABEL: Record<string, string> = {
   ualabis: "Ualá Bis",
   viumi: "Viumi",
   talo: "Talo",
+  dlocalgo: "dLocal Go",
+  mp_cupon: "Cupón Rapipago / Pago Fácil",
   modo: "MODO",
   mobbex: "Mobbex",
   pagos360: "Pagos360",

@@ -35,6 +35,7 @@ import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
 import { UalaBisInfo } from "@/components/dashboard-team/payments/UalaBisInfo";
 import { ViumiInfo } from "@/components/dashboard-team/payments/ViumiInfo";
 import { TaloInfo } from "@/components/dashboard-team/payments/TaloInfo";
+import { DlocalGoInfo } from "@/components/dashboard-team/payments/DlocalGoInfo";
 import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
 import { MpRefundSetting } from "@/components/dashboard-team/payments/MpRefundSetting";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
@@ -125,6 +126,24 @@ async function probeViumi(v: ConnectProbe, storeId: string | null): Promise<Getn
 
 // "Probar conexión" de Talo (ADR-175): la Edge pide un token TL- con las
 // credenciales tipeadas (o, sin tipear, las guardadas del alcance). No guarda nada.
+// "Probar conexión" de dLocal Go (ADR-180): la Edge hace una consulta
+// autenticada sin efectos con las credenciales tipeadas (o, sin tipear, las
+// guardadas del alcance). No guarda nada.
+async function probeDlocalGo(v: ConnectProbe, storeId: string | null): Promise<GetnetProbeResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("dlocalgo", {
+    body: {
+      action: "probe",
+      environment: v.env,
+      ...(v.secrets?.api_key ? { api_key: v.secrets.api_key } : {}),
+      ...(v.secrets?.secret_key ? { secret_key: v.secrets.secret_key } : {}),
+      ...(storeId ? { store_id: storeId } : {}),
+    },
+  });
+  if (error) throw error;
+  return data as GetnetProbeResult;
+}
+
 async function probeTalo(v: ConnectProbe, storeId: string | null): Promise<GetnetProbeResult> {
   const supabase = createClient();
   const { data, error } = await supabase.functions.invoke("talo", {
@@ -443,6 +462,8 @@ export function PaymentMethodsCard() {
               <ViumiInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("viumi")} />
             ) : key === "talo" ? (
               <TaloInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("talo")} />
+            ) : key === "dlocalgo" ? (
+              <DlocalGoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("dlocalgo")} />
             ) : null,
         }}
       />
@@ -482,7 +503,9 @@ export function PaymentMethodsCard() {
                   ? (v) => probeViumi(v, connectScope)
                   : connKey === "talo"
                     ? (v) => probeTalo(v, connectScope)
-                    : undefined
+                    : connKey === "dlocalgo"
+                      ? (v) => probeDlocalGo(v, connectScope)
+                      : undefined
           }
           getnetSlots={getnetSlots}
           getnetOwnCheckout={getnetOwnCheckout}

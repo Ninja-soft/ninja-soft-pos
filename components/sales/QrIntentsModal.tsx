@@ -22,6 +22,7 @@ import { latestRefundByIntent } from "@/lib/payments/ualabis";
 import { UalaBisRefundAction } from "@/components/sales/UalaBisRefundAction";
 import { refundsByIntent } from "@/lib/payments/talo";
 import { TaloRefundAction } from "@/components/sales/TaloRefundAction";
+import { DlocalGoRefundAction } from "@/components/sales/DlocalGoRefundAction";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -38,6 +39,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   ualabis: "Ualá Bis",
   viumi: "Viumi",
   talo: "Talo",
+  dlocalgo: "dLocal Go",
+  mp_cupon: "Cupón Rapipago / Pago Fácil",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -119,6 +122,18 @@ export function QrIntentsModal({
   });
   const taloRefundsByIntent = useMemo(() => refundsByIntent(taloRefunds ?? []), [taloRefunds]);
 
+  // dLocal Go (ADR-180): devoluciones totales de sus cobros aprobados.
+  const dlocalIds = useMemo(
+    () => filtered.filter((i) => i.provider_key === "dlocalgo" && i.status === "approved").map((i) => i.id),
+    [filtered],
+  );
+  const { data: dlocalRefunds } = useQuery({
+    queryKey: ["dlocalgo-refunds", dlocalIds],
+    queryFn: () => posApi.listDlocalGoRefunds(dlocalIds),
+    enabled: open && dlocalIds.length > 0,
+  });
+  const dlocalRefundByIntent = useMemo(() => latestRefundByIntent(dlocalRefunds ?? []), [dlocalRefunds]);
+
   const orphans = useMemo(
     () => filtered.filter((i) => i.status === "approved" && i.saleNumber === null),
     [filtered],
@@ -188,6 +203,8 @@ export function QrIntentsModal({
           <option value="ualabis">Ualá Bis</option>
           <option value="viumi">Viumi</option>
           <option value="talo">Talo</option>
+          <option value="dlocalgo">dLocal Go</option>
+          <option value="mp_cupon">Cupón Rapipago / Pago Fácil</option>
         </select>
         <select
           value={status}
@@ -302,6 +319,20 @@ export function QrIntentsModal({
                     {i.provider_key === "viumi" && i.status === "approved" && (i.saleNumber === null || i.saleStatus === "voided") && (
                       // Viumi (ADR-173): la API no tiene devoluciones.
                       <p className="mt-1 text-xs text-muted-foreground">Para devolverlo, usá la app o el panel de Viumi.</p>
+                    )}
+                    {i.provider_key === "dlocalgo" && (
+                      <div className="mt-1">
+                        <DlocalGoRefundAction
+                          intent={i}
+                          refund={dlocalRefundByIntent.get(i.id)}
+                          onRefund={posApi.refundDlocalGoIntent}
+                          onDone={() => void qc.invalidateQueries({ queryKey: ["dlocalgo-refunds"] })}
+                        />
+                      </div>
+                    )}
+                    {i.provider_key === "mp_cupon" && i.status === "approved" && (i.saleNumber === null || i.saleStatus === "voided") && (
+                      // Cupón Rapipago / Pago Fácil (ADR-180): se devuelve desde Mercado Pago.
+                      <p className="mt-1 text-xs text-muted-foreground">Para devolverlo, usá tu cuenta de Mercado Pago.</p>
                     )}
                     {i.provider_key === "talo" && (
                       <div className="mt-1">

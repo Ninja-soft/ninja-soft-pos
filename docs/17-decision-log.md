@@ -6487,3 +6487,35 @@ H63, H67 y H117 dejaron alertas sueltas (márgenes, riesgo, cockpit) que había 
 - Pendiente de H162: WhatsApp (no hay infraestructura; se suma como otra clave de `channels`), "caída de ventas", los avisos al grabar una venta (P2) y las alertas armadas con IA (P3).
 - Orden de deploy: migración, Edge `alerts_email` (verify_jwt = true, como `account_reminders`) y el front. Sin pg_cron o pg_net los jobs se omiten.
 - Verificado con `tests/unit/alertsCatalog.test.ts` (paridad del catálogo, umbrales y próxima corrida) y `tests/integration/rls-alertas.test.ts` (se salta sin Supabase local); el SQL y el PL/pgSQL se validaron con el parser de Postgres. Falta correrla contra una base real.
+
+## ADR-180: dLocal Go por link de pago y QR, y cupones Rapipago / Pago Fácil con la Orders API de Mercado Pago (F8)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270118100000_dlocal_cupones`, Edges `dlocalgo`, `dlocalgo_webhook` y `mp_cupon`) · **Base:** ADR-143 (Ualá Bis, mismo patrón), ADR-032 (Orders API de Mercado Pago), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de hooks), ADR-070 (salud de webhooks)
+
+### Contexto
+
+Faltaban dos formas de cobrar a distancia: un link de pago con tarjeta de un procesador regional con API pública (dLocal Go) y un medio para el cliente que paga en efectivo (cupón de Rapipago o Pago Fácil). Mercado Pago emite esos cupones por la misma Orders API que ya usamos para el QR de la caja. Detalle, fuentes y lo verificado en `docs/49-dlocal-go.md`.
+
+### Decisión
+
+1. **dLocal Go como proveedor `dlocalgo`** (marca propia, canal `qr_link`, feature OPTIONAL `dlocalgo` desde Pro), clonando Ualá Bis: intent en `mp_payment_intents` (`provider_key='dlocalgo'`), pago `POST /v1/payments` en ARS con `order_id` = intent y `notification_url` por intent en el dominio de hooks, `redirect_url` como link y QR. El cobro entra como `method='qr'` con el intent como referencia.
+2. **Credencial del comercio** (API Key + Secret Key, header `Bearer api_key:secret_key`) en `payment_secrets` provider `dlocalgo`, probada antes de guardar con `GET /v1/currency-exchanges` (autenticada y sin efectos). El switch Sandbox elige `api-sbx` o `api`.
+3. **Webhook firmado y re-consulta.** La notificación trae `{ payment_id }` y el header `V2-HMAC-SHA256, Signature` (HMAC-SHA256 con la Secret Key sobre API Key + cuerpo). Se verifica con la credencial del cobro y sin firma válida no se procesa; aun firmada, el pago se re-consulta y se acredita sólo `PAID` + mismo pago + `order_id` = intent + `ARS` + monto exacto. El POS sondea y el cron de cobros en espera también re-consulta.
+4. **Devoluciones totales** de dLocal Go por `POST /v1/refunds` en `dlocalgo_refunds` (una viva o hecha por cobro, sin venta vigente), con su notificación re-consultando `GET /v1/refunds/{id}`.
+5. **Cupón Rapipago / Pago Fácil como canal de Mercado Pago** con feature propia `cupones_efectivo` (OPTIONAL desde Pro, requiere `mercado_pago`), no como proveedor nuevo: usa la conexión de Mercado Pago del negocio y la Orders API (`type: online`, `payment_method { id: rapipago | pagofacil, type: ticket }`, vencimiento `P3D`). El intent usa `provider_key='mp_cupon'` y `mp_order_id`, así que `mp_orders_webhook` y `resolveOrder` lo acreditan sin cambios. `payment_method_plan_key('mp_cupon')` → `cupones_efectivo`.
+6. **Pagador obligatorio.** Mercado Pago exige email e identificación: el POS los pide (completa con el cliente de la venta) y la Edge también los toma del cliente cuando se regenera un cobro en espera.
+7. **No se dibuja el código de barras.** La doc dice EAN-13 y el ejemplo trae 46 dígitos: se muestra el número copiable y el cupón oficial (`ticket_url`) como link y QR. `mp_payment_intents.voucher` guarda los datos del cupón.
+8. **Cobros en espera:** dLocal Go con tope de 24 h (vida del `redirect_url`); cupón con tope y valor por defecto de 3 días (su vencimiento).
+
+### Alternativas descartadas
+
+- **Payments API de Mercado Pago (`/v1/payments` con `payment_method_id`)** para el cupón: obligaba a sumar otro camino de acreditación; la Orders API ya tiene webhook, sincronización y antifraude en el repo.
+- **Confiar en la firma de dLocal Go sin re-consultar:** la firma prueba el origen pero no el monto ni el estado final.
+- **dLocal Go sin firma (como Ualá Bis):** la doc la documenta; exigirla corta notificaciones falsas antes de gastar una consulta.
+- **Dibujar el código como EAN-13 o Interleaved 2 of 5:** sin confirmar el formato, un código ilegible es peor que el cupón oficial.
+
+### Consecuencias
+
+- Orden de deploy: migración, Edges `dlocalgo`, `dlocalgo_webhook` (verify_jwt = false), `mp_cupon`, `set_payment_secret`, `pending_charges_sync` y `pending_charge_share`, y después el front.
+- Pendiente: primer cobro real en testing de dLocal Go y del cupón en sandbox, cupón para deuda de cuenta corriente desde la ficha del cliente, devolución del cupón por API, devoluciones parciales y liquidaciones de dLocal Go.
+- Tests: `tests/unit/dlocalgo.test.ts`, `tests/unit/dlocalgoUi.test.ts`, `tests/unit/mpCupon.test.ts`, `tests/integration/rls-dlocal-cupones.test.ts`.

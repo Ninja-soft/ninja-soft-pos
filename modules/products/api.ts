@@ -9,6 +9,16 @@ import {
   type ProductPackageRow,
 } from "@/lib/products/packages";
 import { sanitizeIlike } from "@/lib/utils/search";
+import {
+  diffAltCodes,
+  diffSaleUnits,
+  normalizeCode,
+  saleUnitFromRow,
+  type AltCode,
+  type ProductUsage,
+  type SaleUnit,
+  type SaleUnitRow,
+} from "@/lib/products/catalogCodes";
 import { normalizeBrandName } from "@/lib/products/brandName";
 import type {
   CategoryInput,
@@ -57,8 +67,45 @@ export type Product = Tables<"products"> & {
   price_mode?: "fixed" | "open" | null;
   open_price_min?: number | null;
   open_price_max?: number | null;
+  // F24 · H163: compra, venta o ambos (insumos fuera del POS).
+  usage?: ProductUsage | null;
   categories?: { name: string } | null;
 };
+
+/** Coincidencia exacta de un código (scanner, Enter). H163: + bulto. */
+export interface CodeMatch {
+  product: Product;
+  variant?: ProductVariant;
+  /** El código era el de una unidad de venta (bulto, caja, pack). */
+  saleUnit?: SaleUnit & { id: string };
+}
+
+// H163: ids de artículos con un código alternativo que contiene lo buscado
+// (para sumarlos a la búsqueda por texto). Sin la migración, ninguno.
+async function altCodeProductIds(search: string): Promise<string[]> {
+  const up = normalizeCode(search);
+  if (!/^[A-Z0-9._-]{3,60}$/.test(up)) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("product_barcodes" as never)
+    .select("product_id")
+    .is("deleted_at", null)
+    .ilike("code", `%${up}%`)
+    .limit(50);
+  if (error) return [];
+  return [...new Set(((data ?? []) as { product_id: string }[]).map((r) => r.product_id))];
+}
+
+// H163: el código principal de la búsqueda + los alternativos.
+function searchOr(s: string, altIds: string[]): string {
+  const base = `name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%,plu.ilike.%${s}%`;
+  return altIds.length ? `${base},id.in.(${altIds.join(",")})` : base;
+}
+
+// H163: la columna sólo viaja si el form la manda (base sin la migración).
+export function usageColumns(input: { usage?: ProductUsage | null }) {
+  return input.usage ? { usage: input.usage } : {};
+}
 export type Category = Tables<"categories">;
 export type Brand = Tables<"brands">;
 export type StockMovement = Tables<"stock_movements">;
@@ -91,6 +138,51 @@ function toTags(v: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
+// Búsqueda exacta de antes de H163 (base sin product_by_code).
+async function legacyFindAllByCode(
+  code: string,
+  limit = 10,
+): Promise<CodeMatch[]> {
+  const c = code.trim();
+  if (!/^[A-Za-z0-9._\-]+$/.test(c)) return [];
+  const supabase = createClient();
+  const out: CodeMatch[] = [];
+
+  const { data: variants, error: vErr } = await supabase
+    .from("product_variants")
+    .select("*")
+    .is("deleted_at", null)
+    .or(`barcode.eq.${c},sku.eq.${c}`)
+    .limit(limit);
+  if (vErr) throw vErr;
+  const vRows = (variants ?? []) as unknown as ProductVariant[];
+  if (vRows.length > 0) {
+    const { data: parents, error: pErr } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .is("deleted_at", null)
+      .in("id", [...new Set(vRows.map((v) => v.product_id))]);
+    if (pErr) throw pErr;
+    const byId = new Map(((parents ?? []) as unknown as Product[]).map((p) => [p.id, p]));
+    for (const v of vRows) {
+      const p = byId.get(v.product_id);
+      if (p) out.push({ product: p, variant: v });
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*, categories(name)")
+    .is("deleted_at", null)
+    .or(`barcode.eq.${c},sku.eq.${c},plu.eq.${c}`)
+    .limit(limit);
+  if (error) throw error;
+  for (const p of (data ?? []) as unknown as Product[]) {
+    if (!out.some((r) => r.product.id === p.id && !r.variant)) out.push({ product: p });
+  }
+  return out;
+}
+
 export const productsApi = {
   list: async (
     search?: string,
@@ -106,10 +198,9 @@ export const productsApi = {
       .limit(200);
     const s = sanitizeIlike(search);
     if (s) {
-      // Matchea también por PLU (código corto de 6 dígitos) para tipearlo en el POS.
-      q = q.or(
-        `name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%,plu.ilike.%${s}%`,
-      );
+      // Matchea también por PLU (código corto de 6 dígitos) para tipearlo en el
+      // POS y por los códigos alternativos (H163).
+      q = q.or(searchOr(s, await altCodeProductIds(s)));
     }
     if (categoryId) q = q.eq("category_id", categoryId);
     if (brandId) q = q.eq("brand_id", brandId);
@@ -172,10 +263,7 @@ export const productsApi = {
       .is("deleted_at", null)
       .order("name");
     const s = sanitizeIlike(search);
-    if (s)
-      q = q.or(
-        `name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%,plu.ilike.%${s}%`,
-      );
+    if (s) q = q.or(searchOr(s, await altCodeProductIds(s)));
     if (categoryId) q = q.eq("category_id", categoryId);
     if (brandId) q = q.eq("brand_id", brandId);
     // ADR-122: la columna todavía no está en los tipos generados.
@@ -186,99 +274,73 @@ export const productsApi = {
     return { rows: (data ?? []) as unknown as Product[], total: count ?? 0 };
   },
 
-  // Busca por código de barras o SKU exacto (para escaneo). Matchea primero
-  // contra variantes (barcode/sku propios) y, si no, contra productos. Cuando
-  // matchea una variante devuelve el producto padre + la variante.
-  findByCode: async (
-    code: string,
-  ): Promise<{ product: Product; variant?: ProductVariant } | null> => {
-    const c = code.trim();
-    // Solo códigos simples: evita romper el filtro .or() y inyección.
-    if (!/^[A-Za-z0-9._\-]+$/.test(c)) return null;
-    const supabase = createClient();
-
-    // 1) Variante por barcode/sku (activa) → trae el producto padre.
-    const { data: variant, error: vErr } = await supabase
-      .from("product_variants")
-      .select("*")
-      .is("deleted_at", null)
-      .or(`barcode.eq.${c},sku.eq.${c}`)
-      .limit(1)
-      .maybeSingle();
-    if (vErr) throw vErr;
-    if (variant) {
-      const { data: parent, error: pErr } = await supabase
-        .from("products")
-        .select("*, categories(name)")
-        .eq("id", (variant as ProductVariant).product_id)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (pErr) throw pErr;
-      if (parent) {
-        return {
-          product: parent as unknown as Product,
-          variant: variant as unknown as ProductVariant,
-        };
-      }
-    }
-
-    // 2) Producto por barcode/sku/PLU (exacto). El PLU corto también resuelve acá.
-    const { data, error } = await supabase
-      .from("products")
-      .select("*, categories(name)")
-      .is("deleted_at", null)
-      .or(`barcode.eq.${c},sku.eq.${c},plu.eq.${c}`)
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return null;
-    return { product: data as unknown as Product };
+  // Busca por código exacto (escaneo) con EL resolver de la base (H163,
+  // product_by_code): variante, artículo por barcode/SKU/PLU, alternativo,
+  // unidad de venta y PLU sin ceros. Devuelve la primera coincidencia.
+  findByCode: async (code: string): Promise<CodeMatch | null> => {
+    const all = await productsApi.findAllByCode(code, 5);
+    return all[0] ?? null;
   },
 
-  // Todas las coincidencias EXACTAS de un código (variantes por barcode/sku y
-  // productos por barcode/sku/PLU). La usa el buscador reutilizable
-  // (ProductSearchCombobox): una sola coincidencia se agrega directo; varias se
-  // muestran en la lista para elegir. findByCode sigue devolviendo la primera.
-  findAllByCode: async (
-    code: string,
-    limit = 10,
-  ): Promise<{ product: Product; variant?: ProductVariant }[]> => {
+  // Todas las coincidencias EXACTAS de un código. La usa el buscador
+  // reutilizable (ProductSearchCombobox): una sola coincidencia se agrega
+  // directo; varias se muestran en la lista para elegir.
+  findAllByCode: async (code: string, limit = 10): Promise<CodeMatch[]> => {
     const c = code.trim();
+    // Solo códigos simples: evita romper los filtros y la inyección.
     if (!/^[A-Za-z0-9._\-]+$/.test(c)) return [];
     const supabase = createClient();
-    const out: { product: Product; variant?: ProductVariant }[] = [];
-
-    const { data: variants, error: vErr } = await supabase
-      .from("product_variants")
-      .select("*")
-      .is("deleted_at", null)
-      .or(`barcode.eq.${c},sku.eq.${c}`)
-      .limit(limit);
-    if (vErr) throw vErr;
-    const vRows = (variants ?? []) as unknown as ProductVariant[];
-    if (vRows.length > 0) {
-      const { data: parents, error: pErr } = await supabase
-        .from("products")
-        .select("*, categories(name)")
-        .is("deleted_at", null)
-        .in("id", [...new Set(vRows.map((v) => v.product_id))]);
-      if (pErr) throw pErr;
-      const byId = new Map(((parents ?? []) as unknown as Product[]).map((p) => [p.id, p]));
-      for (const v of vRows) {
-        const p = byId.get(v.product_id);
-        if (p) out.push({ product: p, variant: v });
-      }
+    const { data: hits, error } = await supabase.rpc(
+      "product_by_code" as never,
+      { p_code: c, p_limit: limit } as never,
+    );
+    if (error) {
+      // Base sin la migración H163: la búsqueda de siempre.
+      if ((error as { code?: string }).code === "PGRST202") return legacyFindAllByCode(c, limit);
+      throw error;
     }
-
-    const { data, error } = await supabase
-      .from("products")
-      .select("*, categories(name)")
-      .is("deleted_at", null)
-      .or(`barcode.eq.${c},sku.eq.${c},plu.eq.${c}`)
-      .limit(limit);
-    if (error) throw error;
-    for (const p of (data ?? []) as unknown as Product[]) {
-      if (!out.some((r) => r.product.id === p.id && !r.variant)) out.push({ product: p });
+    type Hit = { product_id: string; variant_id: string | null; sale_unit_id: string | null };
+    const rows = (hits ?? []) as unknown as Hit[];
+    if (rows.length === 0) return [];
+    const pIds = [...new Set(rows.map((r) => r.product_id))];
+    const vIds = [...new Set(rows.map((r) => r.variant_id).filter(Boolean) as string[])];
+    const uIds = [...new Set(rows.map((r) => r.sale_unit_id).filter(Boolean) as string[])];
+    const empty = { data: [] as unknown[], error: null };
+    const [pr, vr, ur] = await Promise.all([
+      supabase.from("products").select("*, categories(name)").is("deleted_at", null).in("id", pIds),
+      vIds.length
+        ? supabase.from("product_variants").select("*").is("deleted_at", null).in("id", vIds)
+        : Promise.resolve(empty),
+      uIds.length
+        ? supabase
+            .from("product_sale_units" as never)
+            .select("id, label, units, price, discount_pct, barcode, is_active")
+            .in("id", uIds)
+        : Promise.resolve(empty),
+    ]);
+    if (pr.error) throw pr.error;
+    if (vr.error) throw vr.error;
+    if (ur.error) throw ur.error;
+    const pById = new Map(((pr.data ?? []) as unknown as Product[]).map((p) => [p.id, p]));
+    const vById = new Map(((vr.data ?? []) as unknown as ProductVariant[]).map((v) => [v.id, v]));
+    const uById = new Map(((ur.data ?? []) as unknown as SaleUnitRow[]).map((u) => [u.id, u]));
+    const out: CodeMatch[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const product = pById.get(r.product_id);
+      if (!product) continue;
+      const key = `${r.product_id}|${r.variant_id ?? ""}|${r.sale_unit_id ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const variant = r.variant_id ? vById.get(r.variant_id) : undefined;
+      if (r.variant_id && !variant) continue;
+      const u = r.sale_unit_id ? uById.get(r.sale_unit_id) : undefined;
+      if (r.sale_unit_id && !u) continue;
+      out.push({
+        product,
+        ...(variant ? { variant } : {}),
+        ...(u ? { saleUnit: { ...saleUnitFromRow(u), id: u.id } } : {}),
+      });
     }
     return out;
   },
@@ -409,6 +471,7 @@ export const productsApi = {
         // ADR-122: tipo del servicio (sólo los servicios mandan la columna).
         ...(input.is_service ? { service_type_id: input.service_type_id ?? null } : {}),
         ...openPriceColumns(input),
+        ...usageColumns(input),
         // `plu`/`is_favorite` aún no están en los tipos generados: casteamos el payload.
       } as never)
       .select("*")
@@ -475,6 +538,7 @@ export const productsApi = {
         // ADR-122: tipo del servicio (sólo los servicios mandan la columna).
         ...(input.is_service ? { service_type_id: input.service_type_id ?? null } : {}),
         ...openPriceColumns(input),
+        ...usageColumns(input),
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       } as never)
@@ -730,6 +794,119 @@ export const packagesApi = {
       const { error } = await supabase
         .from("product_packages")
         .insert(d.insert.map((r) => ({ ...r, product_id: productId })));
+      if (error) throw error;
+    }
+  },
+};
+
+// ── Códigos alternativos (F24 · H163) ────────────────────────────────────
+// RLS por negocio, alta y baja con products.edit, choque de códigos validado
+// por trigger (barcode_taken:<origen>). Baja lógica.
+export type AltCodeWithSupplier = AltCode & { supplierName: string | null };
+
+const missingTable = (e: unknown) => {
+  const c = (e as { code?: string } | null)?.code;
+  return c === "42P01" || c === "PGRST205";
+};
+
+export const altCodesApi = {
+  list: async (productId: string): Promise<AltCodeWithSupplier[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_barcodes" as never)
+      .select("id, code, supplier_id, variant_id, created_at, suppliers(name)")
+      .eq("product_id", productId)
+      .is("deleted_at", null)
+      .order("created_at");
+    if (error) {
+      if (missingTable(error)) return [];
+      throw error;
+    }
+    type Row = { id: string; code: string; supplier_id: string | null; variant_id: string | null; suppliers: { name: string } | null };
+    return ((data ?? []) as unknown as Row[]).map((r) => ({
+      id: r.id,
+      code: r.code,
+      supplierId: r.supplier_id,
+      variantId: r.variant_id,
+      supplierName: r.suppliers?.name ?? null,
+    }));
+  },
+
+  save: async (productId: string, saved: AltCode[], edited: AltCode[]): Promise<void> => {
+    const d = diffAltCodes(saved, edited);
+    if (d.insert.length + d.remove.length === 0) return;
+    const supabase = createClient();
+    if (d.remove.length > 0) {
+      const { error } = await supabase
+        .from("product_barcodes" as never)
+        .update({ deleted_at: new Date().toISOString() } as never)
+        .in("id", d.remove);
+      if (error) throw error;
+    }
+    if (d.insert.length > 0) {
+      const { error } = await supabase
+        .from("product_barcodes" as never)
+        .insert(d.insert.map((r) => ({ ...r, product_id: productId })) as never);
+      if (error) throw error;
+    }
+  },
+};
+
+// ── Unidades de venta con coeficiente (F24 · H163) ────────────────────────
+export const saleUnitsApi = {
+  list: async (productId: string): Promise<SaleUnit[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_sale_units" as never)
+      .select("id, label, units, price, discount_pct, barcode, is_active")
+      .eq("product_id", productId)
+      .is("deleted_at", null)
+      .order("units");
+    if (error) {
+      if (missingTable(error)) return [];
+      throw error;
+    }
+    return ((data ?? []) as unknown as SaleUnitRow[]).map(saleUnitFromRow);
+  },
+
+  /** Todas las activas del negocio (POS: elegir unidad o bulto). Sin la migración, ninguna. */
+  active: async (): Promise<(SaleUnit & { id: string; productId: string })[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_sale_units" as never)
+      .select("id, product_id, label, units, price, discount_pct, barcode, is_active")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("units")
+      .limit(2000);
+    if (error) return [];
+    return ((data ?? []) as unknown as (SaleUnitRow & { product_id: string })[]).map((r) => ({
+      ...saleUnitFromRow(r),
+      id: r.id,
+      productId: r.product_id,
+    }));
+  },
+
+  save: async (productId: string, saved: SaleUnit[], edited: SaleUnit[]): Promise<void> => {
+    const d = diffSaleUnits(saved, edited);
+    if (d.insert.length + d.update.length + d.remove.length === 0) return;
+    const supabase = createClient();
+    if (d.remove.length > 0) {
+      const { error } = await supabase
+        .from("product_sale_units" as never)
+        .update({ deleted_at: new Date().toISOString() } as never)
+        .in("id", d.remove);
+      if (error) throw error;
+    }
+    for (const u of d.update) {
+      const { id, ...patch } = u;
+      const { error } = await supabase.from("product_sale_units" as never).update(patch as never).eq("id", id);
+      if (error) throw error;
+    }
+    if (d.insert.length > 0) {
+      const { error } = await supabase
+        .from("product_sale_units" as never)
+        .insert(d.insert.map((r) => ({ ...r, product_id: productId })) as never);
       if (error) throw error;
     }
   },

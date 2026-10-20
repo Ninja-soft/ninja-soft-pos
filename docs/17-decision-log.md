@@ -6425,3 +6425,34 @@ Todos los márgenes (comparativo de sucursales, CMV del asiento) usaban el costo
 - Pendiente de H161: pendientes a fecha de corte, búsqueda sin acentos y los P2 (existencias a fecha, rotación, concentración, PDF).
 - Orden de deploy: migración y después el front.
 - Verificado con un dry-run en producción con rollback (cajero sin `reports.costs` rechazado en rentabilidad; costo oculto en movimientos) y `tests/unit/h161Gestion.test.ts`.
+
+## ADR-177: Catálogo PRO: códigos alternativos, venta por bulto, artículo de compra o venta y duplicar (F24 · H163)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270115100000_h163_catalogo`, sin Edges) · **Base:** ADR-170 (F24), ADR-056 (precio del servidor), ADR-077 (POS sin conexión), ADR-116 (`_sale_apply_service`)
+
+### Contexto
+
+La auditoría de InfoManager IM5 marcó que un artículo tiene un solo código de barras (el cambio de EAN de un proveedor obliga a editar la ficha), que no se puede vender por caja o pack con su coeficiente, que los insumos aparecen en el POS y que dar de alta artículos parecidos es lento.
+
+### Decisión
+
+1. **Códigos alternativos** (`product_barcodes`): por artículo y opcionalmente por variante y por proveedor; código normalizado (mayúsculas, sin espacios) y único por negocio entre las filas vivas. Un trigger (`_catalog_code_taken`) impide que un alternativo pise el principal de un artículo o de una variante o el código de una unidad de venta, y al revés (`products_code_guard`, `product_variants_code_guard`): error `barcode_taken:<origen>`. RLS por negocio con `(select current_tenant_id())`, alta y edición con `products.edit`, baja lógica y auditoría (`write_audit_log`).
+2. **Un solo resolver** `product_by_code(p_code, p_limit)` (SECURITY INVOKER, con la RLS del usuario): variante, artículo por barcode, SKU o PLU, alternativo, unidad de venta y PLU sin ceros a la izquierda, en ese orden. `productsApi.findByCode` y `findAllByCode` lo usan, así lo heredan el scanner y la Caja rápida del POS y `ProductSearchCombobox` (compras, ajustes, traslados, reservas, presupuestos). Contra una base sin la migración, la búsqueda de antes. La búsqueda por texto suma los artículos cuyo alternativo contiene lo escrito. El POS sin conexión baja los alternativos y los bultos en la foto del catálogo.
+3. **Unidad de venta con coeficiente** (`product_sale_units`: nombre, unidades, precio propio o derivado de N × precio unitario con descuento opcional, código propio). Se eligió una tabla nueva y no `product_packages`: aquélla son medidas logísticas (alto, ancho, peso, cantidad de bultos) detrás de `medidas_bultos`; mezclar el precio de venta ahí confundía las dos cosas. No se combina con pesables, variantes, serializados ni servicios (trigger en las dos puntas).
+4. **Venta por bulto sin reescribir `create_sale`.** El carrito guarda la línea en bultos con el precio del bulto; al cobrar se expande a unidades del artículo con el precio unitario de lista (el que `create_sale` valida, ADR-056) y lo que baja el bulto como descuento del renglón, más `sale_unit_id`. Así el stock, el precio, los impuestos y la promo siguen su camino de siempre. `_sale_apply_service` (que `create_sale` ya llama con los renglones y sus ids) se redefinió, copiando su única definición, para validar que la unidad sea de ese artículo y que la cantidad sea un múltiplo exacto, y para guardar `sale_items.sale_unit_id`, `sale_unit_label` ("Caja x 12") y `sale_unit_qty`. `sale_unit_id` no tiene FK a propósito: `sale_items` es una tabla grande y una FK pide un índice más en cada venta.
+5. **Compra, venta o ambos** (`products.usage`, default `both`): un trigger BEFORE INSERT en `sale_items` rechaza los insumos (`product_not_for_sale`) en toda venta (POS, mesas, delivery, API, sin conexión) sin tocar `create_sale`; `public_catalog` (copia de su última definición) no los publica; el POS, mesas y delivery los ocultan y los pickers de compra ocultan lo de sólo venta.
+6. **Duplicar y grabar y seguir**: sólo front. La copia lleva categoría, precios, impuestos y atributos, sin SKU, código, PLU ni stock, y se revisa antes de grabar.
+7. BASE: no hay feature de plan nueva.
+
+### Alternativas descartadas
+
+- **Columna `barcodes text[]` en `products`:** sin unicidad entre artículos ni proveedor por código.
+- **Precio prorrateado por unidad con cambio de precio:** pasaba por el PIN de `cambio_precio` y redondeaba mal el total del bulto.
+- **Un parámetro nuevo en `create_sale`:** obligaba a copiar 1.500 líneas para una validación que entra en `_sale_apply_service`.
+
+### Consecuencias
+
+- El descuento del bulto viaja como descuento del renglón: necesita la feature `descuentos` y un artículo que acepte descuentos (si no, el bulto se cobra N × precio unitario, lo calcula el POS). Una promo por cantidad del artículo puede sumar sobre el bulto.
+- Pendiente de H163: equivalencia de compra por bulto, precio por bulto en listas y etiquetas y los P3 (NCM, ícono de categoría, más de 2 ejes, edición masiva).
+- Orden de deploy: migración y después el front (el front tolera la base sin la migración).
+- Verificado con `tests/unit/h163Catalogo.test.ts`, typecheck y las suites de POS, carrito, sin conexión, combobox, cobros en espera y `db-audit-perf`.

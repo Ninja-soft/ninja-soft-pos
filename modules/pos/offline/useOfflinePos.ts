@@ -16,6 +16,7 @@ import {
   buildSnapshot,
   searchSnapshot,
   findByCodeInSnapshot,
+  findCodeInSnapshot,
   shiftCountKey,
   snapshotKey,
   snapshotMatches,
@@ -333,6 +334,11 @@ export function useOfflinePos(ctx: {
     (code: string): Product | null => (snapshotProducts ? findByCodeInSnapshot(snapshotProducts, code) : null),
     [snapshotProducts],
   );
+  // H163: también el bulto (unidad de venta) si el código es el suyo.
+  const findCode = useCallback(
+    (code: string) => (snapshotProducts ? findCodeInSnapshot(snapshotProducts, code) : null),
+    [snapshotProducts],
+  );
 
   return {
     available,
@@ -346,6 +352,7 @@ export function useOfflinePos(ctx: {
     snapshotAt: snapshot?.at ?? null,
     searchProducts,
     findByCode,
+    findCode,
     markServerDown: () => setServerDown(true),
     saveSale,
     syncNow,

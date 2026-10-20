@@ -13,7 +13,17 @@ import {
   useFavoriteProducts,
   useProductSerials,
   useCategories,
+  useActiveSaleUnits,
 } from "@/modules/products/hooks";
+import { SaleUnitPicker, type SaleUnitChoice } from "@/components/pos/SaleUnitPicker";
+import {
+  isSellable,
+  saleUnitFromRow,
+  saleUnitPrice,
+  type CartSaleUnit,
+  type SaleUnit,
+  type SaleUnitRow,
+} from "@/lib/products/catalogCodes";
 import { useWarrantyCatalog } from "@/modules/warranty/hooks";
 import { buildWarrantyTargets } from "@/lib/warranty/pos";
 import { useMyTenant } from "@/modules/tenants/hooks";
@@ -357,6 +367,8 @@ function PosPageInner() {
   const [freeAmount, setFreeAmount] = useState("");
   const [freeName, setFreeName] = useState("");
   const [weighProduct, setWeighProduct] = useState<PendingProduct | null>(null);
+  // H163: elegir unidad suelta o bulto al tocar un artículo con unidades de venta.
+  const [unitChoice, setUnitChoice] = useState<{ p: PickInput; qty: number; choice: SaleUnitChoice } | null>(null);
   const [weighGrams, setWeighGrams] = useState("");
   const [serialProduct, setSerialProduct] = useState<PendingProduct | null>(null);
   const [serialChoice, setSerialChoice] = useState("");
@@ -419,7 +431,11 @@ function PosPageInner() {
     () => (posOffline ? searchOffline(search) : null),
     [posOffline, searchOffline, search],
   );
-  const allProducts = offlineProducts ?? liveProducts;
+  // H163: los insumos (sólo compra) no se venden.
+  const allProducts = useMemo(
+    () => (offlineProducts ?? liveProducts)?.filter(isSellable),
+    [offlineProducts, liveProducts],
+  );
   const products = useMemo(() => {
     if (!categoryFilter && !menuProductSet) return allProducts;
     let list = allProducts ?? [];
@@ -569,6 +585,10 @@ function PosPageInner() {
   const addWithModifiers = useCartStore((s) => s.addWithModifiers);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
   const addPack = useCartStore((s) => s.addPack);
+  const addSaleUnit = useCartStore((s) => s.addSaleUnit);
+  // H163: unidades de venta (bulto, caja, pack) del negocio, por artículo.
+  const { data: saleUnitsByProduct } = useActiveSaleUnits();
+  const discountsOn = useFeature("descuentos") !== false;
   const coverLineWithPack = useCartStore((s) => s.coverLineWithPack);
   const uncoverLine = useCartStore((s) => s.uncoverLine);
   const setQuantity = useCartStore((s) => s.setQuantity);
@@ -698,9 +718,67 @@ function PosPageInner() {
       setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), categoryId: p.categoryId ?? null });
       setWeighGrams("");
     } else {
+      // H163: con bultos (caja, pack) activos, se elige con qué se vende.
+      const units = saleUnitsByProduct?.get(p.id) ?? [];
+      if (units.length > 0 && !p.is_service) {
+        const unitPrice = priceFor(p.id, null, p.price);
+        setUnitChoice({
+          p,
+          qty,
+          choice: {
+            name: p.name,
+            unitPrice,
+            units: units.map((u) => ({
+              ...u,
+              packPrice: saleUnitPrice(u, priceFor(p.id, null, p.price, u.units), discountsOn && !p.no_discount),
+            })),
+          },
+        });
+        return;
+      }
       if (!branchStockGate(p.id, null, qty)) return;
       addProduct({ ...p, price: priceFor(p.id, null, p.price, qty), warrantyMonths: p.warranty_months ?? 0 }, qty);
     }
+  }
+
+  // H163: vende el artículo por bulto. El precio unitario se resuelve para la
+  // cantidad total (el servidor valida ese precio en el renglón expandido).
+  function addSaleUnitLine(p: PickInput, su: SaleUnit & { id: string }, packs = 1) {
+    if (p.unit === "kg" || p.has_variants || p.is_serialized || isOpenPrice(p)) {
+      toast({ title: `${p.name} no se vende por bulto`, variant: "error" });
+      return;
+    }
+    const n = Math.max(1, Math.round(packs));
+    if (!branchStockGate(p.id, null, su.units * n)) return;
+    const base = priceFor(p.id, null, p.price, su.units * n);
+    const allowDiscount = discountsOn && !p.no_discount;
+    const cartUnit: CartSaleUnit = {
+      id: su.id,
+      units: su.units,
+      basePrice: base,
+      label: su.label,
+      price: su.price,
+      discountPct: su.discountPct,
+      allowDiscount,
+    };
+    addSaleUnit(
+      { id: p.id, name: p.name, sku: p.sku, warrantyMonths: p.warranty_months ?? 0, categoryId: p.categoryId ?? null },
+      cartUnit,
+      saleUnitPrice(cartUnit, base, allowDiscount),
+      n,
+    );
+  }
+  function confirmUnitChoice(saleUnitId: string | null) {
+    const c = unitChoice;
+    if (!c) return;
+    setUnitChoice(null);
+    const su = saleUnitId ? c.choice.units.find((u) => u.id === saleUnitId) : null;
+    if (su) {
+      addSaleUnitLine(c.p, su, c.qty);
+      return;
+    }
+    if (!branchStockGate(c.p.id, null, c.qty)) return;
+    addProduct({ ...c.p, price: priceFor(c.p.id, null, c.p.price, c.qty), warrantyMonths: c.p.warranty_months ?? 0 }, c.qty);
   }
   // Callback estable para la grilla memoizada.
   const pickRef = useRef(pickProduct);
@@ -1158,15 +1236,28 @@ function PosPageInner() {
       addWeighed({ id: p.id, name: p.name, sku: p.sku, price, categoryId: p.category_id }, line.quantityKg);
       return true;
     }
-    const offlineHit = offline.isOffline ? offline.findByCode(code) : null;
+    // H163: el resolver encuentra también alternativos, bultos y PLU sin ceros.
+    const offlineHit = offline.isOffline ? offline.findCode(code) : null;
     const res = offline.isOffline
       ? offlineHit
-        ? { product: offlineHit, variant: undefined }
+        ? {
+            product: offlineHit.product,
+            variant: undefined,
+            saleUnit: offlineHit.saleUnit
+              ? { ...saleUnitFromRow(offlineHit.saleUnit as SaleUnitRow), id: offlineHit.saleUnit.id }
+              : undefined,
+          }
         : null
       : await productsApi.findByCode(code);
     if (!res) return false;
     const { product: p, variant } = res;
-    if (variant) {
+    if (!isSellable(p)) {
+      toast({ title: `${p.name} es un insumo: no se vende`, variant: "error" });
+      return true;
+    }
+    if (res.saleUnit) {
+      addSaleUnitLine(toPick(p), res.saleUnit, pendingQty);
+    } else if (variant) {
       addVariant({
         id: p.id,
         name: p.name,
@@ -2757,6 +2848,12 @@ function PosPageInner() {
             />
           ) : null
         }
+      />
+      <SaleUnitPicker
+        choice={unitChoice?.choice ?? null}
+        onClose={() => setUnitChoice(null)}
+        onUnit={() => confirmUnitChoice(null)}
+        onSaleUnit={(id) => confirmUnitChoice(id)}
       />
       <SerialDialog
         product={serialProduct}

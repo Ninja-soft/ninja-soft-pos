@@ -622,6 +622,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, las devoluciones y anulaciones no se puntúan ni se marcan, y no hay vista de riesgo por persona (el servidor lo rechaza). El PIN de supervisor sigue funcionando.",
     minPlan: "Business",
   },
+  alertas_programadas: {
+    desc: "Alertas programadas: reglas que el sistema revisa solo (stock bajo o negativo, ventas bajo costo, deuda vencida, cheques y facturas de compra por vencer, cajas sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos altos, presupuestos por vencer, clientes que dejaron de comprar, aumentos de costo, certificado de ARCA y anulaciones), con tus umbrales, cada hora, todos los días o algunos días a la hora que elijas, por sucursal. Avisan por la campana y por mail a los roles o personas que elijas, sólo con los casos nuevos, con Probar ahora e historial.",
+    impact: "Desactivado, cada control se mira a mano en su pantalla; las reglas guardadas dejan de correr (el servidor lo rechaza).",
+    minPlan: "Pro",
+    needs: "Para el resumen por mail, el email del negocio configurado en Configuración › Email.",
+  },
   metricas_avanzadas: {
     desc: "Reportes de gestión: rentabilidad mes a mes con el costo de cada venta (ventas netas, costo, margen, gastos y resultado contra el período anterior) y mercadería parada valorizada.",
     impact: "Sin esto quedan los reportes de ventas, cobranzas y movimientos de stock; no hay rentabilidad ni mercadería parada (el servidor lo rechaza).",

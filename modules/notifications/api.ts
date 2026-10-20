@@ -26,7 +26,9 @@ export type NotificationType =
   | "cobros"
   | "disputas"
   // Pedidos desde el catálogo público (ADR-130).
-  | "pedidos";
+  | "pedidos"
+  // Alertas programadas del negocio (ADR-176).
+  | "alertas";
 
 /**
  * De dónde viene (ADR-152): `business` = del negocio activo (incluye las

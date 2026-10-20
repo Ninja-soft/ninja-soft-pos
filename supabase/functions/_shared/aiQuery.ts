@@ -1139,6 +1139,181 @@ export function validateQuery(input: unknown): ValidationResult {
   return { ok: true, spec };
 }
 
+// ── Permisos (H158) ──────────────────────────────────────────────────────────
+// Capacidad que hace falta para consultar cada entidad (como raíz o por ref).
+// Las que no figuran (stores, cash_registers) son datos básicos del negocio.
+// La copia SQL (ai__query_entity_caps) filtra ai__query_catalog() por el
+// usuario del JWT; un test compara ambas.
+export const AI_ENTITY_CAPS: Record<string, string> = {
+  products: "products.view",
+  categories: "products.view",
+  brands: "products.view",
+  product_variants: "products.view",
+  price_lists: "products.view",
+  price_list_items: "products.view",
+  warranty_plans: "products.view",
+  product_serials: "products.view",
+  service_packs: "products.view",
+  menus: "products.view",
+  stock_movements: "stock.view",
+  customers: "customers.view",
+  customer_groups: "customers.view",
+  customer_account_movements: "customers.view",
+  store_credit_movements: "customers.view",
+  store_credit_vouchers: "customers.view",
+  customer_pack_credits: "customers.view",
+  sales: "sales.view",
+  sale_items: "sales.view",
+  payments: "sales.view",
+  sale_returns: "sales.view",
+  return_reasons: "sales.view",
+  promotions: "sales.view",
+  coupons: "sales.view",
+  coupon_redemptions: "sales.view",
+  payment_plans: "sales.view",
+  professionals: "sales.view",
+  appointments: "sales.view",
+  dining_areas: "sales.view",
+  dining_tables: "sales.view",
+  table_orders: "sales.view",
+  table_order_items: "sales.view",
+  dining_reservations: "sales.view",
+  delivery_orders: "sales.view",
+  delivery_order_items: "sales.view",
+  delivery_zones: "sales.view",
+  cash_shifts: "cash.view",
+  cash_movements: "cash.view",
+  cash_z_closures: "cash.view",
+  tenant_users: "team.view",
+  cashier_profiles: "team.view",
+  tenant_payment_methods: "config.edit",
+  subscriptions: "billing.manage",
+  subscription_addons: "billing.manage",
+  plans: "billing.manage",
+};
+
+/** Columnas de costo: sólo con `reports.costs`. */
+export const AI_COST_COLUMNS: Record<string, string[]> = {
+  products: ["cost"],
+};
+
+export const AI_COSTS_CAP = "reports.costs";
+
+/** ¿El usuario con `caps` puede usar la entidad? */
+export function aiEntityAllowed(entity: string, caps: ReadonlySet<string>): boolean {
+  const need = AI_ENTITY_CAPS[entity];
+  return !need || caps.has(need);
+}
+
+function aiColumnAllowed(entity: string, col: string, caps: ReadonlySet<string>): boolean {
+  if (!aiEntityAllowed(entity, caps)) return false;
+  if (caps.has(AI_COSTS_CAP)) return true;
+  return !(AI_COST_COLUMNS[entity] ?? []).includes(col);
+}
+
+/**
+ * Revisa una consulta ya validada contra los permisos del usuario: la entidad
+ * raíz y cada columna pedida (también `ref.col`); sin `select` ni agregados,
+ * las columnas por defecto. Devuelve el motivo si no puede, o null. La RPC SQL
+ * repite el control (catálogo filtrado por usuario); esto da un mensaje claro.
+ */
+export function checkQueryScope(spec: NormalizedQuery, caps: ReadonlySet<string>): string | null {
+  const ent = AI_QUERY_CATALOG[spec.entity];
+  if (!ent || !aiEntityAllowed(spec.entity, caps)) {
+    return `Tu usuario no tiene permiso para consultar '${spec.entity}'.`;
+  }
+  const listing = spec.aggregates.length === 0 && spec.group_by.length === 0;
+  const tokens = [
+    ...(spec.select ?? (listing ? ent.def ?? [] : [])),
+    ...spec.filters.map((f) => f.col),
+    ...spec.group_by.map((g) => g.col),
+    ...spec.aggregates.flatMap((a) => (a.col ? [a.col] : [])),
+    ...spec.order_by.map((o) => o.col),
+  ];
+  for (const t of tokens) {
+    // order_by puede traer alias de salida (sum_total): no son columnas.
+    if (!resolveColumn(spec.entity, t)) continue;
+    const [a, b] = t.split(".") as [string, string | undefined];
+    const target = b === undefined ? spec.entity : ent.refs![a]!.to;
+    const col = b ?? a;
+    if (!aiColumnAllowed(target, col, caps)) {
+      return (AI_COST_COLUMNS[target] ?? []).includes(col)
+        ? "Tu usuario no tiene permiso para ver costos ni márgenes."
+        : `Tu usuario no tiene permiso para consultar '${t}'.`;
+    }
+  }
+  return null;
+}
+
+function redactKeys<T>(value: T, re: RegExp): T {
+  if (Array.isArray(value)) return value.map((v) => redactKeys(v, re)) as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (re.test(k)) continue;
+      out[k] = redactKeys(v, re);
+    }
+    return out as T;
+  }
+  return value;
+}
+
+/** Saca de un resultado las claves de costo y margen (cost, inventory_value_cost…). */
+export function redactCosts<T>(value: T): T {
+  return redactKeys(value, /cost|margin|margen|costo|profit|ganancia/i);
+}
+
+/** Saca la valorización del inventario (inventory_value_*). */
+export function redactValuation<T>(value: T): T {
+  return redactKeys(value, /^inventory_value/i);
+}
+
+/** Lo que el asistente sabe del usuario que pregunta (H158). */
+export type AiScope = {
+  caps: ReadonlySet<string>;
+  /** Ve todas las sucursales del negocio (las tools curadas suman todo el negocio). */
+  allStores: boolean;
+};
+
+// Tools curadas (RPC ai_* con service_role): capacidad que piden y si suman
+// todo el negocio (entonces sólo para quien ve todas las sucursales; el resto
+// usa ai_query, que corre con su JWT y la RLS de sucursal).
+export const AI_TOOL_RULES: Record<string, { cap: string; allStores?: boolean }> = {
+  search_products: { cap: "products.view" },
+  sales_summary: { cap: "sales.view", allStores: true },
+  top_products: { cap: "sales.view", allStores: true },
+  list_customers: { cap: "customers.view" },
+  cash_status: { cap: "cash.view", allStores: true },
+  stock_report: { cap: "stock.view" },
+  business_overview: { cap: "reports.view" },
+};
+
+/** Motivo por el que el usuario no puede usar la tool, o null. */
+export function aiToolDenied(name: string, scope: AiScope): string | null {
+  const rule = AI_TOOL_RULES[name];
+  if (!rule) return null;
+  if (!scope.caps.has(rule.cap)) return "Tu usuario no tiene permiso para ver este dato.";
+  if (rule.allStores && !scope.allStores) {
+    return "Esta herramienta suma todas las sucursales y tu usuario ve sólo algunas. Usá ai_query: ya filtra tus sucursales.";
+  }
+  return null;
+}
+
+/** Recorta un resultado según el usuario: sin costos y sin valorización si no puede verlos. */
+export function scopeResult<T>(value: T, scope: AiScope): T {
+  let out = value;
+  if (!scope.caps.has(AI_COSTS_CAP)) out = redactCosts(out);
+  if (!scope.caps.has("stock.valuation")) out = redactValuation(out);
+  return out;
+}
+
+/** Copia para SQL del mapa de permisos (ai__query_entity_caps). */
+export function entityCapsForSql(): { entities: Record<string, string>; cost_cols: Record<string, string[]>; costs_cap: string } {
+  const entities: Record<string, string> = {};
+  for (const k of Object.keys(AI_ENTITY_CAPS).sort()) entities[k] = AI_ENTITY_CAPS[k]!;
+  return { entities, cost_cols: AI_COST_COLUMNS, costs_cap: AI_COSTS_CAP };
+}
+
 // ── Copia del catálogo para SQL ──────────────────────────────────────────────
 // Forma compacta que embebe la migración en ai__query_catalog(). Un test
 // compara este objeto con el JSON de la migración para que nunca diverjan.
@@ -1182,15 +1357,15 @@ export function catalogForSql(): SqlCatalog {
 // ── ai_schema: descripción legible para el modelo ────────────────────────────
 
 /** Lista corta de entidades (va en el system prompt). */
-export function schemaIndex(): string {
+export function schemaIndex(caps?: ReadonlySet<string>): string {
   return Object.entries(AI_QUERY_CATALOG)
-    .filter(([, e]) => !e.refOnly)
+    .filter(([k, e]) => !e.refOnly && (!caps || aiEntityAllowed(k, caps)))
     .map(([k, e]) => `• ${k}: ${e.d}`)
     .join("\n");
 }
 
 /** Detalle de columnas y relaciones de una o varias entidades. */
-export function describeEntities(names: unknown): {
+export function describeEntities(names: unknown, caps?: ReadonlySet<string>): {
   entities?: Record<string, unknown>;
   error?: string;
 } {
@@ -1209,15 +1384,21 @@ export function describeEntities(names: unknown): {
       out[n] = { error: "no existe o no está disponible" };
       continue;
     }
+    if (caps && !aiEntityAllowed(n, caps)) {
+      out[n] = { error: "tu usuario no tiene permiso para consultarla" };
+      continue;
+    }
+    const colOk = (ent: string, col: string) => !caps || aiColumnAllowed(ent, col, caps);
     const refs: Record<string, string> = {};
     for (const [rk, r] of Object.entries(e.refs ?? {})) {
+      if (!colOk(r.to, "id")) continue;
       const target = AI_QUERY_CATALOG[r.to]!;
-      refs[rk] = `${r.d} → usá ${rk}.<col> con col de ${r.to}: ${Object.keys(target.cols).join(", ")}`;
+      refs[rk] = `${r.d} → usá ${rk}.<col> con col de ${r.to}: ${Object.keys(target.cols).filter((c) => colOk(r.to, c)).join(", ")}`;
     }
     out[n] = {
       descripcion: e.d,
       columnas: Object.fromEntries(
-        Object.entries(e.cols).map(([k, v]) => [k, `${v.t} · ${v.d}`]),
+        Object.entries(e.cols).filter(([k]) => colOk(n, k)).map(([k, v]) => [k, `${v.t} · ${v.d}`]),
       ),
       ...(Object.keys(refs).length ? { relaciones: refs } : {}),
       ...(e.soft ? { nota: "Las filas dadas de baja se excluyen solas." } : {}),

@@ -341,6 +341,8 @@ const ERROR_MESSAGES: Array<[RegExp, string]> = [
   [/invalid_qty/, "Revisá las cantidades."],
   [/reason_required/, "Escribí un motivo."],
   [/invalid_dispatch_number/, "El n° de despacho tiene 16 caracteres (AAaaaTTTTnnnnnnX)."],
+  [/invoice_has_payments/, "La factura tiene pagos imputados: anulá primero la orden de pago (o dejá el total en lo ya pagado)."],
+  [/invoice_letter_mismatch/, "La letra no corresponde a la condición de IVA del proveedor y la de tu negocio."],
   [/invoice_duplicated/, "Ese comprobante ya está cargado para este proveedor."],
   [/vat_not_discriminated/, "Los comprobantes B y C no discriminan IVA."],
   [/total_mismatch/, "El total no coincide con la suma de netos, IVA y tributos."],

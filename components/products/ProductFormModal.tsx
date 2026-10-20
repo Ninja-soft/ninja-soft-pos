@@ -334,6 +334,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const trackStock = watch("track_stock");
   const isActive = watch("is_active");
   const isFavorite = watch("is_favorite");
+  const noDiscount = watch("no_discount");
   const priceRaw = watch("price");
   const costRaw = watch("cost");
   const barcodeVal = watch("barcode");
@@ -397,6 +398,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         product?.allow_negative == null ? "inherit" : product.allow_negative ? "yes" : "no",
       warranty_months: product?.warranty_months ?? 0,
       is_favorite: product?.is_favorite ?? false,
+      no_discount: product?.no_discount ?? false,
       favorite_order: product?.favorite_order ?? 0,
       service_duration_min: product?.service_duration_min ?? "",
       commission_pct: product?.commission_pct ?? "",
@@ -765,6 +767,17 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                     checked={Boolean(isFavorite)}
                     onCheckedChange={(v) => setValue("is_favorite", v, { shouldDirty: true })}
                     label="Favorito"
+                  />
+                }
+              />
+              <SettingRow
+                title="No acepta descuentos"
+                description="En el POS no se le puede hacer descuento manual (las promociones y cupones sí aplican)."
+                control={
+                  <Switch
+                    checked={Boolean(noDiscount)}
+                    onCheckedChange={(v) => setValue("no_discount", v, { shouldDirty: true })}
+                    label="No acepta descuentos"
                   />
                 }
               />

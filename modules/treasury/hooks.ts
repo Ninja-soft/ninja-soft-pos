@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFeature } from "@/modules/saas/gating";
-import type { ChequeKind, ChequeStatus } from "@/lib/treasury/cheques";
+import { chequeDuplicates, normalizeChequeNumber, type ChequeKind, type ChequeStatus } from "@/lib/treasury/cheques";
 import {
   treasuryApi,
   type BankStatementLine,
@@ -224,4 +224,17 @@ export function useTreasuryMutations() {
       onSuccess: inv,
     }),
   };
+}
+
+/** F24 · H158: cheques ya cargados con el mismo número y banco (aviso). */
+export function useChequeDuplicates(number: string, bank: string | null, enabled = true) {
+  const digits = normalizeChequeNumber(number);
+  const on = enabled && digits.length >= 3;
+  const q = useQuery({
+    queryKey: ["treasury", "cheques", "by-number", digits],
+    queryFn: () => treasuryApi.chequesByNumber(digits),
+    enabled: on,
+    staleTime: 30_000,
+  });
+  return on ? chequeDuplicates(q.data ?? [], number, bank) : [];
 }

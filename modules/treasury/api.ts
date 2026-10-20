@@ -670,6 +670,18 @@ export const treasuryApi = {
     return ((data ?? []) as unknown as Cheque[]).map((c) => ({ ...c, amount: Number(c.amount) }));
   },
 
+  // F24 · H158: cheques con ese número (para avisar si se repite). Busca por
+  // el final del número para no depender de los ceros a la izquierda.
+  chequesByNumber: async (digits: string): Promise<Cheque[]> => {
+    const { data, error } = await from("cheques")
+      .select(CHEQUE_COLS)
+      .eq("tenant_id", await tenantId())
+      .ilike("number", `%${digits.replace(/[%_\\]/g, "")}`)
+      .limit(50);
+    if (error) throw error;
+    return ((data ?? []) as unknown as Cheque[]).map((c) => ({ ...c, amount: Number(c.amount) }));
+  },
+
   registerCheque: (v: ChequeInput) => rpc<string>("cheque_register", { p: v }),
 
   transitionCheque: (id: string, to: ChequeStatus, p: { account_id?: string | null; date?: string | null; reason?: string | null }) =>

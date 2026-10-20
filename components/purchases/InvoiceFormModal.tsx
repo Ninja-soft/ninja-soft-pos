@@ -21,6 +21,7 @@ import {
   defaultDueDate,
   invoiceTotals,
   letterDiscriminatesVat,
+  allowedLetters,
   parseInvoiceNumber,
   suggestedLetter,
   validateInvoice,
@@ -38,6 +39,7 @@ import {
   useReceipts,
   useSuppliers,
 } from "@/modules/purchases/hooks";
+import { useTaxSettings } from "@/modules/tax/hooks";
 import { fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface VatRow {
@@ -88,6 +90,8 @@ export function InvoiceFormModal({
   const access = usePurchasesAccess();
   const m = usePurchaseMutations();
   const { data: suppliers = [] } = useSuppliers({ includeArchived: Boolean(invoice) }, open);
+  // Condición de IVA del negocio: define qué letras puede recibir (el servidor lo exige).
+  const buyerIva = useTaxSettings(open).data?.iva_condition ?? null;
 
   const [supplier, setSupplier] = useState("");
   const [kind, setKind] = useState<InvoiceKind>("invoice");
@@ -181,11 +185,11 @@ export function InvoiceFormModal({
   // Al elegir proveedor: letra sugerida, moneda y vencimiento por plazo.
   useEffect(() => {
     if (!open || editing || !sup) return;
-    const l = suggestedLetter(sup.iva_condition, true);
+    const l = suggestedLetter(sup.iva_condition, buyerIva);
     if (l) setLetter(l);
     if (access.pro) setCurrency(sup.currency);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sup?.id, open]);
+  }, [sup?.id, open, buyerIva]);
 
   useEffect(() => {
     if (!dueTouched && issue) setDue(defaultDueDate(issue, sup?.payment_terms_days ?? 0));
@@ -198,6 +202,7 @@ export function InvoiceFormModal({
   );
 
   const discriminates = letterDiscriminatesVat(letter);
+  const letterOptions = sup ? allowedLetters(sup.iva_condition, buyerIva) : null;
   const draft = {
     kind,
     letter,
@@ -350,6 +355,11 @@ export function InvoiceFormModal({
                 </option>
               ))}
             </select>
+            {letterOptions && !letterOptions.includes(letter) && (
+              <p className="mt-1 text-xs text-danger">
+                Con estas condiciones de IVA corresponde {letterOptions.join(" o ")}.
+              </p>
+            )}
           </Field>
           <div className="grid grid-cols-[5rem_1fr] gap-2">
             <Field label="Pto. venta">

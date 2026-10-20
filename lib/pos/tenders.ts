@@ -71,7 +71,8 @@ export type QrProviderKey =
   | "gocuotas"
   | "directo"
   | "ualabis"
-  | "viumi";
+  | "viumi"
+  | "talo";
 export type PointProviderKey = "mercadopago_point" | "nave_point" | "fiserv_point";
 
 export interface TenderDef {
@@ -174,8 +175,10 @@ const LOGO = {
   gocuotas: icon("gocuotas"),
   directo: icon("directo"),
   ualabis: icon("ualabis"),
-  // Viumi (ADR-173): sin logo oficial todavía (null = respaldo genérico).
+  // Viumi (ADR-173): sin isotipo oficial (null = respaldo genérico; el logo
+  // horizontal sí está, ver lib/payments/logos).
   viumi: paymentIcon("viumi"),
+  talo: icon("talo"),
   clover: icon("fiserv_point"),
 } as const;
 
@@ -247,6 +250,12 @@ export const TENDERS: TenderDef[] = [
     featureKey: null,
     logo: LOGO.transfer,
     flow: "direct",
+  },
+  {
+    // Talo (ADR-175): transferencia con CVU y alias únicos por venta. La venta
+    // se cierra sola cuando Talo confirma el pago (no hace falta comprobante).
+    ...qr("talo", "Talo", "transfer", "link", "CVU único, se confirma solo"),
+    label: "Transferencia",
   },
   {
     // Tarjeta en posnet: terminal NO integrada. Se elige la entidad, el tipo
@@ -479,7 +488,7 @@ export interface ProviderStatus {
 // Medios con checkout propio: medio y cuotas se resuelven en su pantalla, así
 // que el recargo plano del medio se suma siempre al monto del QR / link.
 // Espejo del criterio de QrCheckoutModal.
-export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis", "viumi"]);
+export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis", "viumi", "talo"]);
 
 export interface TenderContext {
   /** Todas las filas de tenant_payment_methods (habilitadas o no). */

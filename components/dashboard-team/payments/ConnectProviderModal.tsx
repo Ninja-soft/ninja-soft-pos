@@ -221,6 +221,17 @@ const FORMS: Record<string, FormSpec> = {
     ],
     envNote: "Prueba usa el ambiente de prueba de Viumi: los pagos no mueven plata real.",
   },
+  // Talo (ADR-175): user_id + client_id + client_secret del Dashboard de Talo
+  // (Usuario › Credenciales). Se prueban al guardar (set_payment_secret pide
+  // un token TL- en el ambiente).
+  talo: {
+    fields: [
+      { name: "user_id", label: "User ID", min: 6, placeholder: "El User ID de tu cuenta Talo" },
+      { name: "client_id", label: "Client ID", min: 6, placeholder: "Tu Client ID" },
+      { name: "client_secret", label: "Client Secret", secret: true, min: 8, placeholder: "Tu Client Secret" },
+    ],
+    envNote: "Prueba usa el sandbox de Talo (sandbox-api.talo.com.ar): cuenta aparte, sin plata real y con simulador de transferencias.",
+  },
   // Clover Point (ADR-047): conexión de la marca Fiserv. Las terminales salen
   // de Clover (GET devices); las series cargadas acá acotan y nombran.
   fiserv: {
@@ -438,7 +449,12 @@ export function ConnectProviderModal({
         providerKey === "viumi" && e instanceof Error && e.message === "viumi_invalid_credentials"
           ? "Viumi no aceptó estas credenciales en el ambiente elegido. Revisalas o probá el otro ambiente."
           : null;
-      setServerError(getnetMsg ?? ualaMsg ?? viumiMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
+      // Talo (ADR-175): ídem, pide un token antes de guardar.
+      const taloMsg =
+        providerKey === "talo" && e instanceof Error && e.message === "talo_invalid_credentials"
+          ? "Talo no aceptó estas credenciales en el ambiente elegido. Revisalas o probá el otro ambiente."
+          : null;
+      setServerError(getnetMsg ?? ualaMsg ?? viumiMsg ?? taloMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -975,6 +991,11 @@ export function ConnectProviderModal({
               {providerKey === "viumi" && (
                 <NextStep n={2}>
                   Al cobrar elegís Viumi, Link o QR: la venta se cierra sola cuando Viumi acredita el pago.
+                </NextStep>
+              )}
+              {providerKey === "talo" && (
+                <NextStep n={2}>
+                  Al cobrar elegís Transferencia, Talo: la venta se cierra sola cuando llega la transferencia.
                 </NextStep>
               )}
               {providerKey === "directo" && (

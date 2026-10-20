@@ -19,6 +19,7 @@ export const QR_EDGE_BY_PROVIDER: Record<string, string[]> = {
   gocuotas: ["gocuotas"],
   directo: ["directo"],
   ualabis: ["ualabis"],
+  viumi: ["viumi"],
   talo: ["talo"],
 };
 

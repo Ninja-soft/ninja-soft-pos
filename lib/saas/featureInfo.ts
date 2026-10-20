@@ -326,6 +326,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de Talo y sus credenciales (User ID, Client ID y Client Secret del Dashboard de Talo, Usuario, Credenciales).",
   },
+  viumi: {
+    desc: "Cobros con Viumi (Banco Macro) por link de pago, también como QR: el cliente paga con tarjeta en el checkout de Viumi y la venta se cierra sola al acreditarse. Las devoluciones se hacen desde la app o el panel de Viumi.",
+    impact: "Desactivado, Viumi no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de Viumi y las credenciales de la API (Client ID y Client Secret). Se las pedís a Viumi por mail a consultas@viumi.com.ar.",
+  },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
     impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",
@@ -612,8 +618,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   metricas_avanzadas: {
-    desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",
-    impact: "Sin esto sólo quedan los reportes básicos; no hay dashboards avanzados.",
+    desc: "Reportes de gestión: rentabilidad mes a mes con el costo de cada venta (ventas netas, costo, margen, gastos y resultado contra el período anterior) y mercadería parada valorizada.",
+    impact: "Sin esto quedan los reportes de ventas, cobranzas y movimientos de stock; no hay rentabilidad ni mercadería parada (el servidor lo rechaza).",
     minPlan: "Business",
   },
 

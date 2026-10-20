@@ -61,6 +61,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   gocuotas: "2 a 4 cuotas sin interés con débito",
   directo: "QR y link de Directo, o registro manual de la operación",
   ualabis: "Link de pago y QR por API, o registro de tu QR, POS o Tap",
+  viumi: "Link de pago y QR con el checkout de Viumi",
   talo: "Un CVU y un alias por venta: se confirma solo al llegar la plata",
 };
 
@@ -189,6 +190,15 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "Ualá nos avisa, verificamos la orden y la venta se cierra sola.",
     ],
   },
+  viumi: {
+    activa:
+      "El POS arma un link de pago de Viumi (también como QR) y la venta se cierra sola al acreditarse. Las devoluciones se hacen desde la app o el panel de Viumi.",
+    pasos: [
+      "En el POS elegís Viumi: Link o QR.",
+      "El cliente abre el link o escanea el QR con la cámara del celular y paga con tarjeta en el checkout de Viumi.",
+      "Viumi nos avisa, verificamos la orden y la venta se cierra sola.",
+    ],
+  },
   talo: {
     activa:
       "Cada venta tiene su propio CVU y alias de Talo. El cliente transfiere desde cualquier banco o billetera y la venta se cierra sola cuando Talo confirma la plata, sin pedir comprobante.",
@@ -231,6 +241,7 @@ export const CHANNEL_CAPS: Record<string, ChannelCap[]> = {
   gocuotas: ["qr", "link"],
   directo: ["qr", "link"],
   ualabis: ["qr", "link"],
+  viumi: ["qr", "link"],
   talo: ["qr", "link"],
   fiserv: ["point"],
   fiserv_point: ["point"],
@@ -371,6 +382,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
     ],
     where: "Ualá Bis › Cobros online › API",
     note: "Prueba y producción tienen credenciales distintas. Sin conectar, igual podés registrar los cobros de tu QR, POS o Tap con el número de operación.",
+  },
+  viumi: {
+    steps: [
+      { icon: "mail", text: "Pedile a Viumi las credenciales de la API por mail a consultas@viumi.com.ar." },
+      { icon: "key", text: "Copiá el Client ID y el Client Secret que te mandan." },
+      { icon: "paste", text: "Pegalos acá y elegí el ambiente de las credenciales." },
+    ],
+    where: "Mail de credenciales de Viumi (consultas@viumi.com.ar)",
+    note: "Prueba y producción tienen credenciales distintas. Las devoluciones se hacen desde la app o el panel de Viumi.",
   },
   talo: {
     steps: [

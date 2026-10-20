@@ -127,6 +127,10 @@ verify_jwt = false
 [functions.ualabis_webhook]
 verify_jwt = false
 
+# Viumi (ADR-173): webhook de pagos (sin firma; se re-consulta la orden).
+[functions.viumi_webhook]
+verify_jwt = false
+
 # Talo (ADR-175): webhook de pagos por transferencia (sin firma: se re-consulta).
 [functions.talo_webhook]
 verify_jwt = false

@@ -198,6 +198,14 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
       return "Ualá Bis rechazó las credenciales. Probalas en Configuración → Medios de pago → Ualá Bis (y revisá que sean del mismo ambiente que el switch Sandbox).";
     case "ualabis_error":
       return "Ualá Bis devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
+    case "viumi_min_amount":
+      return "Viumi no acepta cobros de menos de $1. Usá otro medio de pago.";
+    case "viumi_max_amount":
+      return "El monto supera el máximo que acepta Viumi por link. Dividí el cobro o usá otro medio.";
+    case "viumi_auth_failed":
+      return "Viumi rechazó las credenciales. Probalas en Configuración → Medios de pago → Viumi (y revisá que sean del mismo ambiente que el switch Sandbox).";
+    case "viumi_error":
+      return "Viumi devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "talo_auth_failed":
       return "Talo rechazó las credenciales. Probalas en Configuración → Medios de pago → Talo (y revisá que sean del mismo ambiente que el switch Sandbox).";
     case "talo_max_amount":
@@ -251,6 +259,7 @@ export function QrCheckoutModal({
     | "gocuotas"
     | "directo"
     | "ualabis"
+    | "viumi"
     | "talo";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
@@ -290,6 +299,7 @@ export function QrCheckoutModal({
   // débito ahí).
   // Directo: el cliente arma su crédito en la página de Directo.
   // Ualá Bis: checkout de Ualá (tarjeta y cuotas se eligen ahí).
+  // Viumi: checkout de Viumi (tarjeta y cuotas se eligen ahí).
   const selfManaged = QR_SELF_MANAGED.has(provider);
   const { toast } = useToast();
   // Caja QR de MP registrada para esta caja (F17 · H93, ADR-049).
@@ -460,9 +470,11 @@ export function QrCheckoutModal({
                       ? posApi.createDirectoLink
                       : provider === "ualabis"
                         ? posApi.createUalaBisLink
-                        : provider === "talo"
-                          ? posApi.createTaloPayment
-                          : posApi.createMpQr;
+                        : provider === "viumi"
+                          ? posApi.createViumiLink
+                          : provider === "talo"
+                            ? posApi.createTaloPayment
+                            : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => {
@@ -517,8 +529,8 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
-  //  - GO Cuotas, Directo, Ualá Bis y Talo: baja local del intent (no anulan
-  //    órdenes por API; en Talo el CVU vence solo).
+  //  - GO Cuotas, Directo, Ualá Bis, Viumi y Talo: baja local del intent (no
+  //    anulan órdenes por API; en Talo el CVU vence solo).
   function close() {
     if (intentId && phase === "waiting" && !parkedRef.current && !parkingRef.current) {
       if (provider === "mercadopago" && mpChannel === "order") {
@@ -531,6 +543,8 @@ export function QrCheckoutModal({
         posApi.cancelDirectoIntent(intentId).catch(() => null);
       } else if (provider === "ualabis") {
         posApi.cancelUalaBisIntent(intentId).catch(() => null);
+      } else if (provider === "viumi") {
+        posApi.cancelViumiIntent(intentId).catch(() => null);
       } else if (provider === "talo") {
         posApi.cancelTaloIntent(intentId).catch(() => null);
       }
@@ -627,9 +641,11 @@ export function QrCheckoutModal({
                     ? posApi.directoIntentStatus(intentId!)
                     : provider === "ualabis"
                       ? posApi.ualabisIntentStatus(intentId!)
-                      : provider === "talo"
-                        ? posApi.taloIntentStatus(intentId!)
-                        : posApi.mpIntentStatus(intentId!),
+                      : provider === "viumi"
+                        ? posApi.viumiIntentStatus(intentId!)
+                        : provider === "talo"
+                          ? posApi.taloIntentStatus(intentId!)
+                          : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching && !parking,
@@ -1066,6 +1082,12 @@ export function QrCheckoutModal({
                   No sirve con billeteras virtuales (Mercado Pago, MODO, etc.). Abre la página de Ualá Bis para pagar con tarjeta.
                 </Callout>
               )}
+              {provider === "viumi" && !shareOpen && (
+                // El QR de Viumi es el link de pago: abre su checkout para pagar con tarjeta.
+                <Callout tone="info" icon={Camera} title="Escaneá con la cámara del celular">
+                  El QR abre el checkout de Viumi para pagar con tarjeta. No lo leen las billeteras virtuales.
+                </Callout>
+              )}
               {provider === "talo" && !shareOpen && (
                 <TaloTransferPanel
                   cvu={transfer?.cvu ?? (status as TaloStatus | undefined)?.cvu ?? null}
@@ -1083,7 +1105,7 @@ export function QrCheckoutModal({
               >
                 {isMpOrder
                   ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
-                  : provider === "ualabis"
+                  : provider === "ualabis" || provider === "viumi"
                     ? "También podés compartirle el link. La pantalla se actualiza sola al acreditarse."
                   : channel === "link"
                     ? `Compartí el link para que el cliente pague con ${providerName}, o que escanee el QR. La pantalla se actualiza sola al acreditarse.`

@@ -71,6 +71,7 @@ export type QrProviderKey =
   | "gocuotas"
   | "directo"
   | "ualabis"
+  | "viumi"
   | "talo";
 export type PointProviderKey = "mercadopago_point" | "nave_point" | "fiserv_point";
 
@@ -174,6 +175,9 @@ const LOGO = {
   gocuotas: icon("gocuotas"),
   directo: icon("directo"),
   ualabis: icon("ualabis"),
+  // Viumi (ADR-173): sin isotipo oficial (null = respaldo genérico; el logo
+  // horizontal sí está, ver lib/payments/logos).
+  viumi: paymentIcon("viumi"),
   talo: icon("talo"),
   clover: icon("fiserv_point"),
 } as const;
@@ -409,6 +413,10 @@ export const TENDERS: TenderDef[] = [
     referenceHelp:
       "Cobrá {monto} con el QR, el POS o Tap en tu celu de Ualá Bis y cargá el número de operación que te muestra la app.",
   },
+  // Viumi (ADR-173): link de pago y QR del checkout de Viumi (Banco Macro).
+  // Sólo con la API conectada; no hay registro manual.
+  { ...qr("viumi", "Viumi", "wallets", "link", "Link de pago con tarjeta"), minAmount: 1 },
+  { ...qr("viumi", "Viumi", "wallets", "qr", "Tarjeta desde el celular"), minAmount: 1 },
   {
     id: "store_credit",
     group: "customer",
@@ -480,7 +488,7 @@ export interface ProviderStatus {
 // Medios con checkout propio: medio y cuotas se resuelven en su pantalla, así
 // que el recargo plano del medio se suma siempre al monto del QR / link.
 // Espejo del criterio de QrCheckoutModal.
-export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis", "talo"]);
+export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis", "viumi", "talo"]);
 
 export interface TenderContext {
   /** Todas las filas de tenant_payment_methods (habilitadas o no). */

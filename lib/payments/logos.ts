@@ -34,6 +34,10 @@ const FILE_PREFIX: Record<string, string> = {
   // Ualá Bis (ADR-143): isotipo y logo oficiales (developers.ualabis.com.ar y
   // ualabis.com.ar); la variante oscura pasa el azul de "ualá" a blanco.
   ualabis: "ualabis",
+  // Viumi (ADR-173): logo oficial del encabezado de viumi.com.ar; la variante
+  // oscura pasa el violeta de "viu" a blanco. Sin isotipo oficial con fondo
+  // transparente (el ícono de la app tiene placa violeta): ver NO_ICON.
+  viumi: "viumi",
   // Talo (ADR-175): isotipo y logo oficiales del encabezado de talo.com.ar
   // (SVG); la variante oscura pasa el texto "talo" a blanco (el isotipo verde
   // se lee igual en los dos fondos).
@@ -43,9 +47,12 @@ const FILE_PREFIX: Record<string, string> = {
 // Marcas sin logo horizontal propio (son genéricos).
 const NO_WORDMARK = new Set(["cash", "transfer"]);
 
+// Marcas sin isotipo oficial (paymentIcon devuelve null: respaldo genérico).
+const NO_ICON = new Set(["viumi"]);
+
 // Logos con versión para fondo oscuro (los demás se leen bien en ambos).
 const ICON_ON_DARK = new Set(["transfer", "payway", "clover", "ualabis"]);
-const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo"]);
+const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo", "viumi"]);
 
 // Canales con logo de producto propio (no el de su marca): la terminal
 // integrada de Fiserv es Clover.
@@ -63,7 +70,7 @@ const withSurface = (path: string, hasDark: boolean, opts?: LogoOpts) =>
 export function paymentIcon(key: string, opts?: LogoOpts): string | null {
   const brand = logoBrandOf(key);
   const prefix = FILE_PREFIX[brand];
-  return prefix ? withSurface(`${BASE}/${prefix}-icon.webp`, ICON_ON_DARK.has(brand), opts) : null;
+  return prefix && !NO_ICON.has(brand) ? withSurface(`${BASE}/${prefix}-icon.webp`, ICON_ON_DARK.has(brand), opts) : null;
 }
 
 export function paymentWordmark(key: string, opts?: LogoOpts): string | null {

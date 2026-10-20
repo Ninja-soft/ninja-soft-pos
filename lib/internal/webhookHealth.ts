@@ -12,6 +12,7 @@ export const WEBHOOK_PROVIDERS = [
   { key: "gocuotas", label: "GO Cuotas", fn: "gocuotas_webhook" },
   { key: "directo", label: "Directo", fn: "directo_webhook" },
   { key: "ualabis", label: "Ualá Bis", fn: "ualabis_webhook" },
+  { key: "viumi", label: "Viumi", fn: "viumi_webhook" },
   { key: "talo", label: "Talo", fn: "talo_webhook" },
   { key: "clover", label: "Fiserv / Clover", fn: "clover_webhook" },
   { key: "modo", label: "MODO", fn: "modo_webhook" },

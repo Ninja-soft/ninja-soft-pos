@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
   Bookmark,
   ChartArea,
   ChartBar,
@@ -973,6 +974,13 @@ export default function ReportesPage() {
               className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
             >
               <CreditCard size={16} /> Conciliación
+            </Link>
+            <Link
+              href="/reportes/gestion"
+              title="Rentabilidad, cobranzas, movimientos de stock y mercadería parada"
+              className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
+            >
+              <BarChart3 size={16} /> Gestión
             </Link>
             <Link
               href="/reportes/iva"

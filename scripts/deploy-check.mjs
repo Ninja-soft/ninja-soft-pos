@@ -81,6 +81,7 @@ export const PUBLIC_FUNCTIONS = [
   "send_password_recovery",
   "talo_webhook",
   "ualabis_webhook",
+  "viumi_webhook",
 ];
 
 const MIGRATION_RE = /^(\d{14})_([a-z0-9_]+)\.sql$/;

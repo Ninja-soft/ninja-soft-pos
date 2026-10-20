@@ -486,6 +486,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [~] **H21c** — **Nave (Banco Galicia)** (QR interoperable + link y Nave Point). — *Integrado en código (2026-10-11, ADR-030): Edge `nave` (payment_request ecommerce → `qr_data` + `checkout_url`, status de respaldo, cancel), Edge `nave_point` (smart_pos a la terminal del `pos_id`, devices/status/cancel) y `nave_webhook` (valida host Nave anti-SSRF, re-consulta el pago con el token del tenant, acredita sólo APPROVED + monto exacto, idempotente). Auth client_credentials (apinaranja) con 401 → re-auth. Conexión única en Medios de pago (Client ID/Secret, punto de venta, terminales Point, Producción/Prueba, URL de notificaciones para Nave); Nave Point la reutiliza. `QrCheckoutModal`/`PointCheckoutModal` soportan `nave`/`nave_point`; tenders QR, link y Point cableados en el POS (`lib/pos/tenders.ts`). Gating server-side `nave`/`nave_point`. Falta: deploy de las Edge y validar con credenciales sandbox del comercio (pos_id de prueba + URL de notificaciones registrada por Nave).*
   - [~] **H21d** — **GO Cuotas** (cuotas sin interés con débito, QR + link). — *Integrado en código (2026-10-11, ADR-033): Edge `gocuotas` (create → `POST /api_redirect/v1/checkouts` con `order_reference_id` = intent y `webhook_url` por intent, `url_init` como QR + link; status re-consulta la orden; cancel = baja local) y `gocuotas_webhook` (verify_jwt false; nunca confía en el cuerpo: re-consulta con la API Key del tenant, acredita sólo approved + referencia propia + monto exacto en centavos, idempotente; GET = pantalla neutra de retorno). Auth con la API Key de la sucursal como Bearer; sandbox/producción por el switch del medio (`mp_env` en el intent). Mínimo $1.500 con copy claro. `QrCheckoutModal` soporta `gocuotas`; form standalone `GoCuotasConnectForm`. Feature `gocuotas` desde Pro, gating server-side. Tender QR y link cableado en el POS (`lib/pos/tenders.ts`) y conexión en Medios de pago (`ConnectProviderModal`). Falta: aplicar la migración `20261011180000_gocuotas_directo`, deploy de las Edge y validar con API Key de prueba de una sucursal real.*
   - [~] **H21e** — **Directo** (Crédito Directo S.A.) como **tender manual**. — *Implementado (2026-10-11, ADR-034): sin API pública; el cajero cobra en el portal de comercios de Directo (QR o link) y en el POS elige "Directo (crédito)" y carga el número de operación (obligatorio). `payments.method = 'directo'` con `reference` = Nº de operación (constraint), gating coarse por `payment_method_plan_key('directo')`. Feature `directo` desde Pro. Bloque informativo `DirectoInfo` para Medios de pago. `DirectoInfo` cableado en Medios de pago (`PaymentMethodsCard`). Directo sí tiene API: canal QR y link con respaldo manual (ADR-041, Edges `directo` y `directo_webhook`). Falta: aplicar las migraciones y validar en QA.*
+  - [~] **H21k · Viumi (Banco Macro)** por link de pago y QR. *Integrado en código (2026-10-20, ADR-173, `docs/47-viumi.md`): Edge `viumi` (probe/create/status/cancel; orden `POST /api/v2/orders` JSON:API con monto en centavos, intent como id del ítem y en el `webhookUrl`, vence a los 1440 min) y `viumi_webhook` (sin firma: re-consulta la orden, acredita sólo pago aprobado + orden propia + monto exacto). Token OAuth con hosts de la doc y del plugin en orden, cache con hash y reintento ante 401. Credenciales probadas al guardar, cron de cobros en espera, feature `viumi` desde Pro con gating server-side. Sin devoluciones por API (se hacen en la app de Viumi) y sin logo oficial todavía. Falta: aplicar `20270111100000_viumi`, deploy de las Edges y validar con credenciales de prueba.*
   - [~] **H21f · Talo** (transferencia con CVU y alias únicos por venta). *Integrado en código (2026-10-20, ADR-175, `docs/48-talo.md`): Edge `talo` (create → `POST /payments/` con `external_id` = intent y `webhook_url` por intent; status re-consulta `GET /payments/{id}`; cancel = baja local; probe; refund total o de la diferencia) y `talo_webhook` (verify_jwt false; sin firma: re-consulta y acredita SUCCESS u OVERPAID con el precio del intent; UNDERPAID sigue pendiente con lo que falta). Credencial del comercio (User ID + Client ID + Client Secret, token `TL-`), probada antes de guardar. Cobros en espera (3 días) y cron. Tabla `talo_refunds`, `mp_payment_intents.paid_amount`. Feature `talo` (Pro+). **Pasos:** aplicar `20270113100000_talo` y desplegar las Edges. **Pendiente:** primer cobro en sandbox, flujo de partners y conciliación de liquidaciones.*
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 
@@ -1613,19 +1614,19 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 M** Reglas de medios según el comprobante (factura o sólo ticket) y por usuario; monto máximo por medio por comprobante.
   - [ ] **P2 M** Botonera de cobro configurable: botones que combinan medio y comprobante, cobran de un toque, con atajo F y orden por uso.
   - [ ] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera.
-- [ ] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97.
-  - [ ] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy.
-  - [ ] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos).
-  - [ ] **P1 M** Movimientos de stock de todos los artículos con rango, tipo, origen y usuario, y kardex con saldo acumulado.
-  - [ ] **P1 S** Mercadería parada: stock sin ventas en el período, valorizado, con días sin salida y "nunca vendidos".
-  - [ ] **P1 M** Rentabilidad sin contabilidad: ingresos menos CMV menos gastos, mes a mes, con comparación contra un período parejo.
+- [~] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97. *Parcial en ADR-174 (migración `20270112100000_h161_costo_gestion`, Reportes › Gestión): faltan los pendientes a fecha de corte, la búsqueda sin acentos y los P2.*
+  - [x] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy. *Hecho (ADR-174): `sale_items.unit_cost` por trigger; CMV de la venta y de la devolución y comparativo de sucursales lo usan; las ventas anteriores quedaron con el costo del día marcado como aproximado.*
+  - [x] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos). *Hecho (ADR-174): Reportes › Gestión › Cobranzas (cuenta corriente).*
+  - [x] **P1 M** Movimientos de stock de todos los artículos con rango, tipo, origen y usuario, y kardex con saldo acumulado. *Hecho (ADR-174): Reportes › Gestión › Movimientos de stock, con kardex por producto y costo del movimiento.*
+  - [x] **P1 S** Mercadería parada: stock sin ventas en el período, valorizado, con días sin salida y "nunca vendidos". *Hecho (ADR-174, `metricas_avanzadas`).*
+  - [x] **P1 M** Rentabilidad sin contabilidad: ingresos menos CMV menos gastos, mes a mes, con comparación contra un período parejo. *Hecho (ADR-174, `metricas_avanzadas` + `reports.costs`): gastos de Tesorería con cuenta de gasto.*
   - [ ] **P1 S** Comprobantes pendientes por cliente a una fecha de corte (la RPC ya acepta la fecha; falta la UI).
   - [ ] **P1 S** Búsqueda por palabras en cualquier orden y sin acentos (`unaccent`) en POS y listados.
   - [ ] **P2 M** Existencias a una fecha (anterior, entradas y salidas por origen) y foto mensual del inventario valorizado para rotación, DSI y GMROI.
   - [ ] **P2 S** Ranking de clientes con concentración (top 5, 6-10, cuántos hacen el 80 %), "menos vendidos" con N configurable, KPIs de cobranza del negocio (DSO, antigüedad promedio).
   - [ ] **P2 S** Tramos de antigüedad configurables en un solo lugar; avisos de confiabilidad (cobertura de costo, stock negativo) en todo reporte con margen.
   - [ ] **P2 S** Exportar reportes a PDF e impresión, indicando "vista actual" o "resultado completo".
-  - [ ] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer.
+  - [x] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer. *Cumplido: el margen sale de `sale_items.unit_cost`.*
 - [ ] **H162 · Motor de alertas programadas.** · *OPTIONAL `alertas_programadas` (nueva, Pro).* Resuelve las alertas pendientes de H63, H67 y H117.
   - [ ] **P1 L** Reglas por negocio sobre un catálogo (stock bajo mínimo o negativo, venta bajo costo, caída de ventas, deuda vencida, cheques y facturas de compra por vencer, caja sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos anómalos, presupuestos por vencer, clientes que dejaron de comprar, aumento de costo, certificado ARCA por vencer, anulaciones) con frecuencia, días, horario, "sólo casos nuevos", Probar ahora e historial.
   - [ ] **P1 M** Destinos: campana por rol o usuario, resumen diario por mail y WhatsApp.
@@ -1894,7 +1895,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F5** | 38/70 | 12 | 20 | 54% | 63% |
 | **F6** | 58/63 | 3 | 2 | 92% | 94% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
-| **F8** | 18/58 | 23 | 17 | 31% | 51% |
+| **F8** | 18/59 | 24 | 17 | 31% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 32/48 | 13 | 3 | 67% | 80% |
 | **F11** | 79/93 | 12 | 2 | 85% | 91% |
@@ -1910,9 +1911,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 15/131 | 1 | 115 | 11% | 12% |
+| **F24** | 21/131 | 2 | 108 | 16% | 17% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 693/1336 | 311 | 332 | 52% | 64% |
+| **Total** | 699/1337 | 313 | 325 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

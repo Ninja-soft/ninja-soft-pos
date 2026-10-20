@@ -6300,6 +6300,7 @@ Se relevó completo InfoManager IM5, el ERP que usa La Jamonera (187 rutas, 119 
 - Cada función nueva de F24 sigue el checklist de CLAUDE.md §6 (feature, plan, gating en el servidor, copy y comparación).
 - Las features nuevas de F24 (por ejemplo `alertas_programadas`) se crean al implementar el hito, no ahora.
 
+
 ## ADR-171: Integridad y seguridad de la auditoría IM5: IA con permisos, factura de proveedor pagada, letra de compra, asiento con impuestos, producto no bonificable y cheque repetido (F24 · H158)
 
 **Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270109100000_h158_integridad`, Edge `ai_assistant`) · **Base:** ADR-170 (F24), ADR-039 (IA con acceso de lectura), ADR-138 (capacidades), ADR-066 (asientos), ADR-059 (pagos y cheques)
@@ -6329,6 +6330,7 @@ La auditoría de InfoManager IM5 (ADR-170) encontró dos huecos P0 y cuatro arre
 - Un cajero que preguntaba por ganancias ahora recibe "no tenés permiso". El dueño y el auditor no cambian.
 - Orden de deploy: migración, después Edge `ai_assistant` y el front. Front tolerante: sin la migración, el POS no encuentra no bonificables (ninguno) y el aviso de letra sólo informa.
 - Verificado con un dry-run en producción con rollback (resultados en el roadmap, H158) y `tests/unit/h158Integridad.test.ts`.
+
 
 ## ADR-172: Caja PRO: arqueo por billete y por medio, apertura con el fondo anterior, carrito auditado con PIN opcional, tope de descuento propio, ticket de cambio y confirmación del Z (F24 · H159)
 
@@ -6362,6 +6364,68 @@ La auditoría de InfoManager IM5 mostró controles de caja que un comercio usa t
 - Orden de deploy: migración y después el front; sin la migración el front sigue (el conteo y el registro se omiten).
 - Verificado con un dry-run en producción con rollback y `tests/unit/h159CajaPro.test.ts`.
 
+## ADR-173: Viumi (Banco Macro) por link de pago y QR con la Checkout API v2 (F8)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270111100000_viumi` sin aplicar, Edges `viumi` y `viumi_webhook`) · **Base:** ADR-143 (Ualá Bis, misma arquitectura), ADR-031 (Getnet, misma plataforma Geopagos), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de webhooks)
+
+### Contexto
+
+Viumi es la solución de cobros de Banco Macro sobre Geopagos. Publica una Checkout API v2 ([developers.viumi.com.ar](https://developers.viumi.com.ar)) con token OAuth `client_credentials`, órdenes JSON:API con checkout hosted y un webhook de pago sin firma. No documenta devoluciones ni anulación de órdenes. Los hosts de la doc y los del plugin público de WooCommerce no coinciden. Relevamiento completo en `docs/47-viumi.md`.
+
+### Decisión
+
+1. **Proveedor y feature `viumi`** (marca `viumi`, canal `qr_link`, OPTIONAL desde Pro como el resto de los links). `payment_method_plan_key('viumi')` = `viumi` y `pending_charge_max_ttl('viumi')` = 1440. El cobro entra como `method = 'qr'` con el intent como referencia: no hay registro manual.
+2. **Misma arquitectura que Ualá Bis:** lógica pura en `_shared/viumi.ts` (testeada en Node), helpers de servidor en `_shared/viumi_server.ts`, Edge `viumi` (probe, create, status, cancel) y `viumi_webhook` (`withWebhookLog`, siempre 200). El webhook es sólo una pista: el uuid tiene que ser el guardado en el intent y se re-consulta la orden con la credencial del negocio. Se acredita con un pago `APPROVED` o `PROCESSED` y el monto exacto en centavos.
+3. **Hosts de auth en orden:** primero el de la doc (`auth.prd.geopagos.io` / `auth.stg.geopagos.io`) y, si no responde o da 404, el del plugin (`auth.geopagos.com` / `auth.sandbox.geopagos.com`). Las órdenes usan los hosts de la doc.
+4. **Token:** `expires_in` mayor a 1e9 se toma como timestamp unix; si no, como duración. Cache por instancia con clave SHA-256 (sin el secreto en claro), 5 minutos antes del vencimiento; ante 401 o 403 se pide otro y se reintenta una vez.
+5. **El intent viaja como id del ítem y en el `webhookUrl`** (no hay referencia externa documentada). El link vence a los 1440 minutos.
+6. **Sin devoluciones por API:** la UI dice que se hacen desde la app o el panel de Viumi. Cancelar es una baja local del intent.
+7. **Credenciales probadas antes de guardar** (`set_payment_secret` pide un token; rechazo = `viumi_invalid_credentials`, 422). El cron de cobros en espera también sincroniza Viumi.
+8. **Sin logo oficial en el repo:** no se inventa uno; la UI usa el respaldo genérico.
+
+### Alternativas descartadas
+
+- **Reusar el cliente de Getnet (`_shared/getnet.ts`)**: es la misma plataforma, pero Getnet mezcla dos APIs y otros hosts. Un módulo propio, igual al de Ualá Bis, es más fácil de verificar y de tocar sin romper Getnet.
+- **Tabla `viumi_refunds`**: sin endpoint documentado sería una función que no anda.
+- **Tomar `SUCCESS` sola como pagada** (como Getnet): se exige además un pago aprobado a la vista; si Viumi no lo informa, el cobro queda pendiente y el POS sigue consultando.
+
+### Consecuencias
+
+- Orden de deploy: migración, Edges `viumi`, `viumi_webhook`, `set_payment_secret` y `pending_charges_sync`, y el front. Front tolerante: sin la migración, Viumi no aparece en el catálogo.
+- Falta validar con credenciales de prueba reales los hosts, `expires_in` y los estados (lo inferido está en `docs/47-viumi.md`).
+- Verificado con `tests/unit/viumi.test.ts` (fetch simulado), `tests/unit/viumiUi.test.ts` y `tests/integration/rls-viumi.test.ts` (se salta sin Supabase local).
+
+## ADR-174: Costo guardado en cada venta y Reportes › Gestión: rentabilidad, cobranzas, movimientos de stock y mercadería parada (F24 · H161)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270112100000_h161_costo_gestion`, sin Edges) · **Base:** ADR-170 (F24), ADR-066 (asientos), ADR-050 (costos de compra)
+
+### Contexto
+
+Todos los márgenes (comparativo de sucursales, CMV del asiento) usaban el costo de hoy del producto: cada compra con otro costo cambiaba el margen de las ventas pasadas. La auditoría de InfoManager IM5 además marcó reportes de gestión que el dueño usa todos los días: cobranzas, movimientos de stock, mercadería parada y rentabilidad sin depender de la contabilidad.
+
+### Decisión
+
+1. **Costo en el renglón.** `sale_items.unit_cost` (y `cost_source`) lo completa un trigger al insertar con el costo vigente del producto; `create_sale` no cambia. Las ventas anteriores se completaron con el costo del día de la migración, marcadas `backfill` (el reporte avisa que son aproximadas). `stock_movements.unit_cost` igual, para valorizar movimientos.
+2. **Quién lo usa.** El CMV del asiento de la venta y de la devolución (`acc_sync_sale`, `acc_sync_sale_return`) y el margen del comparativo de sucursales (`branch_compare_report`) toman el costo del renglón, con el del producto como respaldo.
+3. **Reportes › Gestión** (`/reportes/gestion`), todos con las sucursales del usuario (`report_store_filter`) y controlados en el servidor (`_report_guard`):
+   - **Rentabilidad** (`report_profitability`, `metricas_avanzadas` + `reports.costs`): por mes, ventas, impuestos de la venta, ventas netas, devoluciones, costo de lo vendido, margen bruto, gastos de Tesorería con cuenta de gasto (sólo sin filtro de sucursal) y resultado, contra el período anterior parejo, con cobertura de costo.
+   - **Cobranzas** (`report_collections`, `reports.view`): cobros de cuenta corriente por medio, persona y caja, y el detalle.
+   - **Movimientos de stock** (`report_stock_movements`, `stock.view`): todo el catálogo con motivo y usuario; con un producto, kardex con saldo anterior y corrido. El costo, sólo con `reports.costs`.
+   - **Mercadería parada** (`report_dead_stock`, `metricas_avanzadas`): stock sin ventas en N días o nunca vendido, con días sin salida y valor a precio (y a costo con `reports.costs`).
+4. `metricas_avanzadas` deja de ser marketing: es la feature de Rentabilidad y Mercadería parada (Business+).
+
+### Alternativas descartadas
+
+- **Cambiar `create_sale` para mandar el costo:** el trigger cubre también las ventas offline, de API y de Mercado Libre.
+- **Costo promedio por capas (FIFO):** no hay capas de costo; se guarda el costo vigente según `purchase_settings.cost_basis`, que es lo que el negocio eligió.
+- **Pendientes a una fecha de corte reusando `account_aging(p_as_of)`:** esa fecha sólo corre los días de mora; el saldo sigue siendo el de hoy. Queda para un corte histórico propio.
+
+### Consecuencias
+
+- Pendiente de H161: pendientes a fecha de corte, búsqueda sin acentos y los P2 (existencias a fecha, rotación, concentración, PDF).
+- Orden de deploy: migración y después el front.
+- Verificado con un dry-run en producción con rollback (cajero sin `reports.costs` rechazado en rentabilidad; costo oculto en movimientos) y `tests/unit/h161Gestion.test.ts`.
+
 ## ADR-175: Talo: cobro por transferencia con CVU y alias únicos por venta, confirmado por re-consulta (F8)
 
 **Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270113100000_talo`, Edges `talo` y `talo_webhook`) · **Base:** ADR-143 (Ualá Bis, mismo patrón), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de hooks), ADR-070 (salud de webhooks)
@@ -6391,3 +6455,4 @@ La transferencia es el medio más usado después del efectivo, pero el cajero ti
 - Orden de deploy: migración, Edges `talo`, `talo_webhook`, `set_payment_secret` y `pending_charges_sync`, y después el front.
 - Pendiente: primer cobro real en sandbox (confirmar el envelope del create, la vida del token y que una segunda transferencia sume), flujo de partners, firma del webhook cuando exista y conciliación de liquidaciones de Talo.
 - Tests: `tests/unit/talo.test.ts`, `tests/unit/taloUi.test.ts`, `tests/integration/rls-talo.test.ts`.
+- Viumi (ADR-173, punto 8) pasa a tener su logo oficial horizontal (encabezado de viumi.com.ar) en `lib/payments/logos.ts` y en el panel del login; sigue sin isotipo (el ícono de la app tiene placa violeta), así que `paymentIcon('viumi')` sigue en null.

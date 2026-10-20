@@ -26,6 +26,11 @@ import {
 import { assessGetnetCredential, getnetPanRelayEnabled } from "../_shared/getnet_server.ts";
 import { webCheckoutSaveVerdict } from "../_shared/getnet_api.ts";
 import { isAuthFailure, parseCreds as parseUalaCreds, ualabisClient } from "../_shared/ualabis.ts";
+import {
+  isAuthFailure as isViumiAuthFailure,
+  parseCreds as parseViumiCreds,
+  viumiClient,
+} from "../_shared/viumi.ts";
 import { isAuthFailure as isTaloAuthFailure, parseCreds as parseTaloCreds, taloClient } from "../_shared/talo.ts";
 
 const cors = {
@@ -64,6 +69,10 @@ const ALLOWED = new Set([
   // Cobros online › API. El ambiente lo define el switch Sandbox del medio
   // (stage vs producción). Se prueban antes de guardarlas.
   "ualabis",
+  // Viumi (ADR-173): client_id y client_secret que Viumi le manda al comercio.
+  // El ambiente lo define el switch Sandbox del medio (stg vs producción). Se
+  // prueban antes de guardarlas.
+  "viumi",
   // Talo (ADR-175): user_id, client_id y client_secret del Dashboard de Talo ›
   // Usuario › Credenciales. El ambiente lo define el switch Sandbox del medio
   // (sandbox-api vs api). Se prueban antes de guardarlas.
@@ -194,6 +203,17 @@ Deno.serve(async (req: Request) => {
     const env = clean.environment === "test" ? "stage" : "prod";
     const t = await ualabisClient({ creds, env }).token(true);
     if (!t.ok && isAuthFailure(t.httpStatus)) return json({ error: "ualabis_invalid_credentials" }, 422);
+    delete clean.environment;
+  }
+
+  // Viumi (ADR-173): igual que Ualá Bis, se pide un token en el ambiente
+  // elegido antes de guardar. Rechazo de credenciales = no se guardan.
+  if (providerKey === "viumi") {
+    const creds = parseViumiCreds(clean);
+    if (!creds) return json({ error: "viumi_missing_fields" }, 400);
+    const env = clean.environment === "test" ? "stage" : "prod";
+    const t = await viumiClient({ creds, env }).token(true);
+    if (!t.ok && isViumiAuthFailure(t.httpStatus)) return json({ error: "viumi_invalid_credentials" }, 422);
     delete clean.environment;
   }
 

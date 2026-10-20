@@ -28,7 +28,7 @@
 
 -- A) Catálogo de proveedores ---------------------------------------------------
 insert into payment_providers (key, name, kind, sort, is_active, brand, channel) values
-  ('talo', 'Talo', 'gateway', 14, true, 'talo', 'qr_link')
+  ('talo', 'Talo', 'gateway', 15, true, 'talo', 'qr_link')
 on conflict (key) do update
   set name = excluded.name,
       kind = excluded.kind,
@@ -39,7 +39,7 @@ on conflict (key) do update
 insert into features (key, label, description, grupo, is_basic, sort) values
   ('talo', 'Talo (transferencia)',
    'Cobros por transferencia con Talo: CVU y alias únicos por venta, y la venta se cierra sola cuando llega la plata',
-   'pagos', false, 126)
+   'pagos', false, 127)
 on conflict (key) do update
   set label = excluded.label,
       description = excluded.description,
@@ -59,7 +59,7 @@ where p.tenant_id is null
   and not (coalesce(p.limits -> 'modules', '{}'::jsonb) ? 'talo');
 
 -- C) Gating: medio → feature de plan. Copia de la definición más nueva
--- (20261210100000_ualabis) con 'talo' -> feature 'talo'.
+-- (20270111100000_viumi) con 'talo' -> feature 'talo'.
 create or replace function payment_method_plan_key(p_method text)
 returns text
 language sql
@@ -89,6 +89,7 @@ as $$
     when 'gocuotas'          then 'gocuotas'
     when 'directo'           then 'directo'
     when 'ualabis'           then 'ualabis'
+    when 'viumi'             then 'viumi'
     when 'talo'              then 'talo'
     when 'account'           then 'cuenta_corriente'
     when 'cuenta_corriente'  then 'cuenta_corriente'
@@ -102,7 +103,7 @@ grant execute on function payment_method_plan_key(text) to authenticated, servic
 
 -- D) Cobros en espera (ADR-048): tope de vencimiento del cobro de Talo. El CVU
 -- vence a los ~5 días; se topea en 3 días (4320 min) como Mobbex y Payway.
--- Copia de 20261210100000_ualabis + 'talo'. Espejo de
+-- Copia de 20270111100000_viumi + 'talo'. Espejo de
 -- modules/pending-charges/logic.ts (PROVIDER_MAX_TTL_MINUTES).
 create or replace function pending_charge_max_ttl(p_provider text)
 returns integer
@@ -121,6 +122,7 @@ as $$
     when 'gocuotas'    then 1440
     when 'directo'     then 1440
     when 'ualabis'     then 1440
+    when 'viumi'       then 1440
     when 'talo'        then 4320
     else 1440
   end;

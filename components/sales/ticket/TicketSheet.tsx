@@ -16,6 +16,7 @@ import {
   ExternalLink,
   FileDown,
   FileText,
+  Gift,
   Printer,
   RotateCcw,
   Share2,
@@ -86,6 +87,8 @@ export interface TicketSheetProps {
   printFailed?: boolean;
   onPdf: () => void;
   pdfBusy?: boolean;
+  /** H159: ticket de cambio sin precios. */
+  onExchangeTicket?: () => void;
   /** Compartir el comprobante (Web Share con archivo); sólo si el equipo puede. */
   onShare?: () => void;
   shareBusy?: boolean;
@@ -252,6 +255,11 @@ export function TicketSheet(p: TicketSheetProps) {
                 <Button variant="secondary" className="h-11 w-full" onClick={p.onPdf} disabled={!visible || p.pdfBusy}>
                   <FileDown size={16} aria-hidden /> PDF
                 </Button>
+                {p.onExchangeTicket && (
+                  <Button variant="secondary" className="h-11 w-full" onClick={p.onExchangeTicket}>
+                    <Gift size={16} aria-hidden /> Ticket de cambio
+                  </Button>
+                )}
                 {p.onShare && (
                   <Button variant="secondary" className="h-11 w-full" onClick={p.onShare} disabled={!visible || p.shareBusy}>
                     <Share2 size={16} aria-hidden /> Compartir

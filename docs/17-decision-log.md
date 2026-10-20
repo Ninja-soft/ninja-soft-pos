@@ -6300,6 +6300,7 @@ Se relevó completo InfoManager IM5, el ERP que usa La Jamonera (187 rutas, 119 
 - Cada función nueva de F24 sigue el checklist de CLAUDE.md §6 (feature, plan, gating en el servidor, copy y comparación).
 - Las features nuevas de F24 (por ejemplo `alertas_programadas`) se crean al implementar el hito, no ahora.
 
+
 ## ADR-171: Integridad y seguridad de la auditoría IM5: IA con permisos, factura de proveedor pagada, letra de compra, asiento con impuestos, producto no bonificable y cheque repetido (F24 · H158)
 
 **Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270109100000_h158_integridad`, Edge `ai_assistant`) · **Base:** ADR-170 (F24), ADR-039 (IA con acceso de lectura), ADR-138 (capacidades), ADR-066 (asientos), ADR-059 (pagos y cheques)
@@ -6329,6 +6330,39 @@ La auditoría de InfoManager IM5 (ADR-170) encontró dos huecos P0 y cuatro arre
 - Un cajero que preguntaba por ganancias ahora recibe "no tenés permiso". El dueño y el auditor no cambian.
 - Orden de deploy: migración, después Edge `ai_assistant` y el front. Front tolerante: sin la migración, el POS no encuentra no bonificables (ninguno) y el aviso de letra sólo informa.
 - Verificado con un dry-run en producción con rollback (resultados en el roadmap, H158) y `tests/unit/h158Integridad.test.ts`.
+
+
+## ADR-172: Caja PRO: arqueo por billete y por medio, apertura con el fondo anterior, carrito auditado con PIN opcional, tope de descuento propio, ticket de cambio y confirmación del Z (F24 · H159)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270110100000_h159_caja_pro`, sin Edges) · **Base:** ADR-170 (F24), ADR-051 (PIN de supervisor), ADR-158 (controles de cierre), ADR-106 (pausar venta)
+
+### Contexto
+
+La auditoría de InfoManager IM5 mostró controles de caja que un comercio usa todos los días y NinjaPOS no tenía: contar billetes, rendir cada medio contra lo esperado, abrir con lo que quedó, registrar lo que el cajero saca del carrito, topes de descuento por persona, ticket de cambio y la confirmación del encargado.
+
+### Decisión
+
+1. **Arqueo.** `cash_shift_save_count(turno, conteo)` guarda en `cash_shifts.close_count` los billetes por denominación (20.000 a 1), las monedas y lo contado de cada medio que no es efectivo (no la cuenta corriente ni el saldo a favor). Lo hace quien abrió la caja o un encargado, antes de `close_cash_shift`, que no cambia. Un trigger al crear el Z arma `cash_z_closures.count_detail`: por medio, esperado (ventas menos anulaciones y cobros de cuenta corriente del turno), contado y diferencia; el efectivo con el esperado y lo contado del cierre. En el POS: "Contar por billete" y "Otros medios (opcional)".
+2. **Apertura.** Un trigger guarda en `cash_shifts.opening_suggested` lo contado en el último cierre de esa caja; si se abre con otro monto queda `cash_open_difference` en la auditoría. El POS lo propone y pide confirmar si se abre en $0 habiendo quedado plata.
+3. **Carrito.** Sacar un renglón o limpiar la venta llama a `log_cart_removal` (auditoría `pos_cart_line_removed` o `pos_cart_cleared` con lo que se sacó). Acción de PIN nueva `cart_remove`, apagada por defecto, con umbral en pesos: con la acción encendida el servidor pide supervisor y el POS pide el PIN y reintenta. Sin conexión no se frena la venta.
+4. **Tope propio.** `tenant_users.max_discount_pct` (el dueño lo carga en Permisos, en la ficha de cada persona; `team_set_discount_cap`). Manda el menor entre el del rol y el propio; un trigger diferido en `sales` lo exige (`discount_exceeds_user_limit`).
+5. **Ticket de cambio.** Desde el detalle de la venta: productos y cantidades sin precios (sin lo devuelto ni las garantías), n° de venta y "válido para cambio hasta" con los días que se eligen (recordados en el equipo).
+6. **Confirmación del Z.** `cash_z_confirm`: el dueño o un encargado con `cash.close` en la sucursal; quien cerró no se confirma a sí mismo salvo el dueño. En el historial, "Sin confirmar" y "Confirmar".
+7. **Carrito al recargar.** El carrito se guarda en `sessionStorage` de la pestaña (líneas y descuento general) y se vacía si entra otro negocio o usuario. El servidor vuelve a validar los precios al cobrar.
+
+### Alternativas descartadas
+
+- **Cambiar `close_cash_shift`:** el conteo se guarda aparte y el Z lo toma por trigger; la función de cierre, con todas sus reglas, no se toca.
+- **Bloquear la apertura con un monto distinto:** se retira plata entre turnos; alcanza con registrarlo.
+- **`localStorage` para el carrito:** se compartiría entre pestañas y quedaría después de cerrar el navegador.
+- **Tope por renglón:** el POS no tiene descuento manual por renglón.
+
+### Consecuencias
+
+- Pendiente de H159: valores en tránsito entre sucursales y el diagnóstico de ARCA para el cajero.
+- Sacar un renglón hace un pedido al servidor (registro). Con el PIN apagado no cambia nada para el cajero.
+- Orden de deploy: migración y después el front; sin la migración el front sigue (el conteo y el registro se omiten).
+- Verificado con un dry-run en producción con rollback y `tests/unit/h159CajaPro.test.ts`.
 
 ## ADR-173: Viumi (Banco Macro) por link de pago y QR con la Checkout API v2 (F8)
 

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import type { CloseCount } from "@/lib/cash/arqueo";
 import { emitirVentaEnSegundoPlano } from "@/modules/arca/api";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
@@ -716,6 +717,34 @@ async function fetchGetnetOwnCheckout(): Promise<boolean> {
 }
 
 export const posApi = {
+  // H159: lo contado en el último cierre de la caja (sugerido para abrir).
+  lastClosing: async (registerId: string): Promise<number | null> => {
+    const { data, error } = await createClient()
+      .from("cash_shifts")
+      .select("closing_amount")
+      .eq("cash_register_id", registerId)
+      .eq("status", "closed")
+      .not("closing_amount", "is", null)
+      .order("closed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    return Number((data as { closing_amount: number | null }).closing_amount ?? 0);
+  },
+  // H159: tope de descuento propio del usuario (null = el del rol).
+  myDiscountCap: async (): Promise<number | null> => {
+    const { data, error } = await createClient().rpc("my_discount_cap" as never);
+    if (error || data === null || data === undefined) return null;
+    return Number(data);
+  },
+  // H159: registro (y PIN si el negocio lo pide) de lo que se saca del carrito.
+  logCartRemoval: async (kind: "line" | "clear", items: { name: string; quantity: number; amount: number }[], amount: number, registerId: string | null) => {
+    const { error } = await createClient().rpc(
+      "log_cart_removal" as never,
+      { p_kind: kind, p_items: items, p_amount: amount, p_register_id: registerId } as never,
+    );
+    if (error && !/Could not find the function|PGRST202/i.test(error.message ?? "")) throw error;
+  },
   // F24 · H158: productos del carrito que no aceptan descuento manual. Sin la
   // columna (migración sin aplicar) o con error, ninguno (el servidor manda).
   noDiscountProductIds: async (ids: string[]): Promise<string[]> => {
@@ -763,8 +792,18 @@ export const posApi = {
     // H156 (ADR-158): cerrar con $0 contados y esperado positivo pide
     // confirmarlo con motivo antes (cash_shift_confirm_zero_close).
     zeroCloseReason?: string | null,
+    // H159 (ADR-172): arqueo por billete y por medio, guardado antes del cierre.
+    count?: CloseCount | null,
   ): Promise<number> => {
     const supabase = createClient();
+    if (count) {
+      const { error: cErr } = await supabase.rpc(
+        "cash_shift_save_count" as never,
+        { p_shift_id: shiftId, p_count: count } as never,
+      );
+      // Sin la migración el arqueo detallado no se guarda; el cierre sigue.
+      if (cErr && !/Could not find the function|PGRST202|does not exist/i.test(cErr.message ?? "")) throw cErr;
+    }
     if (zeroCloseReason && zeroCloseReason.trim()) {
       const { error: zErr } = await supabase.rpc(
         "cash_shift_confirm_zero_close" as never,

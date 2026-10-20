@@ -1593,15 +1593,15 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [x] **P1 S** Producto "no bonificable": no acepta descuento manual (ni con supervisor) pero sí promociones, validado en `create_sale`. *Hecho (ADR-171): `products.no_discount`, triggers en `sale_items` y `sales`; el POS limita el descuento general a lo bonificable.*
   - [x] **P2 S** Aviso de cheque repetido (banco + número) al cargar cheques de terceros, propios y e-cheqs. *Hecho (ADR-171): aviso en el alta de cheques y en la orden de pago, sin frenar.*
   - [x] *Criterio:* un cajero sin `reports.costs` pregunta a la IA "¿cuánto gano con X?" y no ve costos; una factura pagada no se puede anular; el Mayor de "Percepciones IIBB cobradas" cuadra con el Libro IVA Ventas. *Dry-run: el cajero no ve `products.cost` (ai_query responde "Columna no permitida") y el dueño sí; factura con $600 pagados no se anula ni baja de $600; venta de $1.250 con percepción de $30: IVA $216,94, percepción $30 a "Percepciones de IIBB practicadas a depositar", Ventas $1.003,06, balance 0.*
-- [ ] **H159 · Caja PRO: arqueo, rendición y controles del cajero.** · *BASE (arqueo, apertura, auditoría) + OPTIONAL `tesoreria` (tránsito).* Enriquece H111 y H119.
-  - [ ] **P1 M** Arqueo por denominación de billetes y monedas y conteo por medio (cupones, transferencias, cheques, vales) con "a rendir / rendido / diferencia" por medio; impresión con detalle.
-  - [ ] **P1 S** Apertura con el fondo del cierre anterior sugerido, confirmación si se abre en $0 con saldo previo y diferencia de apertura auditada.
-  - [ ] **P1 S** Borrar un renglón o vaciar el carrito antes de cobrar con PIN opcional (política en `security_settings`) y registro en `audit_logs`.
-  - [ ] **P1 S** Tope de descuento por usuario (encima del de su rol) y por renglón, no sólo sobre el total.
-  - [ ] **P1 S** Ticket de cambio sin precios, con los días para cambiar, desde la venta y desde Ventas.
-  - [ ] **P2 M** Cierre en dos pasos: el cajero rinde ("sin confirmar") y el encargado o tesorero confirma; confirmada no se edita, sólo se borra la última sin confirmar.
+- [~] **H159 · Caja PRO: arqueo, rendición y controles del cajero.** · *BASE (arqueo, apertura, auditoría) + OPTIONAL `tesoreria` (tránsito).* Enriquece H111 y H119. *Parcial en ADR-172 (`feat/h159-caja-pro`, migración `20270110100000_h159_caja_pro`): faltan los valores en tránsito y el diagnóstico de ARCA para el cajero.*
+  - [x] **P1 M** Arqueo por denominación de billetes y monedas y conteo por medio (cupones, transferencias, cheques, vales) con "a rendir / rendido / diferencia" por medio; impresión con detalle. *Hecho (ADR-172): Contar por billete en el cierre, otros medios con esperado y diferencia, y el arqueo en el Z.*
+  - [x] **P1 S** Apertura con el fondo del cierre anterior sugerido, confirmación si se abre en $0 con saldo previo y diferencia de apertura auditada. *Hecho (ADR-172): `cash_shifts.opening_suggested` y `cash_open_difference` en la auditoría.*
+  - [x] **P1 S** Borrar un renglón o vaciar el carrito antes de cobrar con PIN opcional (política en `security_settings`) y registro en `audit_logs`. *Hecho (ADR-172): `log_cart_removal` y acción de PIN `cart_remove` (apagada por defecto, umbral en pesos).*
+  - [x] **P1 S** Tope de descuento por usuario (encima del de su rol) y por renglón, no sólo sobre el total. *Hecho el tope por usuario (ADR-172, `tenant_users.max_discount_pct`, controlado en el servidor). El POS no tiene descuento por renglón manual: no aplica.*
+  - [x] **P1 S** Ticket de cambio sin precios, con los días para cambiar, desde la venta y desde Ventas. *Hecho (ADR-172): botón Ticket de cambio en el detalle de la venta (POS y Ventas).*
+  - [x] **P2 M** Cierre en dos pasos: el cajero rinde ("sin confirmar") y el encargado o tesorero confirma; confirmada no se edita, sólo se borra la última sin confirmar. *Hecho como confirmación del Z (ADR-172, `cash_z_confirm`): el Z ya era inmutable.*
   - [ ] **P2 M** Transferencias de valores entre sucursales o a la caja fuerte "en tránsito" con recepción y anulación (los cheques vuelven a cartera).
-  - [ ] **P2 S** Recuperar el carrito al recargar la página (guardado local automático, no sólo Pausar).
+  - [x] **P2 S** Recuperar el carrito al recargar la página (guardado local automático, no sólo Pausar). *Hecho (ADR-172): sessionStorage de la pestaña, con dueño negocio y usuario.*
   - [ ] **P3 S** Diagnóstico para el cajero cuando falla la factura: si el caído es ARCA o el servidor y cuánto tardó.
   - [ ] *Criterio:* un cierre con $10.000 en billetes de 1.000 y un cupón de $5.000 faltante muestra diferencia sólo en tarjeta, el encargado lo confirma y ya no se puede editar.
 - [ ] **H160 · Cobros ampliados.** · *BASE (recibo con varios medios) + OPTIONAL `cuenta_corriente`, `tesoreria`.* Enriquece H14, H31 y H106.
@@ -1910,9 +1910,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 8/131 | 0 | 123 | 6% | 6% |
+| **F24** | 15/131 | 1 | 115 | 11% | 12% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 686/1336 | 310 | 340 | 51% | 63% |
+| **Total** | 693/1336 | 311 | 332 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

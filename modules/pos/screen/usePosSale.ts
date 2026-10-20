@@ -23,6 +23,8 @@ import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflin
 export function saleErrorTitle(msg: string): string {
   // F18 · H100 (ADR-056): precio autoritativo y venta libre.
   if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
+  // F24 · H159: tope de descuento propio del usuario.
+  if (msg.includes("discount_exceeds_user_limit")) return "El descuento supera tu tope personal";
   // F24 · H158: productos no bonificables.
   if (msg.includes("discount_not_discountable")) return "El descuento supera lo que se puede bonificar: hay productos que no aceptan descuento";
   if (msg.includes("product_not_discountable")) return "Un producto no acepta descuento";

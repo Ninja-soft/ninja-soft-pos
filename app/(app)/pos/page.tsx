@@ -26,7 +26,10 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
 import { useCartStore } from "@/modules/pos/store";
-import { useDiscountableSubtotal, useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
+import { useDiscountableSubtotal, useLastClosing, useMyDiscountCap, useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
+import { guardCartRemoval } from "@/modules/pos/cartGuard";
+import type { CloseCount } from "@/lib/cash/arqueo";
+import { effectiveDiscountCap } from "@/lib/permissions/discountCap";
 import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
 import { usePosBranchStock } from "@/modules/pos/branchStock";
 import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, otherBranchesText } from "@/lib/stock/posBranchStock";
@@ -281,6 +284,18 @@ function PosPageInner() {
   const bootScope = useBranchScope().data ?? null;
   const currentUserId = bootScope?.userId ?? null;
   const { data: register, store: registerStore, isFetched: registerFetched } = useDefaultRegister();
+  // H159: el carrito guardado en la pestaña es de este negocio y usuario.
+  const [cartRestored, setCartRestored] = useState(false);
+  useEffect(() => {
+    void Promise.resolve(useCartStore.persist.rehydrate()).finally(() => setCartRestored(true));
+  }, []);
+  useEffect(() => {
+    if (cartRestored && bootScope?.tenantId && currentUserId) {
+      useCartStore.getState().claimOwner(`${bootScope.tenantId}:${currentUserId}`);
+    }
+  }, [cartRestored, bootScope?.tenantId, currentUserId]);
+  const registerIdRef = useRef<string | null>(null);
+  registerIdRef.current = register?.id ?? null;
   const bootKey = posBootKey(bootScope?.tenantId ?? null, currentUserId, registerFetched ? (register?.id ?? null) : null);
   const boot = usePosBootSnapshot(registerFetched ? bootKey : null, posBootScope(bootScope?.tenantId ?? null, currentUserId));
   // Salón requiere el modo gastronómico: sin él cae a Mostrador.
@@ -302,6 +317,8 @@ function PosPageInner() {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [openShiftModal, setOpenShiftModal] = useState(false);
+  // H159: lo contado en el último cierre, sugerido al abrir.
+  const { data: lastClosing } = useLastClosing(register?.id ?? null, openShiftModal);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutTender, setCheckoutTender] = useState<string | null>(null);
@@ -458,7 +475,9 @@ function PosPageInner() {
   const allowFreeSale = posSettings?.allowFreeSale ?? true;
   const liveFreeSale = allowFreeSale && (role === "owner" || role === "manager");
   const canFreeSale = myTenantFetched && posSettingsFetched ? liveFreeSale : (boot?.freeSale ?? false);
-  const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
+  // H159: el tope propio del usuario restringe además del de su rol.
+  const { data: myDiscCap } = useMyDiscountCap();
+  const maxDiscPct = effectiveDiscountCap(posSettings?.maxDiscount?.[role], myDiscCap);
   const rounding = posSettings?.rounding ?? 0;
   const requireCustomer = posSettings?.requireCustomer ?? false;
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
@@ -553,7 +572,19 @@ function PosPageInner() {
   const coverLineWithPack = useCartStore((s) => s.coverLineWithPack);
   const uncoverLine = useCartStore((s) => s.uncoverLine);
   const setQuantity = useCartStore((s) => s.setQuantity);
-  const removeLine = useCartStore((s) => s.removeLine);
+  const removeLineRaw = useCartStore((s) => s.removeLine);
+  // H159: sacar un renglón queda registrado (y con PIN si el negocio lo pide).
+  const removeLine = useCallback(
+    async (lineId: string) => {
+      const line = useCartStore.getState().lines.find((l) => l.lineId === lineId);
+      if (!line) return;
+      const r = await guardCartRemoval("line", [line], registerIdRef.current);
+      if (r === "ok") removeLineRaw(lineId);
+      else if (r === "denied") toast({ title: "No se autorizó sacar el producto", variant: "error" });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [removeLineRaw],
+  );
   const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
   // F18 · H100 (ADR-056): cambio manual de precio con motivo.
   const setLinePrice = useCartStore((s) => s.setLinePrice);
@@ -1231,6 +1262,7 @@ function PosPageInner() {
     notes: string,
     pendingAction: "cancel" | "carry" | null,
     zeroCloseReason?: string | null,
+    count?: CloseCount | null,
   ) {
     if (!shift) return;
     // Cobros en espera del turno que se cancelan: baja en el proveedor después.
@@ -1238,7 +1270,7 @@ function PosPageInner() {
       ? pendingWatch.open.filter((c) => c.cash_shift_id === shift.id && c.status === "waiting")
       : [];
     try {
-      const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes, pendingAction, zeroCloseReason });
+      const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes, pendingAction, zeroCloseReason, count });
       for (const c of toCancel) void cancelAtProvider(c.provider_key, c.channel, c.intent_id);
       setCloseShiftModal(false);
       toast({ title: "Caja cerrada", description: `Diferencia: ${formatCurrency(diff)}`, variant: diff === 0 ? "success" : "info" });
@@ -1250,7 +1282,9 @@ function PosPageInner() {
           msg.includes("pending_charges_decision_required") ||
           msg.includes("close_zero_needs_confirmation"));
       toast({
-        title: msg && msg.includes("close_needs_reason")
+        title: msg && /invalid_denomination|invalid_count|invalid_method/.test(msg)
+          ? "Revisá el conteo: hay una cantidad o un monto que no es válido"
+          : msg && msg.includes("close_needs_reason")
           ? "Escribí un motivo: la diferencia supera la tolerancia"
           : msg && msg.includes("close_zero_needs_confirmation")
             ? "Contaste $0 y el sistema espera efectivo: volvé a contar o escribí por qué cerrás así"
@@ -1603,7 +1637,7 @@ function PosPageInner() {
         else void pauseRef.current.pause();
         return true;
       case "clear":
-        if (pauseRef.current.dialogs.clearConfirm) pauseRef.current.confirmClear();
+        if (pauseRef.current.dialogs.clearConfirm) void pauseRef.current.confirmClear();
         else if (checkoutOpen) sheetClearRef.current?.();
         else pauseRef.current.requestClear();
         return true;
@@ -2306,6 +2340,7 @@ function PosPageInner() {
           onConfirm={handleOpenShift}
           loading={open.isPending}
           locationLabel={locationLabel(registerStore, register)}
+          suggested={lastClosing ?? null}
         />
       </MountWhenOpened>
       <MountWhenOpened open={closeShiftModal}>

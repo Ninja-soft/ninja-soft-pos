@@ -147,6 +147,13 @@ export const cashApi = {
 
   // Conciliación del Z (H156, ADR-158): el encargado revisa una diferencia y
   // deja el tipo y el motivo. Auditado en el servidor.
+  // H159 (ADR-172): el encargado o el dueño confirma el Z.
+  confirmZ: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("cash_z_confirm" as never, { p_id: id } as never);
+    if (error) throw error;
+  },
+
   reviewZ: async (id: string, kind: string, reason: string): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.rpc("cash_z_review" as never, { p_id: id, p_kind: kind, p_reason: reason } as never);

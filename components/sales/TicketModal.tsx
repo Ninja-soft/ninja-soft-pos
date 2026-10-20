@@ -6,6 +6,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
+import { ExchangeTicketModal } from "@/components/sales/ExchangeTicketModal";
+import { brandDisplayName } from "@/lib/branding/businessName";
 import {
   SendReceiptEmail,
   SendReceiptEmailButton,
@@ -73,6 +75,8 @@ interface Props {
 
 export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab, silent, onNewSale, startWith }: Props) {
   const { data } = useSaleDetail(saleId, open);
+  // H159: ticket de cambio sin precios.
+  const [exchangeOpen, setExchangeOpen] = useState(false);
   // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
   const taxLines = useSaleTaxLines(open ? saleId : null);
   // F3 · ADR-072: factura electrónica de la venta (CAE + QR en el ticket).
@@ -473,6 +477,16 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   return (
     <>
       {offscreen}
+      {data && (
+        <ExchangeTicketModal
+          open={exchangeOpen}
+          onOpenChange={setExchangeOpen}
+          businessName={brandDisplayName(brand ?? null)}
+          saleLabel={formatSaleNumber(data.sale.number, numFmt)}
+          saleDate={data.sale.created_at}
+          items={data.items}
+        />
+      )}
       <TicketSheet
         open={open && shown}
         onOpenChange={close}
@@ -530,6 +544,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
         onPdf={handleA4}
         pdfBusy={downloading}
         onShare={canShare ? handleShare : undefined}
+        onExchangeTicket={data && data.sale.status !== "voided" ? () => setExchangeOpen(true) : undefined}
         shareBusy={sharing}
         emailButton={
           <SendReceiptEmailButton

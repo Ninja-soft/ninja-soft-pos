@@ -35,6 +35,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F21** | Participación del staff y gastos recurrentes | 1–2 semanas | 🟡 Con código (ADR-121, spec §20): participaciones, reglas por cliente, gastos, liquidación, pagos con MP, proyección y simulador; falta aplicar la migración y desplegar la Edge |
 | **F22** | Logística y reparto propio (entrega unificada, direcciones con mapa, flota, hojas de ruta, app del repartidor, seguimiento, COT automático) | 14–20 semanas | 🔵 Propuesta (ADR-149, auditoría y plan en [`45-logistica-reparto.md`](./45-logistica-reparto.md)) |
 | **F23** | Tesorería ordenada: cuentas de dinero unificadas, liquidaciones a la billetera, extracto bancario, NubCeo dentro de la Contabilidad, gastos con categoría y menú propio | 6–9 semanas | 🟡 H150 a H156 con código (ADR-158 aplicada, ADR-162 sin aplicar); H157 con test de punta a punta, falta el export en Xubio ([`46-tesoreria.md`](./46-tesoreria.md)) |
+| **F24** | Paridad InfoManager IM5: integridad, caja PRO, cobros, costo en la venta, alertas, balanzas, despiece, compras, B2B, ecommerce, contabilidad e importaciones | 20–30 semanas | 🔵 Propuesta (auditoría 2026-10-20, ADR-170, [`auditoria-infomanager-vs-ninjapos.md`](./auditoria-infomanager-vs-ninjapos.md)) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -675,8 +676,8 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
 
 - [x] **H31b · Historial del cliente 360 PRO.** *(pedido de Lucas, 2026-10-12)* *Primer corte integrado en código (2026-10-12, rama `feat/reintegro-mp-cliente360`, ADR-067): página `/clientes/[id]` con perfil, segmentos, indicadores, sucursales, gráficos, notas, línea de tiempo unificada con filtros y cursor y XLSX; RPC `customer_360_summary` y `customer_360_timeline` con alcance de sucursal; feature `clientes_360` desde Pro. **Pasos:** aplicar `20261030100200`. **Completado (2026-10-19, ADR-169, migración `20270108100000` sin aplicar):** comprobantes con reimprimir y reenviar, cuenta Debe / Haber con saldo corrido y PDF, adjuntos privados, cambios de la ficha auditados en la línea de tiempo y acceso desde el selector del POS y desde cada venta. Tests `c360Completo`, `Cliente360Completo` y `rls-cliente-360-completo`.* Una ficha de cliente robusta y profesional para ver **todo** lo que pasó con ese cliente en un solo lugar. Hoy el historial (`CustomerHistoryModal`) muestra vale, compras y devoluciones; esto lo lleva a una vista completa, en página propia (no modal), accesible desde /clientes, desde el selector del POS y desde cada venta.
   - [~] **Línea de tiempo unificada** de todos los movimientos, con filtros por tipo, fecha, sucursal y medio: ventas, devoluciones y cambios, notas de crédito, cobros de cuenta corriente, cargos y punitorios, ajustes, vales y saldo a favor, garantías, cobros en espera, turnos y reservas, señas, gift cards y puntos (cuando existan), y cambios de datos de la ficha (auditados). *Auditoría F11: `customer_360_timeline` (ADR-067) une ventas, devoluciones, cuenta corriente, cobranza, vales, cobros en espera, reintegros por MP, disputas y notas con filtros de tipo, fecha y sucursal. Faltan turnos, cambios de la ficha auditados y filtro por medio.*
-  - [ ] **Cuenta corriente contable (Debe / Haber / Saldo)**: libro mayor del cliente con saldo acumulado por fila, saldo inicial del período, totales del período, aging y próximos vencimientos. Imputación visible de cada cobro contra sus cargos.
-  - [ ] **Comprobantes**: listado de todos los comprobantes del cliente (tickets, facturas A/B/C cuando haya AFIP, notas de crédito y débito, recibos de cobro, remitos) con ver, reimprimir, descargar PDF y reenviar por email o WhatsApp.
+  - [x] **Cuenta corriente contable (Debe / Haber / Saldo)**: libro mayor del cliente con saldo acumulado por fila, saldo inicial del período, totales del período, aging y próximos vencimientos. Imputación visible de cada cobro contra sus cargos. *Hecho en ADR-169.*
+  - [x] **Comprobantes**: listado de todos los comprobantes del cliente (tickets, facturas A/B/C cuando haya AFIP, notas de crédito y débito, recibos de cobro, remitos) con ver, reimprimir, descargar PDF y reenviar por email o WhatsApp. *Hecho en ADR-169.*
   - [x] **Detalle de cada pago**: medio, procesadora, tarjeta, cuotas, autorización y cupón, y datos de la pasarela cuando el medio está conectado. *Auditoría F11: tocar una venta de la línea de tiempo abre el detalle de la venta con los datos del procesador (ADR-061).*
   - [~] **Datos y perfil**: ficha completa (documento, condición IVA, contactos, domicilios, grupo, lista de precios, límite y condiciones de crédito), notas internas, etiquetas y adjuntos. *Auditoría F11: perfil, datos fiscales y notas internas fijables hechos (`customer_notes`, ADR-067). Faltan etiquetas y adjuntos.*
   - [x] **Indicadores**: total comprado, ticket promedio, frecuencia, última compra, productos y categorías favoritos, medios de pago preferidos, deuda actual y vencida, devoluciones y comportamiento de pago. *Auditoría F11: `customer_360_summary` con 8 indicadores, productos más comprados, medios de pago y segmentos (`lib/customers/c360.ts`, ADR-067).*
@@ -1376,7 +1377,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 - [~] **H109: Contabilidad: plan de cuentas, asientos, cierres y export a estudios.** *(2026-10-12, ADR-066, `feat/contabilidad`, migraciones `20261029100000` a `20261029100300` sin aplicar; ver [`31-contabilidad.md`](./31-contabilidad.md))* · *OPTIONAL `contabilidad` (nueva, Business, hecha) + OPTIONAL `export_contable` (Pro, con H108) + ADDON `integracion_erp` (nueva, por conector). Centros de costo requieren F17/H89.*
   - [x] Plan de cuentas con plantilla argentina comercial precargada, niveles y edición (árbol, imputables, código externo del estudio). *(ADR-066)*
   - [x] Mapeos: medio de pago y adquirente → cuenta con **código ERP** (código externo de la cuenta), caja de cada sucursal → cuenta, IVA y tributos → cuentas, CMV y stock → cuentas, proveedores, tesorería y procesadores. *(ADR-066; cuotas como calificador: pendiente)*
-  - [x] Asientos automáticos por **venta**, **cobro**, devolución, **compra**, **pago**, cierre de caja, ingresos y retiros de caja, liquidación de procesadores, contracargos y movimiento de tesorería; detallados y resumidos al exportar (día o mes y sucursal); inmutables, corrección por contra-asiento; regeneración de un período abierto. *(ADR-066)*
+  - [~] Asientos automáticos por **venta**, **cobro**, devolución, **compra**, **pago**, cierre de caja, ingresos y retiros de caja, liquidación de procesadores, contracargos y movimiento de tesorería; detallados y resumidos al exportar (día o mes y sucursal); inmutables, corrección por contra-asiento; regeneración de un período abierto. *(ADR-066)* *Parcial (auditoría IM5 2026-10-20): el asiento de la venta usa `products.tax_rate` y no `sale_tax_lines`, así que percepciones e internos no van a su cuenta; se arregla en F24/H158.*
   - [x] Centros de costo por sucursal (y opcional por unidad de negocio). *(ADR-066)*
   - [~] Cierre mensual (bloqueo de período, numeración del Diario, re-apertura del dueño auditada). *(ADR-066; diferencias de cambio: pendiente)*
   - [x] Libros Diario, Mayor y Balance de sumas y saldos; estado de resultados; resumen de IVA Ventas y Compras. *(ADR-066)*
@@ -1575,6 +1576,146 @@ Objetivo: cada peso se sigue desde la venta hasta el banco y hasta el asiento, e
 - [~] **H157 · Prueba de punta a punta.** Un día con efectivo, transferencia, QR de MP y tarjeta Payway, retiro, depósito, liquidación, cierre de mes y export al estudio. · *Test de integración.*
   - [~] *Criterio:* Tesorería, Mayor y Sumas y saldos cuadran al centavo y el export abre en Xubio. *ADR-162: `tests/integration/tesoreria-e2e.test.ts` y el mismo escenario en un dry-run en producción cuadran al centavo (Galicia $6.853,20, billetera de MP $2.824,80, caja fuerte $0, caja del POS $400; Sumas y saldos $20.850 = $20.850; 0 asientos desbalanceados; cierre del mes sin problemas). Falta abrir el export en Xubio (manual).*
 
+### F24 · Paridad InfoManager IM5 (auditoría 2026-10-20)
+
+Objetivo: cubrir lo que un comercio que viene de InfoManager IM5 (el ERP de La Jamonera) usa todos los días y NinjaPOS todavía no tiene, y tomar de IM5 las reglas que resuelve mejor. Se cruzaron 614 capacidades de los 8 capítulos de la auditoría funcional de IM5 contra este roadmap y el código de `main`: **232 hechas** (en varias NinjaPOS es mejor: intereses de cuenta corriente que se cobran solos, asientos que nunca quedan desbalanceados, conciliación de tarjetas que empareja sola, impuestos con vigencia), **142 parciales**, **49 ya en el roadmap**, **135 que faltan** y **56 que no aplican** (contabilidad paralela CC1/CC2, impresora fiscal, herencias de IM4, nichos propios de La Jamonera). Detalle, matriz por área y evidencia en [`auditoria-infomanager-vs-ninjapos.md`](./auditoria-infomanager-vs-ninjapos.md); decisión ADR-170.
+
+Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualquier pyme · **P2** pyme mediana · **P3** nicho o enterprise. Esfuerzo: S (≤ 3 días), M (1-2 semanas), L (3-5 semanas), XL (más).
+
+> **Orden sugerido:** primero los P0 y P1 chicos de H158 (correcciones de integridad y seguridad), después H159 (caja y cobros), H160 (costo en la venta, base de todos los márgenes) y H161 (alertas). Las balanzas etiquetadoras (H164) y el despiece (H165) son lo que más pesa para fiambrería y carnicería. El resto según demanda comercial. Cada función nueva sigue el checklist de CLAUDE.md §6 (feature, plan, gating en el servidor, copy y comparación de planes).
+
+- [ ] **H158 · Integridad y seguridad que la auditoría destapó.** · *BASE, sin feature nueva.*
+  - [ ] **P0 S** El asistente de IA respeta los permisos: chequea `reports.costs`, las sucursales permitidas y el tema (ventas, costos, cuentas corrientes, compras, stock, contabilidad) antes de responder. Hoy `ai_assistant` corre las RPC `ai_*` con service_role y expone el costo (`_shared/aiQuery.ts`).
+  - [ ] **P0 S** No dejar editar ni anular una factura de proveedor con pagos imputados (`supplier_invoice_save` y `supplier_invoice_void` no lo miran): pedir anular primero la orden de pago.
+  - [ ] **P1 S** El asiento de la venta lee `sale_tax_lines`: percepciones de IVA e IIBB e internos a su pasivo, exento y no gravado separados. Hoy `acc_sync_sale` usa `products.tax_rate` (por eso H109 "asientos automáticos por venta" pasa a parcial).
+  - [ ] **P1 S** Letra de la factura de compra validada en el servidor según la condición de IVA del proveedor y la del negocio (hoy sólo `suggestedLetter` en el front).
+  - [ ] **P1 S** Producto "no bonificable": no acepta descuento manual (ni con supervisor) pero sí promociones, validado en `create_sale`.
+  - [ ] **P2 S** Aviso de cheque repetido (banco + número) al cargar cheques de terceros, propios y e-cheqs.
+  - [ ] *Criterio:* un cajero sin `reports.costs` pregunta a la IA "¿cuánto gano con X?" y no ve costos; una factura pagada no se puede anular; el Mayor de "Percepciones IIBB cobradas" cuadra con el Libro IVA Ventas.
+- [ ] **H159 · Caja PRO: arqueo, rendición y controles del cajero.** · *BASE (arqueo, apertura, auditoría) + OPTIONAL `tesoreria` (tránsito).* Enriquece H111 y H119.
+  - [ ] **P1 M** Arqueo por denominación de billetes y monedas y conteo por medio (cupones, transferencias, cheques, vales) con "a rendir / rendido / diferencia" por medio; impresión con detalle.
+  - [ ] **P1 S** Apertura con el fondo del cierre anterior sugerido, confirmación si se abre en $0 con saldo previo y diferencia de apertura auditada.
+  - [ ] **P1 S** Borrar un renglón o vaciar el carrito antes de cobrar con PIN opcional (política en `security_settings`) y registro en `audit_logs`.
+  - [ ] **P1 S** Tope de descuento por usuario (encima del de su rol) y por renglón, no sólo sobre el total.
+  - [ ] **P1 S** Ticket de cambio sin precios, con los días para cambiar, desde la venta y desde Ventas.
+  - [ ] **P2 M** Cierre en dos pasos: el cajero rinde ("sin confirmar") y el encargado o tesorero confirma; confirmada no se edita, sólo se borra la última sin confirmar.
+  - [ ] **P2 M** Transferencias de valores entre sucursales o a la caja fuerte "en tránsito" con recepción y anulación (los cheques vuelven a cartera).
+  - [ ] **P2 S** Recuperar el carrito al recargar la página (guardado local automático, no sólo Pausar).
+  - [ ] **P3 S** Diagnóstico para el cajero cuando falla la factura: si el caído es ARCA o el servidor y cuánto tardó.
+  - [ ] *Criterio:* un cierre con $10.000 en billetes de 1.000 y un cupón de $5.000 faltante muestra diferencia sólo en tarjeta, el encargado lo confirma y ya no se puede editar.
+- [ ] **H160 · Cobros ampliados.** · *BASE (recibo con varios medios) + OPTIONAL `cuenta_corriente`, `tesoreria`.* Enriquece H14, H31 y H106.
+  - [ ] **P1 M** Recibo de cuenta corriente con varios medios que tienen que cuadrar con lo imputado, más ajuste por redondeo.
+  - [ ] **P1 M** Cheque y e-cheq de cliente como medio de cobro en el POS y en la cuenta corriente, que entran directo a la cartera de Tesorería.
+  - [ ] **P1 M** Retenciones sufridas dentro del recibo, que cancelan deuda y alimentan las sufridas.
+  - [ ] **P2 M** Efectivo en dólares como medio, con la cotización del día y el vuelto en pesos.
+  - [ ] **P2 S** Planes de tarjeta por día de la semana; arancel, TNA y CFT visibles en el plan.
+  - [ ] **P2 M** Reglas de medios según el comprobante (factura o sólo ticket) y por usuario; monto máximo por medio por comprobante.
+  - [ ] **P2 M** Botonera de cobro configurable: botones que combinan medio y comprobante, cobran de un toque, con atajo F y orden por uso.
+  - [ ] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera.
+- [ ] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97.
+  - [ ] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy.
+  - [ ] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos).
+  - [ ] **P1 M** Movimientos de stock de todos los artículos con rango, tipo, origen y usuario, y kardex con saldo acumulado.
+  - [ ] **P1 S** Mercadería parada: stock sin ventas en el período, valorizado, con días sin salida y "nunca vendidos".
+  - [ ] **P1 M** Rentabilidad sin contabilidad: ingresos menos CMV menos gastos, mes a mes, con comparación contra un período parejo.
+  - [ ] **P1 S** Comprobantes pendientes por cliente a una fecha de corte (la RPC ya acepta la fecha; falta la UI).
+  - [ ] **P1 S** Búsqueda por palabras en cualquier orden y sin acentos (`unaccent`) en POS y listados.
+  - [ ] **P2 M** Existencias a una fecha (anterior, entradas y salidas por origen) y foto mensual del inventario valorizado para rotación, DSI y GMROI.
+  - [ ] **P2 S** Ranking de clientes con concentración (top 5, 6-10, cuántos hacen el 80 %), "menos vendidos" con N configurable, KPIs de cobranza del negocio (DSO, antigüedad promedio).
+  - [ ] **P2 S** Tramos de antigüedad configurables en un solo lugar; avisos de confiabilidad (cobertura de costo, stock negativo) en todo reporte con margen.
+  - [ ] **P2 S** Exportar reportes a PDF e impresión, indicando "vista actual" o "resultado completo".
+  - [ ] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer.
+- [ ] **H162 · Motor de alertas programadas.** · *OPTIONAL `alertas_programadas` (nueva, Pro).* Resuelve las alertas pendientes de H63, H67 y H117.
+  - [ ] **P1 L** Reglas por negocio sobre un catálogo (stock bajo mínimo o negativo, venta bajo costo, caída de ventas, deuda vencida, cheques y facturas de compra por vencer, caja sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos anómalos, presupuestos por vencer, clientes que dejaron de comprar, aumento de costo, certificado ARCA por vencer, anulaciones) con frecuencia, días, horario, "sólo casos nuevos", Probar ahora e historial.
+  - [ ] **P1 M** Destinos: campana por rol o usuario, resumen diario por mail y WhatsApp.
+  - [ ] **P2 S** Avisos al grabar una venta: bajo costo, sin CAE, descuento anómalo.
+  - [ ] **P3 M** Alertas armadas con IA que guardan la consulta y se reusan sin gastar cupo.
+  - [ ] *Criterio:* el dueño recibe a las 8 un mail con las cajas sin cerrar de ayer y los cheques que vencen esta semana, sólo con los casos nuevos.
+- [ ] **H163 · Catálogo PRO.** · *BASE.* Enriquece H100 y H112.
+  - [ ] **P1 M** Varios códigos de barras por artículo (principal y alternativos, opcionalmente por proveedor); el buscador encuentra por todos y por código de fabricante.
+  - [ ] **P1 S** Duplicar artículo ("(COPIA)" para revisar y grabar); alta rápida "grabar y seguir".
+  - [ ] **P1 M** Unidad de venta con coeficiente (bulto, caja, pack) y equivalencias compra / stock / venta; no se combina con pesable; precio por bulto en lista y etiqueta.
+  - [ ] **P2 S** Artículo de Compra, Venta o Ambos: los insumos no aparecen en el POS ni en el catálogo.
+  - [ ] **P3 S** NCM en la ficha; ícono, color o foto de categoría para la grilla del POS; PLU sin ceros a la izquierda; variantes con más de 2 ejes; edición masiva por categoría, IVA, proveedor y stock mínimo.
+- [ ] **H164 · Balanzas etiquetadoras.** · *OPTIONAL `balanza` (existe; el envío de precios suma su copy).* Enriquece H23 y H24.
+  - [ ] **P1 XL** Envío de PLU y precios por lista a la balanza (Kretz Report y AutoReport, Systel Cuora y Neo) desde el puente local: sólo lo que cambió, relectura para verificar, historial por balanza y detección de PLU cruzado.
+  - [ ] **P2 M** Prefijos de balanza PRO: varias reglas con máscara, alcance negocio, sucursal o balanza, prioridad y "probar un código".
+  - [ ] **P2 M** Etiqueta de peso impresa al pesar en la caja, para quien no tiene balanza etiquetadora; captura de peso acumulada.
+  - [ ] **P3 L** Control de tickets de balanza contra lo facturado por día, sucursal y PLU, con tolerancia.
+  - [ ] *Criterio:* cambiar el precio del jamón en la lista y en menos de 5 minutos la balanza de la sucursal imprime el precio nuevo, con el envío en el historial.
+- [ ] **H165 · Producción y despiece.** · *OPTIONAL `produccion` (existe).* Sube a hito el backlog de despiece y enriquece H50.
+  - [ ] **P2 L** Recetas Fraccionar (un insumo da varios productos con % de participación, merma = 100 menos la suma, rango de peso) y Combinar; transformaciones que bajan insumos, suben productos y se anulan con contramovimiento.
+  - [ ] **P2 M** Recetas con insumos que son productos de stock y se descuentan al vender o producir.
+  - [ ] **P2 M** Costo del producido prorrateado por precio de venta y "trasladar costos".
+  - [ ] *Criterio:* despostar una media res de 100 kg da los cortes con su costo, la merma queda registrada y el stock cuadra.
+- [ ] **H166 · Inventario y reposición.** · *BASE + OPTIONAL `multi_sucursal`.* Enriquece H64 y H95.
+  - [ ] **P2 M** Conteo físico multiusuario en vivo: sesión con scanner, conteos parciales que se suman, se carga el total y no la diferencia.
+  - [ ] **P2 M** Pedido interno de reposición con autorización por renglón, despacho parcial con traslado y estado contra lo pedido.
+  - [ ] **P2 M** Costo guardado en cada movimiento de stock y stock a una fecha valorizado.
+  - [ ] **P2 M** Series en la recepción de compra y seguimiento por número de serie.
+  - [ ] **P2 M** Verificador de precios en modo kiosco (scanner o cámara, bloqueado con PIN, precio de promo, funciona sin conexión).
+- [ ] **H167 · Compras PRO.** · *OPTIONAL `compras` (existe) + ADDON `asistente_ia` para la lectura con IA.* Enriquece H101, H104, H106 y H108.
+  - [ ] **P1 M** Importar "Mis Comprobantes Recibidos" de ARCA (XLSX o CSV) con vista previa, control de duplicados y aviso de CUIT ajeno.
+  - [ ] **P1 M** Leer facturas de compra en PDF o foto con IA y precargarlas (nunca graba sola); bandeja de fotos tomadas con el celular.
+  - [ ] **P1 M** Factura de compra con renglones de artículo que también recibe el stock, y cuenta de gasto por renglón.
+  - [ ] **P1 S** Datos del padrón de ARCA al dar de alta un proveedor (ya se usa en clientes).
+  - [ ] **P1 M** Imputar notas de crédito y anticipos contra facturas concretas en la orden de pago, por partes.
+  - [ ] **P1 S** Saldo inicial y ajustes manuales en la cuenta corriente del proveedor.
+  - [ ] **P2 S** Vencimientos en cuotas, CAE y vencimiento del proveedor en la factura; saldos de proveedores a fecha de corte; vínculo proveedor-cliente con saldo neto.
+  - [ ] **P2 M** Autorización de órdenes de compra por monto (tope del negocio, por usuario, acumulado, quien carga no autoriza); una OC sin autorizar no se recibe.
+  - [ ] **P2 M** Previsión de pagos por proveedor sumada al flujo de fondos; sugerencia de compra con lo comprometido y lo vendido a 7, 30, 60 y 90 días.
+  - [ ] **P2 M** Import de lista del proveedor en CSV y PDF (con IA), alta de artículos que no existen, aviso de archivo ya importado y de variaciones absurdas.
+  - [ ] **P2 S** Tope de la NC de compra contra la factura asociada; número inicial de certificado de retención por régimen; envío masivo de OP y OC por mail.
+  - [ ] *Criterio:* se importan los comprobantes recibidos de un mes desde ARCA y el Libro IVA Compras cuadra con el portal.
+- [ ] **H168 · Comprobantes de venta B2B.** · *OPTIONAL `entregas_remitos`, `presupuestos`, `cuenta_corriente` (existen).* Enriquece H32, H41 y H107.
+  - [ ] **P1 M** Nota de crédito financiera: importe libre o % de la factura, con o sin comprobante asociado, sin tocar stock, con permiso.
+  - [ ] **P2 L** Circuito "remito primero": remito sin venta que baja el stock y queda pendiente de facturar; factura de uno o varios remitos; factura resumen de varios tickets.
+  - [ ] **P2 L** Facturación periódica (abonos) por lote con vista previa y protección contra la doble facturación.
+  - [ ] **P2 M** Venta bajo pedido que arma la OC al proveedor; presupuesto que convierte en partes y combina varios; rentabilidad y simulación de cuotas en el presupuesto.
+  - [ ] **P2 M** Importar comprobantes históricos desde Excel; envío masivo de comprobantes por mail y WhatsApp con historial.
+  - [ ] **P2 S** Filtros del listado de ventas por estado fiscal, letra, tipo y producto incluido.
+  - [ ] **P3 S** Remito "no facturable" (muestra, préstamo, consignación); fecha valor ±N días con permiso; copiar una venta; comprobantes en lote con informe.
+- [ ] **H169 · Vendedores y cartera.** · *feature a definir junto con H39 (`comisiones_estimadas` hoy es de medios de pago).*
+  - [ ] **P2 M** Vendedor en la venta de mostrador y por renglón, vendedor asignado al cliente, zona y rubro del cliente.
+  - [ ] **P2 M** Comisión sobre lo cobrado sin IVA, con el % vigente a la fecha de la factura.
+  - [ ] **P2 S** Permiso "ver sólo lo propio" aplicado por RLS a ventas, presupuestos, pedidos, remitos y compras; permiso de exportar por módulo controlado en el servidor.
+- [ ] **H170 · Ecommerce multicanal.** · *OPTIONAL por canal.* Enriquece H84, H87 y F5 "Tienda Nube".
+  - [ ] **P1 S** Una cuenta de ecommerce nueva arranca en sólo lectura y el dueño habilita escribir cuando revisó los vínculos (no pisa el stock de ML con 0).
+  - [ ] **P1 M** Capa de conectores genérica (`channel_accounts`, `channel_jobs`) antes de sumar otro canal.
+  - [ ] **P1 L** Conector Tienda Nube (OAuth, stock y precio, órdenes como pedidos con reserva, factura con CAE en la orden, despacho, depósitos).
+  - [ ] **P2 L** Conector WooCommerce.
+  - [ ] **P2 M** Pantalla Actividad (tareas, reintentar, "error resuelto") y panel "Para atender" por canal; comparación stock y precio POS contra el canal; crear productos desde publicaciones en lote; bandeja de órdenes con fechas y búsqueda.
+- [ ] **H171 · Reparto: cobro y rendición.** · *OPTIONAL `reparto_propio` (existe).* Enriquece H145, H146 y H149.
+  - [ ] **P1 M** Cobro contra entrega por parada con total, cobrado y pendiente por hoja; el cobro genera recibo y movimiento de caja o Tesorería.
+  - [ ] **P2 M** Recepción de la hoja desde la oficina para el chofer sin app ("aplicar a todos", corregir una hoja cerrada con permiso).
+  - [ ] **P2 S** Listado de hojas por rango y búsqueda con export; planilla de carga en bultos; totales (importe, kg, bultos) al agregar entregas.
+- [ ] **H172 · Contabilidad e impuestos que faltan.** · *OPTIONAL `contabilidad`, `impuestos_iva`, `percepciones_retenciones` (existen).* Enriquece H108, H109, H110 y H155.
+  - [ ] **P1 S** "Ver asiento" en venta, devolución, factura y NC de proveedor, orden de pago, cobro y cierre de caja.
+  - [ ] **P2 M** Posición mensual de IVA con confirmación, bloqueo del mes y asiento de liquidación (como IIBB).
+  - [ ] **P2 M** Renglón de asiento manual imputado a cliente o proveedor que entra a su cuenta corriente.
+  - [ ] **P2 M** Cotizaciones compra y venta, carga por rango y bloqueo de factura en moneda sin cotización; diferencia de cambio en compras y pagos.
+  - [ ] **P2 S** Estado de resultados comparativo y mensual, por centro de costo; cuentas de ventas y CMV por categoría; informe de CMV con el costo de la venta.
+  - [ ] **P2 S** Conciliación bancaria con fecha de corte creciente y arrastre de pendientes; movimientos de Tesorería con fecha en mes cerrado bloqueados.
+  - [ ] **P2 M** Exportadores: SICORE de retenciones, percepciones de IIBB practicadas por provincia, SIFERE sufridas; nunca bajar un archivo vacío.
+  - [ ] **P3 S** Balance general, asiento de refundición y apertura, folio del Diario rubricado, copiar asiento, importar asientos por XLSX.
+- [ ] **H173 · Consultas dinámicas e IA con tableros.** · *OPTIONAL `metricas_avanzadas` + ADDON `asistente_ia`.* Enriquece TX-5 y H88.
+  - [ ] **P2 L** Consultas dinámicas sobre el motor `ai_query`: catálogo por área, columnas, filtros, orden, totales, agrupar y desglosar.
+  - [ ] **P2 M** Listados guardados privados, compartidos o públicos, y listados de fábrica.
+  - [ ] **P2 L** La IA responde con un tablero que se guarda y se vuelve a correr sin IA; usa las mismas RPC que las pantallas.
+  - [ ] **P2 M** Envío programado de reportes y tableros por mail con link que vence.
+  - [ ] **P3 S** Consumo de IA visible para el dueño con aviso al 80 %.
+- [ ] **H174 · Configuración, importaciones y maestros.** · *BASE.* Enriquece H34, H62 y H117.
+  - [ ] **P1 S** Importar proveedores por XLSX con cruce por CUIT.
+  - [ ] **P2 M** Importación con columnas a elección, formato guardado, pegar desde Excel y campo de cruce elegible (CUIT, documento, código de barras, código del proveedor).
+  - [ ] **P2 M** Importar plan de cuentas y asientos de apertura.
+  - [ ] **P2 M** "Empezar de cero": borrar datos de prueba hasta una fecha con vista previa de conteos, bloqueado si ya hubo CAE, auditado.
+  - [ ] **P2 M** Unificar clientes y productos duplicados con vista previa y auditoría.
+  - [ ] **P2 M** Diagnóstico "¿por qué no veo X?": plan, switch del negocio, permiso o preferencia del usuario.
+  - [ ] **P2 S** Maestro de transportistas (CUIT, patentes, chofer) para remitos y COT.
+  - [ ] **P2 M** Mismo diseño de documento para remito, presupuesto, recibo, orden de pago y orden de compra; saldo de cuenta corriente y forma de pago al pie.
+  - [ ] **P3 M** Política de contraseña por negocio y MFA para dueño y encargado; acceso restringido a equipos autorizados.
+  - [ ] **P3 S** Menú de empresa publicado por el dueño; "copiar de" otro usuario; vistas guardadas de auditoría con origen (pantalla, API, importación).
+
 ---
 
 ## TX — Mejoras transversales (UX y datos)
@@ -1755,21 +1896,22 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F8** | 18/57 | 22 | 17 | 32% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 32/48 | 13 | 3 | 67% | 80% |
-| **F11** | 77/93 | 12 | 4 | 83% | 89% |
+| **F11** | 79/93 | 12 | 2 | 85% | 91% |
 | **F12** | 45/58 | 7 | 6 | 78% | 84% |
 | **F13** | 41/74 | 25 | 8 | 55% | 72% |
 | **F14** | 8/68 | 41 | 19 | 12% | 42% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
-| **F18** | 43/114 | 54 | 17 | 38% | 61% |
+| **F18** | 42/114 | 55 | 17 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
+| **F24** | 0/131 | 0 | 131 | 0% | 0% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 677/1204 | 308 | 219 | 56% | 69% |
+| **Total** | 678/1335 | 309 | 348 | 51% | 62% |
 <!-- roadmap-progress:end -->
 
 ---

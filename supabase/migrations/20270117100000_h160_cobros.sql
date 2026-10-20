@@ -631,7 +631,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  p     record;
+  r_pay record;
   v_chg numeric;
 begin
   if exists (select 1 from cheques c join payments p on p.id = c.sale_payment_id
@@ -642,8 +642,8 @@ begin
     from payments p
    where p.id = c.sale_payment_id and p.sale_id = new.id and c.status = 'en_cartera';
 
-  for p in select * from payments where sale_id = new.id and method = 'cash_usd' loop
-    v_chg := round(coalesce((p.metadata -> 'usd' ->> 'change_ars')::numeric, 0), 2);
+  for r_pay in select * from payments where sale_id = new.id and method = 'cash_usd' loop
+    v_chg := round(coalesce((r_pay.metadata -> 'usd' ->> 'change_ars')::numeric, 0), 2);
     if v_chg > 0 and exists (select 1 from cash_shifts where id = new.cash_shift_id and status = 'open') then
       insert into cash_movements (tenant_id, cash_shift_id, type, amount, payment_method, reason, reference_id, created_by)
       values (new.tenant_id, new.cash_shift_id, 'income', v_chg, 'cash',

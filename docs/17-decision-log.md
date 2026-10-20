@@ -6394,3 +6394,34 @@ Viumi es la solución de cobros de Banco Macro sobre Geopagos. Publica una Check
 - Orden de deploy: migración, Edges `viumi`, `viumi_webhook`, `set_payment_secret` y `pending_charges_sync`, y el front. Front tolerante: sin la migración, Viumi no aparece en el catálogo.
 - Falta validar con credenciales de prueba reales los hosts, `expires_in` y los estados (lo inferido está en `docs/47-viumi.md`).
 - Verificado con `tests/unit/viumi.test.ts` (fetch simulado), `tests/unit/viumiUi.test.ts` y `tests/integration/rls-viumi.test.ts` (se salta sin Supabase local).
+
+## ADR-174: Costo guardado en cada venta y Reportes › Gestión: rentabilidad, cobranzas, movimientos de stock y mercadería parada (F24 · H161)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270112100000_h161_costo_gestion`, sin Edges) · **Base:** ADR-170 (F24), ADR-066 (asientos), ADR-050 (costos de compra)
+
+### Contexto
+
+Todos los márgenes (comparativo de sucursales, CMV del asiento) usaban el costo de hoy del producto: cada compra con otro costo cambiaba el margen de las ventas pasadas. La auditoría de InfoManager IM5 además marcó reportes de gestión que el dueño usa todos los días: cobranzas, movimientos de stock, mercadería parada y rentabilidad sin depender de la contabilidad.
+
+### Decisión
+
+1. **Costo en el renglón.** `sale_items.unit_cost` (y `cost_source`) lo completa un trigger al insertar con el costo vigente del producto; `create_sale` no cambia. Las ventas anteriores se completaron con el costo del día de la migración, marcadas `backfill` (el reporte avisa que son aproximadas). `stock_movements.unit_cost` igual, para valorizar movimientos.
+2. **Quién lo usa.** El CMV del asiento de la venta y de la devolución (`acc_sync_sale`, `acc_sync_sale_return`) y el margen del comparativo de sucursales (`branch_compare_report`) toman el costo del renglón, con el del producto como respaldo.
+3. **Reportes › Gestión** (`/reportes/gestion`), todos con las sucursales del usuario (`report_store_filter`) y controlados en el servidor (`_report_guard`):
+   - **Rentabilidad** (`report_profitability`, `metricas_avanzadas` + `reports.costs`): por mes, ventas, impuestos de la venta, ventas netas, devoluciones, costo de lo vendido, margen bruto, gastos de Tesorería con cuenta de gasto (sólo sin filtro de sucursal) y resultado, contra el período anterior parejo, con cobertura de costo.
+   - **Cobranzas** (`report_collections`, `reports.view`): cobros de cuenta corriente por medio, persona y caja, y el detalle.
+   - **Movimientos de stock** (`report_stock_movements`, `stock.view`): todo el catálogo con motivo y usuario; con un producto, kardex con saldo anterior y corrido. El costo, sólo con `reports.costs`.
+   - **Mercadería parada** (`report_dead_stock`, `metricas_avanzadas`): stock sin ventas en N días o nunca vendido, con días sin salida y valor a precio (y a costo con `reports.costs`).
+4. `metricas_avanzadas` deja de ser marketing: es la feature de Rentabilidad y Mercadería parada (Business+).
+
+### Alternativas descartadas
+
+- **Cambiar `create_sale` para mandar el costo:** el trigger cubre también las ventas offline, de API y de Mercado Libre.
+- **Costo promedio por capas (FIFO):** no hay capas de costo; se guarda el costo vigente según `purchase_settings.cost_basis`, que es lo que el negocio eligió.
+- **Pendientes a una fecha de corte reusando `account_aging(p_as_of)`:** esa fecha sólo corre los días de mora; el saldo sigue siendo el de hoy. Queda para un corte histórico propio.
+
+### Consecuencias
+
+- Pendiente de H161: pendientes a fecha de corte, búsqueda sin acentos y los P2 (existencias a fecha, rotación, concentración, PDF).
+- Orden de deploy: migración y después el front.
+- Verificado con un dry-run en producción con rollback (cajero sin `reports.costs` rechazado en rentabilidad; costo oculto en movimientos) y `tests/unit/h161Gestion.test.ts`.

@@ -1613,19 +1613,19 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 M** Reglas de medios según el comprobante (factura o sólo ticket) y por usuario; monto máximo por medio por comprobante.
   - [ ] **P2 M** Botonera de cobro configurable: botones que combinan medio y comprobante, cobran de un toque, con atajo F y orden por uso.
   - [ ] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera.
-- [ ] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97.
-  - [ ] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy.
-  - [ ] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos).
-  - [ ] **P1 M** Movimientos de stock de todos los artículos con rango, tipo, origen y usuario, y kardex con saldo acumulado.
-  - [ ] **P1 S** Mercadería parada: stock sin ventas en el período, valorizado, con días sin salida y "nunca vendidos".
-  - [ ] **P1 M** Rentabilidad sin contabilidad: ingresos menos CMV menos gastos, mes a mes, con comparación contra un período parejo.
+- [~] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97. *Parcial en ADR-174 (migración `20270112100000_h161_costo_gestion`, Reportes › Gestión): faltan los pendientes a fecha de corte, la búsqueda sin acentos y los P2.*
+  - [x] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy. *Hecho (ADR-174): `sale_items.unit_cost` por trigger; CMV de la venta y de la devolución y comparativo de sucursales lo usan; las ventas anteriores quedaron con el costo del día marcado como aproximado.*
+  - [x] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos). *Hecho (ADR-174): Reportes › Gestión › Cobranzas (cuenta corriente).*
+  - [x] **P1 M** Movimientos de stock de todos los artículos con rango, tipo, origen y usuario, y kardex con saldo acumulado. *Hecho (ADR-174): Reportes › Gestión › Movimientos de stock, con kardex por producto y costo del movimiento.*
+  - [x] **P1 S** Mercadería parada: stock sin ventas en el período, valorizado, con días sin salida y "nunca vendidos". *Hecho (ADR-174, `metricas_avanzadas`).*
+  - [x] **P1 M** Rentabilidad sin contabilidad: ingresos menos CMV menos gastos, mes a mes, con comparación contra un período parejo. *Hecho (ADR-174, `metricas_avanzadas` + `reports.costs`): gastos de Tesorería con cuenta de gasto.*
   - [ ] **P1 S** Comprobantes pendientes por cliente a una fecha de corte (la RPC ya acepta la fecha; falta la UI).
   - [ ] **P1 S** Búsqueda por palabras en cualquier orden y sin acentos (`unaccent`) en POS y listados.
   - [ ] **P2 M** Existencias a una fecha (anterior, entradas y salidas por origen) y foto mensual del inventario valorizado para rotación, DSI y GMROI.
   - [ ] **P2 S** Ranking de clientes con concentración (top 5, 6-10, cuántos hacen el 80 %), "menos vendidos" con N configurable, KPIs de cobranza del negocio (DSO, antigüedad promedio).
   - [ ] **P2 S** Tramos de antigüedad configurables en un solo lugar; avisos de confiabilidad (cobertura de costo, stock negativo) en todo reporte con margen.
   - [ ] **P2 S** Exportar reportes a PDF e impresión, indicando "vista actual" o "resultado completo".
-  - [ ] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer.
+  - [x] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer. *Cumplido: el margen sale de `sale_items.unit_cost`.*
 - [ ] **H162 · Motor de alertas programadas.** · *OPTIONAL `alertas_programadas` (nueva, Pro).* Resuelve las alertas pendientes de H63, H67 y H117.
   - [ ] **P1 L** Reglas por negocio sobre un catálogo (stock bajo mínimo o negativo, venta bajo costo, caída de ventas, deuda vencida, cheques y facturas de compra por vencer, caja sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos anómalos, presupuestos por vencer, clientes que dejaron de comprar, aumento de costo, certificado ARCA por vencer, anulaciones) con frecuencia, días, horario, "sólo casos nuevos", Probar ahora e historial.
   - [ ] **P1 M** Destinos: campana por rol o usuario, resumen diario por mail y WhatsApp.
@@ -1910,9 +1910,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 15/131 | 1 | 115 | 11% | 12% |
+| **F24** | 21/131 | 2 | 108 | 16% | 17% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 693/1336 | 311 | 332 | 52% | 64% |
+| **Total** | 699/1336 | 312 | 325 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

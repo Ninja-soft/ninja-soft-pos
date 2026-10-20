@@ -34,6 +34,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   gocuotas: "GO Cuotas",
   directo: "Directo",
   ualabis: "Ualá Bis",
+  viumi: "Viumi",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -165,6 +166,7 @@ export function QrIntentsModal({
           <option value="mercadopago">Mercado Pago</option>
           <option value="mobbex">Mobbex</option>
           <option value="ualabis">Ualá Bis</option>
+          <option value="viumi">Viumi</option>
         </select>
         <select
           value={status}
@@ -275,6 +277,10 @@ export function QrIntentsModal({
                           onDone={() => void qc.invalidateQueries({ queryKey: ["ualabis-refunds"] })}
                         />
                       </div>
+                    )}
+                    {i.provider_key === "viumi" && i.status === "approved" && (i.saleNumber === null || i.saleStatus === "voided") && (
+                      // Viumi (ADR-173): la API no tiene devoluciones.
+                      <p className="mt-1 text-xs text-muted-foreground">Para devolverlo, usá la app o el panel de Viumi.</p>
                     )}
                   </td>
                 </tr>

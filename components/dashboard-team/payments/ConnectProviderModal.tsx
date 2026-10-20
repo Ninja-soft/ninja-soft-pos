@@ -212,6 +212,15 @@ const FORMS: Record<string, FormSpec> = {
     ],
     envNote: "Prueba usa el ambiente stage de Ualá Bis: los pagos son simulados con la tarjeta de prueba de tu cuenta.",
   },
+  // Viumi (ADR-173): Client ID y Client Secret de la API. Se prueban al
+  // guardar (set_payment_secret pide un token en el ambiente).
+  viumi: {
+    fields: [
+      { name: "client_id", label: "Client ID", min: 4, placeholder: "Tu Client ID de Viumi" },
+      { name: "client_secret", label: "Client Secret", secret: true, min: 8, placeholder: "Tu Client Secret de Viumi" },
+    ],
+    envNote: "Prueba usa el ambiente de prueba de Viumi: los pagos no mueven plata real.",
+  },
   // Clover Point (ADR-047): conexión de la marca Fiserv. Las terminales salen
   // de Clover (GET devices); las series cargadas acá acotan y nombran.
   fiserv: {
@@ -424,7 +433,12 @@ export function ConnectProviderModal({
         providerKey === "ualabis" && e instanceof Error && e.message === "ualabis_invalid_credentials"
           ? "Ualá Bis no aceptó estas credenciales en el ambiente elegido. Revisalas o probá el otro ambiente."
           : null;
-      setServerError(getnetMsg ?? ualaMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
+      // Viumi (ADR-173): mismo criterio, el servidor pide un token antes de guardar.
+      const viumiMsg =
+        providerKey === "viumi" && e instanceof Error && e.message === "viumi_invalid_credentials"
+          ? "Viumi no aceptó estas credenciales en el ambiente elegido. Revisalas o probá el otro ambiente."
+          : null;
+      setServerError(getnetMsg ?? ualaMsg ?? viumiMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -956,6 +970,11 @@ export function ConnectProviderModal({
               {providerKey === "ualabis" && (
                 <NextStep n={2}>
                   Al cobrar elegís Ualá Bis, Link o QR: la venta se cierra sola cuando Ualá acredita el pago.
+                </NextStep>
+              )}
+              {providerKey === "viumi" && (
+                <NextStep n={2}>
+                  Al cobrar elegís Viumi, Link o QR: la venta se cierra sola cuando Viumi acredita el pago.
                 </NextStep>
               )}
               {providerKey === "directo" && (

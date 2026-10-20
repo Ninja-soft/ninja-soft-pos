@@ -299,6 +299,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   gocuotas: "GO Cuotas",
   directo: "Directo",
   ualabis: "Ualá Bis",
+  viumi: "Viumi",
   account: "Cuenta corriente",
 };
 

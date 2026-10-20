@@ -7,7 +7,9 @@
 // referencia), cheque o e-cheq propio, cheque de terceros en cartera,
 // depósito, tarjeta u otro. Retenciones como agente calculadas por el
 // servidor con su certificado (H106, ADR-079) y retenciones manuales. Lo
-// valida el servidor (supplier_payment_order_create).
+// valida el servidor (supplier_payment_order_create). H167 (ADR-178): las
+// notas de crédito y los anticipos se aplican a facturas concretas, por partes;
+// sin plata de por medio se registra sólo la aplicación (supplier_credit_apply).
 
 import { useEffect, useMemo, useState } from "react";
 import { Info as InfoIcon, Plus, Trash2, Wand2 } from "lucide-react";
@@ -40,6 +42,16 @@ import { useFeature } from "@/modules/saas/gating";
 import { retentionErrorMessage } from "@/lib/tax/retentions";
 import { AgentRetentionsSection, useAgentRetentions } from "./AgentRetentions";
 import { ChequeDuplicateHint } from "@/components/treasury/ChequeDuplicateHint";
+import {
+  CREDIT_SOURCE_LABEL,
+  autoApplyCredit,
+  creditsTotal,
+  openAfterCredits,
+  validateCreditApplications,
+  type CreditApplicationDraft,
+  type CreditSourceType,
+} from "@/lib/purchases/credits";
+import { useOpenCredits, usePurchasesProMutations } from "@/modules/purchases/pro";
 import { ErrorList, FormField, SectionTitle, fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface LineRow {
@@ -52,6 +64,14 @@ interface LineRow {
   chequeDate: string;
   chequeBank: string;
   reference: string;
+}
+
+interface CreditRow {
+  key: number;
+  source_type: CreditSourceType;
+  source_id: string;
+  invoice_id: string;
+  amount: string;
 }
 
 interface WhRow {
@@ -103,6 +123,8 @@ export function PaymentOrderModal({
   const [lines, setLines] = useState<LineRow[]>([newLine()]);
   const [wh, setWh] = useState<WhRow[]>([]);
   const [alloc, setAlloc] = useState<Record<string, string>>({});
+  const [credits, setCredits] = useState<CreditRow[]>([]);
+  const pro = usePurchasesProMutations();
 
   useEffect(() => {
     if (!open) return;
@@ -112,10 +134,22 @@ export function PaymentOrderModal({
     setLines([newLine()]);
     setWh([]);
     setAlloc({});
+    setCredits([]);
   }, [open, supplierId]);
 
   const { data: openDocs = [], isLoading: docsLoading } = useInvoiceOpen(open && supplier ? supplier : null);
-  const docs = useMemo(() => openDocs.filter((d) => d.open_ars > 0.004), [openDocs]);
+  const { data: openCredits = [] } = useOpenCredits(open && supplier ? supplier : null);
+  const baseDocs = useMemo(() => openDocs.filter((d) => d.open_ars > 0.004), [openDocs]);
+  const creditDrafts: CreditApplicationDraft[] = credits
+    .map((c) => ({ source_type: c.source_type, source_id: c.source_id, invoice_id: c.invoice_id, amount: parseNum(c.amount) }))
+    .filter((c) => c.amount > 0 && c.invoice_id);
+  // Saldo de cada comprobante después de aplicar los créditos: lo que queda para pagar.
+  const docs = useMemo(
+    () => openAfterCredits(baseDocs, creditDrafts).filter((d) => d.open_ars > 0.004),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseDocs, JSON.stringify(creditDrafts)],
+  );
+  const creditTotal = creditsTotal(creditDrafts);
 
   const bankAccounts = accounts.filter((a) => a.is_active && a.kind === "bank");
   // Las cajas del POS y lo a acreditar las mueve el sistema (ADR-158): no se pagan desde acá.
@@ -161,12 +195,21 @@ export function PaymentOrderModal({
   const totals = paymentOrderTotals(draftLines, [...withholdings, ...agentLines], allocations);
   const chequesInWallet = useMemo(() => new Map(wallet.map((c) => [c.id, c.amount])), [wallet]);
 
+  // Sólo créditos (sin medios ni imputación): se registra la aplicación sola.
+  const creditOnly =
+    creditDrafts.length > 0 && allocations.length === 0 && withholdings.length === 0 &&
+    draftLines.every((l) => !(Number(l.amount) > 0));
+  const creditErrors = validateCreditApplications(creditDrafts, openCredits, baseDocs);
   const errors = [
     ...(!supplier ? ["Elegí el proveedor."] : []),
-    ...validatePaymentOrder(
-      { lines: draftLines, withholdings, allocations },
-      { openDocs: docs, hasTreasury: treasury, hasOpenShift: Boolean(shift), chequesInWallet },
-    ),
+    ...creditErrors,
+    ...(credits.some((c) => !c.invoice_id) ? ["Elegí a qué comprobante aplicás cada crédito."] : []),
+    ...(creditOnly
+      ? []
+      : validatePaymentOrder(
+          { lines: draftLines, withholdings, allocations },
+          { openDocs: docs, hasTreasury: treasury, hasOpenShift: Boolean(shift), chequesInWallet },
+        )),
     ...(agent.active && supplier && agent.error ? [agent.error] : []),
     ...(agent.active && supplier && !agent.error && agent.loading ? ["Esperá a que se calculen las retenciones."] : []),
   ];
@@ -202,8 +245,35 @@ export function PaymentOrderModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fillPending, agent.loading, agent.preview, agent.total]);
 
+  function applyCredit(sourceType: CreditSourceType, sourceId: string) {
+    const c = openCredits.find((x) => x.source_type === sourceType && x.source_id === sourceId);
+    if (!c) return;
+    const usedByCredit = creditDrafts
+      .filter((d) => d.source_type === sourceType && d.source_id === sourceId)
+      .reduce((t, d) => t + d.amount, 0);
+    const rest = Math.round((c.available_ars - usedByCredit) * 100) / 100;
+    if (rest <= 0) return;
+    const add = autoApplyCredit({ ...c, available_ars: rest }, docs);
+    setCredits((p) => [
+      ...p,
+      ...(add.length > 0
+        ? add.map((a) => ({ key: seq++, ...a, amount: fmtInput(a.amount) }))
+        : [{ key: seq++, source_type: sourceType, source_id: sourceId, invoice_id: "", amount: fmtInput(rest) }]),
+    ]);
+  }
+
   async function save() {
     if (errors.length > 0) return;
+    if (creditOnly) {
+      try {
+        await pro.applyCredits.mutateAsync({ supplierId: supplier, items: creditDrafts, notes: notes.trim() || null });
+        toast({ title: "Créditos aplicados", variant: "success" });
+        onOpenChange(false);
+      } catch (e) {
+        toast({ title: "No se pudieron aplicar los créditos", description: purchaseErrorMessage(e), variant: "error" });
+      }
+      return;
+    }
     try {
       const id = await m.createPaymentOrder.mutateAsync({
         supplier_id: supplier,
@@ -212,6 +282,7 @@ export function PaymentOrderModal({
         lines: draftLines,
         withholdings,
         allocations,
+        ...(creditDrafts.length > 0 ? { credit_applications: creditDrafts } : {}),
         ...(agent.active
           ? {
               agent_retentions: true,
@@ -250,6 +321,9 @@ export function PaymentOrderModal({
               Total <b>{formatCurrency(totals.total)}</b>
             </span>
             <span className="text-muted-foreground">Imputado {formatCurrency(totals.allocated)}</span>
+            {creditTotal > 0 && (
+              <span className="text-muted-foreground">Créditos aplicados {formatCurrency(creditTotal)}</span>
+            )}
             {totals.onAccount > 0.004 && (
               <span className="text-muted-foreground">A cuenta {formatCurrency(totals.onAccount)}</span>
             )}
@@ -260,10 +334,10 @@ export function PaymentOrderModal({
             </Button>
             <Button
               onClick={() => void save()}
-              loading={m.createPaymentOrder.isPending}
+              loading={m.createPaymentOrder.isPending || pro.applyCredits.isPending}
               disabled={errors.length > 0}
             >
-              Registrar orden
+              {creditOnly ? "Aplicar créditos" : "Registrar orden"}
             </Button>
           </div>
         </div>
@@ -294,6 +368,74 @@ export function PaymentOrderModal({
             <input type="date" className={cn(inputCls, "h-11")} value={date} onChange={(e) => setDate(e.target.value)} />
           </FormField>
         </section>
+
+        {supplier && openCredits.length > 0 && (
+          <section className="space-y-2">
+            <SectionTitle>Notas de crédito y anticipos a aplicar</SectionTitle>
+            <p className="text-xs text-muted-foreground">
+              Elegí a qué factura va cada crédito y cuánto (puede ser una parte). Lo que no apliques sigue a favor.
+            </p>
+            <div className="divide-y divide-border rounded-md border border-border">
+              {openCredits.map((c) => (
+                <div key={`${c.source_type}:${c.source_id}`} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{c.label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {CREDIT_SOURCE_LABEL[c.source_type]} · {fmtDate(c.doc_date)}
+                    </div>
+                  </div>
+                  <span className="tabular-nums">{formatCurrency(c.available_ars)}</span>
+                  <Button size="sm" variant="secondary" onClick={() => applyCredit(c.source_type, c.source_id)}>
+                    Aplicar
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {credits.map((c) => {
+              const src = openCredits.find((x) => x.source_type === c.source_type && x.source_id === c.source_id);
+              return (
+                <div key={c.key} className="grid grid-cols-[1fr_8rem_auto] gap-2 max-sm:[&>*:first-child]:col-span-3 sm:grid-cols-[10rem_1fr_8rem_auto]">
+                  <div className="self-center text-xs text-muted-foreground max-sm:col-span-3">{src?.label ?? "Crédito"}</div>
+                  <select
+                    aria-label="Aplicar al comprobante"
+                    className={cn(selectCls, "h-10 px-2")}
+                    value={c.invoice_id}
+                    onChange={(e) =>
+                      setCredits((p) => p.map((x) => (x.key === c.key ? { ...x, invoice_id: e.target.value } : x)))
+                    }
+                  >
+                    <option value="" className="bg-popover text-popover-foreground">
+                      Elegí el comprobante
+                    </option>
+                    {baseDocs.map((d) => (
+                      <option key={d.invoice_id} value={d.invoice_id} className="bg-popover text-popover-foreground">
+                        {d.label} · saldo {formatCurrency(d.open_ars)}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    aria-label="Importe a aplicar"
+                    inputMode="decimal"
+                    className={cn(inputCls, "h-10 text-right")}
+                    value={c.amount}
+                    onChange={(e) =>
+                      setCredits((p) => p.map((x) => (x.key === c.key ? { ...x, amount: e.target.value } : x)))
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Quitar crédito"
+                    className="h-10"
+                    onClick={() => setCredits((p) => p.filter((x) => x.key !== c.key))}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              );
+            })}
+          </section>
+        )}
 
         {supplier && (
           <section className="space-y-2">

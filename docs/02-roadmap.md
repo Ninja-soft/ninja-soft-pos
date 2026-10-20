@@ -1660,14 +1660,14 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 M** Costo guardado en cada movimiento de stock y stock a una fecha valorizado.
   - [ ] **P2 M** Series en la recepción de compra y seguimiento por número de serie.
   - [ ] **P2 M** Verificador de precios en modo kiosco (scanner o cámara, bloqueado con PIN, precio de promo, funciona sin conexión).
-- [ ] **H167 · Compras PRO.** · *OPTIONAL `compras` (existe) + ADDON `asistente_ia` para la lectura con IA.* Enriquece H101, H104, H106 y H108.
-  - [ ] **P1 M** Importar "Mis Comprobantes Recibidos" de ARCA (XLSX o CSV) con vista previa, control de duplicados y aviso de CUIT ajeno.
-  - [ ] **P1 M** Leer facturas de compra en PDF o foto con IA y precargarlas (nunca graba sola); bandeja de fotos tomadas con el celular.
-  - [ ] **P1 M** Factura de compra con renglones de artículo que también recibe el stock, y cuenta de gasto por renglón.
-  - [ ] **P1 S** Datos del padrón de ARCA al dar de alta un proveedor (ya se usa en clientes).
-  - [ ] **P1 M** Imputar notas de crédito y anticipos contra facturas concretas en la orden de pago, por partes.
-  - [ ] **P1 S** Saldo inicial y ajustes manuales en la cuenta corriente del proveedor.
-  - [ ] **P2 S** Vencimientos en cuotas, CAE y vencimiento del proveedor en la factura; saldos de proveedores a fecha de corte; vínculo proveedor-cliente con saldo neto.
+- [~] **H167 · Compras PRO.** · *OPTIONAL `compras` (existe) + ADDON `asistente_ia` para la lectura con IA.* Enriquece H101, H104, H106 y H108. *P1 hecho en ADR-178 (migración `20270116100000_h167_compras`, Edge `purchase_invoice_ocr`): faltan los P2 y el criterio contra un mes real de ARCA.*
+  - [x] **P1 M** Importar "Mis Comprobantes Recibidos" de ARCA (XLSX o CSV) con vista previa, control de duplicados y aviso de CUIT ajeno. *Hecho (ADR-178): `purchase_arca_import` con vista previa que se deshace, proveedor por CUIT (padrón opcional), letra validada por fila; `lib/purchases/arcaImport.ts`. Columnas por alícuota inferidas.*
+  - [x] **P1 M** Leer facturas de compra en PDF o foto con IA y precargarlas (nunca graba sola); bandeja de fotos tomadas con el celular. *Hecho (ADR-178): Edge `purchase_invoice_ocr` (Claude o Gemini de la plataforma, addon `asistente_ia`, `ai_usage`), bucket privado `purchase-inbox` y `purchase_invoice_inbox`.*
+  - [x] **P1 M** Factura de compra con renglones de artículo que también recibe el stock, y cuenta de gasto por renglón. *Hecho (ADR-178): `supplier_invoice_save_full` + `purchase_receive`; `acc_sync_supplier_invoice` imputa cada gasto a su cuenta.*
+  - [x] **P1 S** Datos del padrón de ARCA al dar de alta un proveedor (ya se usa en clientes). *Hecho (ADR-178): `PadronVerify` + `padronToSupplier` en `SupplierFormModal`.*
+  - [x] **P1 M** Imputar notas de crédito y anticipos contra facturas concretas en la orden de pago, por partes. *Hecho (ADR-178): `supplier_credit_applications`, `supplier_credit_apply` y `credit_applications` en `supplier_payment_order_create`; guard de H158 y `supplier_invoice_open` con lo aplicado.*
+  - [x] **P1 S** Saldo inicial y ajustes manuales en la cuenta corriente del proveedor. *Hecho (ADR-178): `supplier_account_adjustments` en `supplier_account_entries`; sin asiento automático (deuda en el ADR).*
+  - [~] **P2 S** Vencimientos en cuotas, CAE y vencimiento del proveedor en la factura; saldos de proveedores a fecha de corte; vínculo proveedor-cliente con saldo neto. *Parcial (ADR-178): CAE y vencimiento del CAE en la factura.*
   - [ ] **P2 M** Autorización de órdenes de compra por monto (tope del negocio, por usuario, acumulado, quien carga no autoriza); una OC sin autorizar no se recibe.
   - [ ] **P2 M** Previsión de pagos por proveedor sumada al flujo de fondos; sugerencia de compra con lo comprometido y lo vendido a 7, 30, 60 y 90 días.
   - [ ] **P2 M** Import de lista del proveedor en CSV y PDF (con IA), alta de artículos que no existen, aviso de archivo ya importado y de variaciones absurdas.
@@ -1915,9 +1915,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 25/135 | 7 | 103 | 19% | 21% |
+| **F24** | 31/135 | 9 | 95 | 23% | 26% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 703/1341 | 318 | 320 | 52% | 64% |
+| **Total** | 709/1341 | 320 | 312 | 53% | 65% |
 <!-- roadmap-progress:end -->
 
 ---

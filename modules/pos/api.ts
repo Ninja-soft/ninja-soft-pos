@@ -11,6 +11,7 @@ import { effectivePlans } from "@/lib/payments/planScope";
 import { getnetSlotsOf } from "@/lib/payments/getnetSlots";
 import { parseOfflinePolicy, type OfflinePolicy } from "@/lib/pos/offline/policy";
 import { planRpc, type PlanPayload } from "@/lib/stock/fulfillment";
+import type { TaloRefundRow } from "@/lib/payments/talo";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -187,6 +188,27 @@ export interface QrIntentRow {
   saleStatus: string | null;
 }
 
+// Talo (ADR-175): pago creado (CVU / alias únicos) y estado re-consultado.
+export interface TaloCreated {
+  intent_id: string;
+  init_point: string;
+  cvu: string | null;
+  alias: string | null;
+  expires_at: string | null;
+}
+export interface TaloStatus {
+  status: string;
+  mp_payment_id: string | null;
+  state?: string;
+  /** Lo recibido según Talo (pesos). */
+  paid?: number | null;
+  /** UNDERPAID: lo que falta. */
+  missing?: number;
+  /** OVERPAID: lo transferido de más. */
+  overpaid?: number;
+  cvu?: string | null;
+  alias?: string | null;
+}
 // payment_plans.valid_from / valid_until (H27) aún no están en los tipos
 // generados (no se regeneran en este PR): se intersectan acá. NULL = sin límite.
 export type PaymentPlan = Tables<"payment_plans"> & {
@@ -1424,6 +1446,95 @@ export const posApi = {
       .order("created_at", { ascending: false });
     if (error) return [];
     return (data ?? []) as unknown as { intent_id: string; status: string; created_at: string }[];
+  },
+
+  // ── Talo (ADR-175): transferencia con CVU / alias único por venta ──────────
+  // create devuelve el CVU, el alias y el payment_url de Talo (init_point: el
+  // POS lo muestra como QR y link). La confirmación llega por el webhook
+  // (talo_webhook); status re-consulta el pago en Talo (respaldo) y devuelve
+  // lo recibido: UNDERPAID sigue pending con lo que falta (missing); OVERPAID
+  // se aprueba con la diferencia (overpaid).
+  createTaloPayment: async (
+    amount: number,
+    title: string,
+  ): Promise<TaloCreated> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("talo", {
+      body: { action: "create", amount, title, ...posStoreBody() },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as TaloCreated;
+  },
+
+  taloIntentStatus: async (id: string): Promise<TaloStatus> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("talo", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as TaloStatus;
+  },
+
+  // Baja local best-effort (si el cliente ya transfirió, gana el pago).
+  cancelTaloIntent: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("talo", {
+      body: { action: "cancel", intent_id: id },
+    });
+  },
+
+  // Devolución (dueño o encargado): "full" = todo lo cobrado (sin venta
+  // vigente); "excess" = la diferencia de una transferencia de más.
+  refundTaloIntent: async (
+    id: string,
+    kind: "full" | "excess",
+  ): Promise<{ refund_id?: string; status?: string; amount?: number; error?: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("talo", {
+      body: { action: "refund", intent_id: id, kind },
+    });
+    if (error) {
+      // non-2xx: el código real viene en el cuerpo (error.context).
+      const ctx = (error as { context?: Response }).context;
+      const body = ctx ? ((await ctx.json().catch(() => null)) as { error?: string } | null) : null;
+      return { error: body?.error ?? "refund_failed" };
+    }
+    return data as { refund_id?: string; status?: string; amount?: number; error?: string };
+  },
+
+  // Lo recibido por Talo de un conjunto de cobros (paid_amount, ADR-175).
+  listTaloPaid: async (intentIds: string[]): Promise<Map<string, number>> => {
+    const out = new Map<string, number>();
+    if (intentIds.length === 0) return out;
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("mp_payment_intents" as never)
+      .select("id, paid_amount")
+      .in("id", intentIds);
+    if (error) return out;
+    for (const r of (data ?? []) as unknown as { id: string; paid_amount: number | string | null }[]) {
+      if (r.paid_amount !== null) out.set(r.id, Number(r.paid_amount));
+    }
+    return out;
+  },
+
+  // Devoluciones de Talo de un conjunto de cobros (RLS por negocio).
+  listTaloRefunds: async (intentIds: string[]): Promise<TaloRefundRow[]> => {
+    if (intentIds.length === 0) return [];
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("talo_refunds" as never)
+      .select("intent_id, kind, status, amount, created_at")
+      .in("intent_id", intentIds)
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return (data ?? []) as unknown as TaloRefundRow[];
   },
 
   // ── Nave (H21c): QR interoperable + link (Edge nave) ───────────────────────

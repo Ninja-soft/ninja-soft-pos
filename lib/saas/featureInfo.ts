@@ -320,6 +320,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de Ualá Bis. Para el link de pago integrado, las credenciales de Cobros online (usuario, Client ID y Client Secret de Ualá Bis, Cobros online, API); sin ellas se cobra en la app y se registra el número de operación.",
   },
+  talo: {
+    desc: "Cobros por transferencia con Talo: cada venta tiene su propio CVU y alias, el cliente transfiere desde cualquier banco o billetera y la venta se cierra sola cuando llega la plata. Si transfiere de más, la venta se cierra igual y la diferencia se devuelve desde la conciliación; si transfiere de menos, el POS muestra cuánto falta.",
+    impact: "Desactivado, Talo no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de Talo y sus credenciales (User ID, Client ID y Client Secret del Dashboard de Talo, Usuario, Credenciales).",
+  },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
     impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",

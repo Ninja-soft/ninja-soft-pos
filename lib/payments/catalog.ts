@@ -119,6 +119,14 @@ export const BRANDS: BrandDef[] = [
     channels: ["ualabis"],
   },
   {
+    key: "talo",
+    name: "Talo",
+    tagline: "Transferencia con CVU y alias únicos por venta",
+    credentialsUrl: "https://app.talo.com.ar",
+    credentialsLabel: "Dashboard de Talo",
+    channels: ["talo"],
+  },
+  {
     key: "fiserv",
     name: "Fiserv",
     tagline: "Terminales Clover integradas y Posnet",
@@ -164,6 +172,7 @@ export const PROVIDER_CHANNEL_FALLBACK: Record<string, { brand: string; channel:
   gocuotas: { brand: "gocuotas", channel: "qr_link" },
   directo: { brand: "directo", channel: "qr_link" },
   ualabis: { brand: "ualabis", channel: "qr_link" },
+  talo: { brand: "talo", channel: "qr_link" },
 };
 
 // Canales con flujo de cobro real implementado. El resto se muestra como
@@ -184,6 +193,8 @@ export const IMPLEMENTED = new Set([
   "directo",
   // Ualá Bis (ADR-143): link + QR por API y registro manual.
   "ualabis",
+  // Talo (ADR-175): transferencia con CVU / alias único por API.
+  "talo",
   // Fiserv (ADR-047): Posnet/Clover sin integrar (habilita la Tarjeta en
   // posnet) y Clover Point por Cloud Pay Display.
   "fiserv",
@@ -193,7 +204,7 @@ export const IMPLEMENTED = new Set([
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
 // getnet (ADR-065): prueba = Web Checkout sandbox u homologación.
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet", "ualabis"]);
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet", "ualabis", "talo"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point

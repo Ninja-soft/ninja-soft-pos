@@ -79,6 +79,7 @@ export const PUBLIC_FUNCTIONS = [
   "payway_checkout",
   "payway_webhook",
   "send_password_recovery",
+  "talo_webhook",
   "ualabis_webhook",
 ];
 

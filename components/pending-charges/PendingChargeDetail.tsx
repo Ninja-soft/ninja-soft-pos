@@ -60,6 +60,7 @@ export const PROVIDER_LABEL: Record<string, string> = {
   gocuotas: "GO Cuotas",
   directo: "Directo",
   ualabis: "Ualá Bis",
+  talo: "Talo",
 };
 
 export const TONE_BADGE: Record<string, BadgeTone> = {

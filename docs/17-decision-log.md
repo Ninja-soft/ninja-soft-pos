@@ -6361,3 +6361,33 @@ La auditoría de InfoManager IM5 mostró controles de caja que un comercio usa t
 - Sacar un renglón hace un pedido al servidor (registro). Con el PIN apagado no cambia nada para el cajero.
 - Orden de deploy: migración y después el front; sin la migración el front sigue (el conteo y el registro se omiten).
 - Verificado con un dry-run en producción con rollback y `tests/unit/h159CajaPro.test.ts`.
+
+## ADR-175: Talo: cobro por transferencia con CVU y alias únicos por venta, confirmado por re-consulta (F8)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270113100000_talo`, Edges `talo` y `talo_webhook`) · **Base:** ADR-143 (Ualá Bis, mismo patrón), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de hooks), ADR-070 (salud de webhooks)
+
+### Contexto
+
+La transferencia es el medio más usado después del efectivo, pero el cajero tiene que mirar el comprobante del cliente o el home banking para confirmarla. Talo da un CVU y un alias únicos por pago y avisa cuando llega la plata, con una API pública, sandbox propio y documentación en [docs.talo.com.ar](https://docs.talo.com.ar). Detalle en `docs/48-talo.md`.
+
+### Decisión
+
+1. **Credencial del comercio, sin partners.** User ID + Client ID + Client Secret del Dashboard de Talo (Usuario › Credenciales), en `payment_secrets` provider `talo`. Token `TL-` por `POST /users/{user_id}/tokens`. Se prueban antes de guardar. El switch Sandbox elige `sandbox-api.talo.com.ar` o `api.talo.com.ar`.
+2. **Mismo patrón que Ualá Bis.** Intent en `mp_payment_intents` (`provider_key='talo'`), pago con `external_id` = intent y `webhook_url` por intent en el dominio de hooks. El cobro entra como `method='qr'` con el intent como referencia: el trigger de `payments` lo gatea con `payment_method_plan_key('talo')`.
+3. **Nunca se confía en el webhook** (no tiene firma): sólo dice qué pago re-consultar. Se aprueba si el pago re-consultado es el del intent, con su `external_id` y su precio, y está `SUCCESS` u `OVERPAID`. `UNDERPAID` sigue pendiente mostrando lo que falta; `EXPIRED` cancela. `OVERPAID` cierra la venta por el total y avisa la diferencia.
+4. **`mp_payment_intents.paid_amount`** (lo recibido según el proveedor) para mostrar el faltante y la diferencia sin volver a consultar a Talo desde el front.
+5. **Cobros en espera** con tope de 3 días (el CVU vive ~5) y el cron `pending_charges_sync` re-consultando los de Talo.
+6. **Devoluciones** en `talo_refunds`: total (sin venta vigente) o la diferencia de un OVERPAID; el monto sale del pago re-consultado. `blame` (obligatorio en la API) es un objeto `{ team_id, mail }`, no un enum: va `ninjasoft-pos` y el email de quien la pide.
+7. **Feature `talo`** OPTIONAL en `pagos`, Pro y superiores, como el resto de las billeteras y links integrados.
+
+### Alternativas descartadas
+
+- **Programa de partners como camino principal:** las credenciales de producción se piden a soporte y el token `PAR-` no documenta vencimiento ni renovación. La credencial `PAR-` ya se acepta en `payment_secrets`, pero el flujo de alta queda pendiente.
+- **Aprobar UNDERPAID como parcial:** la venta quedaría cobrada a medias sin que el cajero lo decida. Se muestra lo que falta y el cliente completa al mismo CVU.
+- **Registro manual de Talo:** sin la API, la transferencia común ya existe como medio `transfer`.
+
+### Consecuencias
+
+- Orden de deploy: migración, Edges `talo`, `talo_webhook`, `set_payment_secret` y `pending_charges_sync`, y después el front.
+- Pendiente: primer cobro real en sandbox (confirmar el envelope del create, la vida del token y que una segunda transferencia sume), flujo de partners, firma del webhook cuando exista y conciliación de liquidaciones de Talo.
+- Tests: `tests/unit/talo.test.ts`, `tests/unit/taloUi.test.ts`, `tests/integration/rls-talo.test.ts`.

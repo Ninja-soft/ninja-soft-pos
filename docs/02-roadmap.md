@@ -486,6 +486,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [~] **H21c** — **Nave (Banco Galicia)** (QR interoperable + link y Nave Point). — *Integrado en código (2026-10-11, ADR-030): Edge `nave` (payment_request ecommerce → `qr_data` + `checkout_url`, status de respaldo, cancel), Edge `nave_point` (smart_pos a la terminal del `pos_id`, devices/status/cancel) y `nave_webhook` (valida host Nave anti-SSRF, re-consulta el pago con el token del tenant, acredita sólo APPROVED + monto exacto, idempotente). Auth client_credentials (apinaranja) con 401 → re-auth. Conexión única en Medios de pago (Client ID/Secret, punto de venta, terminales Point, Producción/Prueba, URL de notificaciones para Nave); Nave Point la reutiliza. `QrCheckoutModal`/`PointCheckoutModal` soportan `nave`/`nave_point`; tenders QR, link y Point cableados en el POS (`lib/pos/tenders.ts`). Gating server-side `nave`/`nave_point`. Falta: deploy de las Edge y validar con credenciales sandbox del comercio (pos_id de prueba + URL de notificaciones registrada por Nave).*
   - [~] **H21d** — **GO Cuotas** (cuotas sin interés con débito, QR + link). — *Integrado en código (2026-10-11, ADR-033): Edge `gocuotas` (create → `POST /api_redirect/v1/checkouts` con `order_reference_id` = intent y `webhook_url` por intent, `url_init` como QR + link; status re-consulta la orden; cancel = baja local) y `gocuotas_webhook` (verify_jwt false; nunca confía en el cuerpo: re-consulta con la API Key del tenant, acredita sólo approved + referencia propia + monto exacto en centavos, idempotente; GET = pantalla neutra de retorno). Auth con la API Key de la sucursal como Bearer; sandbox/producción por el switch del medio (`mp_env` en el intent). Mínimo $1.500 con copy claro. `QrCheckoutModal` soporta `gocuotas`; form standalone `GoCuotasConnectForm`. Feature `gocuotas` desde Pro, gating server-side. Tender QR y link cableado en el POS (`lib/pos/tenders.ts`) y conexión en Medios de pago (`ConnectProviderModal`). Falta: aplicar la migración `20261011180000_gocuotas_directo`, deploy de las Edge y validar con API Key de prueba de una sucursal real.*
   - [~] **H21e** — **Directo** (Crédito Directo S.A.) como **tender manual**. — *Implementado (2026-10-11, ADR-034): sin API pública; el cajero cobra en el portal de comercios de Directo (QR o link) y en el POS elige "Directo (crédito)" y carga el número de operación (obligatorio). `payments.method = 'directo'` con `reference` = Nº de operación (constraint), gating coarse por `payment_method_plan_key('directo')`. Feature `directo` desde Pro. Bloque informativo `DirectoInfo` para Medios de pago. `DirectoInfo` cableado en Medios de pago (`PaymentMethodsCard`). Directo sí tiene API: canal QR y link con respaldo manual (ADR-041, Edges `directo` y `directo_webhook`). Falta: aplicar las migraciones y validar en QA.*
+  - [~] **H21f · Talo** (transferencia con CVU y alias únicos por venta). *Integrado en código (2026-10-20, ADR-175, `docs/48-talo.md`): Edge `talo` (create → `POST /payments/` con `external_id` = intent y `webhook_url` por intent; status re-consulta `GET /payments/{id}`; cancel = baja local; probe; refund total o de la diferencia) y `talo_webhook` (verify_jwt false; sin firma: re-consulta y acredita SUCCESS u OVERPAID con el precio del intent; UNDERPAID sigue pendiente con lo que falta). Credencial del comercio (User ID + Client ID + Client Secret, token `TL-`), probada antes de guardar. Cobros en espera (3 días) y cron. Tabla `talo_refunds`, `mp_payment_intents.paid_amount`. Feature `talo` (Pro+). **Pasos:** aplicar `20270113100000_talo` y desplegar las Edges. **Pendiente:** primer cobro en sandbox, flujo de partners y conciliación de liquidaciones.*
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 
 - [~] **H21b — Orquestador de pagos estilo VTOL.** *Sólo la conciliación tiene base (ver abajo); router, estado central y monitoreo pendientes.*
@@ -1893,7 +1894,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F5** | 38/70 | 12 | 20 | 54% | 63% |
 | **F6** | 58/63 | 3 | 2 | 92% | 94% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
-| **F8** | 18/57 | 22 | 17 | 32% | 51% |
+| **F8** | 18/58 | 23 | 17 | 31% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 32/48 | 13 | 3 | 67% | 80% |
 | **F11** | 79/93 | 12 | 2 | 85% | 91% |
@@ -1911,7 +1912,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **F24** | 15/131 | 1 | 115 | 11% | 12% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 693/1335 | 310 | 332 | 52% | 64% |
+| **Total** | 693/1336 | 311 | 332 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

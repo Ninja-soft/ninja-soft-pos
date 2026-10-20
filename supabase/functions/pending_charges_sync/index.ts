@@ -5,7 +5,9 @@
 // Cron (pg_cron + pg_net, cada 2 min): header X-Cron-Secret ==
 // platform_secrets('internal_cron').token. Toma los cobros 'waiting' sin
 // vencer de los proveedores sin webhook (Pagos360) o con un webhook de pocos
-// reintentos (Ualá Bis, ADR-143: 4 intentos sin firma) y re-consulta cada
+// reintentos (Ualá Bis, ADR-143: 4 intentos sin firma; Talo, ADR-175: sin
+// firma ni política de reintentos documentada, y una transferencia puede
+// llegar horas después) y re-consulta cada
 // intent. Si el proveedor acreditó, el intent pasa a 'approved' y el trigger
 // de la base (pending_charges_on_intent_status) registra la venta en el acto.
 // Nunca confía en nada que no venga de la API del proveedor con la credencial
@@ -27,6 +29,12 @@ import {
   syncIntent as syncUala,
   type IntentRow as UalaIntentRow,
 } from "../_shared/ualabis_server.ts";
+import {
+  INTENT_COLS as TALO_INTENT_COLS,
+  loadCredsScoped as loadTalo,
+  syncIntent as syncTalo,
+  type IntentRow as TaloIntentRow,
+} from "../_shared/talo_server.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -63,7 +71,7 @@ Deno.serve(async (req: Request) => {
     .eq("status", "waiting")
     .is("deleted_at", null)
     .gt("expires_at", new Date().toISOString())
-    .in("provider_key", ["pagos360", "ualabis"])
+    .in("provider_key", ["pagos360", "ualabis", "talo"])
     .order("created_at", { ascending: true })
     .limit(MAX_PER_RUN);
   if (error) return json({ error: "query_failed", detail: error.message }, 500);
@@ -95,6 +103,22 @@ Deno.serve(async (req: Request) => {
     return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
   };
 
+  // Talo: re-consulta el pago con la credencial exacta del cobro.
+  const syncTaloCharge = async (tenantId: string, intentId: string) => {
+    const { data: row } = await admin
+      .from("mp_payment_intents")
+      .select(TALO_INTENT_COLS)
+      .eq("id", intentId)
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "talo")
+      .maybeSingle();
+    if (!row) return null;
+    const conn = await loadTalo(admin, tenantId, { scopeStoreId: await intentSecretScope(admin, intentId) });
+    if (!conn) return null;
+    const r = await syncTalo(admin, row as TaloIntentRow, conn.creds, "cron", null);
+    return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
+  };
+
   // Un negocio a la vez, sus intents en paralelo de a 5. ADR-057: cada intent
   // se verifica con la API key (negocio o sucursal) con la que se creó; las
   // conexiones se cachean por alcance.
@@ -111,6 +135,7 @@ Deno.serve(async (req: Request) => {
       const results = await Promise.all(
         chunk.map(async (c) => {
           if (c.provider_key === "ualabis") return await syncUalaCharge(tenantId, c.intent_id).catch(() => null);
+          if (c.provider_key === "talo") return await syncTaloCharge(tenantId, c.intent_id).catch(() => null);
           const conn = await connFor(c.intent_id);
           if (!conn) return null;
           return await syncPagos360Intent(admin, conn, tenantId, c.intent_id).catch(() => null);

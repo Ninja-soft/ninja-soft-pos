@@ -27,6 +27,9 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   // registro manual (payments.method = 'ualabis'); los dos los gatea el
   // trigger vía payment_method_plan_key('ualabis').
   ualabis: "ualabis",
+  // Talo (ADR-175): transferencia con CVU único por API (method 'qr' + intent
+  // talo); la gatea el trigger vía payment_method_plan_key('talo').
+  talo: "talo",
 };
 
 export function providerFeature(provider: string): string | null {

@@ -33,6 +33,7 @@ import {
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
 import { UalaBisInfo } from "@/components/dashboard-team/payments/UalaBisInfo";
+import { TaloInfo } from "@/components/dashboard-team/payments/TaloInfo";
 import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
 import { MpRefundSetting } from "@/components/dashboard-team/payments/MpRefundSetting";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
@@ -97,6 +98,24 @@ async function probeUalaBis(v: ConnectProbe, storeId: string | null): Promise<Ge
       ...(v.secrets?.username ? { username: v.secrets.username } : {}),
       ...(v.secrets?.client_id ? { client_id: v.secrets.client_id } : {}),
       ...(v.secrets?.client_secret_id ? { client_secret_id: v.secrets.client_secret_id } : {}),
+      ...(storeId ? { store_id: storeId } : {}),
+    },
+  });
+  if (error) throw error;
+  return data as GetnetProbeResult;
+}
+
+// "Probar conexión" de Talo (ADR-175): la Edge pide un token TL- con las
+// credenciales tipeadas (o, sin tipear, las guardadas del alcance). No guarda nada.
+async function probeTalo(v: ConnectProbe, storeId: string | null): Promise<GetnetProbeResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("talo", {
+    body: {
+      action: "probe",
+      environment: v.env,
+      ...(v.secrets?.user_id ? { user_id: v.secrets.user_id } : {}),
+      ...(v.secrets?.client_id ? { client_id: v.secrets.client_id } : {}),
+      ...(v.secrets?.client_secret ? { client_secret: v.secrets.client_secret } : {}),
       ...(storeId ? { store_id: storeId } : {}),
     },
   });
@@ -402,6 +421,8 @@ export function PaymentMethodsCard() {
               <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />
             ) : key === "ualabis" ? (
               <UalaBisInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("ualabis")} />
+            ) : key === "talo" ? (
+              <TaloInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("talo")} />
             ) : null,
         }}
       />
@@ -437,7 +458,9 @@ export function PaymentMethodsCard() {
               ? (v) => probeGetnet(v, connectScope)
               : connKey === "ualabis"
                 ? (v) => probeUalaBis(v, connectScope)
-                : undefined
+                : connKey === "talo"
+                  ? (v) => probeTalo(v, connectScope)
+                  : undefined
           }
           getnetSlots={getnetSlots}
           getnetOwnCheckout={getnetOwnCheckout}

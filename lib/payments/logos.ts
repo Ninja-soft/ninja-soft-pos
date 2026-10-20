@@ -34,6 +34,10 @@ const FILE_PREFIX: Record<string, string> = {
   // Ualá Bis (ADR-143): isotipo y logo oficiales (developers.ualabis.com.ar y
   // ualabis.com.ar); la variante oscura pasa el azul de "ualá" a blanco.
   ualabis: "ualabis",
+  // Talo (ADR-175): isotipo y logo oficiales del encabezado de talo.com.ar
+  // (SVG); la variante oscura pasa el texto "talo" a blanco (el isotipo verde
+  // se lee igual en los dos fondos).
+  talo: "talo",
 };
 
 // Marcas sin logo horizontal propio (son genéricos).
@@ -41,7 +45,7 @@ const NO_WORDMARK = new Set(["cash", "transfer"]);
 
 // Logos con versión para fondo oscuro (los demás se leen bien en ambos).
 const ICON_ON_DARK = new Set(["transfer", "payway", "clover", "ualabis"]);
-const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis"]);
+const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo"]);
 
 // Canales con logo de producto propio (no el de su marca): la terminal
 // integrada de Fiserv es Clover.

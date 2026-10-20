@@ -190,6 +190,7 @@ export function chargeActions(
 // Minutos por defecto y tope de cada link. Espejo de pending_charge_max_ttl()
 // en SQL (tests/unit/pendingCharges.test.ts verifica que coincidan). Getnet
 // crea la orden con expireLimitMinutes 30; MODO y Nave vencen sus QR rápido.
+// Talo: el CVU vence a los ~5 días; se topea en 3 (ADR-175).
 
 export const DEFAULT_TTL_MINUTES = 24 * 60;
 export const MIN_TTL_MINUTES = 5;
@@ -205,6 +206,7 @@ export const PROVIDER_MAX_TTL_MINUTES: Record<string, number> = {
   gocuotas: 24 * 60,
   directo: 24 * 60,
   ualabis: 24 * 60,
+  talo: 3 * 24 * 60,
 };
 
 export function maxTtlMinutes(provider: string): number {

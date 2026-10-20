@@ -91,6 +91,8 @@ const PAYMENT_LOGOS = [
   { src: "/images/payments/pagos360-wordmark.webp", alt: "Pagos360", w: 512, hpx: 142, h: "h-[1.1rem]", f: "brightness-0 invert" },
   { src: "/images/payments/mobbex-wordmark.webp", alt: "Mobbex", w: 512, hpx: 114, h: "h-4", f: "brightness-0 invert" },
   { src: "/images/payments/directo-wordmark-on-dark.webp", alt: "Directo", w: 512, hpx: 102, h: "h-4", f: "brightness-0 invert" },
+  { src: "/images/payments/talo-wordmark-on-dark.webp", alt: "Talo", w: 512, hpx: 173, h: "h-5", f: "brightness-0 invert" },
+  { src: "/images/payments/viumi-wordmark-on-dark.webp", alt: "Viumi", w: 512, hpx: 186, h: "h-5", f: "brightness-0 invert" },
 ];
 
 const num = (n: number) => Math.round(n).toLocaleString("es-AR");

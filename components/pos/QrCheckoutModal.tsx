@@ -24,7 +24,9 @@ import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
-import { posApi, type PaymentPlan } from "@/modules/pos/api";
+import { posApi, type PaymentPlan, type TaloStatus } from "@/modules/pos/api";
+import { TaloTransferPanel } from "@/components/pos/TaloTransferPanel";
+import { taloOverpaidNote } from "@/lib/payments/talo";
 import { usePosProviderPlans } from "@/modules/pos/hooks";
 import { BASE_LABEL, BRAND_LABEL } from "@/modules/pos/planConstants";
 import { CardBrandLogo, ThemedLogo } from "@/components/ui/ThemedLogo";
@@ -196,6 +198,12 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
       return "Ualá Bis rechazó las credenciales. Probalas en Configuración → Medios de pago → Ualá Bis (y revisá que sean del mismo ambiente que el switch Sandbox).";
     case "ualabis_error":
       return "Ualá Bis devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
+    case "talo_auth_failed":
+      return "Talo rechazó las credenciales. Probalas en Configuración → Medios de pago → Talo (y revisá que sean del mismo ambiente que el switch Sandbox).";
+    case "talo_max_amount":
+      return "El monto supera el máximo por cobro de Talo. Dividí el cobro o usá otro medio.";
+    case "talo_error":
+      return "Talo devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "nave_auth_failed":
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
@@ -242,7 +250,8 @@ export function QrCheckoutModal({
     | "nave"
     | "gocuotas"
     | "directo"
-    | "ualabis";
+    | "ualabis"
+    | "talo";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -300,6 +309,8 @@ export function QrCheckoutModal({
   const [initPoint, setInitPoint] = useState("");
   // Nave devuelve el QR EMV (qr_data) aparte del link: se codifica TAL CUAL.
   const [qrData, setQrData] = useState("");
+  // Talo (ADR-175): CVU y alias únicos del cobro.
+  const [transfer, setTransfer] = useState<{ cvu: string | null; alias: string | null } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [mpChannel, setMpChannel] = useState<MpChannel>("order");
   const [switching, setSwitching] = useState(false);
@@ -357,10 +368,17 @@ export function QrCheckoutModal({
     [activePlans, brand],
   );
 
-  function onCreated(r: { intent_id: string; init_point: string; qr_data?: string }) {
+  function onCreated(r: {
+    intent_id: string;
+    init_point: string;
+    qr_data?: string;
+    cvu?: string | null;
+    alias?: string | null;
+  }) {
     setIntentId(r.intent_id);
     setInitPoint(r.init_point);
     setQrData(r.qr_data ?? "");
+    setTransfer(r.cvu || r.alias ? { cvu: r.cvu ?? null, alias: r.alias ?? null } : null);
     setPhase("waiting");
   }
 
@@ -442,7 +460,9 @@ export function QrCheckoutModal({
                       ? posApi.createDirectoLink
                       : provider === "ualabis"
                         ? posApi.createUalaBisLink
-                        : posApi.createMpQr;
+                        : provider === "talo"
+                          ? posApi.createTaloPayment
+                          : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => {
@@ -497,8 +517,8 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
-  //  - GO Cuotas, Directo y Ualá Bis: baja local del intent (no anulan órdenes
-  //    por API).
+  //  - GO Cuotas, Directo, Ualá Bis y Talo: baja local del intent (no anulan
+  //    órdenes por API; en Talo el CVU vence solo).
   function close() {
     if (intentId && phase === "waiting" && !parkedRef.current && !parkingRef.current) {
       if (provider === "mercadopago" && mpChannel === "order") {
@@ -511,6 +531,8 @@ export function QrCheckoutModal({
         posApi.cancelDirectoIntent(intentId).catch(() => null);
       } else if (provider === "ualabis") {
         posApi.cancelUalaBisIntent(intentId).catch(() => null);
+      } else if (provider === "talo") {
+        posApi.cancelTaloIntent(intentId).catch(() => null);
       }
     }
     onOpenChange(false);
@@ -537,6 +559,7 @@ export function QrCheckoutModal({
     setIntentId(null);
     setInitPoint("");
     setQrData("");
+    setTransfer(null);
     setErrorMsg("");
     setMpChannel(channel === "link" ? "link" : "order");
     setSwitching(false);
@@ -604,7 +627,9 @@ export function QrCheckoutModal({
                     ? posApi.directoIntentStatus(intentId!)
                     : provider === "ualabis"
                       ? posApi.ualabisIntentStatus(intentId!)
-                      : posApi.mpIntentStatus(intentId!),
+                      : provider === "talo"
+                        ? posApi.taloIntentStatus(intentId!)
+                        : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching && !parking,
@@ -646,6 +671,10 @@ export function QrCheckoutModal({
   useEffect(() => {
     if (!status || firedRef.current || switching || parkingRef.current || parkedRef.current) return;
     if (status.status === "approved") {
+      // Talo (ADR-175): transferencia de más → la venta va por el total y se
+      // avisa la diferencia para devolverla.
+      const over = provider === "talo" ? taloOverpaidNote((status as TaloStatus).overpaid) : null;
+      if (over) toast({ title: over.title, description: over.text, variant: "info" });
       fireApproved((status as { amount?: number }).amount);
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");
@@ -858,7 +887,11 @@ export function QrCheckoutModal({
     <Modal
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(true) : close())}
-      title={`Cobrar con ${channel === "link" ? "link" : "QR"} · ${providerName}`}
+      title={
+        provider === "talo"
+          ? `Cobrar con transferencia · ${providerName}`
+          : `Cobrar con ${channel === "link" ? "link" : "QR"} · ${providerName}`
+      }
       className="md:max-w-3xl"
     >
       <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-6">
@@ -888,7 +921,14 @@ export function QrCheckoutModal({
 
           {phase === "waiting" && (
             <>
-              <LocalQr value={qrValue} label={`QR de pago ${providerName}`} className={qrSize} />
+              {qrValue ? (
+                <LocalQr value={qrValue} label={`QR de pago ${providerName}`} className={qrSize} />
+              ) : (
+                // Talo sin link de pago: alcanzan el CVU y el alias de la derecha.
+                <div className={stateBox}>
+                  <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
+                </div>
+              )}
               <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
                 <Spinner size={14} />
                 {switching ? "Pasando a link…" : parking ? "Dejando en espera…" : "Esperando pago"}
@@ -1026,7 +1066,21 @@ export function QrCheckoutModal({
                   No sirve con billeteras virtuales (Mercado Pago, MODO, etc.). Abre la página de Ualá Bis para pagar con tarjeta.
                 </Callout>
               )}
-              <p className={cn("text-center text-sm text-muted-foreground md:text-left", shareOpen && "md:hidden")}>
+              {provider === "talo" && !shareOpen && (
+                <TaloTransferPanel
+                  cvu={transfer?.cvu ?? (status as TaloStatus | undefined)?.cvu ?? null}
+                  alias={transfer?.alias ?? (status as TaloStatus | undefined)?.alias ?? null}
+                  amount={amount}
+                  status={status as TaloStatus | undefined}
+                />
+              )}
+              <p
+                className={cn(
+                  "text-center text-sm text-muted-foreground md:text-left",
+                  shareOpen && "md:hidden",
+                  provider === "talo" && "hidden",
+                )}
+              >
                 {isMpOrder
                   ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
                   : provider === "ualabis"

@@ -1626,6 +1626,10 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 S** Ranking de clientes con concentración (top 5, 6-10, cuántos hacen el 80 %), "menos vendidos" con N configurable, KPIs de cobranza del negocio (DSO, antigüedad promedio).
   - [ ] **P2 S** Tramos de antigüedad configurables en un solo lugar; avisos de confiabilidad (cobertura de costo, stock negativo) en todo reporte con margen.
   - [ ] **P2 S** Exportar reportes a PDF e impresión, indicando "vista actual" o "resultado completo".
+  - [ ] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer.
+- [~] **H162 · Motor de alertas programadas.** · *OPTIONAL `alertas_programadas` (nueva, Pro).* Resuelve las alertas pendientes de H63, H67 y H117. *Parcial en ADR-176 (`feat/h162-alertas`, migración `20270114100000_h162_alertas`, Edge `alerts_email`): faltan WhatsApp, caída de ventas, los avisos al grabar la venta y las alertas con IA.*
+  - [x] **P1 L** Reglas por negocio sobre un catálogo (stock bajo mínimo o negativo, venta bajo costo, caída de ventas, deuda vencida, cheques y facturas de compra por vencer, caja sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos anómalos, presupuestos por vencer, clientes que dejaron de comprar, aumento de costo, certificado ARCA por vencer, anulaciones) con frecuencia, días, horario, "sólo casos nuevos", Probar ahora e historial. *Hecho (ADR-176): 16 tipos en `alert_catalog()` con `alert_evaluate`, `alert_rules`, `alert_seen`, runner `alert_run_due` cada 15 minutos, Configuración › Alertas y `/alertas`. "Caída de ventas" queda para después.*
+  - [~] **P1 M** Destinos: campana por rol o usuario, resumen diario por mail y WhatsApp. *Hecho campana por rol o persona y resumen por mail con el email del negocio (Edge `alerts_email`, ADR-176). Falta WhatsApp: no hay infraestructura (`channels` es jsonb para sumarlo).*
   - [x] *Criterio:* subir el costo de un producto hoy no cambia el margen de las ventas de ayer. *Cumplido: el margen sale de `sale_items.unit_cost`.*
 - [ ] **H162 · Motor de alertas programadas.** · *OPTIONAL `alertas_programadas` (nueva, Pro).* Resuelve las alertas pendientes de H63, H67 y H117.
   - [ ] **P1 L** Reglas por negocio sobre un catálogo (stock bajo mínimo o negativo, venta bajo costo, caída de ventas, deuda vencida, cheques y facturas de compra por vencer, caja sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos anómalos, presupuestos por vencer, clientes que dejaron de comprar, aumento de costo, certificado ARCA por vencer, anulaciones) con frecuencia, días, horario, "sólo casos nuevos", Probar ahora e historial.
@@ -1911,9 +1915,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 21/131 | 2 | 108 | 16% | 17% |
+| **F24** | 22/135 | 4 | 109 | 16% | 18% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 699/1337 | 313 | 325 | 52% | 64% |
+| **Total** | 700/1341 | 315 | 326 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

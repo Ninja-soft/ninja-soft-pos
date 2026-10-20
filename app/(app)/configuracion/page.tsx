@@ -148,6 +148,11 @@ const GroupAccountTermsCard = dynamic(
   () => import("@/components/account/GroupAccountTermsCard").then((m) => m.GroupAccountTermsCard),
   { loading },
 );
+// Alertas programadas (F24 · H162, ADR-176).
+const AlertsSettings = dynamic(
+  () => import("@/components/alerts/AlertsSettings").then((m) => m.AlertsSettings),
+  { loading },
+);
 const SecuritySettings = dynamic(
   () => import("@/components/security/SecuritySettings").then((m) => m.SecuritySettings),
   { loading },
@@ -308,6 +313,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       );
     case "seguridad":
       return <SecuritySettings />;
+    case "alertas":
+      return <AlertsSettings />;
     // Ticket: ajustes básicos (BASE, cualquier plan; antes en Marca) y los
     // modelos (escritura protegida por RLS; personalización tras tickets_pro).
     case "tickets":

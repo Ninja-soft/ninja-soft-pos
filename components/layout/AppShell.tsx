@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  BellRing,
   Handshake,
   Bike,
   Building2,
@@ -429,6 +430,8 @@ const NAV: { groups: Group[] } = {
         // Cockpit de comercio unificado y riesgo operativo (F16 · H76, H82, ADR-091).
         { href: "/cockpit", label: "Cockpit", icon: Radar, feature: "cockpit_comercio", managersOnly: true },
         { href: "/riesgo", label: "Riesgo operativo", icon: ShieldAlert, feature: "prevencion_fraude", managersOnly: true },
+        // Alertas programadas (F24 · H162, ADR-176): historial de lo que avisó cada regla.
+        { href: "/alertas", label: "Alertas", icon: BellRing, feature: "alertas_programadas", managersOnly: true },
         // Importar y exportar en Excel (TX-4, ADR-078). Dueño o encargado; el
         // plan se chequea por importación (importacion_excel / export_xlsx).
         // Control comercial (F14 · H63, H67, ADR-092): aprobaciones y márgenes.

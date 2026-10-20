@@ -6456,3 +6456,34 @@ La transferencia es el medio más usado después del efectivo, pero el cajero ti
 - Pendiente: primer cobro real en sandbox (confirmar el envelope del create, la vida del token y que una segunda transferencia sume), flujo de partners, firma del webhook cuando exista y conciliación de liquidaciones de Talo.
 - Tests: `tests/unit/talo.test.ts`, `tests/unit/taloUi.test.ts`, `tests/integration/rls-talo.test.ts`.
 - Viumi (ADR-173, punto 8) pasa a tener su logo oficial horizontal (encabezado de viumi.com.ar) en `lib/payments/logos.ts` y en el panel del login; sigue sin isotipo (el ícono de la app tiene placa violeta), así que `paymentIcon('viumi')` sigue en null.
+
+## ADR-176: Motor de alertas programadas: reglas por negocio sobre un catálogo, campana y resumen por mail con sólo los casos nuevos (F24 · H162)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270114100000_h162_alertas`, Edge `alerts_email`) · **Base:** ADR-170 (F24), ADR-156 (email del negocio y complemento), notificaciones in-app (campana)
+
+### Contexto
+
+H63, H67 y H117 dejaron alertas sueltas (márgenes, riesgo, cockpit) que había que ir a mirar. La auditoría de InfoManager IM5 pidió un motor: el dueño define qué quiere que le avise el sistema, cuándo y a quién, y lo recibe sin entrar a buscarlo. Criterio: a las 8 llega un mail con las cajas sin cerrar de ayer y los cheques que vencen esta semana, sólo con los casos nuevos.
+
+### Decisión
+
+1. **Feature OPTIONAL `alertas_programadas`** (grupo reportes, Pro, Business y Enterprise). Gating en el servidor en cada RPC (`alert_assert`) y en el runner (una regla de un negocio sin la feature no corre y se reprograma).
+2. **Catálogo fijo** en `alert_catalog()` (JSON, espejo en `lib/alerts/catalog.ts` con test de paridad): 16 tipos (stock bajo el mínimo, stock negativo, ventas bajo costo, deuda vencida, cheques por vencer, facturas de compra por vencer, cajas sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos altos, presupuestos por vencer, clientes que dejaron de comprar, aumentos de costo, certificado de ARCA y anulaciones), cada uno con severidad, destino, frecuencia por defecto y umbrales con valor por defecto y rango.
+3. **Evaluador** `alert_evaluate(negocio, tipo, umbrales, sucursal)` (SECURITY DEFINER, sólo service_role): devuelve casos `{key, title, detail, amount?, url?}` con clave estable (producto, venta, cheque, cliente) y hasta 200. Usa los datos que ya existen: `products`/`product_stock`, `sale_items` (con el costo del renglón si existe, si no el del producto), `account_open_debits`, `cheques`, `supplier_invoice_open`, `cash_shifts`, `fiscal_documents`, `stock_adjustments`, `quotes`, `product_cost_history`, `arca_certificates` y `sales`.
+4. **Reglas** en `alert_rules` (una por tipo y alcance: todo el negocio o una sucursal), con umbrales, frecuencia (cada hora, todos los días o algunos días), hora de Argentina, canales (`channels` jsonb: campana y mail), roles y personas, y "sólo casos nuevos". `alert_next_run` calcula la próxima corrida en `America/Argentina/Buenos_Aires`.
+5. **Sólo casos nuevos.** `alert_seen` guarda las claves vistas por regla en la última corrida; se avisan las que no estaban. Un caso que se resuelve sale de la tabla y, si vuelve, es nuevo otra vez. Los comprobantes rechazados usan otra clave que los pendientes (avisa al pasar a rechazado).
+6. **Runner** `alert_run_due` (job `alerts-run` de pg_cron cada 15 minutos, SQL puro): toma las reglas vencidas con `skip locked`, evalúa, registra `alert_events` (casos hasta 50, con `new`), manda una notificación de tipo `alertas` por rol o persona (título "Stock bajo el mínimo: 5 productos", los tres primeros casos y el link al historial) y deja el mail en `pending`. Cada regla en su propio bloque: un error queda en el evento y en `alert_rules.last_error` y no corta las demás.
+7. **Mail.** La Edge `alerts_email` (job `alerts-email`, X-Cron-Secret como `account_reminders`) toma los pendientes con sus destinatarios (`alert_email_pending`), arma un resumen por negocio y grupo de destinatarios y lo manda con el email del negocio (`sendTenantEmail`: SMTP, Resend o el complemento de NinjaSoft con su cupo). Sin email configurado: `skipped` con el motivo; lo de más de 2 días se descarta. Queda en `system_emails` (`alerts_digest`).
+8. **UI.** Configuración › Alertas (dueño o `config.edit`): una tarjeta por tipo con encendido, umbrales con unidad, frecuencia, hora y días, sucursal, campana y mail, roles y personas, sólo casos nuevos, Probar ahora (`alert_rule_test`, sin avisar ni guardar) y la última corrida. Historial en `/alertas` (`reports.view`), al que lleva la campana.
+
+### Alternativas descartadas
+
+- **Reglas libres en SQL o con IA:** riesgo de seguridad y de rendimiento; el catálogo cubre lo pedido y crece con migraciones. Las alertas armadas con IA quedan para después (P3).
+- **Un mail por alerta:** satura; va un resumen por corrida.
+- **Evaluar en una Edge:** las condiciones son consultas sobre datos del negocio; en SQL no salen datos de la base y el job no depende de la red. Sólo el mail sale por Edge.
+
+### Consecuencias
+
+- Pendiente de H162: WhatsApp (no hay infraestructura; se suma como otra clave de `channels`), "caída de ventas", los avisos al grabar una venta (P2) y las alertas armadas con IA (P3).
+- Orden de deploy: migración, Edge `alerts_email` (verify_jwt = true, como `account_reminders`) y el front. Sin pg_cron o pg_net los jobs se omiten.
+- Verificado con `tests/unit/alertsCatalog.test.ts` (paridad del catálogo, umbrales y próxima corrida) y `tests/integration/rls-alertas.test.ts` (se salta sin Supabase local); el SQL y el PL/pgSQL se validaron con el parser de Postgres. Falta correrla contra una base real.

@@ -53,6 +53,8 @@ import { PaymentFormModal } from "./PaymentFormModal";
 import { InvoiceFormModal } from "./InvoiceFormModal";
 import { PriceListImportModal } from "./PriceListImportModal";
 import { PaymentOrderModal } from "./PaymentOrderModal";
+import { SupplierAdjustmentModal } from "./SupplierAdjustmentModal";
+import { usePurchasesProMutations } from "@/modules/purchases/pro";
 
 type Tab = "datos" | "productos" | "cuenta";
 
@@ -483,6 +485,11 @@ function AccountTab({ s }: { s: Supplier }) {
   const [payOpen, setPayOpen] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
+  const [adjOpen, setAdjOpen] = useState(false);
+  const [voidAdj, setVoidAdj] = useState<string | null>(null);
+  const pro = usePurchasesProMutations();
+  const { toast } = useToast();
+  const hasOpening = entries.some((e) => e.entry_type === "opening");
   const { data: allocations = [] } = usePaymentAllocations();
   const now = today();
   const aging = useMemo(() => {
@@ -535,6 +542,9 @@ function AccountTab({ s }: { s: Supplier }) {
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setInvOpen(true)}>
               <FileText size={15} /> Cargar factura
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setAdjOpen(true)}>
+              <Pencil size={15} /> Saldo inicial o ajuste
             </Button>
           </>
         )}
@@ -634,7 +644,18 @@ function AccountTab({ s }: { s: Supplier }) {
                       <td className="px-3 py-2 text-muted-foreground">{fmtDate(r.doc_date)}</td>
                       <td className="px-3 py-2">
                         <div>{r.doc_label}</div>
-                        <div className="text-xs text-muted-foreground">{ENTRY_TYPE_LABEL[r.entry_type]}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {ENTRY_TYPE_LABEL[r.entry_type]}
+                          {canManage && (r.entry_type === "opening" || r.entry_type === "adjustment") && (
+                            <button
+                              type="button"
+                              className="ml-2 underline hover:text-foreground"
+                              onClick={() => setVoidAdj(r.doc_id)}
+                            >
+                              Anular
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums">
                         {r.amount_ars > 0 ? formatMoney(r.amount_ars) : ""}
@@ -655,6 +676,28 @@ function AccountTab({ s }: { s: Supplier }) {
       <PaymentFormModal open={payOpen} onOpenChange={setPayOpen} supplierId={s.id} />
       <PaymentOrderModal open={orderOpen} onOpenChange={setOrderOpen} supplierId={s.id} />
       <InvoiceFormModal open={invOpen} onOpenChange={setInvOpen} supplierId={s.id} />
+      <SupplierAdjustmentModal open={adjOpen} onOpenChange={setAdjOpen} supplierId={s.id} hasOpening={hasOpening} />
+      <ConfirmDialog
+        open={Boolean(voidAdj)}
+        onOpenChange={(o) => !o && setVoidAdj(null)}
+        title="¿Anular el ajuste?"
+        description="Deja de contar en la cuenta del proveedor. Queda registrado con el motivo; no se borra."
+        confirmLabel="Anular"
+        danger
+        withReason
+        reasonPlaceholder="Cargado por error..."
+        loading={pro.voidAdjustment.isPending}
+        onConfirm={(reason) => {
+          if (!voidAdj) return;
+          pro.voidAdjustment
+            .mutateAsync({ id: voidAdj, reason })
+            .then(() => {
+              toast({ title: "Ajuste anulado", variant: "success" });
+              setVoidAdj(null);
+            })
+            .catch((e) => toast({ title: "No se pudo anular", description: purchaseErrorMessage(e), variant: "error" }));
+        }}
+      />
     </div>
   );
 }

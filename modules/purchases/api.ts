@@ -314,6 +314,10 @@ export interface InvoiceRow {
   notes: string | null;
   status: "posted" | "voided";
   void_reason: string | null;
+  /** H167: CAE del proveedor y origen (manual, arca, ia). */
+  cae?: string | null;
+  cae_due?: string | null;
+  source?: "manual" | "arca" | "ia";
   created_at: string;
 }
 
@@ -495,7 +499,7 @@ const RECEIPT_COLS =
 const RECEIPT_NUM: (keyof ReceiptRow)[] = ["fx_rate", "total_units", "total_cost", "landed_total"];
 
 const INVOICE_COLS =
-  "id, supplier_id, kind, letter, point_of_sale, number, issue_date, due_date, currency, fx_rate, vat_lines, other_taxes, net_total, vat_total, exempt_amount, non_taxed_amount, other_taxes_total, total, order_id, notes, status, void_reason, created_at";
+  "id, supplier_id, kind, letter, point_of_sale, number, issue_date, due_date, currency, fx_rate, vat_lines, other_taxes, net_total, vat_total, exempt_amount, non_taxed_amount, other_taxes_total, total, order_id, notes, status, void_reason, cae, cae_due, source, created_at";
 const INVOICE_NUM: (keyof InvoiceRow)[] = [
   "number",
   "fx_rate",
@@ -956,6 +960,8 @@ export interface PaymentOrderInput {
   lines: PaymentLineDraft[];
   withholdings: WithholdingLine[];
   allocations: AllocationDraft[];
+  /** H167: NC y anticipos aplicados a comprobantes concretos (antes de imputar). */
+  credit_applications?: Array<{ source_type: "credit_note" | "payment"; source_id: string; invoice_id: string; amount: number }>;
   /** ADR-079: el servidor calcula las retenciones como agente y numera los certificados. */
   agent_retentions?: boolean;
   /** Total que vio el usuario; si el servidor calcula otro, `retentions_changed`. */
@@ -1115,18 +1121,31 @@ export const purchasesV2Api = {
     }));
   },
 
-  /** Imputaciones vigentes (para el aging). */
+  /**
+   * Imputaciones vigentes (para el aging): pagos imputados y, desde H167, NC y
+   * anticipos aplicados a un comprobante (bajan su saldo igual que un pago).
+   */
   allocations: async (): Promise<Array<{ invoice_id: string; amount: number }>> => {
-    const { data, error } = await from("supplier_payment_allocations")
-      .select("invoice_id, amount")
-      .eq("tenant_id", await tenantId())
-      .is("released_at", null)
-      .limit(10000);
-    if (error) throw error;
-    return ((data ?? []) as unknown as Array<{ invoice_id: string; amount: number }>).map((a) => ({
-      invoice_id: a.invoice_id,
-      amount: Number(a.amount),
-    }));
+    const tenant = await tenantId();
+    const [pays, credits] = await Promise.all([
+      from("supplier_payment_allocations")
+        .select("invoice_id, amount")
+        .eq("tenant_id", tenant)
+        .is("released_at", null)
+        .limit(10000),
+      from("supplier_credit_applications")
+        .select("invoice_id, amount")
+        .eq("tenant_id", tenant)
+        .is("released_at", null)
+        .limit(10000),
+    ]);
+    if (pays.error) throw pays.error;
+    // Base sin la migración de H167: sin créditos aplicados.
+    const rows = [
+      ...((pays.data ?? []) as unknown as Array<{ invoice_id: string; amount: number }>),
+      ...(credits.error ? [] : ((credits.data ?? []) as unknown as Array<{ invoice_id: string; amount: number }>)),
+    ];
+    return rows.map((a) => ({ invoice_id: a.invoice_id, amount: Number(a.amount) }));
   },
 
   createPaymentOrder: (v: PaymentOrderInput): Promise<string> =>

@@ -3,6 +3,7 @@
 // Catálogos y validaciones de proveedores (F18 · H101, ADR-050). PURO.
 
 import { isValidCuit } from "@/modules/customers/schemas";
+import type { PadronPersona } from "@/lib/customers/padron";
 
 export { isValidCuit };
 
@@ -107,4 +108,68 @@ export function whatsappLink(phone: string | null | undefined, text: string): st
   if (d.startsWith("0")) d = d.slice(1);
   if (!d.startsWith("54")) d = `54${d}`;
   return `https://wa.me/${d}?text=${encodeURIComponent(text)}`;
+}
+
+/** Código de provincia de ARCA (0 = CABA, 1 = Buenos Aires...) → nombre de PROVINCES. */
+const ARCA_PROVINCE: Record<number, (typeof PROVINCES)[number]> = {
+  0: "CABA",
+  1: "Buenos Aires",
+  2: "Catamarca",
+  3: "Córdoba",
+  4: "Corrientes",
+  5: "Entre Ríos",
+  6: "Jujuy",
+  7: "Mendoza",
+  8: "La Rioja",
+  9: "Salta",
+  10: "San Juan",
+  11: "San Luis",
+  12: "Santa Fe",
+  13: "Santiago del Estero",
+  14: "Tucumán",
+  16: "Chaco",
+  17: "Chubut",
+  18: "Formosa",
+  19: "Misiones",
+  20: "Neuquén",
+  21: "La Pampa",
+  22: "Río Negro",
+  23: "Santa Cruz",
+  24: "Tierra del Fuego",
+};
+
+const plain = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+
+/** Provincia del padrón → una de PROVINCES (o null). */
+export function provinceFromPadron(id: number | null | undefined, name: string | null | undefined): string | null {
+  if (id != null && ARCA_PROVINCE[id]) return ARCA_PROVINCE[id]!;
+  const n = plain(String(name ?? ""));
+  if (!n) return null;
+  if (n.includes("capital federal") || n.includes("ciudad autonoma") || n === "caba") return "CABA";
+  return PROVINCES.find((p) => plain(p) === n) ?? null;
+}
+
+export interface SupplierFromPadron {
+  name: string;
+  iva_condition: SupplierIvaCondition;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+}
+
+/** Datos del padrón de ARCA para el alta del proveedor (H167). */
+export function padronToSupplier(p: PadronPersona): SupplierFromPadron {
+  const d = p.domicilio_partes ?? null;
+  return {
+    name: p.razon_social,
+    iva_condition: p.iva_condition,
+    address: d?.direccion?.trim() || p.domicilio || null,
+    city: d?.localidad?.trim() || null,
+    province: provinceFromPadron(d?.id_provincia ?? null, d?.provincia ?? p.provincia),
+  };
 }

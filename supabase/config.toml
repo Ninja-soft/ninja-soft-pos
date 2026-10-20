@@ -127,6 +127,10 @@ verify_jwt = false
 [functions.ualabis_webhook]
 verify_jwt = false
 
+# Viumi (ADR-173): webhook de pagos (sin firma; se re-consulta la orden).
+[functions.viumi_webhook]
+verify_jwt = false
+
 # -----------------------------------------------------------------------------
 # Edge Functions con JWT declaradas explícitamente (no van en PUBLIC_FUNCTIONS).
 # catalog_sync (ADR-106): la llama el cron con X-Cron-Secret (anon key como

@@ -6329,3 +6329,34 @@ La auditoría de InfoManager IM5 (ADR-170) encontró dos huecos P0 y cuatro arre
 - Un cajero que preguntaba por ganancias ahora recibe "no tenés permiso". El dueño y el auditor no cambian.
 - Orden de deploy: migración, después Edge `ai_assistant` y el front. Front tolerante: sin la migración, el POS no encuentra no bonificables (ninguno) y el aviso de letra sólo informa.
 - Verificado con un dry-run en producción con rollback (resultados en el roadmap, H158) y `tests/unit/h158Integridad.test.ts`.
+
+## ADR-173: Viumi (Banco Macro) por link de pago y QR con la Checkout API v2 (F8)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270111100000_viumi` sin aplicar, Edges `viumi` y `viumi_webhook`) · **Base:** ADR-143 (Ualá Bis, misma arquitectura), ADR-031 (Getnet, misma plataforma Geopagos), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de webhooks)
+
+### Contexto
+
+Viumi es la solución de cobros de Banco Macro sobre Geopagos. Publica una Checkout API v2 ([developers.viumi.com.ar](https://developers.viumi.com.ar)) con token OAuth `client_credentials`, órdenes JSON:API con checkout hosted y un webhook de pago sin firma. No documenta devoluciones ni anulación de órdenes. Los hosts de la doc y los del plugin público de WooCommerce no coinciden. Relevamiento completo en `docs/47-viumi.md`.
+
+### Decisión
+
+1. **Proveedor y feature `viumi`** (marca `viumi`, canal `qr_link`, OPTIONAL desde Pro como el resto de los links). `payment_method_plan_key('viumi')` = `viumi` y `pending_charge_max_ttl('viumi')` = 1440. El cobro entra como `method = 'qr'` con el intent como referencia: no hay registro manual.
+2. **Misma arquitectura que Ualá Bis:** lógica pura en `_shared/viumi.ts` (testeada en Node), helpers de servidor en `_shared/viumi_server.ts`, Edge `viumi` (probe, create, status, cancel) y `viumi_webhook` (`withWebhookLog`, siempre 200). El webhook es sólo una pista: el uuid tiene que ser el guardado en el intent y se re-consulta la orden con la credencial del negocio. Se acredita con un pago `APPROVED` o `PROCESSED` y el monto exacto en centavos.
+3. **Hosts de auth en orden:** primero el de la doc (`auth.prd.geopagos.io` / `auth.stg.geopagos.io`) y, si no responde o da 404, el del plugin (`auth.geopagos.com` / `auth.sandbox.geopagos.com`). Las órdenes usan los hosts de la doc.
+4. **Token:** `expires_in` mayor a 1e9 se toma como timestamp unix; si no, como duración. Cache por instancia con clave SHA-256 (sin el secreto en claro), 5 minutos antes del vencimiento; ante 401 o 403 se pide otro y se reintenta una vez.
+5. **El intent viaja como id del ítem y en el `webhookUrl`** (no hay referencia externa documentada). El link vence a los 1440 minutos.
+6. **Sin devoluciones por API:** la UI dice que se hacen desde la app o el panel de Viumi. Cancelar es una baja local del intent.
+7. **Credenciales probadas antes de guardar** (`set_payment_secret` pide un token; rechazo = `viumi_invalid_credentials`, 422). El cron de cobros en espera también sincroniza Viumi.
+8. **Sin logo oficial en el repo:** no se inventa uno; la UI usa el respaldo genérico.
+
+### Alternativas descartadas
+
+- **Reusar el cliente de Getnet (`_shared/getnet.ts`)**: es la misma plataforma, pero Getnet mezcla dos APIs y otros hosts. Un módulo propio, igual al de Ualá Bis, es más fácil de verificar y de tocar sin romper Getnet.
+- **Tabla `viumi_refunds`**: sin endpoint documentado sería una función que no anda.
+- **Tomar `SUCCESS` sola como pagada** (como Getnet): se exige además un pago aprobado a la vista; si Viumi no lo informa, el cobro queda pendiente y el POS sigue consultando.
+
+### Consecuencias
+
+- Orden de deploy: migración, Edges `viumi`, `viumi_webhook`, `set_payment_secret` y `pending_charges_sync`, y el front. Front tolerante: sin la migración, Viumi no aparece en el catálogo.
+- Falta validar con credenciales de prueba reales los hosts, `expires_in` y los estados (lo inferido está en `docs/47-viumi.md`).
+- Verificado con `tests/unit/viumi.test.ts` (fetch simulado), `tests/unit/viumiUi.test.ts` y `tests/integration/rls-viumi.test.ts` (se salta sin Supabase local).

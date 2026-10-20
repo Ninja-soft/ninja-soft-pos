@@ -320,6 +320,19 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de Ualá Bis. Para el link de pago integrado, las credenciales de Cobros online (usuario, Client ID y Client Secret de Ualá Bis, Cobros online, API); sin ellas se cobra en la app y se registra el número de operación.",
   },
+  dlocalgo: {
+    desc: "Cobros con dLocal Go por link de pago, también como QR: el cliente paga con tarjeta en el checkout de dLocal Go y la venta se cierra sola al acreditarse. Las devoluciones totales se piden desde la conciliación de cobros QR.",
+    impact: "Desactivado, dLocal Go no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de dLocal Go y sus credenciales de la API (API Key y Secret Key del dashboard, Integraciones, API Integration).",
+  },
+  cupones_efectivo: {
+    desc: "Cupón de pago en efectivo de Mercado Pago para cobrar a distancia: generás el cupón por el total, se lo mandás al cliente por WhatsApp o email, paga en cualquier Rapipago o Pago Fácil y la venta se registra sola al acreditarse (puede tardar hasta 2 horas hábiles). Va bien con los cobros en espera.",
+    impact: "Desactivado, el cupón de Rapipago o Pago Fácil no aparece al cobrar.",
+    minPlan: "Pro",
+    requires: ["mercado_pago"],
+    needs: "Mercado Pago conectado. El cliente tiene que dar su email, su DNI o CUIT y su nombre: Mercado Pago los pide para emitir el cupón.",
+  },
   talo: {
     desc: "Cobros por transferencia con Talo: cada venta tiene su propio CVU y alias, el cliente transfiere desde cualquier banco o billetera y la venta se cierra sola cuando llega la plata. Si transfiere de más, la venta se cierra igual y la diferencia se devuelve desde la conciliación; si transfiere de menos, el POS muestra cuánto falta.",
     impact: "Desactivado, Talo no aparece como medio de pago al cobrar.",

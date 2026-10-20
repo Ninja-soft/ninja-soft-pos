@@ -14,6 +14,7 @@ export const WEBHOOK_PROVIDERS = [
   { key: "ualabis", label: "Ualá Bis", fn: "ualabis_webhook" },
   { key: "viumi", label: "Viumi", fn: "viumi_webhook" },
   { key: "talo", label: "Talo", fn: "talo_webhook" },
+  { key: "dlocalgo", label: "dLocal Go", fn: "dlocalgo_webhook" },
   { key: "clover", label: "Fiserv / Clover", fn: "clover_webhook" },
   { key: "modo", label: "MODO", fn: "modo_webhook" },
   { key: "mobbex", label: "Mobbex", fn: "mobbex_webhook" },

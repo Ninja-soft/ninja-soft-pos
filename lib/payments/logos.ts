@@ -42,6 +42,10 @@ const FILE_PREFIX: Record<string, string> = {
   // (SVG); la variante oscura pasa el texto "talo" a blanco (el isotipo verde
   // se lee igual en los dos fondos).
   talo: "talo",
+  // dLocal Go (ADR-180): logo oficial del encabezado de dlocalgo.com (PNG) y
+  // el isotipo "go" de su SVG oficial (sólo el círculo, sin halo ni sombra);
+  // la variante oscura pasa el texto negro a blanco.
+  dlocalgo: "dlocalgo",
 };
 
 // Marcas sin logo horizontal propio (son genéricos).
@@ -52,11 +56,12 @@ const NO_ICON = new Set<string>();
 
 // Logos con versión para fondo oscuro (los demás se leen bien en ambos).
 const ICON_ON_DARK = new Set(["transfer", "payway", "clover", "ualabis", "viumi"]);
-const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo", "viumi"]);
+const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo", "viumi", "dlocalgo"]);
 
 // Canales con logo de producto propio (no el de su marca): la terminal
 // integrada de Fiserv es Clover.
-const LOGO_OVERRIDE: Record<string, string> = { fiserv_point: "clover" };
+// El cupón Rapipago / Pago Fácil (ADR-180) es un canal de Mercado Pago.
+const LOGO_OVERRIDE: Record<string, string> = { fiserv_point: "clover", mp_cupon: "mercadopago" };
 
 // provider_key (o key de marca) → marca. Los canales Point usan el logo de su
 // marca, salvo los de LOGO_OVERRIDE.

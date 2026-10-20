@@ -33,6 +33,12 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   // Talo (ADR-175): transferencia con CVU único por API (method 'qr' + intent
   // talo); la gatea el trigger vía payment_method_plan_key('talo').
   talo: "talo",
+  // dLocal Go (ADR-180): link + QR por API (method 'qr' + intent dlocalgo);
+  // la habilita payment_method_plan_key('dlocalgo').
+  dlocalgo: "dlocalgo",
+  // Cupón Rapipago / Pago Fácil de Mercado Pago (ADR-180): canal de la
+  // conexión de Mercado Pago con su propia feature (intent mp_cupon).
+  mp_cupon: "cupones_efectivo",
 };
 
 export function providerFeature(provider: string): string | null {

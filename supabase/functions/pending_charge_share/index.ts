@@ -41,6 +41,8 @@ const PROVIDER_NAME: Record<string, string> = {
   ualabis: "Ualá Bis",
   viumi: "Viumi",
   talo: "Talo (transferencia)",
+  dlocalgo: "dLocal Go",
+  mp_cupon: "Rapipago o Pago Fácil (cupón de Mercado Pago)",
 };
 
 function money(n: number): string {

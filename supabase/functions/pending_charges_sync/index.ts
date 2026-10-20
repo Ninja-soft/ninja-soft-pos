@@ -7,8 +7,10 @@
 // vencer de los proveedores sin webhook (Pagos360) o con un webhook de pocos
 // reintentos (Ualá Bis, ADR-143: 4 intentos sin firma; Viumi, ADR-173: sin
 // firma ni reintentos documentados; Talo, ADR-175: sin firma ni política de
-// reintentos documentada, y una transferencia puede llegar horas después) y
-// re-consulta cada
+// reintentos documentada, y una transferencia puede llegar horas después;
+// dLocal Go, ADR-180: webhook firmado que sólo se acepta con firma válida, y
+// los cupones de pago en efectivo de Mercado Pago, ADR-180: se pagan días
+// después, el webhook topic order es por aplicación) y re-consulta cada
 // intent. Si el proveedor acreditó, el intent pasa a 'approved' y el trigger
 // de la base (pending_charges_on_intent_status) registra la venta en el acto.
 // Nunca confía en nada que no venga de la API del proveedor con la credencial
@@ -42,6 +44,14 @@ import {
   syncIntent as syncTalo,
   type IntentRow as TaloIntentRow,
 } from "../_shared/talo_server.ts";
+import {
+  INTENT_COLS as DLOCAL_INTENT_COLS,
+  loadCredsScoped as loadDlocal,
+  syncIntent as syncDlocal,
+  type IntentRow as DlocalIntentRow,
+} from "../_shared/dlocalgo_server.ts";
+import { tenantMpCredential } from "../_shared/mpAuth.ts";
+import { applyOrderToIntent, fetchOrder, ORDER_INTENT_COLUMNS, type OrderIntentRow } from "../_shared/mpIntents.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -78,7 +88,7 @@ Deno.serve(async (req: Request) => {
     .eq("status", "waiting")
     .is("deleted_at", null)
     .gt("expires_at", new Date().toISOString())
-    .in("provider_key", ["pagos360", "ualabis", "viumi", "talo"])
+    .in("provider_key", ["pagos360", "ualabis", "viumi", "talo", "dlocalgo", "mp_cupon"])
     .order("created_at", { ascending: true })
     .limit(MAX_PER_RUN);
   if (error) return json({ error: "query_failed", detail: error.message }, 500);
@@ -141,6 +151,46 @@ Deno.serve(async (req: Request) => {
     return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
   };
 
+  // dLocal Go: re-consulta el pago con la credencial exacta del cobro.
+  const syncDlocalCharge = async (tenantId: string, intentId: string) => {
+    const { data: row } = await admin
+      .from("mp_payment_intents")
+      .select(DLOCAL_INTENT_COLS)
+      .eq("id", intentId)
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "dlocalgo")
+      .maybeSingle();
+    if (!row) return null;
+    const conn = await loadDlocal(admin, tenantId, { scopeStoreId: await intentSecretScope(admin, intentId) });
+    if (!conn) return null;
+    const r = await syncDlocal(admin, row as DlocalIntentRow, conn.creds, "cron", null);
+    return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
+  };
+
+  // Cupón de Mercado Pago: re-lee la order con el token (ambiente y alcance)
+  // con que se creó, misma regla que el webhook topic order.
+  const syncCuponCharge = async (tenantId: string, intentId: string) => {
+    const { data: row } = await admin
+      .from("mp_payment_intents")
+      .select(ORDER_INTENT_COLUMNS)
+      .eq("id", intentId)
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "mp_cupon")
+      .eq("status", "pending")
+      .not("mp_order_id", "is", null)
+      .maybeSingle();
+    const r = row as OrderIntentRow | null;
+    if (!r || !r.mp_order_id) return null;
+    const cred = await tenantMpCredential(admin, tenantId, r.mp_env ?? "prod", {
+      scopeStoreId: await intentSecretScope(admin, intentId),
+    });
+    if (!cred) return null;
+    const got = await fetchOrder(cred.token, r.mp_order_id);
+    if (!got.ok) return { ok: false as const };
+    const res = await applyOrderToIntent(admin, r, got.order, { userId: null, source: "poll" });
+    return { ok: true as const, status: res.status };
+  };
+
   // Un negocio a la vez, sus intents en paralelo de a 5. ADR-057: cada intent
   // se verifica con la API key (negocio o sucursal) con la que se creó; las
   // conexiones se cachean por alcance.
@@ -159,6 +209,8 @@ Deno.serve(async (req: Request) => {
           if (c.provider_key === "ualabis") return await syncUalaCharge(tenantId, c.intent_id).catch(() => null);
           if (c.provider_key === "viumi") return await syncViumiCharge(tenantId, c.intent_id).catch(() => null);
           if (c.provider_key === "talo") return await syncTaloCharge(tenantId, c.intent_id).catch(() => null);
+          if (c.provider_key === "dlocalgo") return await syncDlocalCharge(tenantId, c.intent_id).catch(() => null);
+          if (c.provider_key === "mp_cupon") return await syncCuponCharge(tenantId, c.intent_id).catch(() => null);
           const conn = await connFor(c.intent_id);
           if (!conn) return null;
           return await syncPagos360Intent(admin, conn, tenantId, c.intent_id).catch(() => null);

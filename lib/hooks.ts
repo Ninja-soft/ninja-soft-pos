@@ -17,6 +17,7 @@ export const WEBHOOK_FUNCTIONS: Record<string, string> = {
   ualabis: "ualabis_webhook",
   viumi: "viumi_webhook",
   talo: "talo_webhook",
+  dlocalgo: "dlocalgo_webhook",
   clover: "clover_webhook",
   modo: "modo_webhook",
   mobbex: "mobbex_webhook",

@@ -62,6 +62,8 @@ export const PROVIDER_LABEL: Record<string, string> = {
   ualabis: "Ualá Bis",
   viumi: "Viumi",
   talo: "Talo",
+  dlocalgo: "dLocal Go",
+  mp_cupon: "Cupón Rapipago / Pago Fácil",
 };
 
 export const TONE_BADGE: Record<string, BadgeTone> = {

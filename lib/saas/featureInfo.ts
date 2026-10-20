@@ -618,8 +618,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Para el resumen por mail, el email del negocio configurado en Configuración › Email.",
   },
   metricas_avanzadas: {
-    desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",
-    impact: "Sin esto sólo quedan los reportes básicos; no hay dashboards avanzados.",
+    desc: "Reportes de gestión: rentabilidad mes a mes con el costo de cada venta (ventas netas, costo, margen, gastos y resultado contra el período anterior) y mercadería parada valorizada.",
+    impact: "Sin esto quedan los reportes de ventas, cobranzas y movimientos de stock; no hay rentabilidad ni mercadería parada (el servidor lo rechaza).",
     minPlan: "Business",
   },
 

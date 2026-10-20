@@ -34,6 +34,8 @@ const FILE_PREFIX: Record<string, string> = {
   // Ualá Bis (ADR-143): isotipo y logo oficiales (developers.ualabis.com.ar y
   // ualabis.com.ar); la variante oscura pasa el azul de "ualá" a blanco.
   ualabis: "ualabis",
+  // Viumi (ADR-173): sin logo oficial en el repo todavía. Sin entrada acá,
+  // paymentIcon/paymentWordmark devuelven null y la UI usa su respaldo genérico.
 };
 
 // Marcas sin logo horizontal propio (son genéricos).

@@ -27,6 +27,9 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   // registro manual (payments.method = 'ualabis'); los dos los gatea el
   // trigger vía payment_method_plan_key('ualabis').
   ualabis: "ualabis",
+  // Viumi (ADR-173): link + QR por API (method 'qr' + intent viumi); lo gatea
+  // el trigger vía payment_method_plan_key('viumi').
+  viumi: "viumi",
 };
 
 export function providerFeature(provider: string): string | null {

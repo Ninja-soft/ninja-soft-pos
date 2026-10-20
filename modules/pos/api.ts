@@ -1426,6 +1426,47 @@ export const posApi = {
     return (data ?? []) as unknown as { intent_id: string; status: string; created_at: string }[];
   },
 
+  // ── Viumi (ADR-173): link de pago + QR de la Checkout API v2 ──────────────
+  // create devuelve el link de checkout como init_point. La confirmación llega
+  // por el webhook (viumi_webhook); status re-consulta la orden en Viumi
+  // (respaldo). Sin devoluciones por API (se hacen desde la app de Viumi).
+  createViumiLink: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("viumi", {
+      body: { action: "create", amount, title, ...posStoreBody() },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  viumiIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("viumi", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // Baja local best-effort (si el cliente ya pagó, gana el pago).
+  cancelViumiIntent: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("viumi", {
+      body: { action: "cancel", intent_id: id },
+    });
+  },
+
   // ── Nave (H21c): QR interoperable + link (Edge nave) ───────────────────────
   // create devuelve qr_data (QR EMV: se renderiza TAL CUAL) y el checkout_url
   // como init_point ("Abrir link de pago"). La confirmación principal llega por

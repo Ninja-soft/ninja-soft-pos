@@ -80,6 +80,7 @@ export const PUBLIC_FUNCTIONS = [
   "payway_webhook",
   "send_password_recovery",
   "ualabis_webhook",
+  "viumi_webhook",
 ];
 
 const MIGRATION_RE = /^(\d{14})_([a-z0-9_]+)\.sql$/;

@@ -320,6 +320,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de Ualá Bis. Para el link de pago integrado, las credenciales de Cobros online (usuario, Client ID y Client Secret de Ualá Bis, Cobros online, API); sin ellas se cobra en la app y se registra el número de operación.",
   },
+  viumi: {
+    desc: "Cobros con Viumi (Banco Macro) por link de pago, también como QR: el cliente paga con tarjeta en el checkout de Viumi y la venta se cierra sola al acreditarse. Las devoluciones se hacen desde la app o el panel de Viumi.",
+    impact: "Desactivado, Viumi no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de Viumi y las credenciales de la API (Client ID y Client Secret). Se las pedís a Viumi por mail a consultas@viumi.com.ar.",
+  },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
     impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",

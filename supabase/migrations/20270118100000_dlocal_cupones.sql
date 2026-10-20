@@ -107,12 +107,15 @@ as $$
     when 'ualabis'           then 'ualabis'
     when 'viumi'             then 'viumi'
     when 'talo'              then 'talo'
-    when 'dlocalgo'          then 'dlocalgo'
-    when 'mp_cupon'          then 'cupones_efectivo'
     when 'account'           then 'cuenta_corriente'
     when 'cuenta_corriente'  then 'cuenta_corriente'
     when 'plataforma'        then 'canales_delivery'
     when 'mercadolibre'      then 'mercadolibre'
+    when 'cheque'            then 'tesoreria'
+    when 'echeq'             then 'tesoreria'
+    when 'cash_usd'          then 'efectivo_usd'
+    when 'dlocalgo'          then 'dlocalgo'
+    when 'mp_cupon'          then 'cupones_efectivo'
     else null
   end;
 $$;

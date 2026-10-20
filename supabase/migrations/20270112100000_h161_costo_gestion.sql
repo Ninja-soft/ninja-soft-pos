@@ -96,8 +96,6 @@ update public.sale_items si
   from public.products p
  where p.id = si.product_id and si.unit_cost is null and p.cost is not null;
 
-create index if not exists sale_items_product_tenant_idx on public.sale_items (tenant_id, product_id);
-create index if not exists stock_movements_tenant_created_idx on public.stock_movements (tenant_id, created_at desc);
 create index if not exists cam_tenant_kind_created_idx on public.customer_account_movements (tenant_id, kind, created_at)
   where kind = 'payment';
 

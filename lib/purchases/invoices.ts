@@ -163,17 +163,37 @@ export function parseInvoiceNumber(text: string): { pos: number; number: number 
 }
 
 /**
- * Letra que corresponde según la condición del proveedor (sugerencia): el
- * monotributista y el exento emiten C; el responsable inscripto, A a un
- * responsable inscripto y B al resto.
+ * Letras que puede emitir el proveedor a este negocio (espejo de
+ * supplier_invoice_letters en SQL, que lo exige al grabar). null = sin control
+ * (condición desconocida). Responsable inscripto a monotributista: A (RG 5003)
+ * o B (comprobantes anteriores a la RG).
+ */
+export function allowedLetters(
+  supplierIva: string | null | undefined,
+  buyerIva: string | null | undefined,
+): InvoiceLetter[] | null {
+  if (supplierIva === "exterior") return ["E"];
+  if (supplierIva === "monotributo" || supplierIva === "exento" || supplierIva === "no_alcanzado" || supplierIva === "no_responsable") {
+    return ["C"];
+  }
+  if (supplierIva === "responsable_inscripto") {
+    if (buyerIva === "responsable_inscripto") return ["A", "M"];
+    if (buyerIva === "monotributo" || buyerIva === "monotributo_social") return ["A", "B"];
+    if (buyerIva === "exento" || buyerIva === "no_alcanzado") return ["B"];
+    return ["A", "B", "M"];
+  }
+  return null;
+}
+
+/**
+ * Letra sugerida según la condición del proveedor y la del negocio: la
+ * primera de las posibles.
  */
 export function suggestedLetter(
   supplierIva: string,
-  buyerIsRegistered: boolean,
+  buyerIva: string | null | undefined,
 ): InvoiceLetter | null {
-  if (supplierIva === "monotributo" || supplierIva === "exento") return "C";
-  if (supplierIva === "responsable_inscripto") return buyerIsRegistered ? "A" : "B";
-  return null;
+  return allowedLetters(supplierIva, buyerIva)?.[0] ?? null;
 }
 
 // ── Pagos ───────────────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ import {
   treasuryErrorMessage,
 } from "@/lib/treasury/accounts";
 import { useStores } from "@/modules/stock/hooks";
+import { ChequeDuplicateHint } from "./ChequeDuplicateHint";
 import { useTransferAccounts } from "@/modules/payments/transfer";
 import { useAccAccounts, useAccSettings, useAccountingAccess } from "@/modules/accounting/hooks";
 import { useTreasuryAccounts, useTreasuryMutations } from "@/modules/treasury/hooks";
@@ -843,6 +844,9 @@ export function ChequeFormModal({ open, onOpenChange }: { open: boolean; onOpenC
           <FormField label="Banco">
             <input className={inputCls} maxLength={80} value={f.bank_name} onChange={(e) => setF((p) => ({ ...p, bank_name: e.target.value }))} />
           </FormField>
+          <div className="-mt-1 empty:hidden sm:col-span-2">
+            <ChequeDuplicateHint number={f.number} bank={f.bank_name || null} />
+          </div>
           <FormField label="Fecha de emisión">
             <input type="date" className={inputCls} value={f.issue_date} onChange={(e) => setF((p) => ({ ...p, issue_date: e.target.value }))} />
           </FormField>

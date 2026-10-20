@@ -26,7 +26,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
 import { useCartStore } from "@/modules/pos/store";
-import { useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
+import { useDiscountableSubtotal, useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
 import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
 import { usePosBranchStock } from "@/modules/pos/branchStock";
 import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, otherBranchesText } from "@/lib/stock/posBranchStock";
@@ -79,6 +79,7 @@ import {
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
 import { lineSubtotal } from "@/modules/pos/store";
+import { maxGeneralDiscount } from "@/lib/pos/discount";
 import { pinnedTenders } from "@/lib/pos/tenders";
 import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
 import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
@@ -762,6 +763,11 @@ function PosPageInner() {
   });
   const appliedListName = appliedList?.name ?? null;
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
+  const discountLines = useMemo(
+    () => lines.map((l) => ({ productId: l.productId, amount: lineSubtotal(l) })),
+    [lines],
+  );
+  const discountable = useDiscountableSubtotal(discountLines);
   // ADR-116: la venta lleva servicios (pide período y vencimiento).
   const hasServiceLines = servicesOn && lines.some(isServiceLine);
   const serviceLine = serviceLineId ? lines.find((l) => l.lineId === serviceLineId) ?? null : null;
@@ -1080,12 +1086,20 @@ function PosPageInner() {
     });
   }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, displayTransfer, paidView]);
 
-  // Tope de descuento por rol (H30).
+  // Tope de descuento por rol (H30), sólo sobre lo bonificable (H158: los
+  // productos no bonificables no aceptan descuento manual).
   function handleDiscountChange(value: number) {
-    const max = (subtotal * maxDiscPct) / 100;
+    const max = maxGeneralDiscount(discountable.amount, maxDiscPct);
     if (value > max + 0.001) {
       setDiscountTotal(Math.max(0, Math.floor(max)));
-      toast({ title: `Descuento máximo ${maxDiscPct}% para tu rol`, variant: "error" });
+      toast({
+        title: discountable.hasBlocked
+          ? max > 0
+            ? `Descuento máximo ${formatCurrency(Math.floor(max))}: hay productos que no aceptan descuento`
+            : "Los productos del carrito no aceptan descuento"
+          : `Descuento máximo ${maxDiscPct}% para tu rol`,
+        variant: "error",
+      });
     } else {
       setDiscountTotal(Math.max(0, value));
     }

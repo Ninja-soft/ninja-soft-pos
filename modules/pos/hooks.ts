@@ -18,6 +18,7 @@ import {
   type SaleExtraInput,
 } from "./api";
 import { useCurrentRegister } from "@/modules/branches/hooks";
+import { discountableSubtotal } from "@/lib/pos/discount";
 import type { PlanPayload } from "@/lib/stock/fulfillment";
 import { emitOnboardingEvent } from "@/modules/onboarding/guidance";
 import { resolveEffective } from "@/lib/config/inheritance";
@@ -302,4 +303,22 @@ export function usePosMutations() {
       onError: () => emitOnboardingEvent("venta_fallida"),
     }),
   };
+}
+
+/**
+ * F24 · H158: subtotal sobre el que se puede aplicar el descuento general (sin
+ * los productos no bonificables) y si hay alguno en el carrito.
+ */
+export function useDiscountableSubtotal(lines: { productId: string | null; amount: number }[]) {
+  const ids = useMemo(
+    () => [...new Set(lines.map((l) => l.productId).filter((x): x is string => Boolean(x)))].sort(),
+    [lines],
+  );
+  const { data: blocked = [] } = useQuery({
+    queryKey: ["pos", "no-discount", ids],
+    queryFn: () => posApi.noDiscountProductIds(ids),
+    enabled: ids.length > 0,
+    staleTime: 60_000,
+  });
+  return useMemo(() => discountableSubtotal(lines, blocked), [lines, blocked]);
 }

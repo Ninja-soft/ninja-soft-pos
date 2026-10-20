@@ -63,8 +63,12 @@ import {
   FILTER_OPS,
   MAX_LIMIT,
   TRUNCS,
+  type AiScope,
+  aiToolDenied,
+  checkQueryScope,
   describeEntities,
   schemaIndex,
+  scopeResult,
   validateQuery,
 } from "../_shared/aiQuery.ts";
 
@@ -488,11 +492,47 @@ const TOOL_DECLARATIONS = [
 ];
 
 // Mismo catálogo en el formato de tools de Anthropic (input_schema).
-const CLAUDE_TOOLS = TOOL_DECLARATIONS.map((t) => ({
+const claudeTool = (t: (typeof TOOL_DECLARATIONS)[number]) => ({
   name: t.name,
   description: t.description,
   input_schema: t.parameters,
-}));
+});
+
+// Sólo las tools que el usuario puede usar (H158): el modelo ni las ve.
+function toolsFor(scope: AiScope) {
+  return TOOL_DECLARATIONS.filter((t) => aiToolDenied(t.name, scope) === null);
+}
+
+// Permisos del usuario que pregunta (H158), con su JWT: capacidades efectivas
+// y si ve todas las sucursales. Si algo falla, sin permisos (falla cerrado).
+async function loadScope(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  // deno-lint-ignore no-explicit-any
+  userClient: any,
+  tenantId: string,
+): Promise<AiScope> {
+  try {
+    const [{ data: me, error: meErr }, { data: allowed, error: stErr }, { data: stores, error: sErr }] =
+      await Promise.all([
+        userClient.rpc("my_capabilities"),
+        userClient.rpc("user_allowed_store_ids"),
+        admin.from("stores").select("id").eq("tenant_id", tenantId),
+      ]);
+    if (meErr || stErr || sErr) throw meErr ?? stErr ?? sErr;
+    const caps = new Set<string>(
+      Array.isArray((me as { capabilities?: unknown })?.capabilities)
+        ? ((me as { capabilities: unknown[] }).capabilities.map(String))
+        : [],
+    );
+    const allowedSet = new Set<string>(((allowed ?? []) as unknown[]).map(String));
+    const allStores = ((stores ?? []) as { id: string }[]).every((st) => allowedSet.has(st.id));
+    return { caps, allStores };
+  } catch (e) {
+    console.error("loadScope failed:", e instanceof Error ? e.message : e);
+    return { caps: new Set(), allStores: false };
+  }
+}
 
 // Tope del JSON que se le devuelve al modelo por tool (evita prompts enormes).
 const MAX_TOOL_RESULT_CHARS = 40_000;
@@ -541,6 +581,25 @@ async function runTool(
   // deno-lint-ignore no-explicit-any
   userClient: any,
   tenantId: string,
+  scope: AiScope,
+  name: string,
+  // deno-lint-ignore no-explicit-any
+  args: Record<string, any>,
+): Promise<unknown> {
+  // H158: permisos del usuario. Las tools curadas corren con service_role, así
+  // que el control va acá: capacidad, sucursales y recorte de costos.
+  const denied = aiToolDenied(name, scope);
+  if (denied) return { error: denied };
+  return scopeResult(await runToolRaw(admin, userClient, tenantId, scope, name, args), scope);
+}
+
+async function runToolRaw(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  // deno-lint-ignore no-explicit-any
+  userClient: any,
+  tenantId: string,
+  scope: AiScope,
   name: string,
   // deno-lint-ignore no-explicit-any
   args: Record<string, any>,
@@ -551,10 +610,12 @@ async function runTool(
   try {
     switch (name) {
       case "ai_schema":
-        return describeEntities(a.entities);
+        return describeEntities(a.entities, scope.caps);
       case "ai_query": {
         const v = validateQuery(a);
         if (!v.ok) return { error: v.error };
+        const scopeErr = checkQueryScope(v.spec, scope.caps);
+        if (scopeErr) return { error: scopeErr };
         const { data, error } = await withTimeout<{ data: unknown; error: unknown }>(
           userClient.rpc("ai_query", { p_spec: v.spec }),
           12_000,
@@ -675,6 +736,7 @@ async function callGeminiWithTools(
   // deno-lint-ignore no-explicit-any
   userClient: any,
   tenantId: string,
+  scope: AiScope,
   model: string,
   apiKey: string,
   systemPrompt: string,
@@ -705,7 +767,7 @@ async function callGeminiWithTools(
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: systemPrompt }] },
               contents,
-              tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
+              tools: [{ functionDeclarations: toolsFor(scope) }],
               generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
             }),
           },
@@ -759,7 +821,7 @@ async function callGeminiWithTools(
     for (const p of calls) {
       const fc = p.functionCall!;
       toolsUsed.push(fc.name);
-      const result = await runTool(admin, userClient, tenantId, fc.name, fc.args ?? {});
+      const result = await runTool(admin, userClient, tenantId, scope, fc.name, fc.args ?? {});
       responseParts.push({
         functionResponse: {
           name: fc.name,
@@ -799,6 +861,7 @@ async function callClaudeWithTools(
   // deno-lint-ignore no-explicit-any
   userClient: any,
   tenantId: string,
+  scope: AiScope,
   model: string,
   apiKey: string,
   systemPrompt: string,
@@ -826,7 +889,7 @@ async function callClaudeWithTools(
             model,
             max_tokens: 2048,
             system: systemPrompt,
-            tools: CLAUDE_TOOLS,
+            tools: toolsFor(scope).map(claudeTool),
             messages: convo,
           }),
         }),
@@ -875,7 +938,7 @@ async function callClaudeWithTools(
     const results: ClaudeBlock[] = [];
     for (const call of calls) {
       toolsUsed.push(call.name);
-      const result = await runTool(admin, userClient, tenantId, call.name, call.input ?? {});
+      const result = await runTool(admin, userClient, tenantId, scope, call.name, call.input ?? {});
       results.push({
         type: "tool_result",
         tool_use_id: call.id,
@@ -1354,8 +1417,9 @@ Deno.serve(async (req: Request) => {
       .slice(-12);
     if (messages.length === 0) return json({ error: "empty_messages" }, 400);
 
-    // ── Contexto READ-ONLY scoped por tenant ────────────────────────────────
-    const context = await buildContext(admin, tenantId);
+    // ── Permisos del usuario (H158) y contexto READ-ONLY scoped por tenant ──
+    const scope = await loadScope(admin, userClient, tenantId);
+    const context = await buildContext(admin, tenantId, scope);
 
     // Fecha/hora actual en Argentina: el modelo la necesita para traducir
     // "hoy", "este mes" o "el martes pasado" a fechas de los filtros.
@@ -1395,9 +1459,19 @@ Deno.serve(async (req: Request) => {
       "dato no existe en las entidades disponibles (ej. facturación electrónica " +
       "AFIP, proveedores o compras), explicá qué no está accesible en lugar de " +
       "inventar.\n" +
-      "• Nunca muestres identificadores internos (uuid) salvo que te los pidan.\n\n" +
+      "• Nunca muestres identificadores internos (uuid) salvo que te los pidan.\n" +
+      "• Respondé sólo con lo que este usuario puede ver. Si una herramienta dice " +
+      "que no tiene permiso, decíselo tal cual y no lo estimes ni lo deduzcas de " +
+      "otros datos." +
+      (scope.caps.has("reports.costs")
+        ? ""
+        : " Este usuario no puede ver costos, márgenes ni ganancias.") +
+      (scope.allStores
+        ? ""
+        : " Este usuario ve sólo algunas sucursales: para ventas y caja usá ai_query.") +
+      "\n\n" +
       "Entidades disponibles para ai_query:\n" +
-      schemaIndex() +
+      schemaIndex(scope.caps) +
       "\n\n=== CONTEXTO DEL NEGOCIO (resumen) ===\n" +
       context +
       "\n\n=== GUÍA DE PANTALLAS ===\n" +
@@ -1413,6 +1487,7 @@ Deno.serve(async (req: Request) => {
           admin,
           userClient,
           tenantId,
+          scope,
           model,
           apiKey,
           systemPrompt,
@@ -1422,6 +1497,7 @@ Deno.serve(async (req: Request) => {
           admin,
           userClient,
           tenantId,
+          scope,
           model,
           apiKey,
           systemPrompt,
@@ -1522,8 +1598,13 @@ async function buildContext(
   // deno-lint-ignore no-explicit-any
   admin: any,
   tenantId: string,
+  scope: AiScope,
 ): Promise<string> {
   const now = new Date();
+  const can = (cap: string) => scope.caps.has(cap);
+  // Lo que suma todo el negocio (ventas, caja) sólo para quien ve todas las
+  // sucursales; el resto lo consulta con ai_query (RLS de sucursal).
+  const allBranches = scope.allStores;
   // Bordes "hoy"/"mes" en hora ARGENTINA (día/mes civil AR, no UTC): a las 22:00
   // AR el día UTC ya rotó, así que un borde UTC arrancaría "hoy" a las 21:00 AR
   // y dejaría afuera las ventas de la tarde. weekStart/days30Start son ventanas
@@ -1558,12 +1639,21 @@ async function buildContext(
     const low = Number(s.low_stock) || 0;
     const invCost = Number(s.inventory_value_cost) || 0;
     const invSale = Number(s.inventory_value_sale) || 0;
-    lines.push(
-      `Catálogo: ${prods} productos activos cargados` +
-        (low > 0 ? `, ${low} con stock bajo` : "") +
-        `. Valor de inventario: ${ars(invCost)} a costo / ${ars(invSale)} a precio de venta.`,
-    );
-    lines.push(`Clientes: ${Number(s.customers_active) || 0} clientes cargados.`);
+    const valuation = !can("stock.valuation")
+      ? ""
+      : can("reports.costs")
+        ? `. Valor de inventario: ${ars(invCost)} a costo / ${ars(invSale)} a precio de venta`
+        : `. Valor de inventario: ${ars(invSale)} a precio de venta`;
+    if (can("products.view")) {
+      lines.push(
+        `Catálogo: ${prods} productos activos cargados` +
+          (low > 0 ? `, ${low} con stock bajo` : "") +
+          `${valuation}.`,
+      );
+    }
+    if (can("customers.view")) {
+      lines.push(`Clientes: ${Number(s.customers_active) || 0} clientes cargados.`);
+    }
 
     // Addons activos: traducimos las claves a etiquetas legibles vía plan_addons.
     const addonKeys = Array.isArray(s.active_addons)
@@ -1592,431 +1682,454 @@ async function buildContext(
   }
 
   // ── Ventas hoy / 7 días ───────────────────────────────────────────────────
-  try {
-    const { data: todaySales } = await admin
-      .from("sales")
-      .select("total")
-      .eq("tenant_id", tenantId)
-      .eq("status", "completed")
-      .gte("created_at", todayStart.toISOString());
-    const todayCount = todaySales?.length ?? 0;
-    const todayTotal = (todaySales ?? []).reduce(
-      (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
-      0,
-    );
-    lines.push(`Ventas de hoy: ${todayCount} ventas por ${ars(todayTotal)}.`);
+  if (can("sales.view") && allBranches) {
+    try {
+      const { data: todaySales } = await admin
+        .from("sales")
+        .select("total")
+        .eq("tenant_id", tenantId)
+        .eq("status", "completed")
+        .gte("created_at", todayStart.toISOString());
+      const todayCount = todaySales?.length ?? 0;
+      const todayTotal = (todaySales ?? []).reduce(
+        (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
+        0,
+      );
+      lines.push(`Ventas de hoy: ${todayCount} ventas por ${ars(todayTotal)}.`);
 
-    const { data: weekSales } = await admin
-      .from("sales")
-      .select("total")
-      .eq("tenant_id", tenantId)
-      .eq("status", "completed")
-      .gte("created_at", weekStart.toISOString());
-    const weekCount = weekSales?.length ?? 0;
-    const weekTotal = (weekSales ?? []).reduce(
-      (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
-      0,
-    );
-    lines.push(
-      `Ventas últimos 7 días: ${weekCount} ventas por ${ars(weekTotal)}.`,
-    );
-  } catch (e) {
-    lines.push("(No se pudieron cargar las ventas recientes.)");
-    console.error("buildContext sales(day/week) error:", e);
+      const { data: weekSales } = await admin
+        .from("sales")
+        .select("total")
+        .eq("tenant_id", tenantId)
+        .eq("status", "completed")
+        .gte("created_at", weekStart.toISOString());
+      const weekCount = weekSales?.length ?? 0;
+      const weekTotal = (weekSales ?? []).reduce(
+        (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
+        0,
+      );
+      lines.push(
+        `Ventas últimos 7 días: ${weekCount} ventas por ${ars(weekTotal)}.`,
+      );
+    } catch (e) {
+      lines.push("(No se pudieron cargar las ventas recientes.)");
+      console.error("buildContext sales(day/week) error:", e);
+    }
   }
 
   // ── Ventas del mes en curso vs mes anterior + ticket promedio ─────────────
-  try {
-    // Mes en curso (desde el día 1 hasta ahora).
-    const { data: monthSales } = await admin
-      .from("sales")
-      .select("total")
-      .eq("tenant_id", tenantId)
-      .eq("status", "completed")
-      .gte("created_at", monthStart.toISOString());
-    const monthCount = monthSales?.length ?? 0;
-    const monthTotal = (monthSales ?? []).reduce(
-      (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
-      0,
-    );
-    // Mismo tramo del mes anterior (día 1 AR → igual tiempo transcurrido), para
-    // comparar manzanas con manzanas (mes corriente parcial vs igual tramo previo).
-    // Con bordes anclados en hora AR, el corte = inicio del mes previo + lo que va
-    // corrido del mes actual; así no se desfasa por la zona horaria.
-    const prevCutoff = new Date(
-      prevMonthStart.getTime() + (now.getTime() - monthStart.getTime()),
-    );
-    const { data: prevSales } = await admin
-      .from("sales")
-      .select("total")
-      .eq("tenant_id", tenantId)
-      .eq("status", "completed")
-      .gte("created_at", prevMonthStart.toISOString())
-      .lt("created_at", prevCutoff.toISOString());
-    const prevTotal = (prevSales ?? []).reduce(
-      (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
-      0,
-    );
-    const avgTicket = monthCount > 0 ? monthTotal / monthCount : 0;
-    lines.push(
-      `Ventas del mes en curso: ${monthCount} ventas por ${ars(monthTotal)} ` +
-        `(${pctText(monthTotal, prevTotal)}; mismo tramo mes anterior ` +
-        `${ars(prevTotal)}). Ticket promedio del mes: ${ars(avgTicket)}.`,
-    );
-  } catch (e) {
-    lines.push("(No se pudo cargar el comparativo mensual.)");
-    console.error("buildContext month error:", e);
+  if (can("sales.view") && allBranches) {
+    try {
+      // Mes en curso (desde el día 1 hasta ahora).
+      const { data: monthSales } = await admin
+        .from("sales")
+        .select("total")
+        .eq("tenant_id", tenantId)
+        .eq("status", "completed")
+        .gte("created_at", monthStart.toISOString());
+      const monthCount = monthSales?.length ?? 0;
+      const monthTotal = (monthSales ?? []).reduce(
+        (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
+        0,
+      );
+      // Mismo tramo del mes anterior (día 1 AR → igual tiempo transcurrido), para
+      // comparar manzanas con manzanas (mes corriente parcial vs igual tramo previo).
+      // Con bordes anclados en hora AR, el corte = inicio del mes previo + lo que va
+      // corrido del mes actual; así no se desfasa por la zona horaria.
+      const prevCutoff = new Date(
+        prevMonthStart.getTime() + (now.getTime() - monthStart.getTime()),
+      );
+      const { data: prevSales } = await admin
+        .from("sales")
+        .select("total")
+        .eq("tenant_id", tenantId)
+        .eq("status", "completed")
+        .gte("created_at", prevMonthStart.toISOString())
+        .lt("created_at", prevCutoff.toISOString());
+      const prevTotal = (prevSales ?? []).reduce(
+        (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
+        0,
+      );
+      const avgTicket = monthCount > 0 ? monthTotal / monthCount : 0;
+      lines.push(
+        `Ventas del mes en curso: ${monthCount} ventas por ${ars(monthTotal)} ` +
+          `(${pctText(monthTotal, prevTotal)}; mismo tramo mes anterior ` +
+          `${ars(prevTotal)}). Ticket promedio del mes: ${ars(avgTicket)}.`,
+      );
+    } catch (e) {
+      lines.push("(No se pudo cargar el comparativo mensual.)");
+      console.error("buildContext month error:", e);
+    }
   }
 
   // ── Ventas por medio de pago (últimos 7 días) ─────────────────────────────
   // payments.method es el detalle por medio de pago. Join INNER a sales con
   // status='completed' para NO contar pagos de ventas anuladas (consistente con
   // ai_sales_summary group_by:'payment_method'). Etiquetas legibles en español.
-  try {
-    const methodLabels: Record<string, string> = {
-      cash: "Efectivo",
-      debit: "Débito",
-      credit: "Crédito",
-      transfer: "Transferencia",
-      qr: "QR / Mercado Pago",
-      store_credit: "Crédito en tienda",
-      account: "Cuenta corriente",
-      other: "Otros",
-    };
-    const { data: pays } = await admin
-      .from("payments")
-      .select("method, amount, sales!inner(status)")
-      .eq("tenant_id", tenantId)
-      .eq("sales.status", "completed")
-      .gte("created_at", weekStart.toISOString())
-      .limit(5000);
-    const byMethod = new Map<string, number>();
-    for (const p of pays ?? []) {
-      const m = String((p as { method?: string }).method ?? "other");
-      byMethod.set(
-        m,
-        (byMethod.get(m) ?? 0) + (Number((p as { amount?: number }).amount) || 0),
+  if (can("sales.view") && allBranches) {
+    try {
+      const methodLabels: Record<string, string> = {
+        cash: "Efectivo",
+        debit: "Débito",
+        credit: "Crédito",
+        transfer: "Transferencia",
+        qr: "QR / Mercado Pago",
+        store_credit: "Crédito en tienda",
+        account: "Cuenta corriente",
+        other: "Otros",
+      };
+      const { data: pays } = await admin
+        .from("payments")
+        .select("method, amount, sales!inner(status)")
+        .eq("tenant_id", tenantId)
+        .eq("sales.status", "completed")
+        .gte("created_at", weekStart.toISOString())
+        .limit(5000);
+      const byMethod = new Map<string, number>();
+      for (const p of pays ?? []) {
+        const m = String((p as { method?: string }).method ?? "other");
+        byMethod.set(
+          m,
+          (byMethod.get(m) ?? 0) + (Number((p as { amount?: number }).amount) || 0),
+        );
+      }
+      const parts = [...byMethod.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([m, amt]) => `${methodLabels[m] ?? m} ${ars(amt)}`);
+      lines.push(
+        parts.length
+          ? `Ventas por medio de pago (7 días): ${parts.join(", ")}.`
+          : "Ventas por medio de pago (7 días): sin pagos registrados.",
       );
+    } catch (e) {
+      lines.push("(No se pudieron cargar los medios de pago.)");
+      console.error("buildContext payments error:", e);
     }
-    const parts = [...byMethod.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([m, amt]) => `${methodLabels[m] ?? m} ${ars(amt)}`);
-    lines.push(
-      parts.length
-        ? `Ventas por medio de pago (7 días): ${parts.join(", ")}.`
-        : "Ventas por medio de pago (7 días): sin pagos registrados.",
-    );
-  } catch (e) {
-    lines.push("(No se pudieron cargar los medios de pago.)");
-    console.error("buildContext payments error:", e);
   }
 
   // ── Top 5 productos por cantidad (últimos 7 días) ─────────────────────────
-  try {
-    const { data: items } = await admin
-      .from("sale_items")
-      .select("product_name, quantity, created_at")
-      .eq("tenant_id", tenantId)
-      .gte("created_at", weekStart.toISOString())
-      .limit(2000);
-    const agg = new Map<string, number>();
-    for (const it of items ?? []) {
-      const name = String((it as { product_name?: string }).product_name ?? "")
-        .trim();
-      if (!name) continue;
-      const qty = Number((it as { quantity?: number }).quantity) || 0;
-      agg.set(name, (agg.get(name) ?? 0) + qty);
+  if (can("sales.view") && allBranches) {
+    try {
+      const { data: items } = await admin
+        .from("sale_items")
+        .select("product_name, quantity, created_at")
+        .eq("tenant_id", tenantId)
+        .gte("created_at", weekStart.toISOString())
+        .limit(2000);
+      const agg = new Map<string, number>();
+      for (const it of items ?? []) {
+        const name = String((it as { product_name?: string }).product_name ?? "")
+          .trim();
+        if (!name) continue;
+        const qty = Number((it as { quantity?: number }).quantity) || 0;
+        agg.set(name, (agg.get(name) ?? 0) + qty);
+      }
+      const top = [...agg.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, qty]) => `${name} (${qty})`);
+      lines.push(
+        top.length
+          ? `Top productos (7 días): ${top.join(", ")}.`
+          : "Top productos (7 días): sin ventas registradas.",
+      );
+    } catch (e) {
+      lines.push("(No se pudieron cargar los productos más vendidos.)");
+      console.error("buildContext top products error:", e);
     }
-    const top = [...agg.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, qty]) => `${name} (${qty})`);
-    lines.push(
-      top.length
-        ? `Top productos (7 días): ${top.join(", ")}.`
-        : "Top productos (7 días): sin ventas registradas.",
-    );
-  } catch (e) {
-    lines.push("(No se pudieron cargar los productos más vendidos.)");
-    console.error("buildContext top products error:", e);
   }
 
   // ── Productos con stock bajo (stock <= stock_min) ─────────────────────────
   // El CONTEO global ya viene del snapshot (RPC). Acá solo listamos NOMBRES de
   // hasta 10 para dar color; ventana acotada (500 filas) para no inflar.
-  try {
-    const { data: lowStock } = await admin
-      .from("products")
-      .select("name, stock, stock_min")
-      .eq("tenant_id", tenantId)
-      .eq("is_active", true)
-      .is("deleted_at", null)
-      .limit(500);
-    const low = (lowStock ?? [])
-      .filter(
-        (p: { stock?: number; stock_min?: number }) =>
-          Number(p.stock_min) > 0 && Number(p.stock) <= Number(p.stock_min),
-      )
-      .slice(0, 10)
-      .map((p: { name?: string; stock?: number }) => `${p.name} (${p.stock})`);
-    lines.push(
-      low.length
-        ? `Detalle de stock bajo (muestra): ${low.join(", ")}.`
-        : "Detalle de stock bajo: sin productos por debajo del mínimo.",
-    );
-  } catch (e) {
-    lines.push("(No se pudo cargar el detalle de stock bajo.)");
-    console.error("buildContext low stock error:", e);
+  if (can("stock.view")) {
+    try {
+      const { data: lowStock } = await admin
+        .from("products")
+        .select("name, stock, stock_min")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .limit(500);
+      const low = (lowStock ?? [])
+        .filter(
+          (p: { stock?: number; stock_min?: number }) =>
+            Number(p.stock_min) > 0 && Number(p.stock) <= Number(p.stock_min),
+        )
+        .slice(0, 10)
+        .map((p: { name?: string; stock?: number }) => `${p.name} (${p.stock})`);
+      lines.push(
+        low.length
+          ? `Detalle de stock bajo (muestra): ${low.join(", ")}.`
+          : "Detalle de stock bajo: sin productos por debajo del mínimo.",
+      );
+    } catch (e) {
+      lines.push("(No se pudo cargar el detalle de stock bajo.)");
+      console.error("buildContext low stock error:", e);
+    }
   }
 
   // ── Cuenta corriente: top clientes con saldo deudor ───────────────────────
   // Saldo (deuda) por cliente = sum(delta) en customer_account_movements
   // (delta>0 fía, delta<0 paga). Reportamos los de saldo positivo, ordenados.
-  try {
-    const { data: movs } = await admin
-      .from("customer_account_movements")
-      .select("customer_id, delta, due_date")
-      .eq("tenant_id", tenantId)
-      .limit(10000);
-    const balByCustomer = new Map<string, number>();
-    const overdueByCustomer = new Map<string, boolean>();
-    const todayDateStr = now.toISOString().slice(0, 10);
-    for (const m of movs ?? []) {
-      const cid = String((m as { customer_id?: string }).customer_id ?? "");
-      if (!cid) continue;
-      const delta = Number((m as { delta?: number }).delta) || 0;
-      balByCustomer.set(cid, (balByCustomer.get(cid) ?? 0) + delta);
-      const due = (m as { due_date?: string | null }).due_date;
-      // Cargo vencido = delta>0 con due_date pasada (señal de mora).
-      if (delta > 0 && due && due < todayDateStr) overdueByCustomer.set(cid, true);
-    }
-    const debtors = [...balByCustomer.entries()].filter(([, bal]) => bal > 0.5);
-    const totalDebt = debtors.reduce((a, [, bal]) => a + bal, 0);
-    if (debtors.length === 0) {
-      lines.push("Cuenta corriente: sin clientes con saldo deudor.");
-    } else {
-      const topDebtors = debtors.sort((a, b) => b[1] - a[1]).slice(0, 8);
-      const ids = topDebtors.map(([cid]) => cid);
-      const { data: custs } = await admin
-        .from("customers")
-        .select("id, name")
+  if (can("customers.view")) {
+    try {
+      const { data: movs } = await admin
+        .from("customer_account_movements")
+        .select("customer_id, delta, due_date")
         .eq("tenant_id", tenantId)
-        .in("id", ids);
-      const nameById = new Map<string, string>();
-      for (const c of custs ?? []) {
-        nameById.set(
-          String((c as { id?: string }).id ?? ""),
-          String((c as { name?: string }).name ?? "Cliente"),
+        .limit(10000);
+      const balByCustomer = new Map<string, number>();
+      const overdueByCustomer = new Map<string, boolean>();
+      const todayDateStr = now.toISOString().slice(0, 10);
+      for (const m of movs ?? []) {
+        const cid = String((m as { customer_id?: string }).customer_id ?? "");
+        if (!cid) continue;
+        const delta = Number((m as { delta?: number }).delta) || 0;
+        balByCustomer.set(cid, (balByCustomer.get(cid) ?? 0) + delta);
+        const due = (m as { due_date?: string | null }).due_date;
+        // Cargo vencido = delta>0 con due_date pasada (señal de mora).
+        if (delta > 0 && due && due < todayDateStr) overdueByCustomer.set(cid, true);
+      }
+      const debtors = [...balByCustomer.entries()].filter(([, bal]) => bal > 0.5);
+      const totalDebt = debtors.reduce((a, [, bal]) => a + bal, 0);
+      if (debtors.length === 0) {
+        lines.push("Cuenta corriente: sin clientes con saldo deudor.");
+      } else {
+        const topDebtors = debtors.sort((a, b) => b[1] - a[1]).slice(0, 8);
+        const ids = topDebtors.map(([cid]) => cid);
+        const { data: custs } = await admin
+          .from("customers")
+          .select("id, name")
+          .eq("tenant_id", tenantId)
+          .in("id", ids);
+        const nameById = new Map<string, string>();
+        for (const c of custs ?? []) {
+          nameById.set(
+            String((c as { id?: string }).id ?? ""),
+            String((c as { name?: string }).name ?? "Cliente"),
+          );
+        }
+        const parts = topDebtors.map(([cid, bal]) => {
+          const overdue = overdueByCustomer.get(cid) ? " (vencido)" : "";
+          return `${nameById.get(cid) ?? "Cliente"} ${ars(bal)}${overdue}`;
+        });
+        lines.push(
+          `Cuenta corriente: ${debtors.length} clientes deben ${ars(totalDebt)} ` +
+            `en total. Top deudores: ${parts.join(", ")}.`,
         );
       }
-      const parts = topDebtors.map(([cid, bal]) => {
-        const overdue = overdueByCustomer.get(cid) ? " (vencido)" : "";
-        return `${nameById.get(cid) ?? "Cliente"} ${ars(bal)}${overdue}`;
-      });
-      lines.push(
-        `Cuenta corriente: ${debtors.length} clientes deben ${ars(totalDebt)} ` +
-          `en total. Top deudores: ${parts.join(", ")}.`,
-      );
+    } catch (e) {
+      lines.push("(No se pudo cargar la cuenta corriente.)");
+      console.error("buildContext account movements error:", e);
     }
-  } catch (e) {
-    lines.push("(No se pudo cargar la cuenta corriente.)");
-    console.error("buildContext account movements error:", e);
   }
 
   // ── Estado de caja: turno abierto y saldo de efectivo esperado ────────────
   // Saldo efectivo del turno = apertura + ingresos − egresos + ventas cash −
   // anulaciones cash (mismo cálculo que close_cash_shift / módulo cash).
-  try {
-    const { data: openShifts } = await admin
-      .from("cash_shifts")
-      .select("id, opening_amount, opened_at")
-      .eq("tenant_id", tenantId)
-      .eq("status", "open")
-      .order("opened_at", { ascending: false })
-      .limit(5);
-    if (!openShifts || openShifts.length === 0) {
-      lines.push("Caja: no hay turno abierto en este momento.");
-    } else {
-      const shiftIds = openShifts.map((s: { id: string }) => s.id);
-      const { data: mvs } = await admin
-        .from("cash_movements")
-        .select("cash_shift_id, type, amount, payment_method")
+  if (can("cash.view") && allBranches) {
+    try {
+      const { data: openShifts } = await admin
+        .from("cash_shifts")
+        .select("id, opening_amount, opened_at")
         .eq("tenant_id", tenantId)
-        .in("cash_shift_id", shiftIds)
-        .limit(10000);
-      const expectedByShift = new Map<string, number>();
-      for (const s of openShifts) {
-        expectedByShift.set(s.id, Number(s.opening_amount) || 0);
+        .eq("status", "open")
+        .order("opened_at", { ascending: false })
+        .limit(5);
+      if (!openShifts || openShifts.length === 0) {
+        lines.push("Caja: no hay turno abierto en este momento.");
+      } else {
+        const shiftIds = openShifts.map((s: { id: string }) => s.id);
+        const { data: mvs } = await admin
+          .from("cash_movements")
+          .select("cash_shift_id, type, amount, payment_method")
+          .eq("tenant_id", tenantId)
+          .in("cash_shift_id", shiftIds)
+          .limit(10000);
+        const expectedByShift = new Map<string, number>();
+        for (const s of openShifts) {
+          expectedByShift.set(s.id, Number(s.opening_amount) || 0);
+        }
+        for (const m of mvs ?? []) {
+          const sid = String((m as { cash_shift_id?: string }).cash_shift_id ?? "");
+          if (!expectedByShift.has(sid)) continue;
+          const type = String((m as { type?: string }).type ?? "");
+          const amt = Number((m as { amount?: number }).amount) || 0;
+          const pm = String((m as { payment_method?: string }).payment_method ?? "");
+          let delta = 0;
+          if (type === "income") delta = amt;
+          else if (type === "expense") delta = -amt;
+          else if (type === "sale" && pm === "cash") delta = amt;
+          else if (type === "sale_void" && pm === "cash") delta = -amt;
+          expectedByShift.set(sid, (expectedByShift.get(sid) ?? 0) + delta);
+        }
+        const total = [...expectedByShift.values()].reduce((a, b) => a + b, 0);
+        lines.push(
+          `Caja: ${openShifts.length} turno(s) abierto(s). ` +
+            `Efectivo esperado en caja: ${ars(total)}.`,
+        );
       }
-      for (const m of mvs ?? []) {
-        const sid = String((m as { cash_shift_id?: string }).cash_shift_id ?? "");
-        if (!expectedByShift.has(sid)) continue;
-        const type = String((m as { type?: string }).type ?? "");
-        const amt = Number((m as { amount?: number }).amount) || 0;
-        const pm = String((m as { payment_method?: string }).payment_method ?? "");
-        let delta = 0;
-        if (type === "income") delta = amt;
-        else if (type === "expense") delta = -amt;
-        else if (type === "sale" && pm === "cash") delta = amt;
-        else if (type === "sale_void" && pm === "cash") delta = -amt;
-        expectedByShift.set(sid, (expectedByShift.get(sid) ?? 0) + delta);
-      }
-      const total = [...expectedByShift.values()].reduce((a, b) => a + b, 0);
-      lines.push(
-        `Caja: ${openShifts.length} turno(s) abierto(s). ` +
-          `Efectivo esperado en caja: ${ars(total)}.`,
-      );
+    } catch (e) {
+      lines.push("(No se pudo cargar el estado de caja.)");
+      console.error("buildContext cash error:", e);
     }
-  } catch (e) {
-    lines.push("(No se pudo cargar el estado de caja.)");
-    console.error("buildContext cash error:", e);
   }
 
   // ── Devoluciones recientes (7 y 30 días) ──────────────────────────────────
-  try {
-    const { data: rets } = await admin
-      .from("sale_returns")
-      .select("total, created_at")
-      .eq("tenant_id", tenantId)
-      .gte("created_at", days30Start.toISOString())
-      .limit(5000);
-    let c7 = 0;
-    let t7 = 0;
-    let c30 = 0;
-    let t30 = 0;
-    const week = weekStart.getTime();
-    for (const r of rets ?? []) {
-      const amt = Number((r as { total?: number }).total) || 0;
-      const ts = new Date(
-        String((r as { created_at?: string }).created_at ?? ""),
-      ).getTime();
-      c30 += 1;
-      t30 += amt;
-      if (ts >= week) {
-        c7 += 1;
-        t7 += amt;
+  if (can("sales.view") && allBranches) {
+    try {
+      const { data: rets } = await admin
+        .from("sale_returns")
+        .select("total, created_at")
+        .eq("tenant_id", tenantId)
+        .gte("created_at", days30Start.toISOString())
+        .limit(5000);
+      let c7 = 0;
+      let t7 = 0;
+      let c30 = 0;
+      let t30 = 0;
+      const week = weekStart.getTime();
+      for (const r of rets ?? []) {
+        const amt = Number((r as { total?: number }).total) || 0;
+        const ts = new Date(
+          String((r as { created_at?: string }).created_at ?? ""),
+        ).getTime();
+        c30 += 1;
+        t30 += amt;
+        if (ts >= week) {
+          c7 += 1;
+          t7 += amt;
+        }
       }
+      lines.push(
+        `Devoluciones: ${c7} por ${ars(t7)} en 7 días; ` +
+          `${c30} por ${ars(t30)} en 30 días.`,
+      );
+    } catch (e) {
+      lines.push("(No se pudieron cargar las devoluciones.)");
+      console.error("buildContext returns error:", e);
     }
-    lines.push(
-      `Devoluciones: ${c7} por ${ars(t7)} en 7 días; ` +
-        `${c30} por ${ars(t30)} en 30 días.`,
-    );
-  } catch (e) {
-    lines.push("(No se pudieron cargar las devoluciones.)");
-    console.error("buildContext returns error:", e);
   }
 
   // ── Resumen de suscripción (plan, estado, vencimiento/trial) ──────────────
   // service_role scoped al tenant: subscriptions + plans + tenants.trial_ends_at.
-  try {
-    const { data: sub } = await admin
-      .from("subscriptions")
-      .select(
-        "status, billing_cycle, current_period_end, cancel_at_period_end, is_lifetime, plan_id",
-      )
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    if (!sub) {
-      lines.push("Suscripción: sin datos de plan.");
-    } else {
-      const s = sub as {
-        status?: string;
-        billing_cycle?: string;
-        current_period_end?: string | null;
-        cancel_at_period_end?: boolean;
-        is_lifetime?: boolean;
-        plan_id?: string | null;
-      };
-      let planName = "desconocido";
-      if (s.plan_id) {
-        const { data: plan } = await admin
-          .from("plans")
-          .select("name, secondary_name")
-          .eq("id", s.plan_id)
-          .maybeSingle();
-        const pn = plan as { name?: string; secondary_name?: string } | null;
-        if (pn?.name) {
-          planName = pn.secondary_name
-            ? `${pn.name} (${pn.secondary_name})`
-            : pn.name;
+  if (can("billing.manage")) {
+    try {
+      const { data: sub } = await admin
+        .from("subscriptions")
+        .select(
+          "status, billing_cycle, current_period_end, cancel_at_period_end, is_lifetime, plan_id",
+        )
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (!sub) {
+        lines.push("Suscripción: sin datos de plan.");
+      } else {
+        const s = sub as {
+          status?: string;
+          billing_cycle?: string;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          is_lifetime?: boolean;
+          plan_id?: string | null;
+        };
+        let planName = "desconocido";
+        if (s.plan_id) {
+          const { data: plan } = await admin
+            .from("plans")
+            .select("name, secondary_name")
+            .eq("id", s.plan_id)
+            .maybeSingle();
+          const pn = plan as { name?: string; secondary_name?: string } | null;
+          if (pn?.name) {
+            planName = pn.secondary_name
+              ? `${pn.name} (${pn.secondary_name})`
+              : pn.name;
+          }
         }
+        const statusLabels: Record<string, string> = {
+          trial: "en prueba",
+          active: "activa",
+          past_due: "con pago vencido",
+          suspended: "suspendida",
+          cancelled: "cancelada",
+        };
+        const statusTxt = statusLabels[s.status ?? ""] ?? (s.status ?? "sin estado");
+        // Para trial, la fecha canónica es tenants.trial_ends_at; si no, el período.
+        let endIso: string | null = s.current_period_end ?? null;
+        if (s.status === "trial") {
+          const { data: t } = await admin
+            .from("tenants")
+            .select("trial_ends_at")
+            .eq("id", tenantId)
+            .maybeSingle();
+          endIso = (t as { trial_ends_at?: string | null } | null)?.trial_ends_at ??
+            endIso;
+        }
+        let tail = "";
+        if (s.is_lifetime) {
+          tail = " Plan de por vida (sin vencimiento).";
+        } else if (endIso) {
+          const end = new Date(endIso);
+          const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86_400_000);
+          const when = end.toISOString().slice(0, 10);
+          const label = s.status === "trial" ? "Prueba termina" : "Próximo vencimiento";
+          tail =
+            daysLeft >= 0
+              ? ` ${label} el ${when} (faltan ${daysLeft} día(s)).`
+              : ` ${label} el ${when} (venció hace ${Math.abs(daysLeft)} día(s)).`;
+        }
+        const cancelTxt = s.cancel_at_period_end
+          ? " Marcada para no renovar al fin del período."
+          : "";
+        lines.push(
+          `Suscripción: plan ${planName}, ${statusTxt} ` +
+            `(ciclo ${s.billing_cycle ?? "s/d"}).${tail}${cancelTxt}`,
+        );
       }
-      const statusLabels: Record<string, string> = {
-        trial: "en prueba",
-        active: "activa",
-        past_due: "con pago vencido",
-        suspended: "suspendida",
-        cancelled: "cancelada",
-      };
-      const statusTxt = statusLabels[s.status ?? ""] ?? (s.status ?? "sin estado");
-      // Para trial, la fecha canónica es tenants.trial_ends_at; si no, el período.
-      let endIso: string | null = s.current_period_end ?? null;
-      if (s.status === "trial") {
-        const { data: t } = await admin
-          .from("tenants")
-          .select("trial_ends_at")
-          .eq("id", tenantId)
-          .maybeSingle();
-        endIso = (t as { trial_ends_at?: string | null } | null)?.trial_ends_at ??
-          endIso;
-      }
-      let tail = "";
-      if (s.is_lifetime) {
-        tail = " Plan de por vida (sin vencimiento).";
-      } else if (endIso) {
-        const end = new Date(endIso);
-        const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86_400_000);
-        const when = end.toISOString().slice(0, 10);
-        const label = s.status === "trial" ? "Prueba termina" : "Próximo vencimiento";
-        tail =
-          daysLeft >= 0
-            ? ` ${label} el ${when} (faltan ${daysLeft} día(s)).`
-            : ` ${label} el ${when} (venció hace ${Math.abs(daysLeft)} día(s)).`;
-      }
-      const cancelTxt = s.cancel_at_period_end
-        ? " Marcada para no renovar al fin del período."
-        : "";
-      lines.push(
-        `Suscripción: plan ${planName}, ${statusTxt} ` +
-          `(ciclo ${s.billing_cycle ?? "s/d"}).${tail}${cancelTxt}`,
-      );
+    } catch (e) {
+      lines.push("(No se pudo cargar la suscripción.)");
+      console.error("buildContext subscription error:", e);
     }
-  } catch (e) {
-    lines.push("(No se pudo cargar la suscripción.)");
-    console.error("buildContext subscription error:", e);
   }
 
   // ── Estado de configuración ───────────────────────────────────────────────
-  try {
-    // ADR-119: el diseño de comprobantes vive en tenant_branding.invoice_style
-    // (las plantillas de ticket se retiraron).
-    const { data: brandRow } = await admin
-      .from("tenant_branding")
-      .select("invoice_style")
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    const style = (brandRow as { invoice_style?: Record<string, unknown> } | null)?.invoice_style;
-    const ticket = style && Object.keys(style).length > 0 ? style : null;
-    const { data: mp } = await admin
-      .from("tenant_payment_methods")
-      .select("enabled")
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", "mercadopago")
-      .maybeSingle();
-    const { data: smtp } = await admin
-      .from("tenant_email_smtp")
-      .select("host")
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    lines.push(
-      `Config: diseño de comprobantes ${ticket ? "personalizado" : "por defecto (modelo Clásico)"}; ` +
-        `Mercado Pago ${mp?.enabled ? "habilitado" : "deshabilitado"}; ` +
-        `email de comprobantes ${smtp?.host ? "configurado" : "sin configurar"}.`,
-    );
-  } catch (e) {
-    lines.push("(No se pudo cargar el estado de configuración.)");
-    console.error("buildContext config error:", e);
+  if (can("config.edit")) {
+    try {
+      // ADR-119: el diseño de comprobantes vive en tenant_branding.invoice_style
+      // (las plantillas de ticket se retiraron).
+      const { data: brandRow } = await admin
+        .from("tenant_branding")
+        .select("invoice_style")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      const style = (brandRow as { invoice_style?: Record<string, unknown> } | null)?.invoice_style;
+      const ticket = style && Object.keys(style).length > 0 ? style : null;
+      const { data: mp } = await admin
+        .from("tenant_payment_methods")
+        .select("enabled")
+        .eq("tenant_id", tenantId)
+        .eq("provider_key", "mercadopago")
+        .maybeSingle();
+      const { data: smtp } = await admin
+        .from("tenant_email_smtp")
+        .select("host")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      lines.push(
+        `Config: diseño de comprobantes ${ticket ? "personalizado" : "por defecto (modelo Clásico)"}; ` +
+          `Mercado Pago ${mp?.enabled ? "habilitado" : "deshabilitado"}; ` +
+          `email de comprobantes ${smtp?.host ? "configurado" : "sin configurar"}.`,
+      );
+    } catch (e) {
+      lines.push("(No se pudo cargar el estado de configuración.)");
+      console.error("buildContext config error:", e);
+    }
   }
 
+  if (!allBranches && can("sales.view")) {
+    lines.push("Ventas y caja: este usuario ve sólo sus sucursales; consultalas con ai_query.");
+  }
   return lines.join("\n");
 }

@@ -90,3 +90,44 @@ export function daysToPayment(paymentDate: string, today: string): number {
   const b = Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10));
   return Math.round((a - b) / 86_400_000);
 }
+
+// ── Cheque repetido (F24 · H158) ────────────────────────────────────────────
+// El mismo número y banco ya cargado suele ser un error de tipeo o una carga
+// doble. Es un aviso: dos bancos pueden tener el mismo número.
+
+/** Número sin espacios, guiones ni ceros a la izquierda. */
+export function normalizeChequeNumber(n: string | null | undefined): string {
+  return String(n ?? "").replace(/[^0-9a-z]/gi, "").replace(/^0+/, "").toUpperCase();
+}
+
+/** Banco sin acentos, mayúsculas ni "banco"/"bco" delante. */
+export function normalizeBankName(b: string | null | undefined): string {
+  return String(b ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/^(banco|bco\.?)\s+(del?\s+)?/, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Cheques de la lista con el mismo número (y el mismo banco cuando los dos lo
+ * tienen), sin los anulados ni el que se está editando.
+ */
+export function chequeDuplicates<T extends { id: string; number: string; bank_name: string | null; status: string }>(
+  list: readonly T[],
+  number: string,
+  bank: string | null,
+  excludeId?: string | null,
+): T[] {
+  const n = normalizeChequeNumber(number);
+  if (n.length < 3) return [];
+  const b = normalizeBankName(bank);
+  return list.filter((c) => {
+    if (c.id === excludeId || c.status === "anulado") return false;
+    if (normalizeChequeNumber(c.number) !== n) return false;
+    const cb = normalizeBankName(c.bank_name);
+    return !b || !cb || cb === b;
+  });
+}

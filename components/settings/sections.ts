@@ -1,5 +1,6 @@
 import {
   BadgeDollarSign,
+  BellRing,
   Bike,
   Building2,
   CalendarDays,
@@ -79,7 +80,8 @@ export type SettingsSectionKey =
   | "presupuestos"
   | "pedidos"
   | "logistica"
-  | "imagenes-ia";
+  | "imagenes-ia"
+  | "alertas";
 
 export type SettingsSectionDef = {
   key: SettingsSectionKey;
@@ -168,6 +170,18 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
           "Qué acciones piden PIN de supervisor y desde qué monto, quién autoriza, tu PIN y el registro de todo lo que pasa en el negocio.",
         icon: ShieldCheck,
         keywords: "pin supervisor autorizacion anulacion devolucion retiro descuento auditoria registro log caja compartida",
+      },
+      // F24 · H162 (ADR-176): alertas programadas (OPTIONAL Pro+).
+      {
+        key: "alertas",
+        label: "Alertas",
+        title: "Alertas programadas",
+        description:
+          "Avisos automáticos por la campana y por mail: stock bajo, ventas bajo costo, deudas, cheques, cajas sin cerrar, comprobantes sin CAE y más, con tus umbrales y horarios.",
+        icon: BellRing,
+        feature: "alertas_programadas",
+        keywords:
+          "alerta aviso notificacion campana mail resumen diario stock minimo negativo bajo costo deuda vencida cheque factura proveedor caja abierta sin cerrar cae comprobante mercaderia parada ajuste descuento presupuesto cliente inactivo costo certificado anulacion programada umbral",
       },
     ],
   },
@@ -548,6 +562,8 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = SETTINGS_GROUPS.flatMap(
 /** Nombres alternativos aceptados en `?seccion=`. */
 export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   cupones: "promociones",
+  avisos: "alertas",
+  notificaciones: "alertas",
   arca: "facturacion",
   "mis-datos-fiscales": "datos-facturacion",
   "facturacion-ninjasoft": "datos-facturacion",

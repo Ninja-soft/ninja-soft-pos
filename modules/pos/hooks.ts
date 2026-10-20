@@ -227,8 +227,8 @@ export function usePaymentPlanMutations(providerKey: string, storeId: string | n
       onSuccess: inv,
     }),
     setProviderValidity: useMutation({
-      mutationFn: (v: { validFrom: string | null; validUntil: string | null }) =>
-        paymentPlansApi.setProviderValidity(providerKey, v.validFrom, v.validUntil, storeId),
+      mutationFn: (v: { validFrom: string | null; validUntil: string | null; weekdays?: number[] | null }) =>
+        paymentPlansApi.setProviderValidity(providerKey, v.validFrom, v.validUntil, storeId, v.weekdays),
       onSuccess: inv,
     }),
     remove: useMutation({ mutationFn: (id: string) => paymentPlansApi.remove(id), onSuccess: inv }),

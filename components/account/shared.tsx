@@ -21,6 +21,11 @@ export const METHOD_LABEL: Record<string, string> = {
   transfer: "Transferencia",
   qr: "QR",
   other: "Otro",
+  // H160 (ADR-179): recibo con varios medios.
+  cheque: "Cheque",
+  echeq: "E-cheq",
+  retention: "Retención",
+  rounding: "Redondeo",
 };
 
 export const COLLECT_METHODS: { value: CollectMethod; label: string }[] = [

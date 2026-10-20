@@ -82,9 +82,9 @@ Estados: HECHO · PARCIAL · EN ROADMAP · FALTA · NO APLICA.
 | # | Capacidad IM5 | Estado | Evidencia NinjaPOS | Gap |
 |---|---|---|---|---|
 | 47 | Recibo correlativo con imputación FIFO o elegida, pago parcial y a cuenta | HECHO | `account_collect` y `CollectModal.tsx` (recibo #, imputación y saldo a favor), ADR-037 | |
-| 48 | Varios medios en un mismo recibo | PARCIAL | `CollectModal` acepta un solo medio por cobro (`COLLECT_METHODS`: efectivo, transferencia, débito, crédito, QR, otro) | Recibo con varias líneas de pago que tienen que cuadrar |
-| 49 | Cheques y e-cheqs del cliente en el cobro (banco, número, fechas, tipo, control de repetidos) | FALTA | La cartera de cheques de terceros existe en Tesorería (`20261022100300_tesoreria.sql`, H154), pero no es un medio de cobro ni en la venta ni en la cta. cte. | Medio "Cheque o e-cheq" que dé de alta el cheque en cartera |
-| 50 | Retenciones sufridas cargadas en el recibo (IIBB, Ganancias, IVA, SUSS) | PARCIAL | Las sufridas se registran aparte (H106, `components/tax/SufferedFormModal.tsx`) | Que la retención sea un medio del recibo, cancele deuda y alimente las sufridas |
+| 48 | Varios medios en un mismo recibo | HECHO | `account_collect_multi` y `CollectModal` con líneas que cuadran y redondeo (H160, ADR-179) | |
+| 49 | Cheques y e-cheqs del cliente en el cobro (banco, número, fechas, tipo, control de repetidos) | HECHO | Medios `cheque` y `echeq` en el POS y en el recibo, que dan de alta el cheque en cartera (H160, ADR-179) | El aviso de repetido sigue en el alta manual |
+| 50 | Retenciones sufridas cargadas en el recibo (IIBB, Ganancias, IVA, SUSS) | HECHO | Línea de retención del recibo con `tax_suffered_register` (H160, ADR-179) | |
 | 51 | Anticipos y saldo a favor | HECHO | `account_unapplied_credits`, vales (`20260531280000_store_credit_payment.sql`) | |
 | 52 | Seña parcial | EN ROADMAP | H30 l.650 [ ] | |
 | 53 | Recibo en dos monedas y NC/ND automáticas por diferencia de cotización | FALTA | Depende de la moneda extranjera (H107) | |

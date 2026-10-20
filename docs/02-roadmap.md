@@ -1605,15 +1605,15 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [x] **P2 S** Recuperar el carrito al recargar la página (guardado local automático, no sólo Pausar). *Hecho (ADR-172): sessionStorage de la pestaña, con dueño negocio y usuario.*
   - [ ] **P3 S** Diagnóstico para el cajero cuando falla la factura: si el caído es ARCA o el servidor y cuánto tardó.
   - [ ] *Criterio:* un cierre con $10.000 en billetes de 1.000 y un cupón de $5.000 faltante muestra diferencia sólo en tarjeta, el encargado lo confirma y ya no se puede editar.
-- [ ] **H160 · Cobros ampliados.** · *BASE (recibo con varios medios) + OPTIONAL `cuenta_corriente`, `tesoreria`.* Enriquece H14, H31 y H106.
-  - [ ] **P1 M** Recibo de cuenta corriente con varios medios que tienen que cuadrar con lo imputado, más ajuste por redondeo.
-  - [ ] **P1 M** Cheque y e-cheq de cliente como medio de cobro en el POS y en la cuenta corriente, que entran directo a la cartera de Tesorería.
-  - [ ] **P1 M** Retenciones sufridas dentro del recibo, que cancelan deuda y alimentan las sufridas.
-  - [ ] **P2 M** Efectivo en dólares como medio, con la cotización del día y el vuelto en pesos.
-  - [ ] **P2 S** Planes de tarjeta por día de la semana; arancel, TNA y CFT visibles en el plan.
+- [~] **H160 · Cobros ampliados.** · *BASE (recibo con varios medios) + OPTIONAL `cuenta_corriente`, `tesoreria`, `efectivo_usd` (nueva, Pro).* Enriquece H14, H31 y H106. *Parcial en ADR-179 (`feat/h160-cobros`, migración `20270117100000_h160_cobros`): faltan las reglas de medios por comprobante, la botonera configurable y arancel, TNA y CFT del plan.*
+  - [x] **P1 M** Recibo de cuenta corriente con varios medios que tienen que cuadrar con lo imputado, más ajuste por redondeo. *Hecho (ADR-179): `account_collect_multi`, una línea por medio con un solo recibo, redondeo hasta `pos_settings.receipt_rounding_tolerance` a "Diferencias de redondeo".*
+  - [x] **P1 M** Cheque y e-cheq de cliente como medio de cobro en el POS y en la cuenta corriente, que entran directo a la cartera de Tesorería. *Hecho (ADR-179): medios `cheque` y `echeq` gateados por `tesoreria` en el servidor; el cheque queda en cartera enlazado al recibo o al pago.*
+  - [x] **P1 M** Retenciones sufridas dentro del recibo, que cancelan deuda y alimentan las sufridas. *Hecho (ADR-179): línea de retención registrada con `tax_suffered_register` y vinculada al recibo.*
+  - [x] **P2 M** Efectivo en dólares como medio, con la cotización del día y el vuelto en pesos. *Hecho (ADR-179): medio `cash_usd` (feature `efectivo_usd`), cotización del negocio o la oficial, vuelto como retiro del cajón y dólares aparte en el arqueo.*
+  - [~] **P2 S** Planes de tarjeta por día de la semana; arancel, TNA y CFT visibles en el plan. *Hecho por día de la semana (ADR-179, `payment_plans.weekdays`); falta arancel, TNA y CFT (no hay columnas).*
   - [ ] **P2 M** Reglas de medios según el comprobante (factura o sólo ticket) y por usuario; monto máximo por medio por comprobante.
   - [ ] **P2 M** Botonera de cobro configurable: botones que combinan medio y comprobante, cobran de un toque, con atajo F y orden por uso.
-  - [ ] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera.
+  - [x] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera. *Cubierto en `tests/unit/h160Cobros.test.ts` (sin dry-run en base).*
 - [~] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97. *Parcial en ADR-174 (migración `20270112100000_h161_costo_gestion`, Reportes › Gestión): faltan los pendientes a fecha de corte, la búsqueda sin acentos y los P2.*
   - [x] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy. *Hecho (ADR-174): `sale_items.unit_cost` por trigger; CMV de la venta y de la devolución y comparativo de sucursales lo usan; las ventas anteriores quedaron con el costo del día marcado como aproximado.*
   - [x] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos). *Hecho (ADR-174): Reportes › Gestión › Cobranzas (cuenta corriente).*
@@ -1911,9 +1911,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 21/131 | 2 | 108 | 16% | 17% |
+| **F24** | 26/131 | 4 | 101 | 20% | 21% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 699/1337 | 313 | 325 | 52% | 64% |
+| **Total** | 704/1337 | 315 | 318 | 53% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

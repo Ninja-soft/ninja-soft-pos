@@ -38,11 +38,14 @@ export function billsTotal(bills: Record<string, number>, coins: number): number
   return Math.round((t + (coins > 0 ? coins : 0)) * 100) / 100;
 }
 
+// H160: los dólares se esperan y se cuentan en dólares (no en pesos).
+const methodLabel = (m: string) => (m === "cash_usd" ? "Dólares (en US$)" : (PAYMENT_METHOD_LABELS[m] ?? m));
+
 /** Medios del turno que se cuentan, con su esperado (los de esperado 0 no salen). */
 export function countableMethods(byMethod: Record<string, number>): { method: string; label: string; expected: number }[] {
   return Object.entries(byMethod)
     .filter(([m, v]) => !NOT_COUNTED.has(m) && Math.abs(v) > 0.004)
-    .map(([m, v]) => ({ method: m, label: PAYMENT_METHOD_LABELS[m] ?? m, expected: Math.round(v * 100) / 100 }))
+    .map(([m, v]) => ({ method: m, label: methodLabel(m), expected: Math.round(v * 100) / 100 }))
     .sort((a, b) => b.expected - a.expected);
 }
 
@@ -85,7 +88,7 @@ export function countDetailRows(detail: unknown): CountDetailRow[] {
   return Object.entries(methods)
     .map(([m, v]) => ({
       method: m,
-      label: m === "cash" ? "Efectivo" : (PAYMENT_METHOD_LABELS[m] ?? m),
+      label: m === "cash" ? "Efectivo" : methodLabel(m),
       expected: Number(v.expected ?? 0),
       counted: v.counted == null ? null : Number(v.counted),
       diff: v.diff == null ? null : Number(v.diff),

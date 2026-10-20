@@ -56,8 +56,8 @@ Estados: HECHO, PARCIAL, ROADMAP (pendiente con hito), FALTA (ni código ni road
 | Tarjeta con plan, cuotas, recargo, lote, cupón, autorización | HECHO | `payment_plans`, `payments.card_voucher`, `require_card_voucher` | - |
 | Planes por día de la semana | FALTA | `payment_plans` tiene vigencia y `store_id`, no días | "Cuotas sin interés los martes" se resuelve hoy sólo con promos |
 | Arancel, TNA, TEM, CFT por plan | PARCIAL | H21i comisiones por medio; F14 línea 927 CFT | CFT visible en el cobro |
-| Cheque como medio de cobro (POS y cuenta corriente) | PARCIAL | Cheques de terceros en Tesorería (ADR-059, ADR-158, `ChequesView.tsx`) | No es un medio del POS ni de `account_collect` |
-| Efectivo en dólares con cotización | FALTA | Tenders sin USD (`lib/pos/tenders.ts`) | Cobro en USD con cotización del día y vuelto en pesos |
+| Cheque como medio de cobro (POS y cuenta corriente) | HECHO | Medios `cheque` y `echeq` en el POS y en `account_collect_multi` (H160, ADR-179) | |
+| Efectivo en dólares con cotización | HECHO | Tender `cash_usd` con cotización del día y vuelto en pesos (H160, ADR-179) | |
 | Pago electrónico aprobado no se pierde al cerrar | HECHO | Cobros en espera (ADR-048), Pausar (ADR-106) | - |
 | Reglas de cobro destino x medio (qué medios por tipo de comprobante y usuario) | PARCIAL | Medios por negocio y sucursal, planes por sucursal (`20261020110000_planes_por_sucursal.sql`) | Restringir medios por "factura vs sólo ticket" y por usuario |
 | Botonera de cobro ágil (un toque cobra y graba, F-keys, orden por uso) | PARCIAL | Cobro express H36 | Botones configurables medio + comprobante con atajo y orden por frecuencia |

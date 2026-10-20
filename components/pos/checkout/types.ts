@@ -70,6 +70,21 @@ export interface CheckoutPayment {
    * un snapshot en payments.metadata.transfer.
    */
   transfer?: { accountId: string | null };
+  /** H160: datos del cheque o e-cheq (entra a la cartera de Tesorería). */
+  cheque?: SaleChequeInput;
+  /** H160: dólares recibidos y la cotización usada (method 'cash_usd'). */
+  usd?: { amount: number; rate: number };
+}
+
+/** H160 (ADR-179): cheque o e-cheq del cliente cobrado en el POS. */
+export interface SaleChequeInput {
+  number: string;
+  bank_name?: string | null;
+  /** AAAA-MM-DD. */
+  payment_date: string;
+  issue_date?: string | null;
+  drawer_name?: string | null;
+  drawer_cuit?: string | null;
 }
 
 /** Cobro aprobado por la terminal integrada (ADR-053). */
@@ -149,6 +164,8 @@ export interface PaidLine extends CheckoutLine {
   reference?: string;
   card_voucher?: CheckoutPayment["card_voucher"];
   transfer?: CheckoutPayment["transfer"];
+  cheque?: CheckoutPayment["cheque"];
+  usd?: CheckoutPayment["usd"];
   surchargeItems: { name: string; amount: number }[];
   /** Cobro electrónico ya aprobado: no se puede quitar. */
   locked: boolean;

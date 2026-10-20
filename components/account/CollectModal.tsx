@@ -12,15 +12,25 @@ import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { allocatePayment, type OpenItem } from "@/lib/account/allocation";
 import {
+  RECEIPT_METHOD_LABEL,
+  fillReceiptAmounts,
+  needsMultiReceipt,
+  receiptLineError,
+  receiptTotals,
+  type ReceiptLine,
+} from "@/lib/account/receipt";
+import {
   accountErrorMessage,
   newIdempotencyKey,
   type CollectMethod,
   type CollectResult,
   type OpenItemRow,
 } from "@/modules/customers/account";
-import { useAccountMutations, useAccountStatement } from "@/modules/customers/hooks";
+import { useAccountMutations, useAccountStatement, useReceiptTolerance } from "@/modules/customers/hooks";
 import { useTransferAccounts } from "@/modules/payments/transfer";
-import { COLLECT_METHODS, KIND_LABEL, METHOD_LABEL, fmtDate } from "./shared";
+import { useFeature } from "@/modules/saas/gating";
+import { KIND_LABEL, METHOD_LABEL, fmtDate } from "./shared";
+import { ReceiptLinesEditor, newDraftLine, type DraftLine } from "./ReceiptLinesEditor";
 
 function itemLabel(it: Pick<OpenItemRow, "kind" | "reason" | "installment_no" | "installments">): string {
   if (it.kind === "interest") return "Punitorio";
@@ -28,9 +38,10 @@ function itemLabel(it: Pick<OpenItemRow, "kind" | "reason" | "installment_no" | 
   return it.reason || KIND_LABEL.charge;
 }
 
-// Cobro de deuda de cuenta corriente: monto, medio, imputación (FIFO por
-// defecto o elegida) y nota. Impacta en la caja abierta (efectivo al arqueo,
-// otros medios al Z) y genera recibo correlativo. Idempotente por intento.
+// Cobro de deuda de cuenta corriente: monto, medios (H160: varios, con
+// cheques, e-cheqs y retenciones, más el ajuste por redondeo), imputación
+// (FIFO por defecto o elegida) y nota. Impacta en la caja abierta (efectivo al
+// arqueo, otros medios al Z) y genera un recibo correlativo. Idempotente.
 export function CollectModal({
   open,
   onOpenChange,
@@ -46,9 +57,12 @@ export function CollectModal({
 }) {
   const { toast } = useToast();
   const { data: st, isLoading } = useAccountStatement(open ? customerId : null);
-  const { collect } = useAccountMutations();
+  const { collect, collectMulti } = useAccountMutations();
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<CollectMethod>("cash");
+  const [drafts, setDrafts] = useState<DraftLine[]>(() => [newDraftLine()]);
+  const allowCheques = useFeature("tesoreria") === true;
+  const allowRetentions = useFeature("percepciones_retenciones") === true;
+  const { data: tolerance = 10 } = useReceiptTolerance(open);
   const [note, setNote] = useState("");
   const [choose, setChoose] = useState(false);
   const [chosen, setChosen] = useState<Record<string, string>>({});
@@ -58,13 +72,11 @@ export function CollectModal({
   // Tesorería, el cobro suma ahí y en su cuenta contable).
   const { data: transferAccounts = [] } = useTransferAccounts();
   const activeTransfers = transferAccounts.filter((t) => t.is_active && !t.deleted_at);
-  const [transferAccount, setTransferAccount] = useState("");
 
   useEffect(() => {
     if (open) {
       setAmount(presetAmount && presetAmount > 0 ? String(presetAmount) : "");
-      setTransferAccount("");
-      setMethod("cash");
+      setDrafts([newDraftLine()]);
       setNote("");
       setChoose(false);
       setChosen({});
@@ -100,6 +112,45 @@ export function CollectModal({
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
+  // Medios del recibo: la primera línea sin monto toma lo que falta.
+  const lineAmounts = useMemo(
+    () => fillReceiptAmounts(drafts.map((d) => (d.amount.trim() === "" ? null : Number(d.amount) || 0)), amt),
+    [drafts, amt],
+  );
+  const receiptLines: ReceiptLine[] = useMemo(
+    () =>
+      drafts.map((d, i): ReceiptLine =>
+        d.kind === "retention"
+          ? {
+              kind: "retention",
+              tax: d.tax,
+              amount: lineAmounts[i] ?? 0,
+              jurisdiction: d.jurisdiction || null,
+              certificate: d.certificate || null,
+            }
+          : {
+              kind: "payment",
+              method: d.method,
+              amount: lineAmounts[i] ?? 0,
+              transfer_account_id: d.method === "transfer" ? d.transferAccount || null : null,
+              cheque:
+                d.method === "cheque" || d.method === "echeq"
+                  ? {
+                      number: d.chequeNumber,
+                      bank_name: d.chequeBank || null,
+                      payment_date: d.chequePaymentDate,
+                      drawer_name: d.chequeDrawer || null,
+                      drawer_cuit: d.chequeCuit || null,
+                    }
+                  : null,
+            },
+      ),
+    [drafts, lineAmounts],
+  );
+  const usedLines = receiptLines.filter((l) => l.amount > 0);
+  const totals = receiptTotals(usedLines, amt, tolerance);
+  const lineError = usedLines.map(receiptLineError).find(Boolean) ?? null;
+
   async function submit() {
     try {
       const picks = choose
@@ -107,15 +158,26 @@ export function CollectModal({
             .map(([id, v]) => ({ id, amount: Math.round((Number(v) || 0) * 100) / 100 }))
             .filter((x) => x.amount > 0)
         : null;
-      const r = await collect.mutateAsync({
-        customerId: customerId!,
-        amount: amt,
-        method,
-        allocations: picks,
-        idempotencyKey: key,
-        note,
-        transferAccountId: method === "transfer" ? transferAccount || null : null,
-      });
+      const single = usedLines[0];
+      const r =
+        !needsMultiReceipt(usedLines, totals) && single && single.kind === "payment"
+          ? await collect.mutateAsync({
+              customerId: customerId!,
+              amount: amt,
+              method: single.method as CollectMethod,
+              allocations: picks,
+              idempotencyKey: key,
+              note,
+              transferAccountId: single.method === "transfer" ? single.transfer_account_id || null : null,
+            })
+          : await collectMulti.mutateAsync({
+              customerId: customerId!,
+              lines: usedLines,
+              total: amt,
+              allocations: picks,
+              idempotencyKey: key,
+              note,
+            });
       setResult(r);
       toast({ title: `Cobro registrado · recibo #${r.receipt_no}`, variant: "success" });
     } catch (e) {
@@ -136,11 +198,28 @@ export function CollectModal({
                 Recibo #{result.receipt_no} · {formatCurrency(Number(result.amount))}
               </p>
               <p className="text-muted-foreground">
-                {METHOD_LABEL[result.method] ?? result.method} · saldo actual{" "}
+                {result.lines && result.lines.length > 1
+                  ? `${result.lines.filter((l) => l.kind === "payment").length} medios`
+                  : (METHOD_LABEL[result.method] ?? RECEIPT_METHOD_LABEL[result.method as "cash"] ?? result.method)}{" "}
+                · saldo actual{" "}
                 <span className="font-semibold text-foreground">{formatCurrency(Number(result.balance))}</span>
               </p>
             </div>
           </div>
+          {result.lines && result.lines.length > 1 && (
+            <ul className="space-y-1 text-sm">
+              {result.lines.map((l) => (
+                <li key={l.id} className="flex justify-between gap-2 rounded-md bg-muted/40 px-3 py-1.5">
+                  <span className="truncate">
+                    {RECEIPT_METHOD_LABEL[(l.method ?? "other") as "cash"] ?? l.method}
+                    {l.cheque_id ? " · en cartera" : ""}
+                    {l.suffered_id ? " · en retenciones sufridas" : ""}
+                  </span>
+                  <span className="tabular-nums">{formatCurrency(Number(l.amount))}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           {result.allocations.length > 0 && (
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Imputado a</p>
@@ -189,49 +268,34 @@ export function CollectModal({
             )}
           </div>
 
-          <div>
-            <p className="mb-2 text-sm font-medium text-muted-foreground">Medio</p>
-            <div className="grid grid-cols-3 gap-2">
-              {COLLECT_METHODS.map((m) => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => setMethod(m.value)}
-                  className={cn(
-                    "h-10 rounded-lg text-sm font-medium transition",
-                    method === m.value
-                      ? "bg-ninja-flame/15 text-foreground"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ReceiptLinesEditor
+            lines={drafts}
+            amounts={lineAmounts}
+            onChange={setDrafts}
+            allowCheques={allowCheques}
+            allowRetentions={allowRetentions}
+            transferAccounts={activeTransfers}
+          />
 
-          {method === "transfer" && activeTransfers.length > 0 && (
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-muted-foreground">¿A qué cuenta te transfirió?</span>
-              <select
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-                value={transferAccount}
-                onChange={(e) => setTransferAccount(e.target.value)}
-              >
-                <option value="" className="bg-popover text-popover-foreground">
-                  No sé o no importa
-                </option>
-                {activeTransfers.map((t) => (
-                  <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">
-                    {t.bank_name}
-                    {t.alias ? ` · ${t.alias}` : ""}
-                  </option>
+          {amt > 0 && usedLines.length > 0 && (
+            <div className="rounded-lg bg-muted/40 p-3 text-sm">
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Medios</span>
+                <span className="tabular-nums">{formatCurrency(totals.linesTotal)}</span>
+              </div>
+              {totals.diff !== 0 &&
+                (totals.balanced ? (
+                  <p className="mt-1 text-muted-foreground">
+                    {totals.diff > 0 ? "Faltan" : "Sobran"} {formatCurrency(Math.abs(totals.diff))}: se registra como
+                    redondeo.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-danger">
+                    {totals.diff > 0 ? "Faltan" : "Sobran"} {formatCurrency(Math.abs(totals.diff))} para llegar a{" "}
+                    {formatCurrency(amt)} (el redondeo admite hasta {formatCurrency(tolerance)}).
+                  </p>
                 ))}
-              </select>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                Si esa cuenta está vinculada a un banco en Tesorería, el cobro suma solo en ese banco.
-              </span>
-            </label>
+            </div>
           )}
 
           {items.length > 0 && (
@@ -337,7 +401,11 @@ export function CollectModal({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button loading={collect.isPending} disabled={!(amt > 0) || Boolean(preview.error)} onClick={submit}>
+            <Button
+              loading={collect.isPending || collectMulti.isPending}
+              disabled={!(amt > 0) || Boolean(preview.error) || !totals.balanced || Boolean(lineError)}
+              onClick={submit}
+            >
               Registrar cobro
             </Button>
           </div>

@@ -5,7 +5,10 @@
 //   price_mismatch:{"items":[{"product_id","variant_id","expected","received"}]}
 // Acá se lee ese error, se reprecia el carrito y se arma el aviso. Las líneas
 // con precio cambiado a mano (priceOverride), los regalos y las cubiertas por un
-// pack no se tocan: esas las decide el servidor por su lado.
+// pack no se tocan: esas las decide el servidor por su lado. H163: en la línea
+// por bulto el servidor manda el precio unitario y se recalcula el del bulto.
+
+import { repriceSaleUnit, type CartSaleUnit } from "@/lib/products/catalogCodes";
 
 export interface PriceMismatch {
   productId: string;
@@ -54,6 +57,8 @@ export interface RepriceableLine {
   packCreditId?: string | null;
   /** ADR-151: precio a definir al cobrar: lo decide el servidor por el producto. */
   openPrice?: unknown;
+  /** H163: línea por bulto. */
+  saleUnit?: CartSaleUnit | null;
 }
 
 export interface RepriceChange {
@@ -61,6 +66,8 @@ export interface RepriceChange {
   name: string;
   from: number;
   to: number;
+  /** H163: el bulto con el precio unitario nuevo. */
+  saleUnit?: CartSaleUnit;
 }
 
 /**
@@ -74,7 +81,14 @@ export function repriceChanges(lines: RepriceableLine[], mismatches: PriceMismat
     const m = mismatches.find(
       (x) => x.productId === l.productId && (x.variantId ?? null) === (l.variantId ?? null),
     );
-    if (!m || Math.abs(m.expected - l.unitPrice) <= 0.01) continue;
+    if (!m) continue;
+    if (l.saleUnit) {
+      if (Math.abs(m.expected - l.saleUnit.basePrice) <= 0.01) continue;
+      const r = repriceSaleUnit(l.saleUnit, m.expected);
+      out.push({ lineId: l.lineId, name: l.name, from: l.unitPrice, to: r.to, saleUnit: r.saleUnit });
+      continue;
+    }
+    if (Math.abs(m.expected - l.unitPrice) <= 0.01) continue;
     out.push({ lineId: l.lineId, name: l.name, from: l.unitPrice, to: m.expected });
   }
   return out;

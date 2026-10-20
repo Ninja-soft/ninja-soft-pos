@@ -1637,12 +1637,12 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 S** Avisos al grabar una venta: bajo costo, sin CAE, descuento anómalo.
   - [ ] **P3 M** Alertas armadas con IA que guardan la consulta y se reusan sin gastar cupo.
   - [ ] *Criterio:* el dueño recibe a las 8 un mail con las cajas sin cerrar de ayer y los cheques que vencen esta semana, sólo con los casos nuevos.
-- [ ] **H163 · Catálogo PRO.** · *BASE.* Enriquece H100 y H112.
-  - [ ] **P1 M** Varios códigos de barras por artículo (principal y alternativos, opcionalmente por proveedor); el buscador encuentra por todos y por código de fabricante.
-  - [ ] **P1 S** Duplicar artículo ("(COPIA)" para revisar y grabar); alta rápida "grabar y seguir".
-  - [ ] **P1 M** Unidad de venta con coeficiente (bulto, caja, pack) y equivalencias compra / stock / venta; no se combina con pesable; precio por bulto en lista y etiqueta.
-  - [ ] **P2 S** Artículo de Compra, Venta o Ambos: los insumos no aparecen en el POS ni en el catálogo.
-  - [ ] **P3 S** NCM en la ficha; ícono, color o foto de categoría para la grilla del POS; PLU sin ceros a la izquierda; variantes con más de 2 ejes; edición masiva por categoría, IVA, proveedor y stock mínimo.
+- [~] **H163 · Catálogo PRO.** · *BASE.* Enriquece H100 y H112. *Parcial en ADR-177 (`feat/h163-catalogo`, migración `20270115100000_h163_catalogo`): faltan la equivalencia de compra por bulto, el precio por bulto en listas y etiquetas y los P3 salvo el PLU sin ceros.*
+  - [x] **P1 M** Varios códigos de barras por artículo (principal y alternativos, opcionalmente por proveedor); el buscador encuentra por todos y por código de fabricante. *Hecho (ADR-177): `product_barcodes` con choque de códigos por trigger y el resolver `product_by_code` en el scanner, la Caja rápida, el buscador del POS y de listados, `ProductSearchCombobox` (compras, ajustes, traslados) y el POS sin conexión.*
+  - [x] **P1 S** Duplicar artículo ("(COPIA)" para revisar y grabar); alta rápida "grabar y seguir". *Hecho (ADR-177): Duplicar en Productos abre el alta prellenada sin códigos, PLU ni stock; Grabar y seguir deja el form en blanco con la misma categoría.*
+  - [~] **P1 M** Unidad de venta con coeficiente (bulto, caja, pack) y equivalencias compra / stock / venta; no se combina con pesable; precio por bulto en lista y etiqueta. *Parcial (ADR-177): `product_sale_units` con precio propio o derivado y código propio; el POS vende por bulto (scanner o elegir al tocar), el stock baja N y `sale_items` guarda el bulto. Faltan la equivalencia en compras y el precio por bulto en listas y etiquetas.*
+  - [x] **P2 S** Artículo de Compra, Venta o Ambos: los insumos no aparecen en el POS ni en el catálogo. *Hecho (ADR-177): `products.usage`, trigger `product_not_for_sale` en `sale_items`, catálogo público y pickers de compra filtrados.*
+  - [~] **P3 S** NCM en la ficha; ícono, color o foto de categoría para la grilla del POS; PLU sin ceros a la izquierda; variantes con más de 2 ejes; edición masiva por categoría, IVA, proveedor y stock mínimo. *PLU sin ceros hecho (ADR-177, en el resolver y sin conexión); el resto pendiente.*
 - [ ] **H164 · Balanzas etiquetadoras.** · *OPTIONAL `balanza` (existe; el envío de precios suma su copy).* Enriquece H23 y H24.
   - [ ] **P1 XL** Envío de PLU y precios por lista a la balanza (Kretz Report y AutoReport, Systel Cuora y Neo) desde el puente local: sólo lo que cambió, relectura para verificar, historial por balanza y detección de PLU cruzado.
   - [ ] **P2 M** Prefijos de balanza PRO: varias reglas con máscara, alcance negocio, sucursal o balanza, prioridad y "probar un código".
@@ -1915,9 +1915,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 22/135 | 4 | 109 | 16% | 18% |
+| **F24** | 25/135 | 7 | 103 | 19% | 21% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 700/1341 | 315 | 326 | 52% | 64% |
+| **Total** | 703/1341 | 318 | 320 | 52% | 64% |
 <!-- roadmap-progress:end -->
 
 ---

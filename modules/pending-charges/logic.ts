@@ -5,6 +5,8 @@
 // espeja sus reglas para mostrar y anticipar.
 // =============================================================================
 
+import { expandSaleUnitLine, type CartSaleUnit } from "@/lib/products/catalogCodes";
+
 export type PendingChargeStatus = "waiting" | "paid" | "completed" | "cancelled" | "expired";
 
 export type ShareChannel = "whatsapp" | "email" | "sms" | "copy" | "native" | "qr";
@@ -434,6 +436,8 @@ export interface SaleArgsLine {
   lineDetail?: string | null;
   clarificationIds?: string[];
   lineNote?: string | null;
+  /** H163: línea por bulto (cantidad en bultos, precio del bulto). */
+  saleUnit?: CartSaleUnit | null;
 }
 
 export interface SaleArgsExtra {
@@ -469,6 +473,8 @@ export interface SaleArgsItem {
   line_note?: string;
   line_detail?: string;
   clarification_ids?: string[];
+  // H163: unidad de venta (la valida _sale_apply_service).
+  sale_unit_id?: string;
 }
 
 export interface SaleArgsExtraOut {
@@ -496,6 +502,11 @@ export function buildSaleItemsAndExtras(
     quantity: l.quantity,
     unit_price: l.packCreditId ? 0 : l.unitPrice,
     discount: l.packCreditId ? 0 : l.discount,
+    // H163: el bulto viaja expandido a unidades del artículo, con el precio
+    // unitario de lista y lo que baja el bulto como descuento del renglón.
+    ...(l.saleUnit && l.productId && !l.packCreditId
+      ? { ...expandSaleUnitLine({ quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount, saleUnit: l.saleUnit }), sale_unit_id: l.saleUnit.id }
+      : {}),
     // ADR-056: el servidor valida el precio; estas marcas explican los $0 y el
     // cambio manual (list_price es informativo: el servidor usa el suyo).
     ...(l.giftPromoId ? { gift_promo_id: l.giftPromoId } : {}),

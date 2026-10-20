@@ -6555,3 +6555,32 @@ Todo dentro de la OPTIONAL `compras` (existe; sin keys nuevas en `features`) y, 
 - Pendiente de H167: desaplicar un crédito desde la pantalla (la RPC `supplier_credit_unapply` existe), imputar una OP a un saldo inicial (hoy el saldo inicial entra al aging FIFO), editar artículos de una factura ya recibida (se anula la recepción) y los P2.
 - Orden de deploy: migración, Edge `purchase_invoice_ocr` y después el front (la lista de facturas lee `cae`, `cae_due` y `source`).
 - Tests: `tests/unit/h167Compras.test.ts`; SQL revisado con el parser de Postgres (libpg_query) sin base.
+
+## ADR-179: Cobros ampliados: recibo con varios medios, cheque y e-cheq a la cartera, retenciones en el recibo, efectivo en dólares y planes por día (F24 · H160)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270117100000_h160_cobros`, sin Edges) · **Base:** ADR-037 (cuenta corriente v2), ADR-158 (cheques en la contabilidad), ADR-162 (cobro por transferencia a su cuenta), ADR-095 (retenciones sufridas), ADR-172 (arqueo por medio), ADR-055 (datos del pago por card_voucher)
+
+### Contexto
+
+La auditoría IM5 marcó que el recibo de cuenta corriente acepta un solo medio, que el cheque del cliente no es un medio de cobro ni en el POS ni en la cuenta corriente, que las retenciones sufridas se cargan aparte del recibo y que no se puede cobrar en dólares.
+
+### Decisión
+
+1. **Recibo con varios medios (`account_collect_multi`).** Cada línea es un movimiento `payment` propio con su medio; la principal lleva el número de recibo, la clave de idempotencia y la nota, y las demás apuntan a ella (`customer_account_movements.receipt_parent_id`). Así la caja (un `cash_movement` por línea), la transferencia a su cuenta de Tesorería, el asiento por medio (`acc_sync_cc_movement`), el arqueo por medio de H159 y el reporte de cobranzas de H161 siguen funcionando sin cambios. Las líneas tienen que sumar lo que se cancela; la diferencia hasta `pos_settings.receipt_rounding_tolerance` (10 pesos por defecto, editable en Operación) va como ajuste `rounding` (crédito o débito) a "Diferencias de redondeo". `account_collect` queda igual y el modal lo sigue usando con un solo medio común.
+2. **Cheque y e-cheq** (`cheque`, `echeq` en `payments.method` y en el recibo): dan de alta el cheque de terceros en cartera, recibido del cliente, enlazado por `cheques.cc_movement_id` o `cheques.sale_payment_id`. Gating real: `payment_method_plan_key` los manda a `tesoreria` (trigger de `payments` y `assert_payment_method_allowed` en el recibo). Contabilidad sin mapeos nuevos: el cobro va a "Otros medios de cobro a cobrar" (cobro `*`) y el cheque lo pasa a Valores a depositar (ADR-158). En el POS los datos viajan en `card_voucher.cheque` y un trigger los pasa a `metadata.cheque`, sin tocar `create_sale`.
+3. **Retenciones en el recibo:** línea `retention` (IIBB con jurisdicción, IVA, Ganancias, SUSS) con certificado: es un `payment` con medio `retention` que cancela deuda y se registra con `tax_suffered_register` vinculada al movimiento (mismos permisos: dueño o encargado con `taxes.manage` y la feature `percepciones_retenciones`). El asiento neto queda Retención sufrida contra Deudores con la reclasificación de ADR-095.
+4. **Anulación:** una línea sola no se anula (`receipt_void_whole`); al anular el recibo desde la principal se anulan todas, se devuelve la caja de cada una, el cheque vuelve de cartera a anulado (con contra-asiento) y la retención queda anulada. Si el cheque ya se depositó o entregó, no se puede anular. Lo mismo al anular una venta del POS con cheque.
+5. **Efectivo en dólares (`cash_usd`, feature nueva `efectivo_usd`, OPTIONAL, Pro y superiores):** el pago guarda los pesos que cubre; los dólares, la cotización y el vuelto van en `payments.metadata.usd`. Cotización: la del negocio (`fx_rates`) o la oficial de la plataforma (compra), por `pos_usd_quote`. El vuelto en pesos sale del cajón como retiro atado a la venta; el arqueo espera los dólares en dólares (`cash_shift_expected_by_method`). Contabilidad: cobro `cash_usd` a Caja.
+6. **Planes de tarjeta por día** (`payment_plans.weekdays`, 0 domingo a 6 sábado, null todos): el POS ofrece el plan sólo esos días (hora de Argentina), como la vigencia de H27.
+
+### Alternativas descartadas
+
+- **Un solo movimiento con las líneas en una tabla aparte:** obligaba a reescribir la caja, la tesorería, el asiento, el arqueo y el reporte de cobranzas, que leen un medio por movimiento.
+- **Reescribir `create_sale` para el cheque y los dólares:** los triggers de `payments` cubren también las ventas estacionadas.
+- **Cheque como feature propia:** la cartera es de Tesorería; sin ella no hay dónde guardarlo.
+
+### Consecuencias
+
+- Pendiente de H160: reglas de medios según el comprobante y por usuario con monto máximo, y la botonera de cobro configurable; arancel, TNA y CFT del plan (no hay columnas todavía); el vuelto en pesos de una venta en dólares anulada en otro turno no vuelve solo al cajón; la devolución parcial de una venta pagada con cheque no toca el cheque.
+- Orden de deploy: migración y después el front (el modal y la configuración leen columnas nuevas).
+- Tests: `tests/unit/h160Cobros.test.ts` (incluye el criterio: $60.000 en efectivo, e-cheq de $38.000 y retención de IIBB de $2.000 cancelan $100.000 y el e-cheq queda en cartera). Sin dry-run en base.

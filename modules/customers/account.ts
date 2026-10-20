@@ -6,6 +6,7 @@
 // (estado de cuenta, aging) también se resuelven en el server.
 import { createClient } from "@/lib/supabase/client";
 import type { Json } from "@/types/database";
+import { DEFAULT_ROUNDING_TOLERANCE, toReceiptRpcLines, type ReceiptLine } from "@/lib/account/receipt";
 import {
   ACCOUNT_CONFIG_DEFAULT,
   effectiveAccountConfig,
@@ -179,6 +180,17 @@ export interface CollectResult {
   allocations: { charge_id: string; amount: number; reason: string | null; kind: string; due_date: string | null }[];
   unapplied: number;
   idempotent?: boolean;
+  /** H160: recibo con varios medios (account_collect_multi). */
+  lines?: {
+    id: string;
+    kind: string;
+    method: string | null;
+    amount: number;
+    cheque_id: string | null;
+    suffered_id: string | null;
+  }[];
+  /** H160: ajuste por redondeo del recibo (+ a favor del cliente). */
+  rounding?: number;
 }
 
 export interface SupervisorPinStatus {
@@ -256,6 +268,41 @@ export const accountApi = {
       // Sólo se manda si hay cuenta: así funciona igual con la base sin ADR-162.
       ...(input.method === "transfer" && input.transferAccountId ? { p_transfer_account: input.transferAccountId } : {}),
     }),
+
+  /**
+   * H160 (ADR-179): recibo con varios medios, cheques, e-cheqs y retenciones.
+   * `total` = lo que cancela; la diferencia con las líneas, dentro de la
+   * tolerancia del negocio, se registra como redondeo.
+   */
+  collectMulti: (input: {
+    customerId: string;
+    lines: ReceiptLine[];
+    total: number;
+    allocations?: { id: string; amount: number }[] | null;
+    idempotencyKey: string;
+    note?: string | null;
+  }) =>
+    rpc<CollectResult>("account_collect_multi", {
+      p_customer_id: input.customerId,
+      p_lines: toReceiptRpcLines(input.lines) as unknown as Json,
+      p_total: input.total,
+      p_allocations: (input.allocations && input.allocations.length > 0
+        ? input.allocations
+        : null) as unknown as Json,
+      p_idempotency_key: input.idempotencyKey,
+      p_note: input.note || null,
+    }),
+
+  /** H160: tolerancia de redondeo del recibo (pos_settings). */
+  receiptTolerance: async (): Promise<number> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("pos_settings")
+      .select("receipt_rounding_tolerance" as never)
+      .maybeSingle();
+    const v = Number((data as { receipt_rounding_tolerance?: number | string } | null)?.receipt_rounding_tolerance);
+    return Number.isFinite(v) && v >= 0 ? v : DEFAULT_ROUNDING_TOLERANCE;
+  },
 
   voidPayment: (movementId: string, reason: string) =>
     rpc<{ ok: boolean; balance: number }>("account_void_payment", {
@@ -437,6 +484,20 @@ const ERRORS: [string, string][] = [
   ["invalid_pin", "El PIN tiene que tener entre 4 y 6 números"],
   ["group_not_found", "No encontramos ese grupo"],
   ["forbidden_account_fields", "Sólo el dueño o un encargado pueden cambiar condiciones de cuenta"],
+  ["receipt_mismatch", "Los medios no suman lo que se cancela (la diferencia supera la tolerancia de redondeo)"],
+  ["receipt_lines_required", "Agregá al menos un medio de cobro"],
+  ["receipt_void_whole", "Esa línea es parte de un recibo: anulá el recibo completo"],
+  ["receipt_cheque_used", "El cheque del recibo ya se depositó o se entregó: no se puede anular"],
+  ["cheque_data_required", "Completá el número del cheque"],
+  ["payment_date_required", "Completá la fecha de pago del cheque"],
+  ["cheque_invalid_date", "Revisá las fechas del cheque"],
+  ["invalid_cuit", "El CUIT del librador no es válido"],
+  ["suffered_jurisdiction_required", "Elegí la jurisdicción de la retención de IIBB"],
+  ["suffered_invalid_tax", "Elegí el impuesto de la retención"],
+  ["iibb_period_liquidated", "Ese período de IIBB ya está liquidado"],
+  ["feature_not_in_plan: percepciones_retenciones", "Las retenciones no están incluidas en tu plan"],
+  ["forbidden_role", "No tenés permiso para cargar retenciones"],
+  ["transfer_account_not_found", "La cuenta de la transferencia ya no está disponible"],
   ["forbidden", "No tenés permiso para esta acción"],
 ];
 

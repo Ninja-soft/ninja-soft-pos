@@ -171,6 +171,7 @@ export function useAccountMutations() {
   };
   return {
     collect: useMutation({ mutationFn: accountApi.collect, onSuccess: invalidate }),
+    collectMulti: useMutation({ mutationFn: accountApi.collectMulti, onSuccess: invalidate }),
     voidPayment: useMutation({
       mutationFn: (v: { id: string; reason: string }) => accountApi.voidPayment(v.id, v.reason),
       onSuccess: invalidate,
@@ -277,4 +278,14 @@ export function useCustomerMutations() {
       onSuccess: invalidate,
     }),
   };
+}
+
+/** H160: tolerancia de redondeo del recibo con varios medios. */
+export function useReceiptTolerance(enabled = true) {
+  return useQuery({
+    queryKey: ["account", "receipt-tolerance"],
+    enabled,
+    queryFn: () => accountApi.receiptTolerance(),
+    staleTime: 5 * 60_000,
+  });
 }

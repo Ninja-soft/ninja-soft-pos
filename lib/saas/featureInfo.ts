@@ -326,6 +326,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de Talo y sus credenciales (User ID, Client ID y Client Secret del Dashboard de Talo, Usuario, Credenciales).",
   },
+  efectivo_usd: {
+    desc: "Cobrar en dólares en el POS: el cajero carga los dólares que entrega el cliente, el sistema usa la cotización del día (la que cargó el negocio o la oficial) y calcula el vuelto en pesos. El arqueo de la caja espera y cuenta los dólares aparte.",
+    impact: "Desactivado, Dólares no aparece como medio de pago al cobrar (el servidor lo rechaza).",
+    minPlan: "Pro",
+  },
   viumi: {
     desc: "Cobros con Viumi (Banco Macro) por link de pago, también como QR: el cliente paga con tarjeta en el checkout de Viumi y la venta se cierra sola al acreditarse. Las devoluciones se hacen desde la app o el panel de Viumi.",
     impact: "Desactivado, Viumi no aparece como medio de pago al cobrar.",
@@ -464,7 +469,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Activá el modo profesional en Configuración de compras.",
   },
   tesoreria: {
-    desc: "Tesorería: caja general y cuentas bancarias con saldo, movimientos, transferencias entre cuentas y conciliación manual contra el extracto; cheques y e-cheqs propios y de terceros (en cartera, entregados, depositados o rechazados) y flujo de fondos proyectado con lo que vence de proveedores y lo que entra de clientes y cheques. Las órdenes de pago pueden pagar desde un banco o con cheques.",
+    desc: "Tesorería: caja general y cuentas bancarias con saldo, movimientos, transferencias entre cuentas y conciliación manual contra el extracto; cheques y e-cheqs propios y de terceros (en cartera, entregados, depositados o rechazados) y flujo de fondos proyectado con lo que vence de proveedores y lo que entra de clientes y cheques. Las órdenes de pago pueden pagar desde un banco o con cheques. Los cheques y e-cheqs de clientes se cobran desde el POS y en los recibos de cuenta corriente y entran solos a la cartera.",
     impact: "Desactivado, las órdenes de pago sólo registran efectivo de la caja y transferencias con su referencia; no hay cuentas, cheques ni flujo de fondos (el servidor lo rechaza).",
     minPlan: "Business",
     requires: ["compras"],

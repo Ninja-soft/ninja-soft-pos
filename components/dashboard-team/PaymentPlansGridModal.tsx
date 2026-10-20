@@ -9,8 +9,9 @@ import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils/cn";
 import { useProviderPlans, usePaymentPlanMutations } from "@/modules/pos/hooks";
-import { planCode, type PaymentPlan } from "@/modules/pos/api";
+import { WEEKDAY_SHORT, planCode, type PaymentPlan } from "@/modules/pos/api";
 import {
   ALL_BRANDS,
   BRAND_LABEL,
@@ -98,6 +99,8 @@ export function PaymentPlansGridModal({
   // medio. Vacío = sin límite. Al cobrar, sólo se ofrecen los planes vigentes hoy.
   const [validFrom, setValidFrom] = useState("");
   const [validUntil, setValidUntil] = useState("");
+  // H160: días de la semana en que se ofrecen (vacío = todos).
+  const [weekdays, setWeekdays] = useState<number[]>([]);
 
   // Config visual + recargo del medio (tenant_payment_methods)
   const { data: cfg } = useQuery({
@@ -128,11 +131,13 @@ export function PaymentPlansGridModal({
   const validitySource = (storeId
     ? rows.filter((p) => (p as { store_id?: string | null }).store_id === storeId)
     : plans
-  ).find((p) => p.valid_from || p.valid_until);
+  ).find((p) => p.valid_from || p.valid_until || (p.weekdays && p.weekdays.length > 0));
+  const weekdaysKey = (validitySource?.weekdays ?? []).join(",");
   useEffect(() => {
     setValidFrom(validitySource?.valid_from ?? "");
     setValidUntil(validitySource?.valid_until ?? "");
-  }, [validitySource?.valid_from, validitySource?.valid_until, storeId]);
+    setWeekdays(weekdaysKey ? weekdaysKey.split(",").map(Number) : []);
+  }, [validitySource?.valid_from, validitySource?.valid_until, weekdaysKey, storeId]);
   // Cada apertura arranca en "Todo el negocio".
   useEffect(() => {
     if (open) setScope({ scope: "tenant" });
@@ -166,6 +171,7 @@ export function PaymentPlansGridModal({
         await m.setProviderValidity.mutateAsync({
           validFrom: validFrom || null,
           validUntil: validUntil || null,
+          weekdays: weekdays.length > 0 ? weekdays : null,
         });
         return;
       }
@@ -189,6 +195,7 @@ export function PaymentPlansGridModal({
       await m.setProviderValidity.mutateAsync({
         validFrom: validFrom || null,
         validUntil: validUntil || null,
+        weekdays: weekdays.length > 0 ? weekdays : null,
       });
     },
     onSuccess: () => {
@@ -493,18 +500,48 @@ export function PaymentPlansGridModal({
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
               />
             </label>
-            {(validFrom || validUntil) && (
+            {(validFrom || validUntil || weekdays.length > 0) && (
               <button
                 type="button"
                 onClick={() => {
                   setValidFrom("");
                   setValidUntil("");
+                  setWeekdays([]);
                 }}
                 className="h-9 rounded-md border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
               >
                 Sin límite
               </button>
             )}
+          </div>
+          <div className="mt-3">
+            <span className="mb-1 block text-sm text-muted-foreground">Días de la semana</span>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Días de la semana">
+              {WEEKDAY_SHORT.map((label, d) => {
+                const on = weekdays.includes(d);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setWeekdays((w) => (on ? w.filter((x) => x !== d) : [...w, d].sort((a, b) => a - b)))
+                    }
+                    className={cn(
+                      "h-9 min-w-[3rem] rounded-md border px-2 text-sm transition",
+                      on
+                        ? "border-transparent bg-ninja-flame/15 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Sin días marcados, se ofrecen todos los días. Ejemplo: cuotas sin interés sólo los martes y jueves.
+            </p>
           </div>
         </div>
 

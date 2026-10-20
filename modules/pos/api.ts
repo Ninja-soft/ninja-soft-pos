@@ -49,13 +49,27 @@ export interface SalePaymentInput {
     // Directo (ADR-034): tender manual; reference = Nº de operación de Directo.
     | "directo"
     // Ualá Bis (ADR-143): QR, POS o Tap; reference = Nº de operación.
-    | "ualabis";
+    | "ualabis"
+    // H160 (ADR-179): cheque y e-cheq del cliente; efectivo en dólares.
+    | "cheque"
+    | "echeq"
+    | "cash_usd";
   amount: number;
   reference?: string;
   // Voucher de tarjeta (lote/cupón/autorización). Opcional; sólo débito/crédito.
   card_voucher?: CardVoucher;
   // Transferencia desde el POS (ADR-055): cuenta elegida (null = por defecto).
   transfer?: { accountId: string | null };
+  // H160: cheque o e-cheq (a la cartera) y dólares con su cotización.
+  cheque?: {
+    number: string;
+    bank_name?: string | null;
+    payment_date: string;
+    issue_date?: string | null;
+    drawer_name?: string | null;
+    drawer_cuit?: string | null;
+  };
+  usd?: { amount: number; rate: number };
 }
 
 /**
@@ -65,8 +79,15 @@ export interface SalePaymentInput {
  * card_voucher (ADR-055).
  */
 export function toSalePayments(payments: SalePaymentInput[]): Record<string, unknown>[] {
-  return payments.map(({ transfer, ...p }) =>
-    transfer && p.method === "transfer"
+  return payments.map(({ transfer, cheque, usd, ...p }) =>
+    // H160 (ADR-179): mismo camino que la transferencia: el trigger
+    // payments_aa_h160_extras pasa el cheque o los dólares a metadata y limpia
+    // card_voucher (create_sale no cambia).
+    cheque && (p.method === "cheque" || p.method === "echeq")
+      ? { ...p, card_voucher: { cheque } }
+      : usd && p.method === "cash_usd"
+        ? { ...p, card_voucher: { usd } }
+        : transfer && p.method === "transfer"
       ? {
           ...p,
           card_voucher: {
@@ -214,6 +235,8 @@ export interface TaloStatus {
 export type PaymentPlan = Tables<"payment_plans"> & {
   valid_from: string | null;
   valid_until: string | null;
+  /** H160: días de la semana (0 domingo a 6 sábado). null = todos. */
+  weekdays?: number[] | null;
 };
 export interface PaymentPlanInput {
   provider_key: string;
@@ -227,15 +250,36 @@ export interface PaymentPlanInput {
   // Vigencia del plan (fechas de calendario del negocio). NULL = sin límite.
   valid_from?: string | null;
   valid_until?: string | null;
+  // H160: días de la semana en que se ofrece (0 domingo a 6 sábado). null = todos.
+  weekdays?: number[] | null;
+}
+
+const AR_WEEKDAY: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** Día de la semana en Argentina (0 domingo a 6 sábado). */
+export function arWeekday(d: Date = new Date()): number {
+  const w = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(d);
+  return AR_WEEKDAY[w] ?? d.getDay();
+}
+
+export const WEEKDAY_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"] as const;
+
+/** Días del plan en palabras ("Mar y Jue"); null = todos los días. */
+export function weekdaysLabel(days: number[] | null | undefined): string | null {
+  if (!days || days.length === 0 || days.length >= 7) return null;
+  const names = [...days].sort((a, b) => a - b).map((d) => WEEKDAY_SHORT[d] ?? String(d));
+  return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
 }
 
 // Un plan está vigente si valid_from <= hoy <= (valid_until ?? ∞). Espeja
 // isDiscountActive (modules/internal/api.ts): fecha LOCAL del negocio, no UTC.
 // Los planes fuera de vigencia no se ofrecen al cobrar.
 export function isPlanActive(
-  p: Pick<PaymentPlan, "valid_from" | "valid_until">,
+  p: Pick<PaymentPlan, "valid_from" | "valid_until"> & { weekdays?: number[] | null },
   today: Date = new Date(),
 ): boolean {
+  // H160: planes por día de la semana (hora de Argentina).
+  if (p.weekdays && p.weekdays.length > 0 && !p.weekdays.includes(arWeekday(today))) return false;
   const t = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   if (p.valid_from && p.valid_from > t) return false;
   if (p.valid_until && p.valid_until < t) return false;
@@ -422,12 +466,19 @@ export const paymentPlansApi = {
     validFrom: string | null,
     validUntil: string | null,
     storeId: PlanScope = null,
+    // H160: días de la semana (null = todos; undefined = no se toca).
+    weekdays?: number[] | null,
   ): Promise<void> => {
     const supabase = createClient();
+    const patch = {
+      valid_from: validFrom,
+      valid_until: validUntil,
+      ...(weekdays !== undefined ? { weekdays: weekdays && weekdays.length > 0 && weekdays.length < 7 ? weekdays : null } : {}),
+    };
     const run = (withScope: boolean) => {
       const q = supabase
         .from("payment_plans")
-        .update({ valid_from: validFrom, valid_until: validUntil } as never)
+        .update(patch as never)
         .eq("provider_key", providerKey);
       return withScope ? scoped(q, storeId) : q;
     };

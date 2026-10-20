@@ -20,6 +20,7 @@ export const QR_EDGE_BY_PROVIDER: Record<string, string[]> = {
   directo: ["directo"],
   ualabis: ["ualabis"],
   viumi: ["viumi"],
+  talo: ["talo"],
 };
 
 export function edgesToWarm(providers: (string | null | undefined)[], now = Date.now()): string[] {

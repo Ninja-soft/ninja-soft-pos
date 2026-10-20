@@ -68,6 +68,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   directo: "Directo",
   ualabis: "Ualá Bis",
   viumi: "Viumi",
+  talo: "Talo",
   modo: "MODO",
   mobbex: "Mobbex",
   pagos360: "Pagos360",

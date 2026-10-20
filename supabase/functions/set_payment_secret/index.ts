@@ -31,6 +31,7 @@ import {
   parseCreds as parseViumiCreds,
   viumiClient,
 } from "../_shared/viumi.ts";
+import { isAuthFailure as isTaloAuthFailure, parseCreds as parseTaloCreds, taloClient } from "../_shared/talo.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -72,6 +73,10 @@ const ALLOWED = new Set([
   // El ambiente lo define el switch Sandbox del medio (stg vs producción). Se
   // prueban antes de guardarlas.
   "viumi",
+  // Talo (ADR-175): user_id, client_id y client_secret del Dashboard de Talo ›
+  // Usuario › Credenciales. El ambiente lo define el switch Sandbox del medio
+  // (sandbox-api vs api). Se prueban antes de guardarlas.
+  "talo",
 ]);
 
 Deno.serve(async (req: Request) => {
@@ -209,6 +214,18 @@ Deno.serve(async (req: Request) => {
     const env = clean.environment === "test" ? "stage" : "prod";
     const t = await viumiClient({ creds, env }).token(true);
     if (!t.ok && isViumiAuthFailure(t.httpStatus)) return json({ error: "viumi_invalid_credentials" }, 422);
+    delete clean.environment;
+  }
+
+  // Talo (ADR-175): credenciales nuevas se prueban pidiendo un token TL- en el
+  // ambiente elegido. Si Talo las rechaza, no se guardan (un corte de red no
+  // frena el guardado: "Probar conexión" lo muestra después).
+  if (providerKey === "talo") {
+    const creds = parseTaloCreds(clean);
+    if (!creds || creds.kind !== "client") return json({ error: "talo_missing_fields" }, 400);
+    const env = clean.environment === "test" ? "sandbox" : "prod";
+    const t = await taloClient({ creds, env }).token(true);
+    if (!t.ok && isTaloAuthFailure(t.httpStatus)) return json({ error: "talo_invalid_credentials" }, 422);
     delete clean.environment;
   }
 

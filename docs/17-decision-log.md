@@ -6272,3 +6272,30 @@ ADR-067 dejó la ficha del cliente con perfil, indicadores, gráficos, notas y l
 - La auditoría de `customers` suma una fila por alta, edición y baja (también las importaciones). Si molesta en volumen, el `when` se puede afinar.
 - Orden de deploy: migración `20270108100000_cliente_360_completo`, después el front. Front tolerante: sin la migración, los adjuntos muestran error al cargar y la línea de tiempo funciona igual (los tipos nuevos no llegan).
 - Verificado: dry-run en producción con rollback (cambio auditado visible, edición que sólo toca `updated_at` sin auditar, ruta ajena rechazada, archivo no subido rechazado, guardarraíles de RLS en 0). Tests `tests/unit/c360Completo.test.ts`, `tests/components/Cliente360Completo.test.tsx` y `tests/integration/rls-cliente-360-completo.test.ts` (aislamiento entre negocios en adjuntos, storage y línea de tiempo).
+
+## ADR-170: Paridad con InfoManager IM5 como fase propia (F24) a partir de la auditoría funcional
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (sólo roadmap y documentación, sin código) · **Base:** ADR-043 (auditoría Napse, mismo método)
+
+### Contexto
+
+Se relevó completo InfoManager IM5, el ERP que usa La Jamonera (187 rutas, 119 manuales, servidor en sólo lectura). Hacía falta saber qué de eso ya tiene NinjaPOS, qué está planeado y qué falta, para poder ofrecer NinjaPOS a comercios que vienen de IM5 sin que pierdan funciones que usan todos los días.
+
+### Decisión
+
+1. Se cruzaron las 614 capacidades de los 8 capítulos contra el roadmap y el código de `main` (con evidencia por fila): 232 hechas, 142 parciales, 49 en el roadmap, 135 faltan y 56 no aplican. Matrices en `docs/auditoria-im5/` y resumen en `docs/auditoria-infomanager-vs-ninjapos.md`.
+2. Lo que falta o es parcial se agrupa en una **fase nueva F24 (H158 a H174)** por tema, con prioridad (P0 a P3) y esfuerzo por ítem, y cada hito dice qué hito existente enriquece. No se reparten los ítems por las fases viejas para no perder la trazabilidad con la auditoría.
+3. **H158 va primero:** dos P0 (la IA respeta los permisos de costos y sucursal; una factura de proveedor pagada no se edita ni se anula) y el asiento de la venta con `sale_tax_lines`.
+4. H109 "asientos automáticos por venta" pasa a parcial; los ítems de H31b hechos en ADR-169 se marcan hechos.
+5. No se replica: la contabilidad paralela CC1 / CC2, la impresora fiscal, los talonarios manuales, las limitaciones heredadas de IM4 ni los circuitos propios de La Jamonera (intermediarios, Ultu).
+
+### Alternativas descartadas
+
+- **Sumar cada ítem en el hito más cercano de F11, F17 o F18:** más de 130 ítems dispersos hacen imposible medir el avance de la paridad.
+- **Copiar el modelo de IM5 (comprobantes declarativos, motor de fórmulas):** NinjaPOS ya resolvió esos casos con RPC tipadas e impuestos parametrizados con vigencia (ADR-105), más fáciles de auditar.
+
+### Consecuencias
+
+- El roadmap suma 131 ítems pendientes; el total baja de 56 % a 51 % hecho.
+- Cada función nueva de F24 sigue el checklist de CLAUDE.md §6 (feature, plan, gating en el servidor, copy y comparación).
+- Las features nuevas de F24 (por ejemplo `alertas_programadas`) se crean al implementar el hito, no ahora.

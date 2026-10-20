@@ -3,7 +3,9 @@
 // Comprobante de proveedor (F18 · H101, ADR-050): factura, nota de débito o
 // de crédito con neto por alícuota, IVA, exento, no gravado, percepciones y
 // otros tributos, vinculado a las recepciones que factura. El servidor valida
-// los mismos totales (supplier_invoice_save).
+// los mismos totales (supplier_invoice_save). H167 (ADR-178): CAE del
+// proveedor, renglones de artículos (reciben stock) y de gasto (con cuenta) y
+// precarga desde la lectura con IA de la bandeja (nunca graba sola).
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, TriangleAlert } from "lucide-react";
@@ -40,6 +42,13 @@ import {
   useSuppliers,
 } from "@/modules/purchases/hooks";
 import { useTaxSettings } from "@/modules/tax/hooks";
+import { useCurrentStoreId } from "@/modules/stock/hooks";
+import { normalizeCuit, formatCuit } from "@/lib/purchases/suppliers";
+import { validateLines } from "@/lib/purchases/invoiceLines";
+import { useInvoiceLines, usePurchasesProMutations } from "@/modules/purchases/pro";
+import type { OcrInvoice } from "@/supabase/functions/_shared/purchaseInvoiceOcr";
+import { InvoiceLinesSection, newExpenseLine, toDraft, type LineState } from "./InvoiceLinesSection";
+import { SupplierFormModal } from "./SupplierFormModal";
 import { fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface VatRow {
@@ -78,6 +87,10 @@ export function InvoiceFormModal({
   supplierId,
   receiptIds,
   orderId,
+  prefill,
+  inboxId,
+  onSaved,
+  prefillWarnings,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -85,10 +98,19 @@ export function InvoiceFormModal({
   supplierId?: string | null;
   receiptIds?: string[];
   orderId?: string | null;
+  /** H167: datos leídos con IA para precargar (se revisan antes de guardar). */
+  prefill?: OcrInvoice | null;
+  /** H167: archivo de la bandeja que se marca como procesado al guardar. */
+  inboxId?: string | null;
+  onSaved?: (id: string) => void;
+  /** Avisos de la lectura con IA (lo que conviene revisar). */
+  prefillWarnings?: string[];
 }) {
   const { toast } = useToast();
   const access = usePurchasesAccess();
   const m = usePurchaseMutations();
+  const pro = usePurchasesProMutations();
+  const currentStoreId = useCurrentStoreId();
   const { data: suppliers = [] } = useSuppliers({ includeArchived: Boolean(invoice) }, open);
   // Condición de IVA del negocio: define qué letras puede recibir (el servidor lo exige).
   const buyerIva = useTaxSettings(open).data?.iva_condition ?? null;
@@ -112,6 +134,18 @@ export function InvoiceFormModal({
   const [totalTouched, setTotalTouched] = useState(false);
   const [linked, setLinked] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [cae, setCae] = useState("");
+  const [caeDue, setCaeDue] = useState("");
+  const [lines, setLinesState] = useState<LineState[]>([]);
+  const [linesTouched, setLinesTouched] = useState(false);
+  const [storeId, setStoreId] = useState("");
+  const [newSupplierOpen, setNewSupplierOpen] = useState(false);
+  const setLines = (fn: (p: LineState[]) => LineState[]) => {
+    setLinesTouched(true);
+    setLinesState(fn);
+  };
+  const savedLinesQ = useInvoiceLines(open ? invoice?.id : null);
+  const savedLines = savedLinesQ.data ?? [];
 
   const sup = suppliers.find((x) => x.id === supplier) ?? null;
   const editing = Boolean(invoice?.id);
@@ -158,6 +192,8 @@ export function InvoiceFormModal({
       setTotal(String(invoice.total).replace(".", ","));
       setTotalTouched(true);
       setNotes(invoice.notes ?? "");
+      setCae(invoice.cae ?? "");
+      setCaeDue(invoice.cae_due ?? "");
     } else {
       setSupplier(supplierId ?? "");
       setKind("invoice");
@@ -177,10 +213,77 @@ export function InvoiceFormModal({
       setTotal("");
       setTotalTouched(false);
       setNotes("");
+      setCae("");
+      setCaeDue("");
+      if (prefill) applyPrefill(prefill);
     }
+    setLinesState([]);
+    setLinesTouched(false);
+    setStoreId(currentStoreId ?? "");
     setLinked(receiptIds ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, invoice?.id]);
+  }, [open, invoice?.id, prefill]);
+
+  // Gastos ya guardados (edición): se editan acá; los artículos quedan fijos.
+  useEffect(() => {
+    if (!open || !invoice?.id || linesTouched) return;
+    setLinesState(
+      savedLines
+        .filter((l) => l.kind === "expense")
+        .map((l) => ({
+          ...newExpenseLine(l.description ?? "", s(l.net), l.vat_rate),
+          accountId: l.account_id ?? "",
+        })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, invoice?.id, savedLinesQ.dataUpdatedAt]);
+
+  // Precarga leída con IA: el proveedor se busca por CUIT.
+  const prefillCuit = normalizeCuit(prefill?.supplier_cuit);
+  const prefillSupplier = prefillCuit ? (suppliers.find((x) => normalizeCuit(x.cuit) === prefillCuit) ?? null) : null;
+  useEffect(() => {
+    if (open && !invoice && prefillSupplier && !supplier) setSupplier(prefillSupplier.id);
+  }, [open, invoice, prefillSupplier, supplier]);
+
+  function applyPrefill(d: OcrInvoice) {
+    setKind(d.kind);
+    if (d.letter) setLetter(d.letter as InvoiceLetter);
+    if (d.point_of_sale) setPos(String(d.point_of_sale));
+    if (d.number) setNumber(String(d.number));
+    if (d.issue_date) setIssue(d.issue_date);
+    if (d.due_date) {
+      setDue(d.due_date);
+      setDueTouched(true);
+    }
+    setCurrency(d.currency || "ARS");
+    const disc = d.letter ? letterDiscriminatesVat(d.letter as InvoiceLetter) : true;
+    if (disc) {
+      setVatRows(
+        d.vat_lines.length > 0
+          ? d.vat_lines.map((l) => ({ key: nextKey(), rate: l.rate, net: s(l.net), vat: s(l.vat), vatTouched: true }))
+          : [{ key: nextKey(), rate: 21, net: "", vat: "", vatTouched: false }],
+      );
+    } else {
+      setPlainAmount(s(d.vat_lines.reduce((t, l) => t + l.net + l.vat, 0)));
+    }
+    setExempt(s(d.exempt_amount));
+    setNonTaxed(s(d.non_taxed_amount));
+    setTaxes(
+      d.other_taxes.map((t) => ({
+        key: nextKey(),
+        kind: t.kind as OtherTaxKind,
+        jurisdiction: t.jurisdiction ?? "",
+        description: t.description ?? "",
+        amount: s(t.amount),
+      })),
+    );
+    if (d.total) {
+      setTotal(s(d.total));
+      setTotalTouched(true);
+    }
+    setCae(d.cae ?? "");
+    setCaeDue(d.cae_due ?? "");
+  }
 
   // Al elegir proveedor: letra sugerida, moneda y vencimiento por plazo.
   useEffect(() => {
@@ -233,10 +336,18 @@ export function InvoiceFormModal({
   const totalValue = totalTouched ? parseNum(total) : computed.total;
   const validation = validateInvoice({ ...draft, total: totalValue });
   const foreign = currency !== "ARS";
+  const lineDrafts = lines.map(toDraft);
+  const caeDigits = cae.replace(/\D/g, "");
   const errors = [
     ...validation.errors,
     ...(!supplier ? ["Elegí el proveedor."] : []),
     ...(foreign && !(parseNum(fx) > 0) ? ["Cargá el tipo de cambio."] : []),
+    ...(caeDigits && caeDigits.length !== 14 ? ["El CAE tiene 14 números."] : []),
+    ...validateLines(lineDrafts, {
+      invoiceNet: computed.net + draft.exempt_amount + draft.non_taxed_amount,
+      hasStore: Boolean(storeId),
+      editing,
+    }),
   ];
 
   function patchVat(key: number, p: Partial<VatRow>) {
@@ -282,9 +393,32 @@ export function InvoiceFormModal({
       order_id: invoice?.order_id ?? orderId ?? null,
       notes: notes.trim() || null,
     };
+    const hasItems = lineDrafts.some((l) => l.kind === "item");
     try {
-      await m.saveInvoice.mutateAsync({ id: invoice?.id ?? null, input, receiptIds: linked });
-      toast({ title: editing ? "Comprobante actualizado" : "Comprobante cargado", variant: "success" });
+      const id = await pro.saveInvoiceFull.mutateAsync({
+        id: invoice?.id ?? null,
+        input: {
+          ...input,
+          cae: caeDigits || null,
+          cae_due: caeDue || null,
+          source: prefill ? "ia" : "manual",
+        },
+        receiptIds: linked,
+        lines: editing ? (linesTouched ? lineDrafts : null) : lineDrafts.length > 0 ? lineDrafts : null,
+        storeId: hasItems ? storeId : null,
+      });
+      if (inboxId) {
+        await pro.inboxSetStatus.mutateAsync({ id: inboxId, status: "processed", invoiceId: id });
+      }
+      toast({
+        title: editing
+          ? "Comprobante actualizado"
+          : hasItems
+            ? "Comprobante cargado: el stock ya está actualizado"
+            : "Comprobante cargado",
+        variant: "success",
+      });
+      onSaved?.(id);
       onOpenChange(false);
     } catch (e) {
       toast({ title: "No se pudo guardar", description: purchaseErrorMessage(e), variant: "error" });
@@ -309,7 +443,7 @@ export function InvoiceFormModal({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => void save()} loading={m.saveInvoice.isPending} disabled={errors.length > 0}>
+            <Button onClick={() => void save()} loading={pro.saveInvoiceFull.isPending} disabled={errors.length > 0}>
               {editing ? "Guardar" : "Cargar comprobante"}
             </Button>
           </div>
@@ -317,6 +451,19 @@ export function InvoiceFormModal({
       }
     >
       <div className="space-y-5">
+        {prefill && (
+          <Callout tone="info" title="Precargado con IA: revisá todo antes de guardar">
+            {prefillWarnings && prefillWarnings.length > 0 ? (
+              <ul className="list-disc pl-4 text-sm">
+                {prefillWarnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            ) : (
+              "Compará los datos con el papel: la lectura puede equivocarse."
+            )}
+          </Callout>
+        )}
         <section className="grid gap-3 sm:grid-cols-3">
           <Field label="Proveedor" className="sm:col-span-3">
             <select
@@ -337,6 +484,16 @@ export function InvoiceFormModal({
                 </option>
               ))}
             </select>
+            {prefill && prefillCuit && !prefillSupplier && !supplier && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  El proveedor {prefill.supplier_name ?? ""} (CUIT {formatCuit(prefillCuit)}) no está cargado.
+                </span>
+                <Button size="sm" variant="secondary" onClick={() => setNewSupplierOpen(true)}>
+                  Crear proveedor
+                </Button>
+              </div>
+            )}
           </Field>
           <Field label="Tipo">
             <select className={selectCls} value={kind} onChange={(e) => setKind(e.target.value as InvoiceKind)}>
@@ -401,6 +558,18 @@ export function InvoiceFormModal({
                 setDueTouched(true);
               }}
             />
+          </Field>
+          <Field label="CAE o CAI (opcional)">
+            <input
+              inputMode="numeric"
+              className={cn(inputCls, "h-11")}
+              value={cae}
+              placeholder="14 números"
+              onChange={(e) => setCae(e.target.value.replace(/\D/g, "").slice(0, 14))}
+            />
+          </Field>
+          <Field label="Vencimiento del CAE (opcional)">
+            <input type="date" className={cn(inputCls, "h-11")} value={caeDue} onChange={(e) => setCaeDue(e.target.value)} />
           </Field>
           {(access.pro || foreign) && (
             <div className="grid grid-cols-2 gap-2">
@@ -622,6 +791,35 @@ export function InvoiceFormModal({
           </Field>
         </section>
 
+        <InvoiceLinesSection
+          lines={lines}
+          setLines={setLines}
+          editing={editing}
+          saved={savedLines}
+          storeId={storeId}
+          setStoreId={setStoreId}
+          open={open}
+        />
+        {prefill && prefill.items.length > 0 && !editing && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>La lectura encontró {prefill.items.length} renglones de detalle.</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                setLines((p) => [
+                  ...p,
+                  ...prefill.items.map((it) =>
+                    newExpenseLine(it.description, s(Math.round(it.qty * it.unit_price * 100) / 100), it.vat_rate),
+                  ),
+                ])
+              }
+            >
+              Pasarlos como gastos
+            </Button>
+          </div>
+        )}
+
         {(errors.length > 0 || validation.warnings.length > 0) && (
           <Callout tone={errors.length > 0 ? "danger" : "warning"} icon={TriangleAlert}>
             <ul className="list-disc pl-4 text-sm">
@@ -667,6 +865,12 @@ export function InvoiceFormModal({
           <textarea className={textareaCls} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
       </div>
+      <SupplierFormModal
+        open={newSupplierOpen}
+        onOpenChange={setNewSupplierOpen}
+        initial={prefill ? { name: prefill.supplier_name ?? "", cuit: prefillCuit } : null}
+        onSaved={(sx) => setSupplier(sx.id)}
+      />
     </Modal>
   );
 }

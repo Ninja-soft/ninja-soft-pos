@@ -6519,6 +6519,43 @@ La auditoría de InfoManager IM5 marcó que un artículo tiene un solo código d
 - Orden de deploy: migración y después el front (el front tolera la base sin la migración).
 - Verificado con `tests/unit/h163Catalogo.test.ts`, typecheck y las suites de POS, carrito, sin conexión, combobox, cobros en espera y `db-audit-perf`.
 
+## ADR-178: Compras PRO: import de Mis Comprobantes de ARCA, lectura de facturas con IA y bandeja, factura con renglones, NC y anticipos imputados, padrón y saldo inicial del proveedor (F24 · H167)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270116100000_h167_compras` sin aplicar, Edge `purchase_invoice_ocr` sin desplegar) · **Base:** ADR-170 (F24), ADR-050 y ADR-059 (compras), ADR-171 (H158: guard de factura pagada y letra), ADR-133 (padrón de ARCA), ADR-122 (IA de la plataforma)
+
+### Contexto
+
+La auditoría de InfoManager IM5 (cap. 04) marcó como FALTA importar los comprobantes recibidos de ARCA y leer facturas con IA, y como PARCIAL la imputación de NC y anticipos (se aplicaban FIFO en el front y el excedente quedaba "a cuenta"), la cuenta de gasto por renglón, la factura que también recibe stock, el padrón en el alta de proveedores y el saldo inicial del proveedor.
+
+### Decisión
+
+Todo dentro de la OPTIONAL `compras` (existe; sin keys nuevas en `features`) y, para la lectura con IA, el ADDON `asistente_ia` (mismo control que `ai_cover_image`: `tenant_has_feature_for`). Escritura sólo por RPC SECURITY DEFINER con `_purchase_write_assert()` = `purchase_assert(true)` (negocio, rol, plan) + `purchase_can_write()` (capacidad `purchases.manage`). Tablas nuevas con `tenant_id`, RLS `(select current_tenant_id()) or (select internal_scope())` y sin escritura directa.
+
+1. **Import de "Mis Comprobantes Recibidos".** El archivo (XLSX con `readXlsxGrid` o CSV) se lee en el navegador (`lib/purchases/arcaImport.ts`): busca la fila de encabezados (la primera es el título con la CUIT), mapea las columnas por nombre normalizado y arma cada comprobante. `purchase_arca_import(p_rows, p_apply, p_file_name, p_create_suppliers)` deriva clase y letra del código de ARCA (`purchase_arca_cbte`), busca el proveedor por CUIT o lo crea (con la condición del padrón si el front la consultó, si no la que sale de la letra), valida la letra con `supplier_invoice_letters`, salta duplicados y graba con `supplier_invoice_save` (`source = 'arca'`, CAE). Cada fila corre en su bloque: en la vista previa siempre se deshace (`dry_run_ok`) y devuelve qué pasaría; al aplicar, una fila con error conocido se informa y no corta el lote; un error inesperado aborta todo. Idempotente: lo ya cargado vuelve como "Ya cargado". Estados en pantalla: Nuevo, Proveedor a crear, Ya cargado, CUIT ajena (receptor distinto del negocio; se importa sólo si se pide) y Error.
+2. **Lectura con IA y bandeja.** Bucket privado `purchase-inbox` (`<negocio>/<archivo>`, PDF, JPG, PNG, WEBP, 10 MB) y `purchase_invoice_inbox` (pending, processed, discarded) con `purchase_inbox_add` y `purchase_inbox_set_status`. La Edge `purchase_invoice_ocr` (verify_jwt) exige miembro activo con `purchases.manage`, `compras` y el addon; respeta `ai_config.active` y la cuota mensual del asistente; usa Claude si hay `claude_api_key` (PDF como `document`, foto como `image`; modelo `ai_config.ocr_model` o Claude Opus 5.5 con effort bajo y fallback del servidor) y si no Gemini (`inline_data`); valida el JSON estricto (`_shared/purchaseInvoiceOcr.ts`: CUIT con dígito verificador, alícuotas válidas, fechas reales) y guarda lo leído en la fila; cuenta el consumo en `ai_usage`. Nunca graba: abre el formulario precargado con los avisos, ofrece crear el proveedor si su CUIT no está y al guardar marca el archivo como cargado.
+3. **Factura con renglones.** `supplier_invoice_lines` ('item' y 'expense', baja lógica). `supplier_invoice_save_full` envuelve a `supplier_invoice_save` (que no se redefine): CAE y vencimiento del CAE, renglones y, si hay artículos (sólo en el alta), crea la recepción con `purchase_receive` (misma lógica de recibir: stock, costo promedio, último costo, lotes, permisos de recepción libre) vinculada a la factura. Los renglones no pueden superar el neto. `acc_sync_supplier_invoice` (definición viva de 20261029100200) imputa cada gasto a su cuenta (imputable) y el resto a `compras` como antes; si una edición sólo cambia los gastos, se rehace el asiento con `acc_sync_safe`.
+4. **Padrón en el alta de proveedores.** `SupplierFormModal` usa `PadronVerify` (el de clientes, feature `padron_arca`) y `padronToSupplier` vuelca razón social, condición de IVA, domicilio, localidad y provincia.
+5. **NC y anticipos imputados.** `supplier_credit_applications` (fuente: NC del proveedor o pago con saldo sin imputar; destino: factura o ND; `payment_id` = OP en la que se aplicó; se desaplica con `released_at`). `_supplier_credit_apply` valida lo disponible del crédito y el saldo del comprobante (`supplier_doc_open_ars`), por partes. Se usa suelto (`supplier_credit_apply`, sin plata de por medio) o dentro de `supplier_payment_order_create` (definición viva de 20261231100000) con `credit_applications`, antes de imputar el pago. `supplier_invoice_open` resta lo aplicado (`credited_ars` al final), `supplier_credit_open` lista los créditos disponibles, el guard de H158 cuenta lo aplicado (una factura o NC con créditos aplicados no se anula ni baja) y anular un pago libera lo aplicado con él (trigger). El aging recibe lo aplicado como imputación explícita.
+6. **Saldo inicial y ajustes.** `supplier_account_adjustments` (opening única por proveedor, adjustment con signo, fecha, vencimiento, motivo, anulación con motivo y auditoría) entra en `supplier_account_entries` (vista viva) y por lo tanto en saldos, aging y resumen de cuenta.
+
+### Verificado vs inferido
+
+- **Verificado (fuentes públicas: ayudas de Colppy y Dux sobre el import desde ARCA):** la primera fila del archivo es un título y los encabezados van en la segunda; columnas del diseño clásico (Fecha, Tipo, Punto de Venta, Número Desde/Hasta, Cód. Autorización, Tipo/Nro. Doc. Emisor, Denominación Emisor, Tipo Cambio, Moneda, Imp. Neto Gravado, Imp. Neto No Gravado, Imp. Op. Exentas, Otros Tributos, IVA, Imp. Total); los importes en moneda de origen con su tipo de cambio; los códigos de tipo de comprobante de WSFE.
+- **Inferido (no hay documentación oficial del export):** los nombres exactos de las columnas por alícuota del diseño nuevo (se reconocen por patrón: "Neto Grav. IVA 21%", "IVA 10,5%"...), si el CSV usa ; o , (se detecta), si las NC vienen en negativo (se toman en valor absoluto) y el formato del título con la CUIT. Sin desglose, el IVA se asigna a la alícuota que lo explica; si no la hay (varias alícuotas), la fila queda en error para cargarla a mano. Lo que el total tiene de más va como "otros tributos sin detalle" con aviso.
+- **Lectura con IA:** probado sólo con tests del validador y del armado del pedido; la precisión real depende del modelo configurado y de la calidad de la foto. Por eso nunca graba y muestra los avisos.
+
+### Alternativas descartadas
+
+- **Redefinir `supplier_invoice_save`** para CAE y renglones: un envoltorio no toca la definición viva que usan devoluciones e import.
+- **Imputación negativa dentro de `supplier_payment_allocations`:** mezclaría plata con créditos y rompería `_tax_retention_bases` (base de retención = lo pagado). Tabla aparte.
+- **Asiento automático del saldo inicial y los ajustes:** el saldo inicial ya está en el asiento de apertura y la contrapartida de un ajuste depende del caso. Deuda: se registra con un asiento manual (H172 "renglón de asiento manual imputado a proveedor").
+
+### Consecuencias
+
+- Pendiente de H167: desaplicar un crédito desde la pantalla (la RPC `supplier_credit_unapply` existe), imputar una OP a un saldo inicial (hoy el saldo inicial entra al aging FIFO), editar artículos de una factura ya recibida (se anula la recepción) y los P2.
+- Orden de deploy: migración, Edge `purchase_invoice_ocr` y después el front (la lista de facturas lee `cae`, `cae_due` y `source`).
+- Tests: `tests/unit/h167Compras.test.ts`; SQL revisado con el parser de Postgres (libpg_query) sin base.
+
 ## ADR-179: Cobros ampliados: recibo con varios medios, cheque y e-cheq a la cartera, retenciones en el recibo, efectivo en dólares y planes por día (F24 · H160)
 
 **Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270117100000_h160_cobros`, sin Edges) · **Base:** ADR-037 (cuenta corriente v2), ADR-158 (cheques en la contabilidad), ADR-162 (cobro por transferencia a su cuenta), ADR-095 (retenciones sufridas), ADR-172 (arqueo por medio), ADR-055 (datos del pago por card_voucher)

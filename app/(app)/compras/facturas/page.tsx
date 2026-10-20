@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Ban, Banknote, Download, FileText, HandCoins, Plus, Receipt } from "lucide-react";
+import { Ban, Banknote, Download, FileText, FileUp, HandCoins, Inbox, Plus, Receipt } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -48,6 +48,8 @@ import { InvoiceFormModal } from "@/components/purchases/InvoiceFormModal";
 import { PaymentFormModal } from "@/components/purchases/PaymentFormModal";
 import { PaymentOrderModal } from "@/components/purchases/PaymentOrderModal";
 import { PaymentOrderDetailModal } from "@/components/purchases/PaymentOrderDetailModal";
+import { ArcaImportModal } from "@/components/purchases/ArcaImportModal";
+import { InvoiceInboxModal } from "@/components/purchases/InvoiceInboxModal";
 
 type Tab = "invoices" | "payments" | "balances";
 
@@ -72,6 +74,8 @@ export default function FacturasPage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<string | null>(null);
+  const [arcaOpen, setArcaOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [voiding, setVoiding] = useState<{ type: "invoice" | "payment"; id: string } | null>(null);
 
   const filters = {
@@ -258,6 +262,16 @@ export default function FacturasPage() {
             {canManage && (
               <Button onClick={() => setInvoiceModal({ open: true, invoice: null })}>
                 <Plus size={16} /> Cargar comprobante
+              </Button>
+            )}
+            {canManage && (
+              <Button variant="secondary" onClick={() => setInboxOpen(true)}>
+                <Inbox size={16} /> Bandeja
+              </Button>
+            )}
+            {canManage && (
+              <Button variant="secondary" onClick={() => setArcaOpen(true)}>
+                <FileUp size={16} /> Importar de ARCA
               </Button>
             )}
             {canManage && (
@@ -595,6 +609,8 @@ export default function FacturasPage() {
         onCreated={(id) => setPaymentDetail(id)}
       />
       <PaymentOrderDetailModal paymentId={paymentDetail} onOpenChange={(o) => !o && setPaymentDetail(null)} />
+      <ArcaImportModal open={arcaOpen} onOpenChange={setArcaOpen} />
+      <InvoiceInboxModal open={inboxOpen} onOpenChange={setInboxOpen} />
       <ConfirmDialog
         open={Boolean(voiding)}
         onOpenChange={(o) => !o && setVoiding(null)}

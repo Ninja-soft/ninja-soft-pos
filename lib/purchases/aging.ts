@@ -8,13 +8,15 @@
 
 import { round } from "./costs";
 
-export type EntryType = "invoice" | "debit_note" | "credit_note" | "payment";
+export type EntryType = "invoice" | "debit_note" | "credit_note" | "payment" | "opening" | "adjustment";
 
 export const ENTRY_TYPE_LABEL: Record<EntryType, string> = {
   invoice: "Factura",
   debit_note: "Nota de débito",
   credit_note: "Nota de crédito",
   payment: "Pago",
+  opening: "Saldo inicial",
+  adjustment: "Ajuste",
 };
 
 export interface AccountEntry {

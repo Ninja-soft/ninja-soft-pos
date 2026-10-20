@@ -17,6 +17,8 @@ export interface PickInput {
   open_price_min?: number | null;
   open_price_max?: number | null;
   is_service?: boolean;
+  // H158/H163: no acepta descuento (el bulto se vende a N × precio).
+  no_discount?: boolean;
 }
 
 export function toPick(p: Product): PickInput {
@@ -26,6 +28,7 @@ export function toPick(p: Product): PickInput {
     open_price_min: p.open_price_min ?? null,
     open_price_max: p.open_price_max ?? null,
     is_service: Boolean(x.is_service),
+    no_discount: Boolean(p.no_discount),
     id: p.id,
     name: p.name,
     sku: p.sku,

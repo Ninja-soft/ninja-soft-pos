@@ -43,14 +43,17 @@ export type OfflineResolveAction ="retry" | "discard" | "resolve" | "acknowledge
 
 export const offlineApi = {
   /** Catálogo para la foto local (mismo select que el POS, hasta 5000). */
+  // H163: con los códigos alternativos y las unidades de venta, para que el
+  // scanner los encuentre sin conexión. Contra una base sin la migración, el
+  // select de siempre.
   catalog: async (): Promise<Product[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("products")
-      .select("*, categories(name)")
-      .is("deleted_at", null)
-      .order("name")
-      .limit(SNAPSHOT_MAX_PRODUCTS);
+    const run = (select: string) =>
+      supabase.from("products").select(select).is("deleted_at", null).order("name").limit(SNAPSHOT_MAX_PRODUCTS);
+    let { data, error } = await run(
+      "*, categories(name), product_barcodes(code, deleted_at), product_sale_units(id, label, units, price, discount_pct, barcode, is_active, deleted_at)",
+    );
+    if (error) ({ data, error } = await run("*, categories(name)"));
     if (error) throw error;
     return (data ?? []) as unknown as Product[];
   },

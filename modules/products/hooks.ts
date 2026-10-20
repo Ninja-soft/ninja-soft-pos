@@ -8,9 +8,11 @@ import {
 } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
+  altCodesApi,
   brandsApi,
   categoriesApi,
   packagesApi,
+  saleUnitsApi,
   pluSettingsApi,
   productsApi,
   serialsApi,
@@ -331,6 +333,38 @@ export function useBrandMutations() {
 }
 
 // Medidas por bulto de un producto (null = producto nuevo, sin bultos guardados).
+// F24 · H163: códigos alternativos y unidades de venta del artículo.
+export function useProductAltCodes(productId: string | null) {
+  return useQuery({
+    queryKey: ["product-alt-codes", productId],
+    queryFn: () => altCodesApi.list(productId as string),
+    enabled: Boolean(productId),
+  });
+}
+
+export function useProductSaleUnits(productId: string | null) {
+  return useQuery({
+    queryKey: ["product-sale-units", productId],
+    queryFn: () => saleUnitsApi.list(productId as string),
+    enabled: Boolean(productId),
+  });
+}
+
+/** Unidades de venta activas del negocio, por artículo (POS). */
+export function useActiveSaleUnits(enabled = true) {
+  return useQuery({
+    queryKey: ["sale-units-active"],
+    queryFn: async () => {
+      const rows = await saleUnitsApi.active();
+      const map = new Map<string, typeof rows>();
+      for (const r of rows) map.set(r.productId, [...(map.get(r.productId) ?? []), r]);
+      return map;
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useProductPackages(productId: string | null) {
   return useQuery({
     queryKey: ["product-packages", productId],

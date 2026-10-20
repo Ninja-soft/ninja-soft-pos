@@ -1,5 +1,6 @@
 "use client";
 
+import { isSellable } from "@/lib/products/catalogCodes";
 import { useMemo, useState } from "react";
 import { Clock, Flame, Plus, Search } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -32,7 +33,9 @@ export function TableProductPicker({
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const { data: products } = useProducts(search);
+  const { data: allProducts } = useProducts(search);
+  // H163: los insumos (sólo compra) no se venden.
+  const products = useMemo(() => allProducts?.filter(isSellable), [allProducts]);
   // Mismo resolver que el servidor (ADR-058): sin sucursal ni cliente, como el trigger.
   const prices = usePriceResolver({ storeId: null, customerId: null });
   const { addItem } = useTableOrderMutations();

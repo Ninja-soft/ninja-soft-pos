@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,7 +34,7 @@ import {
   type ProductInput,
   type ProductOutput,
 } from "@/modules/products/schemas";
-import { categoriesApi, packagesApi, type Product } from "@/modules/products/api";
+import { altCodesApi, categoriesApi, packagesApi, saleUnitsApi, type Product } from "@/modules/products/api";
 import { KDS_STATIONS, KDS_STATION_LABELS } from "@/modules/dining/api";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { usePriceLists } from "@/modules/prices/hooks";
@@ -99,11 +99,28 @@ import { ProductImageChoice, type ImageMode } from "@/components/products/Produc
 import { useServiceTypes } from "@/modules/services/types";
 import { aiCoverError, useAiCoverMutations, useAiCoversEnabled, useAiImageSettings } from "@/modules/ai/covers";
 import { coverStyleInfo } from "@/supabase/functions/_shared/aiCoverPrompt";
+import { AltCodesEditor, type AltCodeDraft } from "@/components/products/AltCodesEditor";
+import { SaleUnitsEditor } from "@/components/products/SaleUnitsEditor";
+import { useProductAltCodes, useProductSaleUnits } from "@/modules/products/hooks";
+import { useSuppliers } from "@/modules/purchases/hooks";
+import {
+  USAGE_OPTIONS,
+  barcodeTakenMessage,
+  copyName,
+  diffAltCodes,
+  diffSaleUnits,
+  saleUnitError,
+  usageOf,
+  type ProductUsage,
+  type SaleUnit,
+} from "@/lib/products/catalogCodes";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product?: Product | null;
+  /** H163: alta prellenada desde otro artículo ("Duplicar"). Sin product. */
+  copyFrom?: Product | null;
 }
 
 type TabKey =
@@ -232,7 +249,10 @@ function SaveFirst({ children }: { children: React.ReactNode }) {
   return <p className="rounded-xl bg-muted p-3.5 text-xs text-muted-foreground">{children}</p>;
 }
 
-export function ProductFormModal({ open, onOpenChange, product }: Props) {
+export function ProductFormModal({ open, onOpenChange, product, copyFrom }: Props) {
+  // H163: duplicar = alta con los datos de otro artículo para revisar y grabar.
+  const src = product ?? copyFrom ?? null;
+  const isCopy = !product && Boolean(copyFrom);
   // Tras crear, seguimos en modo edición (fotos / componentes / seriales).
   const [created, setCreated] = useState<Product | null>(null);
   const active = product ?? created;
@@ -298,6 +318,9 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
   );
+  const { data: savedAltCodes = [], isLoading: altLoading } = useProductAltCodes(active?.id ?? null);
+  const { data: savedSaleUnits = [], isLoading: unitsLoading } = useProductSaleUnits(active?.id ?? null);
+  const { data: suppliers = [] } = useSuppliers({}, open);
 
   const [tab, setTab] = useState<TabKey>("general");
   const { data: historyVariants } = useVariants(active?.id ?? null, tab === "historial");
@@ -313,6 +336,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const [nodes, setNodes] = useState<CategoryNode[]>([]);
   const [attributes, setAttributes] = useState<ProductAttribute[]>([]);
   const [packages, setPackages] = useState<ProductPackage[]>([]);
+  // H163: códigos alternativos y unidades de venta (se guardan con el artículo).
+  const [altCodes, setAltCodes] = useState<AltCodeDraft[]>([]);
+  const [saleUnits, setSaleUnits] = useState<SaleUnit[]>([]);
+  // "Grabar y seguir": después de crear, el form queda en blanco (misma categoría).
+  const keepGoingRef = useRef(false);
+  const [blankKey, setBlankKey] = useState(0);
   const [savingExtras, setSavingExtras] = useState(false);
   // ADR-140: costo final y utilidad (se guarda después del producto, como los bultos).
   const [costing, setCosting] = useState<CostingDraft>(EMPTY_COSTING);
@@ -359,66 +388,71 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     setImageModeTouched(false);
     setFreshImage(null);
     setAddingBrand(false);
-    const cd = costingFromProduct(product);
+    const cd = costingFromProduct(src);
     setCosting(cd);
     setCostingSaved(cd);
     setAdvancedOpen(cd.cost_currency === "USD" || cd.cost_extras.length > 0 || cd.markup_pct !== "");
-    setAttributes(normalizeAttributes(product?.attributes));
-    setNodes(pathToCategory(product?.category_id ?? null, categories));
+    setAttributes(normalizeAttributes(src?.attributes));
+    setNodes(pathToCategory(src?.category_id ?? null, categories));
     reset({
-      name: product?.name ?? "",
-      sku: product?.sku ?? "",
-      barcode: product?.barcode ?? "",
-      plu: product?.plu ?? "",
-      category_id: product?.category_id ?? null,
-      brand_id: product?.brand_id ?? null,
-      price: product?.price ?? 0,
-      cost: product?.cost ?? undefined,
+      // H163: la copia no repite nombre, códigos ni PLU (se revisan antes de grabar).
+      name: isCopy ? copyName(src?.name ?? "") : (src?.name ?? ""),
+      sku: isCopy ? "" : (src?.sku ?? ""),
+      barcode: isCopy ? "" : (src?.barcode ?? ""),
+      plu: isCopy ? "" : (src?.plu ?? ""),
+      category_id: src?.category_id ?? null,
+      brand_id: src?.brand_id ?? null,
+      price: src?.price ?? 0,
+      cost: src?.cost ?? undefined,
       replacement_cost:
-        (product as { replacement_cost?: number | null } | null | undefined)?.replacement_cost ?? undefined,
-      stock: product?.stock ?? 0,
-      stock_min: product?.stock_min ?? 0,
-      unit: product?.unit ?? "un",
-      tax_rate: product?.tax_rate ?? 21,
-      ...productTaxDefaults(product),
+        (src as { replacement_cost?: number | null } | null | undefined)?.replacement_cost ?? undefined,
+      stock: isCopy ? 0 : (src?.stock ?? 0),
+      stock_min: src?.stock_min ?? 0,
+      unit: src?.unit ?? "un",
+      tax_rate: src?.tax_rate ?? 21,
+      ...productTaxDefaults(src),
       // ADR-116: en un negocio de servicios lo nuevo nace como servicio.
-      ...(product ? {} : { is_service: vocab.newIsService }),
-      season: product?.season ?? "",
-      tags: product?.tags?.join(", ") ?? "",
-      image_url: product?.image_url ?? "",
-      description: product?.description ?? "",
-      model: product?.model ?? "",
+      ...(src ? {} : { is_service: vocab.newIsService }),
+      season: src?.season ?? "",
+      tags: src?.tags?.join(", ") ?? "",
+      image_url: src?.image_url ?? "",
+      description: src?.description ?? "",
+      model: src?.model ?? "",
       attributes: [],
-      is_active: product?.is_active ?? true,
-      is_kit: product?.is_kit ?? false,
-      is_serialized: product?.is_serialized ?? false,
-      has_variants: product?.has_variants ?? false,
-      track_stock: product ? (product.track_stock ?? true) : !vocab.newIsService,
+      is_active: src?.is_active ?? true,
+      is_kit: src?.is_kit ?? false,
+      is_serialized: src?.is_serialized ?? false,
+      has_variants: src?.has_variants ?? false,
+      track_stock: src ? (src.track_stock ?? true) : !vocab.newIsService,
       allow_negative:
-        product?.allow_negative == null ? "inherit" : product.allow_negative ? "yes" : "no",
-      warranty_months: product?.warranty_months ?? 0,
-      is_favorite: product?.is_favorite ?? false,
-      no_discount: product?.no_discount ?? false,
-      favorite_order: product?.favorite_order ?? 0,
-      service_duration_min: product?.service_duration_min ?? "",
-      commission_pct: product?.commission_pct ?? "",
-      station: product?.station ?? "",
-      invoice_detail: product?.invoice_detail ?? "",
-      service_clarification_ids: product?.service_clarification_ids ?? [],
-      service_type_id: product?.service_type_id ?? "",
+        src?.allow_negative == null ? "inherit" : src.allow_negative ? "yes" : "no",
+      warranty_months: src?.warranty_months ?? 0,
+      is_favorite: isCopy ? false : (src?.is_favorite ?? false),
+      no_discount: src?.no_discount ?? false,
+      favorite_order: src?.favorite_order ?? 0,
+      service_duration_min: src?.service_duration_min ?? "",
+      commission_pct: src?.commission_pct ?? "",
+      station: src?.station ?? "",
+      invoice_detail: src?.invoice_detail ?? "",
+      service_clarification_ids: src?.service_clarification_ids ?? [],
+      service_type_id: src?.service_type_id ?? "",
       // ADR-151: modo de precio (undefined = fijo sin tocar).
-      price_mode: product?.price_mode === "open" ? "open" : undefined,
-      open_price_min: product?.open_price_min ?? "",
-      open_price_max: product?.open_price_max ?? "",
+      price_mode: src?.price_mode === "open" ? "open" : undefined,
+      open_price_min: src?.open_price_min ?? "",
+      open_price_max: src?.open_price_max ?? "",
+      usage: src?.usage && src.usage !== "both" ? src.usage : undefined,
     });
+    setAltCodes([]);
+    setSaleUnits([]);
+    setPackages([]);
     // categories entra aparte (abajo) para no resetear el form al llegar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, product, reset]);
+  }, [open, product, copyFrom, blankKey, reset]);
 
   // Las categorías pueden llegar después de abrir: completamos la ruta.
   useEffect(() => {
-    if (open && product?.category_id && nodes.length === 0 && categories.length > 0) {
-      setNodes(pathToCategory(product.category_id, categories));
+    if (open && src?.category_id && nodes.length === 0 && categories.length > 0) {
+      setNodes(pathToCategory(src.category_id, categories));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, categories.length]);
@@ -428,6 +462,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     if (open) setPackages(savedPackages);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, active?.id, packagesLoading]);
+
+  // H163: alternativos y bultos guardados → estado editable.
+  useEffect(() => {
+    if (open && active?.id) setAltCodes(savedAltCodes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, active?.id, altLoading]);
+  useEffect(() => {
+    if (open && active?.id) setSaleUnits(savedSaleUnits);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, active?.id, unitsLoading]);
 
   useEffect(() => {
     if (created?.plu) setValue("plu", created.plu);
@@ -470,6 +514,18 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       setCostingSaved(costing);
       await qc.invalidateQueries({ queryKey: ["products"] });
     }
+    // H163: códigos alternativos y unidades de venta.
+    const ad = diffAltCodes(savedAltCodes, altCodes);
+    if (ad.insert.length + ad.remove.length > 0) {
+      await altCodesApi.save(productId, savedAltCodes, altCodes);
+      await qc.invalidateQueries({ queryKey: ["product-alt-codes", productId] });
+    }
+    const ud = diffSaleUnits(savedSaleUnits, saleUnits);
+    if (ud.insert.length + ud.update.length + ud.remove.length > 0) {
+      await saleUnitsApi.save(productId, savedSaleUnits, saleUnits);
+      await qc.invalidateQueries({ queryKey: ["product-sale-units", productId] });
+      await qc.invalidateQueries({ queryKey: ["sale-units-active"] });
+    }
     if (!packagesAllowed) return;
     const d = diffPackages(savedPackages, packages);
     if (d.insert.length + d.update.length + d.remove.length === 0) return;
@@ -487,6 +543,18 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       });
       return;
     }
+    // H163: bultos válidos (no van con pesables, variantes ni serializados).
+    const unitErr = saleUnits
+      .map((u) => saleUnitError(u, { unit: parsed.unit, has_variants: parsed.has_variants, is_serialized: parsed.is_serialized, is_service: parsed.is_service }))
+      .find(Boolean);
+    if (unitErr) {
+      setTab("precios");
+      toast({ title: "Revisá la venta por bulto", description: unitErr, variant: "error" });
+      keepGoingRef.current = false;
+      return;
+    }
+    const keepGoing = keepGoingRef.current && !active;
+    keepGoingRef.current = false;
     setSavingExtras(true);
     try {
       // Árbol de categorías: crea los niveles nuevos y usa la hoja.
@@ -510,6 +578,19 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       }
       const nuevo = await create.mutateAsync(input);
       await saveExtras(nuevo.id);
+      if (keepGoing) {
+        // H163: "Grabar y seguir": form en blanco con la misma categoría.
+        const keepNodes = nodes;
+        toast({ title: `${Noun} creado: ${nuevo.name}`, description: "Seguí con el próximo.", variant: "success" });
+        if (aiEnabled && imageMode === "ai") generateAiCover(nuevo.id);
+        if (copyFrom) {
+          onOpenChange(false);
+          return;
+        }
+        setBlankKey((k) => k + 1);
+        setTimeout(() => setNodes(keepNodes), 0);
+        return;
+      }
       setCreated(nuevo);
       // ADR-122: imagen elegida en General. Con IA se genera de fondo (no
       // bloquea el alta) para cualquier producto o servicio; "Subir foto"
@@ -524,7 +605,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     } catch (e) {
       toast({
         title: "No se pudo guardar",
-        description: errorDescription(e),
+        description: barcodeTakenMessage(e) ?? errorDescription(e),
         variant: "error",
       });
     } finally {
@@ -582,13 +663,26 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? `Editar ${noun}` : `Nuevo ${noun}`}
+      title={isEdit ? `Editar ${noun}` : isCopy ? `Nuevo ${noun} (copia de ${copyFrom?.name ?? ""})` : `Nuevo ${noun}`}
       className="sm:max-w-3xl"
       footer={
         <>
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             {created ? "Cerrar" : "Cancelar"}
           </Button>
+          {!isEdit && (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={saving}
+              onClick={() => {
+                keepGoingRef.current = true;
+                void handleSubmit(onSubmit, onInvalid)();
+              }}
+            >
+              Grabar y seguir
+            </Button>
+          )}
           <Button type="submit" form="product-form" loading={saving}>
             {isEdit ? "Guardar" : `Crear ${noun}`}
           </Button>
@@ -947,6 +1041,27 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             <MarketReferencePanel ean={barcodeVal} myPrice={price} className="pt-2" />
           </Group>
 
+          {!isService && (
+            <Group
+              title="Venta por bulto"
+              description="Vendé por caja, pack o bulto: 1 bulto descuenta sus unidades del stock. Precio propio o el de las unidades con descuento."
+            >
+              {active && unitsLoading ? (
+                <div className="grid h-16 place-items-center">
+                  <Spinner />
+                </div>
+              ) : (
+                <SaleUnitsEditor
+                  value={saleUnits}
+                  onChange={setSaleUnits}
+                  unitPrice={price}
+                  allowDiscount={!noDiscount}
+                  product={{ unit: watch("unit"), has_variants: hasVariants, is_serialized: isSerialized, is_service: isService }}
+                />
+              )}
+            </Group>
+          )}
+
           <Group
             title="Listas de precios"
             description="Cómo queda este precio en cada lista activa y de dónde sale, con la misma cuenta que usa el POS."
@@ -1115,6 +1230,25 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               />
             )}
           </Group>
+          {!isService && (
+            <Group
+              title="Códigos alternativos"
+              description="Otro EAN, el código del fabricante o el del proveedor: el scanner y el buscador los encuentran igual que al principal."
+            >
+              {active && altLoading ? (
+                <div className="grid h-16 place-items-center">
+                  <Spinner />
+                </div>
+              ) : (
+                <AltCodesEditor
+                  value={altCodes}
+                  onChange={setAltCodes}
+                  mainBarcode={barcodeVal}
+                  suppliers={suppliers.map((x) => ({ id: x.id, name: x.name }))}
+                />
+              )}
+            </Group>
+          )}
         </div>
 
         {/* ── Atributos ───────────────────────────────────────────── */}
@@ -1180,6 +1314,30 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
         {/* ── Más (tipo de producto, servicio, cocina) ────────────── */}
         <div className={show("mas")}>
+          {!isService && (
+            <Group title="Se usa para" description="Un insumo no aparece en el POS ni en el catálogo online; lo de sólo venta no aparece al comprar.">
+              <div className="grid gap-2 sm:grid-cols-3">
+                {USAGE_OPTIONS.map((o) => {
+                  const on = usageOf({ usage: watch("usage") }) === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setValue("usage", o.value as ProductUsage, { shouldDirty: true })}
+                      className={cn(
+                        "rounded-lg px-3 py-2.5 text-left transition",
+                        on ? "bg-ninja-flame/[0.12] text-ninja-flameSoft" : "bg-muted hover:bg-muted/70",
+                      )}
+                    >
+                      <span className="block text-sm font-semibold">{o.label}</span>
+                      <span className="block text-xs text-muted-foreground">{o.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Group>
+          )}
           {!isService && (
           <Group title="Tipo de producto">
             <div className="divide-y divide-border rounded-lg bg-muted">

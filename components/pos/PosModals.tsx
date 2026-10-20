@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Banknote } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Callout } from "@/components/ui/Callout";
 import { useShiftMovements } from "@/modules/cash/hooks";
@@ -10,6 +10,18 @@ import { MIN_REASON, validReason, zeroCloseNeedsConfirm } from "@/lib/cash/close
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils/format";
+import { Switch } from "@/components/ui/Switch";
+import {
+  DENOMINATIONS,
+  billsTotal,
+  buildCount,
+  countHasData,
+  countableMethods,
+  openingNeedsConfirm,
+  toAmount,
+  toQty,
+  type CloseCount,
+} from "@/lib/cash/arqueo";
 
 // Apertura y cierre de caja del POS. El cobro vive en la hoja única
 // (components/pos/checkout/CheckoutSheet.tsx), que reemplazó a PaymentModal.
@@ -20,6 +32,7 @@ export function OpenShiftModal({
   onConfirm,
   loading,
   locationLabel,
+  suggested,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -27,8 +40,20 @@ export function OpenShiftModal({
   loading: boolean;
   // "Centro · Caja 1": dónde se abre el turno (F17 · H90).
   locationLabel?: string;
+  // H159: lo que quedó contado en el último cierre de esta caja.
+  suggested?: number | null;
 }) {
   const [amount, setAmount] = useState("0");
+  const [confirmZero, setConfirmZero] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setAmount(suggested && suggested > 0 ? String(suggested) : "0");
+      setConfirmZero(false);
+    }
+  }, [open, suggested]);
+  const value = Number(amount) || 0;
+  const askZero = openingNeedsConfirm(value, suggested);
+  const differs = suggested != null && suggested > 0 && Math.abs(value - suggested) > 0.009;
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Abrir caja" description={locationLabel || undefined}>
       <div className="space-y-4">
@@ -37,14 +62,41 @@ export function OpenShiftModal({
           type="number"
           step="0.01"
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => {
+            setAmount(e.target.value);
+            setConfirmZero(false);
+          }}
         />
+        {suggested != null && suggested > 0 && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            En el último cierre de esta caja quedaron {formatCurrency(suggested)}.
+            {differs && " Si abrís con otro monto, la diferencia queda registrada."}
+          </p>
+        )}
+        {askZero && confirmZero && (
+          <Callout tone="warning" icon={AlertTriangle} title={`¿Abrís con $0?`}>
+            <p>
+              El último cierre dejó {formatCurrency(suggested ?? 0)} en el cajón. Si se retiró, abrí igual; si no, cargá el
+              monto.
+            </p>
+          </Callout>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button loading={loading} onClick={() => onConfirm(Number(amount) || 0)} data-tour="caja-abrir-confirmar">
-            Abrir
+          <Button
+            loading={loading}
+            onClick={() => {
+              if (askZero && !confirmZero) {
+                setConfirmZero(true);
+                return;
+              }
+              onConfirm(value);
+            }}
+            data-tour="caja-abrir-confirmar"
+          >
+            {askZero && confirmZero ? "Abrir con $0" : "Abrir"}
           </Button>
         </div>
       </div>
@@ -75,6 +127,7 @@ export function CloseShiftModal({
     notes: string,
     pendingAction: "cancel" | "carry" | null,
     zeroCloseReason?: string | null,
+    count?: CloseCount | null,
   ) => void;
   loading: boolean;
   locationLabel?: string;
@@ -91,8 +144,22 @@ export function CloseShiftModal({
   const needsDecision = Boolean(pending && pending.waiting + pending.paid > 0);
   // El esperado sale de los movimientos del turno (se piden sólo con el modal abierto).
   const { data: movements } = useShiftMovements(open && shiftId ? shiftId : null);
-  const expected = movements ? summarize(opening ?? 0, movements).cashExpected : null;
-  const counted = Number(amount) || 0;
+  const summary = movements ? summarize(opening ?? 0, movements) : null;
+  const expected = summary ? summary.cashExpected : null;
+  // H159: arqueo por billete y por medio.
+  const [byBills, setByBills] = useState(false);
+  const [bills, setBills] = useState<Record<string, string>>({});
+  const [coins, setCoins] = useState("");
+  const [methodCounts, setMethodCounts] = useState<Record<string, string>>({});
+  const billQty = useMemo(() => {
+    const q: Record<string, number> = {};
+    for (const d of DENOMINATIONS) q[String(d)] = toQty(bills[String(d)] ?? "");
+    return q;
+  }, [bills]);
+  const coinsAmount = toAmount(coins) ?? 0;
+  const billSum = billsTotal(billQty, coinsAmount);
+  const methods = useMemo(() => (summary ? countableMethods(summary.byMethod) : []), [summary]);
+  const counted = byBills ? billSum : Number(amount) || 0;
   const needsZeroConfirm = zeroCloseNeedsConfirm(counted, expected);
   const zeroOk = !needsZeroConfirm || validReason(zeroReason);
   return (
@@ -103,17 +170,80 @@ export function CloseShiftModal({
       description={locationLabel || undefined}
     >
       <div className="space-y-4">
-        <Input
-          label="Efectivo contado"
-          type="number"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <Banknote size={16} aria-hidden /> Contar por billete
+          </span>
+          <Switch checked={byBills} onCheckedChange={setByBills} label="Contar por billete" />
+        </div>
+        {byBills ? (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {DENOMINATIONS.filter((d) => d >= 10).map((d) => (
+                <label key={d} className="flex items-center gap-2 rounded-lg bg-fg-4 px-2.5 py-1.5 text-sm">
+                  <span className="w-16 shrink-0 font-semibold tabular-nums">{formatCurrency(d)}</span>
+                  <span aria-hidden className="text-muted-foreground">×</span>
+                  <input
+                    inputMode="numeric"
+                    aria-label={`Billetes de ${d}`}
+                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-right tabular-nums"
+                    value={bills[String(d)] ?? ""}
+                    placeholder="0"
+                    onChange={(e) => setBills((b) => ({ ...b, [String(d)]: e.target.value.replace(/\D/g, "").slice(0, 7) }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <Input label="Monedas (total)" inputMode="decimal" value={coins} placeholder="0" onChange={(e) => setCoins(e.target.value)} />
+            <p className="text-sm">
+              Efectivo contado: <span className="font-semibold tabular-nums">{formatCurrency(billSum)}</span>
+            </p>
+          </div>
+        ) : (
+          <Input
+            label="Efectivo contado"
+            type="number"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        )}
         {expected !== null && (
           <p className="-mt-2 text-xs text-muted-foreground">
-            El sistema espera {formatCurrency(expected)} en efectivo.
+            El sistema espera {formatCurrency(expected)} en efectivo
+            {counted !== expected ? ` (diferencia ${formatCurrency(counted - expected)})` : ""}.
           </p>
+        )}
+        {methods.length > 0 && (
+          <fieldset className="space-y-2 rounded-xl bg-fg-4 p-3">
+            <legend className="sr-only">Otros medios</legend>
+            <p className="text-sm font-semibold">Otros medios (opcional)</p>
+            <p className="text-xs text-muted-foreground">
+              Contá los cupones, transferencias y QR del turno. Lo que cargues queda en el Z con su diferencia.
+            </p>
+            {methods.map((m) => {
+              const c = toAmount(methodCounts[m.method] ?? "");
+              return (
+                <div key={m.method} className="grid grid-cols-[1fr_8rem] items-center gap-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{m.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Esperado {formatCurrency(m.expected)}
+                      {c !== null && Math.abs(c - m.expected) > 0.004 ? ` · diferencia ${formatCurrency(c - m.expected)}` : ""}
+                    </p>
+                  </div>
+                  <input
+                    inputMode="decimal"
+                    aria-label={`Contado de ${m.label}`}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-right tabular-nums"
+                    placeholder="Contado"
+                    value={methodCounts[m.method] ?? ""}
+                    onChange={(e) => setMethodCounts((x) => ({ ...x, [m.method]: e.target.value }))}
+                  />
+                </div>
+              );
+            })}
+          </fieldset>
         )}
         {needsZeroConfirm && expected !== null && (
           <Callout tone="warning" icon={AlertTriangle} title="Vas a cerrar con $0 contados">
@@ -189,14 +319,20 @@ export function CloseShiftModal({
           <Button
             loading={loading}
             disabled={(needsDecision && pendingAction === null) || !zeroOk}
-            onClick={() =>
+            onClick={() => {
+              const count = buildCount(
+                byBills ? billQty : {},
+                byBills ? coinsAmount : 0,
+                Object.fromEntries(methods.map((m) => [m.method, toAmount(methodCounts[m.method] ?? "")])),
+              );
               onConfirm(
                 counted,
                 notes,
                 needsDecision ? pendingAction : null,
                 needsZeroConfirm ? zeroReason.trim() : null,
-              )
-            }
+                countHasData(count) ? count : null,
+              );
+            }}
           >
             Cerrar caja
           </Button>

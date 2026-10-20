@@ -24,6 +24,7 @@ import { usePermissionMutations } from "@/modules/permissions/hooks";
 import type { PermOverview, PermPerson, PermRole } from "@/modules/permissions/api";
 import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { DiscountCapField } from "./DiscountCapField";
 
 const STORE_DEFAULT = "__negocio__";
 
@@ -253,6 +254,11 @@ export function EffectiveModal({ person, data, onClose }: { person: PermPerson |
           />
         </div>
         {p.base === "owner" && <p className="text-sm text-muted-foreground">El dueño puede todo, siempre.</p>}
+        {data.is_owner && p.base !== "owner" && (
+          <section className={cn(FLAT_PANEL, "p-3.5")}>
+            <DiscountCapField userId={p.user_id} />
+          </section>
+        )}
         {ctx.res.usedSystemFallback && (
           <p className="text-sm text-muted-foreground">
             Tu plan no incluye roles a medida: hoy cuenta como {BASE_LABEL[ctx.base]}.

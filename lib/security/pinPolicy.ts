@@ -18,7 +18,8 @@ export type PinAction =
   | "cash_in"
   | "shift_force_close"
   | "abrir_cajon"
-  | "reintegro_mp";
+  | "reintegro_mp"
+  | "cart_remove";
 
 export interface PinRule {
   enabled: boolean;
@@ -59,6 +60,7 @@ export const PIN_ACTIONS: PinAction[] = [
   "shift_force_close",
   "abrir_cajon",
   "reintegro_mp",
+  "cart_remove",
 ];
 
 /** Acciones que siempre piden PIN cuando se consultan (espejo de pin_action_required). */
@@ -77,6 +79,8 @@ export const DEFAULT_POLICY: PinPolicy = {
   abrir_cajon: { enabled: true, threshold: 0 },
   // ADR-067: siempre; la plata sale de la cuenta de Mercado Pago.
   reintegro_mp: { enabled: true, threshold: 0 },
+  // H159 (ADR-172): sacar del carrito antes de cobrar; apagado por defecto.
+  cart_remove: { enabled: false, threshold: 0 },
 };
 
 export const DEFAULT_SECURITY: SecuritySettings = {
@@ -149,6 +153,12 @@ export const ACTION_INFO: Record<
   reintegro_mp: {
     label: "Reintegrar por Mercado Pago",
     desc: "Siempre pide supervisor: devuelve la plata de una venta a la tarjeta o cuenta de Mercado Pago del cliente. El dueño y los supervisores lo hacen sin PIN.",
+    unit: "money",
+    reasonRequired: false,
+  },
+  cart_remove: {
+    label: "Sacar productos del carrito",
+    desc: "Borrar un renglón o limpiar la venta antes de cobrar, desde el monto indicado. Siempre queda registrado en la auditoría.",
     unit: "money",
     reasonRequired: false,
   },

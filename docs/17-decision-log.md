@@ -6488,6 +6488,103 @@ H63, H67 y H117 dejaron alertas sueltas (márgenes, riesgo, cockpit) que había 
 - Orden de deploy: migración, Edge `alerts_email` (verify_jwt = true, como `account_reminders`) y el front. Sin pg_cron o pg_net los jobs se omiten.
 - Verificado con `tests/unit/alertsCatalog.test.ts` (paridad del catálogo, umbrales y próxima corrida) y `tests/integration/rls-alertas.test.ts` (se salta sin Supabase local); el SQL y el PL/pgSQL se validaron con el parser de Postgres. Falta correrla contra una base real.
 
+## ADR-177: Catálogo PRO: códigos alternativos, venta por bulto, artículo de compra o venta y duplicar (F24 · H163)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270115100000_h163_catalogo`, sin Edges) · **Base:** ADR-170 (F24), ADR-056 (precio del servidor), ADR-077 (POS sin conexión), ADR-116 (`_sale_apply_service`)
+
+### Contexto
+
+La auditoría de InfoManager IM5 marcó que un artículo tiene un solo código de barras (el cambio de EAN de un proveedor obliga a editar la ficha), que no se puede vender por caja o pack con su coeficiente, que los insumos aparecen en el POS y que dar de alta artículos parecidos es lento.
+
+### Decisión
+
+1. **Códigos alternativos** (`product_barcodes`): por artículo y opcionalmente por variante y por proveedor; código normalizado (mayúsculas, sin espacios) y único por negocio entre las filas vivas. Un trigger (`_catalog_code_taken`) impide que un alternativo pise el principal de un artículo o de una variante o el código de una unidad de venta, y al revés (`products_code_guard`, `product_variants_code_guard`): error `barcode_taken:<origen>`. RLS por negocio con `(select current_tenant_id())`, alta y edición con `products.edit`, baja lógica y auditoría (`write_audit_log`).
+2. **Un solo resolver** `product_by_code(p_code, p_limit)` (SECURITY INVOKER, con la RLS del usuario): variante, artículo por barcode, SKU o PLU, alternativo, unidad de venta y PLU sin ceros a la izquierda, en ese orden. `productsApi.findByCode` y `findAllByCode` lo usan, así lo heredan el scanner y la Caja rápida del POS y `ProductSearchCombobox` (compras, ajustes, traslados, reservas, presupuestos). Contra una base sin la migración, la búsqueda de antes. La búsqueda por texto suma los artículos cuyo alternativo contiene lo escrito. El POS sin conexión baja los alternativos y los bultos en la foto del catálogo.
+3. **Unidad de venta con coeficiente** (`product_sale_units`: nombre, unidades, precio propio o derivado de N × precio unitario con descuento opcional, código propio). Se eligió una tabla nueva y no `product_packages`: aquélla son medidas logísticas (alto, ancho, peso, cantidad de bultos) detrás de `medidas_bultos`; mezclar el precio de venta ahí confundía las dos cosas. No se combina con pesables, variantes, serializados ni servicios (trigger en las dos puntas).
+4. **Venta por bulto sin reescribir `create_sale`.** El carrito guarda la línea en bultos con el precio del bulto; al cobrar se expande a unidades del artículo con el precio unitario de lista (el que `create_sale` valida, ADR-056) y lo que baja el bulto como descuento del renglón, más `sale_unit_id`. Así el stock, el precio, los impuestos y la promo siguen su camino de siempre. `_sale_apply_service` (que `create_sale` ya llama con los renglones y sus ids) se redefinió, copiando su única definición, para validar que la unidad sea de ese artículo y que la cantidad sea un múltiplo exacto, y para guardar `sale_items.sale_unit_id`, `sale_unit_label` ("Caja x 12") y `sale_unit_qty`. `sale_unit_id` no tiene FK a propósito: `sale_items` es una tabla grande y una FK pide un índice más en cada venta.
+5. **Compra, venta o ambos** (`products.usage`, default `both`): un trigger BEFORE INSERT en `sale_items` rechaza los insumos (`product_not_for_sale`) en toda venta (POS, mesas, delivery, API, sin conexión) sin tocar `create_sale`; `public_catalog` (copia de su última definición) no los publica; el POS, mesas y delivery los ocultan y los pickers de compra ocultan lo de sólo venta.
+6. **Duplicar y grabar y seguir**: sólo front. La copia lleva categoría, precios, impuestos y atributos, sin SKU, código, PLU ni stock, y se revisa antes de grabar.
+7. BASE: no hay feature de plan nueva.
+
+### Alternativas descartadas
+
+- **Columna `barcodes text[]` en `products`:** sin unicidad entre artículos ni proveedor por código.
+- **Precio prorrateado por unidad con cambio de precio:** pasaba por el PIN de `cambio_precio` y redondeaba mal el total del bulto.
+- **Un parámetro nuevo en `create_sale`:** obligaba a copiar 1.500 líneas para una validación que entra en `_sale_apply_service`.
+
+### Consecuencias
+
+- El descuento del bulto viaja como descuento del renglón: necesita la feature `descuentos` y un artículo que acepte descuentos (si no, el bulto se cobra N × precio unitario, lo calcula el POS). Una promo por cantidad del artículo puede sumar sobre el bulto.
+- Pendiente de H163: equivalencia de compra por bulto, precio por bulto en listas y etiquetas y los P3 (NCM, ícono de categoría, más de 2 ejes, edición masiva).
+- Orden de deploy: migración y después el front (el front tolera la base sin la migración).
+- Verificado con `tests/unit/h163Catalogo.test.ts`, typecheck y las suites de POS, carrito, sin conexión, combobox, cobros en espera y `db-audit-perf`.
+
+## ADR-178: Compras PRO: import de Mis Comprobantes de ARCA, lectura de facturas con IA y bandeja, factura con renglones, NC y anticipos imputados, padrón y saldo inicial del proveedor (F24 · H167)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270116100000_h167_compras` sin aplicar, Edge `purchase_invoice_ocr` sin desplegar) · **Base:** ADR-170 (F24), ADR-050 y ADR-059 (compras), ADR-171 (H158: guard de factura pagada y letra), ADR-133 (padrón de ARCA), ADR-122 (IA de la plataforma)
+
+### Contexto
+
+La auditoría de InfoManager IM5 (cap. 04) marcó como FALTA importar los comprobantes recibidos de ARCA y leer facturas con IA, y como PARCIAL la imputación de NC y anticipos (se aplicaban FIFO en el front y el excedente quedaba "a cuenta"), la cuenta de gasto por renglón, la factura que también recibe stock, el padrón en el alta de proveedores y el saldo inicial del proveedor.
+
+### Decisión
+
+Todo dentro de la OPTIONAL `compras` (existe; sin keys nuevas en `features`) y, para la lectura con IA, el ADDON `asistente_ia` (mismo control que `ai_cover_image`: `tenant_has_feature_for`). Escritura sólo por RPC SECURITY DEFINER con `_purchase_write_assert()` = `purchase_assert(true)` (negocio, rol, plan) + `purchase_can_write()` (capacidad `purchases.manage`). Tablas nuevas con `tenant_id`, RLS `(select current_tenant_id()) or (select internal_scope())` y sin escritura directa.
+
+1. **Import de "Mis Comprobantes Recibidos".** El archivo (XLSX con `readXlsxGrid` o CSV) se lee en el navegador (`lib/purchases/arcaImport.ts`): busca la fila de encabezados (la primera es el título con la CUIT), mapea las columnas por nombre normalizado y arma cada comprobante. `purchase_arca_import(p_rows, p_apply, p_file_name, p_create_suppliers)` deriva clase y letra del código de ARCA (`purchase_arca_cbte`), busca el proveedor por CUIT o lo crea (con la condición del padrón si el front la consultó, si no la que sale de la letra), valida la letra con `supplier_invoice_letters`, salta duplicados y graba con `supplier_invoice_save` (`source = 'arca'`, CAE). Cada fila corre en su bloque: en la vista previa siempre se deshace (`dry_run_ok`) y devuelve qué pasaría; al aplicar, una fila con error conocido se informa y no corta el lote; un error inesperado aborta todo. Idempotente: lo ya cargado vuelve como "Ya cargado". Estados en pantalla: Nuevo, Proveedor a crear, Ya cargado, CUIT ajena (receptor distinto del negocio; se importa sólo si se pide) y Error.
+2. **Lectura con IA y bandeja.** Bucket privado `purchase-inbox` (`<negocio>/<archivo>`, PDF, JPG, PNG, WEBP, 10 MB) y `purchase_invoice_inbox` (pending, processed, discarded) con `purchase_inbox_add` y `purchase_inbox_set_status`. La Edge `purchase_invoice_ocr` (verify_jwt) exige miembro activo con `purchases.manage`, `compras` y el addon; respeta `ai_config.active` y la cuota mensual del asistente; usa Claude si hay `claude_api_key` (PDF como `document`, foto como `image`; modelo `ai_config.ocr_model` o Claude Opus 5.5 con effort bajo y fallback del servidor) y si no Gemini (`inline_data`); valida el JSON estricto (`_shared/purchaseInvoiceOcr.ts`: CUIT con dígito verificador, alícuotas válidas, fechas reales) y guarda lo leído en la fila; cuenta el consumo en `ai_usage`. Nunca graba: abre el formulario precargado con los avisos, ofrece crear el proveedor si su CUIT no está y al guardar marca el archivo como cargado.
+3. **Factura con renglones.** `supplier_invoice_lines` ('item' y 'expense', baja lógica). `supplier_invoice_save_full` envuelve a `supplier_invoice_save` (que no se redefine): CAE y vencimiento del CAE, renglones y, si hay artículos (sólo en el alta), crea la recepción con `purchase_receive` (misma lógica de recibir: stock, costo promedio, último costo, lotes, permisos de recepción libre) vinculada a la factura. Los renglones no pueden superar el neto. `acc_sync_supplier_invoice` (definición viva de 20261029100200) imputa cada gasto a su cuenta (imputable) y el resto a `compras` como antes; si una edición sólo cambia los gastos, se rehace el asiento con `acc_sync_safe`.
+4. **Padrón en el alta de proveedores.** `SupplierFormModal` usa `PadronVerify` (el de clientes, feature `padron_arca`) y `padronToSupplier` vuelca razón social, condición de IVA, domicilio, localidad y provincia.
+5. **NC y anticipos imputados.** `supplier_credit_applications` (fuente: NC del proveedor o pago con saldo sin imputar; destino: factura o ND; `payment_id` = OP en la que se aplicó; se desaplica con `released_at`). `_supplier_credit_apply` valida lo disponible del crédito y el saldo del comprobante (`supplier_doc_open_ars`), por partes. Se usa suelto (`supplier_credit_apply`, sin plata de por medio) o dentro de `supplier_payment_order_create` (definición viva de 20261231100000) con `credit_applications`, antes de imputar el pago. `supplier_invoice_open` resta lo aplicado (`credited_ars` al final), `supplier_credit_open` lista los créditos disponibles, el guard de H158 cuenta lo aplicado (una factura o NC con créditos aplicados no se anula ni baja) y anular un pago libera lo aplicado con él (trigger). El aging recibe lo aplicado como imputación explícita.
+6. **Saldo inicial y ajustes.** `supplier_account_adjustments` (opening única por proveedor, adjustment con signo, fecha, vencimiento, motivo, anulación con motivo y auditoría) entra en `supplier_account_entries` (vista viva) y por lo tanto en saldos, aging y resumen de cuenta.
+
+### Verificado vs inferido
+
+- **Verificado (fuentes públicas: ayudas de Colppy y Dux sobre el import desde ARCA):** la primera fila del archivo es un título y los encabezados van en la segunda; columnas del diseño clásico (Fecha, Tipo, Punto de Venta, Número Desde/Hasta, Cód. Autorización, Tipo/Nro. Doc. Emisor, Denominación Emisor, Tipo Cambio, Moneda, Imp. Neto Gravado, Imp. Neto No Gravado, Imp. Op. Exentas, Otros Tributos, IVA, Imp. Total); los importes en moneda de origen con su tipo de cambio; los códigos de tipo de comprobante de WSFE.
+- **Inferido (no hay documentación oficial del export):** los nombres exactos de las columnas por alícuota del diseño nuevo (se reconocen por patrón: "Neto Grav. IVA 21%", "IVA 10,5%"...), si el CSV usa ; o , (se detecta), si las NC vienen en negativo (se toman en valor absoluto) y el formato del título con la CUIT. Sin desglose, el IVA se asigna a la alícuota que lo explica; si no la hay (varias alícuotas), la fila queda en error para cargarla a mano. Lo que el total tiene de más va como "otros tributos sin detalle" con aviso.
+- **Lectura con IA:** probado sólo con tests del validador y del armado del pedido; la precisión real depende del modelo configurado y de la calidad de la foto. Por eso nunca graba y muestra los avisos.
+
+### Alternativas descartadas
+
+- **Redefinir `supplier_invoice_save`** para CAE y renglones: un envoltorio no toca la definición viva que usan devoluciones e import.
+- **Imputación negativa dentro de `supplier_payment_allocations`:** mezclaría plata con créditos y rompería `_tax_retention_bases` (base de retención = lo pagado). Tabla aparte.
+- **Asiento automático del saldo inicial y los ajustes:** el saldo inicial ya está en el asiento de apertura y la contrapartida de un ajuste depende del caso. Deuda: se registra con un asiento manual (H172 "renglón de asiento manual imputado a proveedor").
+
+### Consecuencias
+
+- Pendiente de H167: desaplicar un crédito desde la pantalla (la RPC `supplier_credit_unapply` existe), imputar una OP a un saldo inicial (hoy el saldo inicial entra al aging FIFO), editar artículos de una factura ya recibida (se anula la recepción) y los P2.
+- Orden de deploy: migración, Edge `purchase_invoice_ocr` y después el front (la lista de facturas lee `cae`, `cae_due` y `source`).
+- Tests: `tests/unit/h167Compras.test.ts`; SQL revisado con el parser de Postgres (libpg_query) sin base.
+
+## ADR-179: Cobros ampliados: recibo con varios medios, cheque y e-cheq a la cartera, retenciones en el recibo, efectivo en dólares y planes por día (F24 · H160)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270117100000_h160_cobros`, sin Edges) · **Base:** ADR-037 (cuenta corriente v2), ADR-158 (cheques en la contabilidad), ADR-162 (cobro por transferencia a su cuenta), ADR-095 (retenciones sufridas), ADR-172 (arqueo por medio), ADR-055 (datos del pago por card_voucher)
+
+### Contexto
+
+La auditoría IM5 marcó que el recibo de cuenta corriente acepta un solo medio, que el cheque del cliente no es un medio de cobro ni en el POS ni en la cuenta corriente, que las retenciones sufridas se cargan aparte del recibo y que no se puede cobrar en dólares.
+
+### Decisión
+
+1. **Recibo con varios medios (`account_collect_multi`).** Cada línea es un movimiento `payment` propio con su medio; la principal lleva el número de recibo, la clave de idempotencia y la nota, y las demás apuntan a ella (`customer_account_movements.receipt_parent_id`). Así la caja (un `cash_movement` por línea), la transferencia a su cuenta de Tesorería, el asiento por medio (`acc_sync_cc_movement`), el arqueo por medio de H159 y el reporte de cobranzas de H161 siguen funcionando sin cambios. Las líneas tienen que sumar lo que se cancela; la diferencia hasta `pos_settings.receipt_rounding_tolerance` (10 pesos por defecto, editable en Operación) va como ajuste `rounding` (crédito o débito) a "Diferencias de redondeo". `account_collect` queda igual y el modal lo sigue usando con un solo medio común.
+2. **Cheque y e-cheq** (`cheque`, `echeq` en `payments.method` y en el recibo): dan de alta el cheque de terceros en cartera, recibido del cliente, enlazado por `cheques.cc_movement_id` o `cheques.sale_payment_id`. Gating real: `payment_method_plan_key` los manda a `tesoreria` (trigger de `payments` y `assert_payment_method_allowed` en el recibo). Contabilidad sin mapeos nuevos: el cobro va a "Otros medios de cobro a cobrar" (cobro `*`) y el cheque lo pasa a Valores a depositar (ADR-158). En el POS los datos viajan en `card_voucher.cheque` y un trigger los pasa a `metadata.cheque`, sin tocar `create_sale`.
+3. **Retenciones en el recibo:** línea `retention` (IIBB con jurisdicción, IVA, Ganancias, SUSS) con certificado: es un `payment` con medio `retention` que cancela deuda y se registra con `tax_suffered_register` vinculada al movimiento (mismos permisos: dueño o encargado con `taxes.manage` y la feature `percepciones_retenciones`). El asiento neto queda Retención sufrida contra Deudores con la reclasificación de ADR-095.
+4. **Anulación:** una línea sola no se anula (`receipt_void_whole`); al anular el recibo desde la principal se anulan todas, se devuelve la caja de cada una, el cheque vuelve de cartera a anulado (con contra-asiento) y la retención queda anulada. Si el cheque ya se depositó o entregó, no se puede anular. Lo mismo al anular una venta del POS con cheque.
+5. **Efectivo en dólares (`cash_usd`, feature nueva `efectivo_usd`, OPTIONAL, Pro y superiores):** el pago guarda los pesos que cubre; los dólares, la cotización y el vuelto van en `payments.metadata.usd`. Cotización: la del negocio (`fx_rates`) o la oficial de la plataforma (compra), por `pos_usd_quote`. El vuelto en pesos sale del cajón como retiro atado a la venta; el arqueo espera los dólares en dólares (`cash_shift_expected_by_method`). Contabilidad: cobro `cash_usd` a Caja.
+6. **Planes de tarjeta por día** (`payment_plans.weekdays`, 0 domingo a 6 sábado, null todos): el POS ofrece el plan sólo esos días (hora de Argentina), como la vigencia de H27.
+
+### Alternativas descartadas
+
+- **Un solo movimiento con las líneas en una tabla aparte:** obligaba a reescribir la caja, la tesorería, el asiento, el arqueo y el reporte de cobranzas, que leen un medio por movimiento.
+- **Reescribir `create_sale` para el cheque y los dólares:** los triggers de `payments` cubren también las ventas estacionadas.
+- **Cheque como feature propia:** la cartera es de Tesorería; sin ella no hay dónde guardarlo.
+
+### Consecuencias
+
+- Pendiente de H160: reglas de medios según el comprobante y por usuario con monto máximo, y la botonera de cobro configurable; arancel, TNA y CFT del plan (no hay columnas todavía); el vuelto en pesos de una venta en dólares anulada en otro turno no vuelve solo al cajón; la devolución parcial de una venta pagada con cheque no toca el cheque.
+- Orden de deploy: migración y después el front (el modal y la configuración leen columnas nuevas).
+- Tests: `tests/unit/h160Cobros.test.ts` (incluye el criterio: $60.000 en efectivo, e-cheq de $38.000 y retención de IIBB de $2.000 cancelan $100.000 y el e-cheq queda en cartera). Sin dry-run en base.
+
 ## ADR-180: dLocal Go por link de pago y QR, y cupones Rapipago / Pago Fácil con la Orders API de Mercado Pago (F8)
 
 **Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270118100000_dlocal_cupones`, Edges `dlocalgo`, `dlocalgo_webhook` y `mp_cupon`) · **Base:** ADR-143 (Ualá Bis, mismo patrón), ADR-032 (Orders API de Mercado Pago), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de hooks), ADR-070 (salud de webhooks)

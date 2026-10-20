@@ -1,7 +1,8 @@
 "use client";
 
 // Alta y edición de proveedor (F18 · H101, ADR-050). El servidor valida CUIT,
-// CBU y alias de nuevo (checks de la tabla) y exige rol y plan (RLS).
+// CBU y alias de nuevo (checks de la tabla) y exige rol y plan (RLS). Con un
+// CUIT válido trae los datos del padrón de ARCA (H167, el mismo de clientes).
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
@@ -24,6 +25,8 @@ import {
 } from "@/lib/purchases/suppliers";
 import type { Supplier, SupplierInput } from "@/modules/purchases/api";
 import { usePurchaseMutations, usePurchasesAccess } from "@/modules/purchases/hooks";
+import { PadronVerify } from "@/components/customers/PadronVerify";
+import { padronToSupplier } from "@/lib/purchases/suppliers";
 import { selectCls, textareaCls } from "./shared";
 
 interface FormState {
@@ -93,11 +96,14 @@ export function SupplierFormModal({
   onOpenChange,
   supplier,
   onSaved,
+  initial,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   supplier?: Supplier | null;
   onSaved?: (s: Supplier) => void;
+  /** Datos para precargar el alta (p. ej. CUIT y razón social leídos de una factura). */
+  initial?: Partial<Pick<SupplierInput, "name" | "cuit" | "iva_condition">> | null;
 }) {
   const { toast } = useToast();
   const access = usePurchasesAccess();
@@ -107,7 +113,13 @@ export function SupplierFormModal({
 
   useEffect(() => {
     if (!open) return;
-    setF(fromSupplier(supplier, access.pro ? access.settings.default_currency : "ARS"));
+    const base = fromSupplier(supplier, access.pro ? access.settings.default_currency : "ARS");
+    if (!supplier && initial) {
+      if (initial.name) base.name = initial.name;
+      if (initial.cuit) base.cuit = formatCuit(initial.cuit);
+      if (initial.iva_condition) base.iva_condition = initial.iva_condition;
+    }
+    setF(base);
     setErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, supplier]);
@@ -224,6 +236,26 @@ export function SupplierFormModal({
               onChange={(e) => set("cuit", e.target.value)}
               onBlur={() => isValidCuit(f.cuit) && set("cuit", formatCuit(f.cuit))}
             />
+            {!exterior && (
+              <div className="sm:col-span-2">
+                <PadronVerify
+                  docType="cuit"
+                  docNumber={f.cuit}
+                  onApply={(persona) => {
+                    const d = padronToSupplier(persona);
+                    setF((p) => ({
+                      ...p,
+                      name: d.name || p.name,
+                      iva_condition: d.iva_condition,
+                      address: d.address ?? p.address,
+                      city: d.city ?? p.city,
+                      province: d.province ?? p.province,
+                    }));
+                    toast({ title: "Datos de ARCA cargados", variant: "success" });
+                  }}
+                />
+              </div>
+            )}
             {exterior && (
               <Input
                 label="Identificación tributaria del exterior"

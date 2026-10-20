@@ -5,6 +5,7 @@
 // revalida al sincronizar y, si cambiaron, respeta el cobrado y lo audita.
 
 import type { OfflinePolicy } from "./policy";
+import { normalizeCode, pluCandidates, type OfflineCodes } from "@/lib/products/catalogCodes";
 
 export const SNAPSHOT_VERSION = 1;
 /** Tope de productos en la foto (el POS lista hasta 200 por búsqueda). */
@@ -86,27 +87,61 @@ const fold = (s: unknown) =>
         .toLowerCase()
     : "";
 
-interface Searchable {
+interface Searchable extends OfflineCodes {
   name?: unknown;
   sku?: unknown;
   barcode?: unknown;
   plu?: unknown;
+  usage?: unknown;
 }
 
-/** Misma búsqueda que productsApi.list (nombre, SKU, código, PLU), en local. */
+const liveAlt = (p: Searchable) => (p.product_barcodes ?? []).filter((b) => !b.deleted_at);
+const liveUnits = (p: Searchable) => (p.product_sale_units ?? []).filter((u) => !u.deleted_at && u.is_active);
+
+/** Misma búsqueda que productsApi.list (nombre, SKU, código, PLU y alternativos), en local. */
 export function searchSnapshot<P extends Searchable>(products: P[], q: string, limit = 200): P[] {
   const s = fold(q.trim());
+  const up = normalizeCode(q);
   const list = s
     ? products.filter(
-        (p) => fold(p.name).includes(s) || fold(p.sku).includes(s) || fold(p.barcode).includes(s) || fold(p.plu).includes(s),
+        (p) =>
+          fold(p.name).includes(s) ||
+          fold(p.sku).includes(s) ||
+          fold(p.barcode).includes(s) ||
+          fold(p.plu).includes(s) ||
+          (up.length >= 3 && liveAlt(p).some((b) => b.code.includes(up))),
       )
     : products;
-  return list.slice(0, limit);
+  // H163: los insumos (sólo compra) no se venden.
+  return list.filter((p) => p.usage !== "purchase").slice(0, limit);
 }
 
-/** Código exacto (scanner): barcode, SKU o PLU. */
-export function findByCodeInSnapshot<P extends Searchable>(products: P[], code: string): P | null {
+/** Código exacto (scanner): barcode, SKU, PLU (también sin ceros), alternativo o bulto. */
+export function findCodeInSnapshot<P extends Searchable>(
+  products: P[],
+  code: string,
+): { product: P; saleUnit?: NonNullable<OfflineCodes["product_sale_units"]>[number] } | null {
   const c = code.trim();
   if (!c) return null;
-  return products.find((p) => p.barcode === c || p.sku === c || p.plu === c) ?? null;
+  const up = normalizeCode(c);
+  const direct = products.find((p) => p.barcode === c || p.sku === c || p.plu === c);
+  if (direct) return { product: direct };
+  for (const p of products) {
+    if (liveAlt(p).some((b) => b.code === up)) return { product: p };
+  }
+  for (const p of products) {
+    const u = liveUnits(p).find((x) => x.barcode === up);
+    if (u) return { product: p, saleUnit: u };
+  }
+  const plus = pluCandidates(c).slice(1);
+  if (plus.length) {
+    const byPlu = products.find((p) => plus.includes(String(p.plu ?? "")));
+    if (byPlu) return { product: byPlu };
+  }
+  return null;
+}
+
+/** Código exacto (scanner): barcode, SKU o PLU (y alternativos). */
+export function findByCodeInSnapshot<P extends Searchable>(products: P[], code: string): P | null {
+  return findCodeInSnapshot(products, code)?.product ?? null;
 }

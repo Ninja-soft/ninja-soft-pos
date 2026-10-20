@@ -72,6 +72,8 @@ export const ProductSchema = z.object({
   is_favorite: z.boolean().default(false),
   // F24 · H158: no acepta descuento manual (promos y cupones sí).
   no_discount: z.boolean().default(false),
+  // F24 · H163: compra, venta o ambos. undefined = no se tocó (queda 'both').
+  usage: z.enum(["both", "sale", "purchase"]).optional(),
   favorite_order: z.coerce.number().int().min(0).max(9999).default(0),
   // Servicio (F12 · H38): duración por defecto del turno (min) y % de comisión
   // del profesional. Vacío → null (producto normal, sin agenda).

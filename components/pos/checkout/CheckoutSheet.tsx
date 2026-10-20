@@ -78,6 +78,9 @@ import { TransferPanel } from "./TransferPanel";
 import { useSalePerceptions } from "@/modules/tax/hooks";
 import type { PreviewItem } from "@/modules/tax/api";
 import { TransferAutoDetect } from "./TransferAutoDetect";
+import { ChequeFields, EMPTY_CHEQUE, UsdFields, type ChequeDraft } from "./ChequeUsdFields";
+import { formatUsd, settleUsd, type UsdQuote } from "@/lib/pos/usd";
+import { isValidCuit, normalizeDigits } from "@/lib/tax/catalog";
 import { CheckoutTabBar, CheckoutTabsProvider, useCheckoutTabsState } from "./CheckoutTabs";
 import { depositToApply } from "@/modules/agenda/deposits";
 import { displayDataOf, isMpCvuAccount, type TransferAccount } from "@/lib/payments/transfer";
@@ -253,6 +256,8 @@ export interface CheckoutSheetProps {
   pauseRef?: React.MutableRefObject<(() => void) | null>;
   /** El POS llama acá para limpiar con el atajo de teclado. */
   clearRef?: React.MutableRefObject<(() => void) | null>;
+  /** H160: cotización del dólar del día para el cobro en dólares. */
+  usdQuote?: UsdQuote | null;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -321,6 +326,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     restore = null,
     pauseRef,
     clearRef,
+    usdQuote = null,
   } = props;
 
   // ADR-068: percepciones de la venta (se recalculan con el total sin ellas).
@@ -364,6 +370,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [voucher, setVoucher] = useState(EMPTY_VOUCHER);
   // Número de operación (Directo, transferencia): viaja como reference del pago.
   const [opRef, setOpRef] = useState("");
+  // H160: cheque o e-cheq (a la cartera) y dólares recibidos.
+  const [cheque, setCheque] = useState<ChequeDraft>(EMPTY_CHEQUE);
+  const [usdStr, setUsdStr] = useState("");
   // ADR-061: n° de operación de la transferencia detectada que hay que confirmar.
   const [autoCommitRef, setAutoCommitRef] = useState<string | null>(null);
   // Cuenta donde transfiere el cliente (ADR-055).
@@ -706,6 +715,15 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     return () => window.clearTimeout(t);
   }, [open, showTransferRef, transferAcc?.id]);
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
+  // H160: cheque / e-cheq y dólares.
+  const isCheque = active?.flow === "cheque";
+  const chequeCuit = normalizeDigits(cheque.cuit);
+  const chequeCuitError = isCheque && chequeCuit !== "" && !isValidCuit(chequeCuit);
+  const chequeOk = !isCheque || (cheque.number.trim() !== "" && cheque.paymentDate !== "" && !chequeCuitError);
+  const isUsd = active?.flow === "cash_usd";
+  const usdAmount = Math.max(0, Number(usdStr) || 0);
+  const usdSettle = settleUsd(usdAmount, usdQuote?.rate ?? 0, settle.amount);
+  const usdOk = !isUsd || (Boolean(usdQuote) && usdSettle.amount > 0);
   const isAccount = active?.flow === "account";
   const accountOk = !isAccount || !renderAccount || !accountPay.blocked;
   const canCommit =
@@ -717,6 +735,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     posnetReady &&
     terminalReady &&
     refOk &&
+    chequeOk &&
+    usdOk &&
     !belowMin &&
     !receivedShort &&
     !electronic &&
@@ -729,6 +749,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setReceivedStr("");
     setVoucher(EMPTY_VOUCHER);
     setOpRef("");
+    setCheque(EMPTY_CHEQUE);
+    setUsdStr("");
     // El estado de cuenta corriente NO se resetea acá: el panel lo reporta al
     // montarse (y su efecto corre antes que éste, lo pisaría).
   }, [activeId, cardKind]);
@@ -790,6 +812,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       ...(l.reference ? { reference: l.reference } : {}),
       ...(l.card_voucher ? { card_voucher: l.card_voucher } : {}),
       ...(l.transfer ? { transfer: l.transfer } : {}),
+      ...(l.cheque ? { cheque: l.cheque } : {}),
+      ...(l.usd ? { usd: l.usd } : {}),
       // El medio real se supo al final (Point): sin promos por medio.
       ...(!l.promoEligible ? { promo_ineligible: true } : {}),
     }));
@@ -811,6 +835,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setPlanId("");
     setVoucher(EMPTY_VOUCHER);
     setOpRef("");
+    setCheque(EMPTY_CHEQUE);
+    setUsdStr("");
     setCardBrand(null);
     setCardBank(null);
     // El adquirente queda: el resto se suele cobrar en la misma terminal.
@@ -855,6 +881,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const brandInfo = isPosnet ? cardBrandByKey(cardBrand) : null;
     if (isPosnet && cardAcq) onAcquirerUsed?.(cardAcq);
     const kindLabel = cardKind === "debit" ? "Débito" : "Crédito";
+    // H160: en dólares se registra lo que cubren (en pesos); el resto es vuelto.
+    const lineAmount = isUsd ? usdSettle.amount : settle.amount;
     addLine({
       key: `l${++keySeq}`,
       tenderId: active.id,
@@ -867,6 +895,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       detail:
         active.flow === "cash" && received != null && received > settle.amount
           ? `Recibido ${money(received)}, vuelto ${money(received - settle.amount)}`
+          : isUsd && usdQuote
+            ? `${formatUsd(usdAmount)} a ${money(usdQuote.rate)}${usdSettle.change > 0 ? `, vuelto ${money(usdSettle.change)}` : ""}`
+            : isCheque
+              ? [`N° ${cheque.number.trim()}`, cheque.bank.trim() || null, `pago ${cheque.paymentDate.split("-").reverse().join("/")}`]
+                  .filter(Boolean)
+                  .join(" · ")
           : plan
             ? plan.label
             : isTransfer
@@ -879,10 +913,20 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                   : undefined,
       logo: isPosnet && cardBrand ? cardBrandLogo(cardBrand, cardKind) : active.logo,
       method: activeMethod,
-      amount: settle.amount,
+      amount: lineAmount,
       surcharge: settle.surcharge,
       surchargeItems: settle.surcharge > 0 ? [{ name: surchargeName, amount: settle.surcharge }] : [],
-      received: active.flow === "cash" ? (received ?? settle.amount) : undefined,
+      received: active.flow === "cash" ? (received ?? settle.amount) : isUsd ? usdSettle.ars : undefined,
+      cheque: isCheque
+        ? {
+            number: cheque.number.trim(),
+            payment_date: cheque.paymentDate,
+            bank_name: cheque.bank.trim() || null,
+            drawer_name: cheque.drawer.trim() || null,
+            drawer_cuit: chequeCuit || null,
+          }
+        : undefined,
+      usd: isUsd && usdQuote ? { amount: usdAmount, rate: usdQuote.rate } : undefined,
       reference:
         active.requiresReference || (isTransfer && opRef.trim())
           ? opRef.trim()
@@ -1061,7 +1105,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   if (commitBlocker && (readyToConfirm || active)) ctaLabel = commitBlocker;
   else if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
   else if (active) {
-    const amt = money(settle.amount);
+    const amt = money(isUsd ? usdSettle.amount : settle.amount);
     // El modal del QR suma solo el recargo del medio (checkout propio o
     // recargo único): el botón muestra el monto que va a salir en el QR.
     const qrAmt = money(round2(settle.amount * (1 + (active.qrSurchargePct || 0) / 100)));
@@ -1073,7 +1117,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       ctaLabel = posnetNextStep ? "Continuar" : cardStep === 1 ? "Elegí la terminal" : "Elegí la entidad de la tarjeta";
     else if (isPosnet) ctaLabel = `Registrar cobro con tarjeta ${amt}`;
     else if (transferScreen) ctaLabel = settle.closes ? `Ya transfirió · Cobrar ${amt}` : `Ya transfirió · Agregar ${amt}`;
-    else ctaLabel = settle.closes ? `Cobrar ${amt}` : `Agregar pago ${amt}`;
+    else ctaLabel = settle.closes && (!isUsd || usdSettle.covers) ? `Cobrar ${amt}` : `Agregar pago ${amt}`;
   }
   const posnetNext = !readyToConfirm && isPosnet && cardStep < 4;
   const ctaDisabled = readyToConfirm
@@ -1253,7 +1297,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       />
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold">
-          {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
+          {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "cheque" || active.group === "customer"
             ? active.label
             : `${active.brandLabel} ${active.label}`}
         </p>
@@ -1496,6 +1540,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const otherBlock = active ? (
     <>
+      {isCheque && (
+        <ChequeFields value={cheque} onChange={setCheque} echeq={active.method === "echeq"} cuitError={chequeCuitError} />
+      )}
+      {isUsd && (
+        <UsdFields usd={usdStr} onUsd={setUsdStr} quote={usdQuote} due={settle.amount} settle={usdSettle} />
+      )}
       {transferScreen && transferAcc && (
         <TransferPanel
           accounts={transferAccounts}
@@ -1832,7 +1882,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     glyph={tenderGlyph(active)}
                     colorIcon={tenderColorIcon(active)}
                   />
-                  {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
+                  {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "cheque" || active.group === "customer"
                     ? active.label
                     : `${active.brandLabel} ${active.label}`}
                 </div>

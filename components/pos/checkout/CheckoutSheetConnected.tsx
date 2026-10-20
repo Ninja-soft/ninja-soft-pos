@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useQuery } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
+import type { UsdQuote } from "@/lib/pos/usd";
 import { isPlanActive, type PaymentPlan } from "@/modules/pos/api";
 import { usePaymentPlans, usePosSettings, useProfessionals } from "@/modules/pos/hooks";
 import { useProfessionalsForPosStore } from "@/modules/branches/staffHooks";
@@ -115,6 +118,20 @@ export function CheckoutSheetConnected({
         : null,
     [transferCfg, onTransferState, transferAuto, offline, posBranch.posStoreId, posRegister.data?.id],
   );
+  // H160: cotización del dólar para el cobro en dólares (feature efectivo_usd).
+  const usdOn = useFeature("efectivo_usd") === true;
+  const { data: usdQuote = null } = useQuery({
+    queryKey: ["pos", "usd-quote"],
+    enabled: usdOn && props.open && !offline,
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<UsdQuote | null> => {
+      const { data, error } = await createClient().rpc("pos_usd_quote" as never);
+      if (error) throw error;
+      const q = data as { rate?: number | string; source?: string; date?: string | null } | null;
+      const rate = Number(q?.rate);
+      return q && rate > 0 ? { rate, source: q.source ?? "oficial", date: q.date ?? null } : null;
+    },
+  });
   const { data: allPlans } = usePaymentPlans();
   const { data: allProfessionals } = useProfessionals();
   // Sólo los vendedores habilitados en la sucursal del POS (F17 · H91).
@@ -284,6 +301,7 @@ export function CheckoutSheetConnected({
   return (
     <CheckoutSheet
       {...props}
+      usdQuote={usdQuote}
       onConfirm={fiscal.onConfirm}
       commitBlocker={fiscal.commitBlocker}
       fiscalSlot={

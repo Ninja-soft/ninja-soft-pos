@@ -6,8 +6,10 @@
 
 import { ProductSearchCombobox } from "@/components/products/ProductSearchCombobox";
 import type { Product, ProductVariant } from "@/modules/products/api";
+import { isPurchasable } from "@/lib/products/catalogCodes";
 
-const purchasable = (p: Product) => !p.is_kit;
+// H163: lo de sólo venta tampoco se compra.
+const purchasable = (p: Product) => !p.is_kit && isPurchasable(p);
 
 export function ProductPicker({
   onPick,
@@ -27,7 +29,7 @@ export function ProductPicker({
       placeholder={placeholder}
       autoFocus={autoFocus}
       filter={purchasable}
-      rejectMessage={(p) => `${p.name} es un kit: comprá sus componentes`}
+      rejectMessage={(p) => (p.is_kit ? `${p.name} es un kit: comprá sus componentes` : `${p.name} es sólo de venta: no se compra`)}
       emptyHint="Los kits no se compran: se compran sus componentes."
     />
   );

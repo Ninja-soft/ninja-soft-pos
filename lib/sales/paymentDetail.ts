@@ -46,6 +46,9 @@ const METHOD_LABEL: Record<string, string> = {
   ualabis: "Ualá Bis",
   sena: "Seña del turno",
   plataforma: "App de delivery",
+  cheque: "Cheque",
+  echeq: "E-cheq",
+  cash_usd: "Efectivo en dólares",
   other: "Otro medio",
 };
 
@@ -83,7 +86,7 @@ export function providerName(key: string | null | undefined): string | null {
 
 /** Medios que nunca pasan por un procesador: sólo se muestra lo del POS. */
 export function isLocalOnly(method: string): boolean {
-  return ["cash", "transfer", "account", "store_credit", "other"].includes(method);
+  return ["cash", "transfer", "account", "store_credit", "other", "cheque", "echeq", "cash_usd"].includes(method);
 }
 
 const vstr = (v: Record<string, unknown> | null, k: string): string | null => {

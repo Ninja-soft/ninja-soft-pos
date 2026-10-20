@@ -25,7 +25,12 @@ export type SaleMethod =
   // Ualá Bis (ADR-143): QR, POS o Tap registrados con número de operación.
   | "ualabis"
   // Seña del turno ya cobrada (ADR-088): la agrega la hoja, no es un tender.
-  | "sena";
+  | "sena"
+  // H160 (ADR-179): cheque y e-cheq del cliente (entran a la cartera de
+  // Tesorería) y efectivo en dólares con la cotización del día.
+  | "cheque"
+  | "echeq"
+  | "cash_usd";
 
 export type TenderChannel = "manual" | "qr" | "link" | "point";
 
@@ -38,6 +43,8 @@ export type TenderChannel = "manual" | "qr" | "link" | "point";
 //  - qr: QrCheckoutModal (QR o link del proveedor).
 //  - point: PointCheckoutModal (la terminal recibe la orden por API).
 //  - store_credit / account: saldo a favor o cuenta corriente del cliente.
+//  - cheque: datos del cheque o e-cheq (H160), entra a la cartera.
+//  - cash_usd: dólares recibidos con la cotización y el vuelto en pesos (H160).
 export type TenderFlow =
   | "cash"
   | "direct"
@@ -46,7 +53,9 @@ export type TenderFlow =
   | "qr"
   | "point"
   | "store_credit"
-  | "account";
+  | "account"
+  | "cheque"
+  | "cash_usd";
 
 export type TenderGroupKey =
   | "cash"
@@ -58,6 +67,7 @@ export type TenderGroupKey =
   | "nave"
   | "fiserv"
   | "wallets"
+  | "cheque"
   | "customer";
 
 export type QrProviderKey =
@@ -438,6 +448,53 @@ export const TENDERS: TenderDef[] = [
   { ...qr("dlocalgo", "dLocal Go", "wallets", "link", "Link de pago con tarjeta"), minAmount: 1 },
   { ...qr("dlocalgo", "dLocal Go", "wallets", "qr", "Tarjeta desde el celular"), minAmount: 1 },
   {
+    // H160 (ADR-179): efectivo en dólares (feature efectivo_usd).
+    id: "cash_usd",
+    group: "cash",
+    brand: "cash_usd",
+    brandLabel: "Dólares",
+    channel: "manual",
+    label: "Dólares",
+    method: "cash_usd",
+    provider: null,
+    connection: null,
+    featureKey: "efectivo_usd",
+    logo: null,
+    flow: "cash_usd",
+    hint: "Cotización del día, vuelto en pesos",
+  },
+  {
+    // H160 (ADR-179): cheque y e-cheq del cliente, a la cartera de Tesorería.
+    id: "cheque",
+    group: "cheque",
+    brand: "cheque",
+    brandLabel: "Cheque",
+    channel: "manual",
+    label: "Cheque",
+    method: "cheque",
+    provider: null,
+    connection: null,
+    featureKey: "tesoreria",
+    logo: null,
+    flow: "cheque",
+    hint: "Entra a la cartera",
+  },
+  {
+    id: "echeq",
+    group: "cheque",
+    brand: "echeq",
+    brandLabel: "E-cheq",
+    channel: "manual",
+    label: "E-cheq",
+    method: "echeq",
+    provider: null,
+    connection: null,
+    featureKey: "tesoreria",
+    logo: null,
+    flow: "cheque",
+    hint: "Entra a la cartera",
+  },
+  {
     id: "store_credit",
     group: "customer",
     brand: "store_credit",
@@ -479,6 +536,7 @@ export const TENDER_GROUPS: { key: TenderGroupKey; label: string }[] = [
   { key: "nave", label: "Nave" },
   { key: "fiserv", label: "Clover" },
   { key: "wallets", label: "Billeteras y links" },
+  { key: "cheque", label: "Cheques" },
   { key: "customer", label: "Cuenta del cliente" },
 ];
 
@@ -583,6 +641,10 @@ export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
       return ctx.hasCustomer && ctx.storeCreditBalance > 0;
     case "account":
       return ctx.hasCustomer;
+    case "cheque":
+    case "cash_usd":
+      // H160: sólo con la feature confirmada (no se anticipa mientras carga).
+      return Boolean(t.featureKey && ctx.features?.[t.featureKey] === true);
   }
 }
 

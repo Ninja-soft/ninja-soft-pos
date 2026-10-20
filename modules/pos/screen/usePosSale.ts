@@ -166,6 +166,8 @@ export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
     ...(l.lineNote ? { lineNote: l.lineNote } : {}),
     ...(l.lineDetail !== undefined ? { lineDetail: l.lineDetail } : {}),
     ...(l.clarificationIds !== undefined ? { clarificationIds: l.clarificationIds } : {}),
+    // H163: línea por bulto.
+    ...(l.saleUnit ? { saleUnit: l.saleUnit } : {}),
   }));
 }
 

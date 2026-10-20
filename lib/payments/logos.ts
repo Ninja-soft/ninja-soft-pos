@@ -35,8 +35,8 @@ const FILE_PREFIX: Record<string, string> = {
   // ualabis.com.ar); la variante oscura pasa el azul de "ualá" a blanco.
   ualabis: "ualabis",
   // Viumi (ADR-173): logo oficial del encabezado de viumi.com.ar; la variante
-  // oscura pasa el violeta de "viu" a blanco. El isotipo es el ícono oficial
-  // de la app (apple-touch-icon de viumi.com.ar, esquinas transparentes).
+  // oscura pasa el violeta de "viu" a blanco. El isotipo es la "ü" del logo
+  // (la que pidió el dueño), sin placa; en fondo oscuro el violeta pasa a blanco.
   viumi: "viumi",
   // Talo (ADR-175): isotipo y logo oficiales del encabezado de talo.com.ar
   // (SVG); la variante oscura pasa el texto "talo" a blanco (el isotipo verde
@@ -55,7 +55,7 @@ const NO_WORDMARK = new Set(["cash", "transfer"]);
 const NO_ICON = new Set<string>();
 
 // Logos con versión para fondo oscuro (los demás se leen bien en ambos).
-const ICON_ON_DARK = new Set(["transfer", "payway", "clover", "ualabis"]);
+const ICON_ON_DARK = new Set(["transfer", "payway", "clover", "ualabis", "viumi"]);
 const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo", "viumi", "dlocalgo"]);
 
 // Canales con logo de producto propio (no el de su marca): la terminal

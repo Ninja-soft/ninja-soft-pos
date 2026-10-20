@@ -122,7 +122,8 @@ export function checkoutTotals(i: CheckoutInput): CheckoutTotals {
   const change = round2(
     i.lines.reduce(
       (a, l) =>
-        l.method === "cash" && (l.received ?? 0) > l.amount
+        // H160: en dólares, `received` son los pesos que valen (vuelto en pesos).
+        (l.method === "cash" || l.method === "cash_usd") && (l.received ?? 0) > l.amount
           ? a + ((l.received ?? 0) - l.amount)
           : a,
       0,

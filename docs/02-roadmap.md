@@ -1607,15 +1607,15 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [x] **P2 S** Recuperar el carrito al recargar la página (guardado local automático, no sólo Pausar). *Hecho (ADR-172): sessionStorage de la pestaña, con dueño negocio y usuario.*
   - [ ] **P3 S** Diagnóstico para el cajero cuando falla la factura: si el caído es ARCA o el servidor y cuánto tardó.
   - [ ] *Criterio:* un cierre con $10.000 en billetes de 1.000 y un cupón de $5.000 faltante muestra diferencia sólo en tarjeta, el encargado lo confirma y ya no se puede editar.
-- [ ] **H160 · Cobros ampliados.** · *BASE (recibo con varios medios) + OPTIONAL `cuenta_corriente`, `tesoreria`.* Enriquece H14, H31 y H106.
-  - [ ] **P1 M** Recibo de cuenta corriente con varios medios que tienen que cuadrar con lo imputado, más ajuste por redondeo.
-  - [ ] **P1 M** Cheque y e-cheq de cliente como medio de cobro en el POS y en la cuenta corriente, que entran directo a la cartera de Tesorería.
-  - [ ] **P1 M** Retenciones sufridas dentro del recibo, que cancelan deuda y alimentan las sufridas.
-  - [ ] **P2 M** Efectivo en dólares como medio, con la cotización del día y el vuelto en pesos.
-  - [ ] **P2 S** Planes de tarjeta por día de la semana; arancel, TNA y CFT visibles en el plan.
+- [~] **H160 · Cobros ampliados.** · *BASE (recibo con varios medios) + OPTIONAL `cuenta_corriente`, `tesoreria`, `efectivo_usd` (nueva, Pro).* Enriquece H14, H31 y H106. *Parcial en ADR-179 (`feat/h160-cobros`, migración `20270117100000_h160_cobros`): faltan las reglas de medios por comprobante, la botonera configurable y arancel, TNA y CFT del plan.*
+  - [x] **P1 M** Recibo de cuenta corriente con varios medios que tienen que cuadrar con lo imputado, más ajuste por redondeo. *Hecho (ADR-179): `account_collect_multi`, una línea por medio con un solo recibo, redondeo hasta `pos_settings.receipt_rounding_tolerance` a "Diferencias de redondeo".*
+  - [x] **P1 M** Cheque y e-cheq de cliente como medio de cobro en el POS y en la cuenta corriente, que entran directo a la cartera de Tesorería. *Hecho (ADR-179): medios `cheque` y `echeq` gateados por `tesoreria` en el servidor; el cheque queda en cartera enlazado al recibo o al pago.*
+  - [x] **P1 M** Retenciones sufridas dentro del recibo, que cancelan deuda y alimentan las sufridas. *Hecho (ADR-179): línea de retención registrada con `tax_suffered_register` y vinculada al recibo.*
+  - [x] **P2 M** Efectivo en dólares como medio, con la cotización del día y el vuelto en pesos. *Hecho (ADR-179): medio `cash_usd` (feature `efectivo_usd`), cotización del negocio o la oficial, vuelto como retiro del cajón y dólares aparte en el arqueo.*
+  - [~] **P2 S** Planes de tarjeta por día de la semana; arancel, TNA y CFT visibles en el plan. *Hecho por día de la semana (ADR-179, `payment_plans.weekdays`); falta arancel, TNA y CFT (no hay columnas).*
   - [ ] **P2 M** Reglas de medios según el comprobante (factura o sólo ticket) y por usuario; monto máximo por medio por comprobante.
   - [ ] **P2 M** Botonera de cobro configurable: botones que combinan medio y comprobante, cobran de un toque, con atajo F y orden por uso.
-  - [ ] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera.
+  - [x] *Criterio:* un cliente paga $100.000 con $60.000 en efectivo, un e-cheq de $38.000 y una retención de IIBB de $2.000; la deuda queda en cero y el e-cheq aparece en la cartera. *Cubierto en `tests/unit/h160Cobros.test.ts` (sin dry-run en base).*
 - [~] **H161 · Costo en la venta y reportes de gestión.** · *BASE (costo guardado, cobranzas, movimientos) + OPTIONAL `metricas_avanzadas` (rotación, GMROI, rentabilidad).* Enriquece TX-5, H67 y H97. *Parcial en ADR-174 (migración `20270112100000_h161_costo_gestion`, Reportes › Gestión): faltan los pendientes a fecha de corte, la búsqueda sin acentos y los P2.*
   - [x] **P1 M** Guardar en `sale_items` el costo al vender (y el de última compra); todos los márgenes, la rentabilidad y el CMV lo leen de ahí y no de `products.cost` de hoy. *Hecho (ADR-174): `sale_items.unit_cost` por trigger; CMV de la venta y de la devolución y comparativo de sucursales lo usan; las ventas anteriores quedaron con el costo del día marcado como aproximado.*
   - [x] **P1 S** Reporte de cobranzas del período por medio, cuenta, usuario y caja (sin contar anticipos cancelados ni redondeos). *Hecho (ADR-174): Reportes › Gestión › Cobranzas (cuenta corriente).*
@@ -1639,12 +1639,12 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 S** Avisos al grabar una venta: bajo costo, sin CAE, descuento anómalo.
   - [ ] **P3 M** Alertas armadas con IA que guardan la consulta y se reusan sin gastar cupo.
   - [ ] *Criterio:* el dueño recibe a las 8 un mail con las cajas sin cerrar de ayer y los cheques que vencen esta semana, sólo con los casos nuevos.
-- [ ] **H163 · Catálogo PRO.** · *BASE.* Enriquece H100 y H112.
-  - [ ] **P1 M** Varios códigos de barras por artículo (principal y alternativos, opcionalmente por proveedor); el buscador encuentra por todos y por código de fabricante.
-  - [ ] **P1 S** Duplicar artículo ("(COPIA)" para revisar y grabar); alta rápida "grabar y seguir".
-  - [ ] **P1 M** Unidad de venta con coeficiente (bulto, caja, pack) y equivalencias compra / stock / venta; no se combina con pesable; precio por bulto en lista y etiqueta.
-  - [ ] **P2 S** Artículo de Compra, Venta o Ambos: los insumos no aparecen en el POS ni en el catálogo.
-  - [ ] **P3 S** NCM en la ficha; ícono, color o foto de categoría para la grilla del POS; PLU sin ceros a la izquierda; variantes con más de 2 ejes; edición masiva por categoría, IVA, proveedor y stock mínimo.
+- [~] **H163 · Catálogo PRO.** · *BASE.* Enriquece H100 y H112. *Parcial en ADR-177 (`feat/h163-catalogo`, migración `20270115100000_h163_catalogo`): faltan la equivalencia de compra por bulto, el precio por bulto en listas y etiquetas y los P3 salvo el PLU sin ceros.*
+  - [x] **P1 M** Varios códigos de barras por artículo (principal y alternativos, opcionalmente por proveedor); el buscador encuentra por todos y por código de fabricante. *Hecho (ADR-177): `product_barcodes` con choque de códigos por trigger y el resolver `product_by_code` en el scanner, la Caja rápida, el buscador del POS y de listados, `ProductSearchCombobox` (compras, ajustes, traslados) y el POS sin conexión.*
+  - [x] **P1 S** Duplicar artículo ("(COPIA)" para revisar y grabar); alta rápida "grabar y seguir". *Hecho (ADR-177): Duplicar en Productos abre el alta prellenada sin códigos, PLU ni stock; Grabar y seguir deja el form en blanco con la misma categoría.*
+  - [~] **P1 M** Unidad de venta con coeficiente (bulto, caja, pack) y equivalencias compra / stock / venta; no se combina con pesable; precio por bulto en lista y etiqueta. *Parcial (ADR-177): `product_sale_units` con precio propio o derivado y código propio; el POS vende por bulto (scanner o elegir al tocar), el stock baja N y `sale_items` guarda el bulto. Faltan la equivalencia en compras y el precio por bulto en listas y etiquetas.*
+  - [x] **P2 S** Artículo de Compra, Venta o Ambos: los insumos no aparecen en el POS ni en el catálogo. *Hecho (ADR-177): `products.usage`, trigger `product_not_for_sale` en `sale_items`, catálogo público y pickers de compra filtrados.*
+  - [~] **P3 S** NCM en la ficha; ícono, color o foto de categoría para la grilla del POS; PLU sin ceros a la izquierda; variantes con más de 2 ejes; edición masiva por categoría, IVA, proveedor y stock mínimo. *PLU sin ceros hecho (ADR-177, en el resolver y sin conexión); el resto pendiente.*
 - [ ] **H164 · Balanzas etiquetadoras.** · *OPTIONAL `balanza` (existe; el envío de precios suma su copy).* Enriquece H23 y H24.
   - [ ] **P1 XL** Envío de PLU y precios por lista a la balanza (Kretz Report y AutoReport, Systel Cuora y Neo) desde el puente local: sólo lo que cambió, relectura para verificar, historial por balanza y detección de PLU cruzado.
   - [ ] **P2 M** Prefijos de balanza PRO: varias reglas con máscara, alcance negocio, sucursal o balanza, prioridad y "probar un código".
@@ -1662,14 +1662,14 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
   - [ ] **P2 M** Costo guardado en cada movimiento de stock y stock a una fecha valorizado.
   - [ ] **P2 M** Series en la recepción de compra y seguimiento por número de serie.
   - [ ] **P2 M** Verificador de precios en modo kiosco (scanner o cámara, bloqueado con PIN, precio de promo, funciona sin conexión).
-- [ ] **H167 · Compras PRO.** · *OPTIONAL `compras` (existe) + ADDON `asistente_ia` para la lectura con IA.* Enriquece H101, H104, H106 y H108.
-  - [ ] **P1 M** Importar "Mis Comprobantes Recibidos" de ARCA (XLSX o CSV) con vista previa, control de duplicados y aviso de CUIT ajeno.
-  - [ ] **P1 M** Leer facturas de compra en PDF o foto con IA y precargarlas (nunca graba sola); bandeja de fotos tomadas con el celular.
-  - [ ] **P1 M** Factura de compra con renglones de artículo que también recibe el stock, y cuenta de gasto por renglón.
-  - [ ] **P1 S** Datos del padrón de ARCA al dar de alta un proveedor (ya se usa en clientes).
-  - [ ] **P1 M** Imputar notas de crédito y anticipos contra facturas concretas en la orden de pago, por partes.
-  - [ ] **P1 S** Saldo inicial y ajustes manuales en la cuenta corriente del proveedor.
-  - [ ] **P2 S** Vencimientos en cuotas, CAE y vencimiento del proveedor en la factura; saldos de proveedores a fecha de corte; vínculo proveedor-cliente con saldo neto.
+- [~] **H167 · Compras PRO.** · *OPTIONAL `compras` (existe) + ADDON `asistente_ia` para la lectura con IA.* Enriquece H101, H104, H106 y H108. *P1 hecho en ADR-178 (migración `20270116100000_h167_compras`, Edge `purchase_invoice_ocr`): faltan los P2 y el criterio contra un mes real de ARCA.*
+  - [x] **P1 M** Importar "Mis Comprobantes Recibidos" de ARCA (XLSX o CSV) con vista previa, control de duplicados y aviso de CUIT ajeno. *Hecho (ADR-178): `purchase_arca_import` con vista previa que se deshace, proveedor por CUIT (padrón opcional), letra validada por fila; `lib/purchases/arcaImport.ts`. Columnas por alícuota inferidas.*
+  - [x] **P1 M** Leer facturas de compra en PDF o foto con IA y precargarlas (nunca graba sola); bandeja de fotos tomadas con el celular. *Hecho (ADR-178): Edge `purchase_invoice_ocr` (Claude o Gemini de la plataforma, addon `asistente_ia`, `ai_usage`), bucket privado `purchase-inbox` y `purchase_invoice_inbox`.*
+  - [x] **P1 M** Factura de compra con renglones de artículo que también recibe el stock, y cuenta de gasto por renglón. *Hecho (ADR-178): `supplier_invoice_save_full` + `purchase_receive`; `acc_sync_supplier_invoice` imputa cada gasto a su cuenta.*
+  - [x] **P1 S** Datos del padrón de ARCA al dar de alta un proveedor (ya se usa en clientes). *Hecho (ADR-178): `PadronVerify` + `padronToSupplier` en `SupplierFormModal`.*
+  - [x] **P1 M** Imputar notas de crédito y anticipos contra facturas concretas en la orden de pago, por partes. *Hecho (ADR-178): `supplier_credit_applications`, `supplier_credit_apply` y `credit_applications` en `supplier_payment_order_create`; guard de H158 y `supplier_invoice_open` con lo aplicado.*
+  - [x] **P1 S** Saldo inicial y ajustes manuales en la cuenta corriente del proveedor. *Hecho (ADR-178): `supplier_account_adjustments` en `supplier_account_entries`; sin asiento automático (deuda en el ADR).*
+  - [~] **P2 S** Vencimientos en cuotas, CAE y vencimiento del proveedor en la factura; saldos de proveedores a fecha de corte; vínculo proveedor-cliente con saldo neto. *Parcial (ADR-178): CAE y vencimiento del CAE en la factura.*
   - [ ] **P2 M** Autorización de órdenes de compra por monto (tope del negocio, por usuario, acumulado, quien carga no autoriza); una OC sin autorizar no se recibe.
   - [ ] **P2 M** Previsión de pagos por proveedor sumada al flujo de fondos; sugerencia de compra con lo comprometido y lo vendido a 7, 30, 60 y 90 días.
   - [ ] **P2 M** Import de lista del proveedor en CSV y PDF (con IA), alta de artículos que no existen, aviso de archivo ya importado y de variaciones absurdas.
@@ -1917,9 +1917,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 22/135 | 4 | 109 | 16% | 18% |
+| **F24** | 36/135 | 11 | 88 | 27% | 31% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 700/1343 | 317 | 326 | 52% | 64% |
+| **Total** | 714/1343 | 324 | 305 | 53% | 65% |
 <!-- roadmap-progress:end -->
 
 ---

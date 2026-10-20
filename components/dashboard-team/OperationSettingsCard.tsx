@@ -60,6 +60,8 @@ type Settings = {
   sku_prefix: string;
   require_close_reason: boolean;
   close_tolerance: number;
+  /** H160: redondeo admitido en un recibo de cuenta corriente con varios medios. */
+  receipt_rounding_tolerance?: number;
   require_customer: boolean;
   sale_prefix: string;
   sale_pad: number;
@@ -180,6 +182,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [skuPrefix, setSkuPrefix] = useState("");
   const [requireReason, setRequireReason] = useState(false);
   const [tolerance, setTolerance] = useState(0);
+  const [receiptTol, setReceiptTol] = useState(10);
   const [requireCustomer, setRequireCustomer] = useState(false);
   const [salePrefix, setSalePrefix] = useState("");
   const [salePad, setSalePad] = useState(0);
@@ -234,6 +237,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setSkuPrefix(settings.sku_prefix ?? "");
     setRequireReason(settings.require_close_reason ?? false);
     setTolerance(settings.close_tolerance ?? 0);
+    setReceiptTol(Number(settings.receipt_rounding_tolerance ?? 10));
     setRequireCustomer(settings.require_customer ?? false);
     setSalePrefix(settings.sale_prefix ?? "");
     setSalePad(settings.sale_pad ?? 0);
@@ -275,6 +279,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           sku_prefix: skuPrefix.trim(),
           require_close_reason: requireReason,
           close_tolerance: Math.max(0, Number(tolerance) || 0),
+          receipt_rounding_tolerance: Math.min(1000, Math.max(0, Number(receiptTol) || 0)),
           require_customer: requireCustomer,
           sale_prefix: salePrefix.trim(),
           sale_pad: Math.max(0, Math.min(12, Number(salePad) || 0)),
@@ -524,6 +529,22 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
               </span>
             </div>
           )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">Redondeo en recibos de cuenta corriente $</span>
+            <input
+              type="number"
+              min="0"
+              max="1000"
+              step="1"
+              value={receiptTol}
+              onChange={(e) => setReceiptTol(Number(e.target.value) || 0)}
+              className={numCls}
+              aria-label="Redondeo en recibos de cuenta corriente"
+            />
+            <span className="text-xs text-muted-foreground">
+              Si los medios de un recibo no llegan justo a lo que se cancela, hasta este monto se registra como redondeo.
+            </span>
+          </div>
         </CardContent>
       </Card>
 

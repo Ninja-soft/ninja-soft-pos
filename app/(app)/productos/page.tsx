@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  Copy,
   Download,
   FolderTree,
   History,
@@ -103,6 +104,8 @@ export default function ProductosPage() {
   const costBasis = purchaseSettings?.cost_basis ?? "last";
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  // H163: duplicar artículo (alta prellenada para revisar y grabar).
+  const [copyFrom, setCopyFrom] = useState<Product | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [mermaOpen, setMermaOpen] = useState(false);
   const [productionOpen, setProductionOpen] = useState(false);
@@ -192,6 +195,7 @@ export default function ProductosPage() {
 
   function openNew() {
     setSelected(null);
+    setCopyFrom(null);
     // Primer producto del tenant y todavía no se decidió el PLU → preguntamos
     // (modal Tailwind) si lo quiere activar antes de abrir el alta. Una sola vez.
     if (
@@ -206,7 +210,13 @@ export default function ProductosPage() {
     setFormOpen(true);
   }
   function openEdit(p: Product) {
+    setCopyFrom(null);
     setSelected(p);
+    setFormOpen(true);
+  }
+  function openDuplicate(p: Product) {
+    setSelected(null);
+    setCopyFrom(p);
     setFormOpen(true);
   }
   function openAdjust(p: Product) {
@@ -658,6 +668,14 @@ export default function ProductosPage() {
                           </RoleIconButton>
                           <RoleIconButton
                             denied={deniedCatalog}
+                            onClick={() => openDuplicate(p)}
+                            title="Duplicar"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          >
+                            <Copy size={16} />
+                          </RoleIconButton>
+                          <RoleIconButton
+                            denied={deniedCatalog}
                             onClick={() => onDelete(p)}
                             title="Eliminar"
                             className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
@@ -696,6 +714,7 @@ export default function ProductosPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         product={selected}
+        copyFrom={copyFrom}
       />
       <StockAdjustModal
         open={adjustOpen}
@@ -722,6 +741,7 @@ export default function ProductosPage() {
         onOpenChange={setPluPromptOpen}
         onResolved={() => {
           setSelected(null);
+          setCopyFrom(null);
           setFormOpen(true);
         }}
       />

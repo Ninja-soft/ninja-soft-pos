@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
 import type { ServicePeriod } from "@/lib/catalog/mode";
+import type { CartSaleUnit } from "@/lib/products/catalogCodes";
 
 export interface CartLine {
   lineId: string; // id local de la línea (estable; soporta ítems sin producto)
@@ -55,6 +56,10 @@ export interface CartLine {
   // línea; el servidor lo acepta porque el producto está en modo libre (no por
   // esta marca) y valida mínimo y máximo. No se reprecia ni se fusiona.
   openPrice?: { min: number | null; max: number | null; suggested: number | null } | null;
+  // F24 · H163 (ADR-177): línea vendida por bulto (caja, pack). quantity va en
+  // bultos y unitPrice es el precio del bulto; al cobrar se expande a unidades
+  // del artículo (expandSaleUnitLine). variantLabel muestra "Caja x 12".
+  saleUnit?: CartSaleUnit | null;
 }
 
 /** ¿El renglón tiene datos de servicio propios? (no se fusiona con otro). */
@@ -139,6 +144,14 @@ interface CartState {
   // sesiones al cliente (create_sale, extra kind='pack'). Cada pack es su propia
   // línea (no fusiona); cantidad 1.
   addPack: (p: { packId: string; name: string; price: number }) => void;
+  // H163: vende el artículo por bulto (unidad de venta con coeficiente). Se
+  // fusiona con la línea del mismo bulto.
+  addSaleUnit: (
+    p: { id: string; name: string; sku: string | null; warrantyMonths?: number; categoryId?: string | null },
+    unit: CartSaleUnit,
+    packPrice: number,
+    qty?: number,
+  ) => void;
   // Cubre una línea con una sesión de pack (H41): la línea pasa a precio 0 y se
   // marca con el crédito que la cubre. Al confirmar, create_sale consume una
   // sesión (extra kind='pack_session'). Quitar la cobertura la vuelve a cobrar.
@@ -150,7 +163,7 @@ interface CartState {
   // (price == listPrice) borra la marca.
   setLinePrice: (lineId: string, price: number, reason: string) => void;
   // Precios que mandó el servidor (price_mismatch): reprecia esas líneas.
-  applyServerPrices: (changes: { lineId: string; to: number }[]) => void;
+  applyServerPrices: (changes: { lineId: string; to: number; saleUnit?: CartSaleUnit }[]) => void;
   removeLine: (lineId: string) => void;
   setDiscountTotal: (amount: number) => void;
   // Reconcilia las líneas de REGALO (F9 · H54) con lo que el motor calcula: agrega
@@ -205,7 +218,13 @@ export const useCartStore = create<CartState>()(
       // variante del mismo producto (esas llevan variantId).
       const existing = state.lines.find(
         (l) =>
-          l.productId === p.id && !l.variantId && l.unit !== "kg" && !l.serial && !l.openPrice && !lineHasServiceEdits(l),
+          l.productId === p.id &&
+          !l.variantId &&
+          l.unit !== "kg" &&
+          !l.serial &&
+          !l.openPrice &&
+          !l.saleUnit &&
+          !lineHasServiceEdits(l),
       );
       if (existing) {
         return {
@@ -428,7 +447,8 @@ export const useCartStore = create<CartState>()(
   setLinePrice: (lineId, price, reason) =>
     set((state) => ({
       lines: state.lines.map((l) => {
-        if (l.lineId !== lineId) return l;
+        // H163: el bulto no cambia de precio a mano (su precio es el del bulto).
+        if (l.lineId !== lineId || l.saleUnit) return l;
         // La primera vez, el precio actual de la línea es el de lista.
         const listPrice = l.listPrice ?? l.unitPrice;
         const back = Math.abs(price - listPrice) <= 0.01;
@@ -437,11 +457,46 @@ export const useCartStore = create<CartState>()(
           : { ...l, unitPrice: price, priceOverride: true, overrideReason: reason.trim(), listPrice };
       }),
     })),
+  addSaleUnit: (p, unit, packPrice, qty = 1) =>
+    set((state) => {
+      const add = qty > 0 ? Math.round(qty) : 1;
+      const existing = state.lines.find(
+        (l) => l.productId === p.id && l.saleUnit?.id === unit.id && !lineHasServiceEdits(l),
+      );
+      if (existing) {
+        return {
+          lines: state.lines.map((l) =>
+            l.lineId === existing.lineId ? { ...l, quantity: l.quantity + add } : l,
+          ),
+        };
+      }
+      return {
+        lines: [
+          ...state.lines,
+          {
+            lineId: crypto.randomUUID(),
+            productId: p.id,
+            categoryId: p.categoryId ?? null,
+            name: p.name,
+            sku: p.sku,
+            unitPrice: packPrice,
+            quantity: add,
+            discount: 0,
+            unit: "un",
+            variantLabel: `${unit.label} x ${unit.units}`,
+            warrantyMonths: p.warrantyMonths ?? 0,
+            saleUnit: unit,
+          },
+        ],
+      };
+    }),
   applyServerPrices: (changes) =>
     set((state) => ({
       lines: state.lines.map((l) => {
         const c = l.openPrice ? undefined : changes.find((x) => x.lineId === l.lineId);
-        return c ? { ...l, unitPrice: c.to, listPrice: c.to } : l;
+        if (!c) return l;
+        // H163: en el bulto, el precio del servidor es el unitario.
+        return c.saleUnit ? { ...l, unitPrice: c.to, saleUnit: c.saleUnit } : { ...l, unitPrice: c.to, listPrice: c.to };
       }),
     })),
   removeLine: (lineId) =>

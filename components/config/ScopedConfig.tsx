@@ -300,6 +300,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   directo: "Directo",
   ualabis: "Ualá Bis",
   viumi: "Viumi",
+  talo: "Talo",
   account: "Cuenta corriente",
 };
 

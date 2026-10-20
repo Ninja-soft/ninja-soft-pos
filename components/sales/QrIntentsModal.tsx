@@ -20,6 +20,8 @@ import { ThemedLogo } from "@/components/ui/ThemedLogo";
 import { posApi } from "@/modules/pos/api";
 import { latestRefundByIntent } from "@/lib/payments/ualabis";
 import { UalaBisRefundAction } from "@/components/sales/UalaBisRefundAction";
+import { refundsByIntent } from "@/lib/payments/talo";
+import { TaloRefundAction } from "@/components/sales/TaloRefundAction";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -35,6 +37,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   directo: "Directo",
   ualabis: "Ualá Bis",
   viumi: "Viumi",
+  talo: "Talo",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -98,6 +101,23 @@ export function QrIntentsModal({
     enabled: open && ualaIds.length > 0,
   });
   const refundByIntent = useMemo(() => latestRefundByIntent(ualaRefunds ?? []), [ualaRefunds]);
+
+  // Talo (ADR-175): lo recibido y las devoluciones (total o diferencia).
+  const taloIds = useMemo(
+    () => filtered.filter((i) => i.provider_key === "talo" && i.status !== "pending").map((i) => i.id),
+    [filtered],
+  );
+  const { data: taloPaid } = useQuery({
+    queryKey: ["talo-paid", taloIds],
+    queryFn: () => posApi.listTaloPaid(taloIds),
+    enabled: open && taloIds.length > 0,
+  });
+  const { data: taloRefunds } = useQuery({
+    queryKey: ["talo-refunds", taloIds],
+    queryFn: () => posApi.listTaloRefunds(taloIds),
+    enabled: open && taloIds.length > 0,
+  });
+  const taloRefundsByIntent = useMemo(() => refundsByIntent(taloRefunds ?? []), [taloRefunds]);
 
   const orphans = useMemo(
     () => filtered.filter((i) => i.status === "approved" && i.saleNumber === null),
@@ -167,6 +187,7 @@ export function QrIntentsModal({
           <option value="mobbex">Mobbex</option>
           <option value="ualabis">Ualá Bis</option>
           <option value="viumi">Viumi</option>
+          <option value="talo">Talo</option>
         </select>
         <select
           value={status}
@@ -281,6 +302,19 @@ export function QrIntentsModal({
                     {i.provider_key === "viumi" && i.status === "approved" && (i.saleNumber === null || i.saleStatus === "voided") && (
                       // Viumi (ADR-173): la API no tiene devoluciones.
                       <p className="mt-1 text-xs text-muted-foreground">Para devolverlo, usá la app o el panel de Viumi.</p>
+                    )}
+                    {i.provider_key === "talo" && (
+                      <div className="mt-1">
+                        <TaloRefundAction
+                          intent={{ ...i, paidAmount: taloPaid?.get(i.id) ?? null }}
+                          refunds={taloRefundsByIntent.get(i.id)}
+                          onRefund={posApi.refundTaloIntent}
+                          onDone={() => {
+                            void qc.invalidateQueries({ queryKey: ["talo-refunds"] });
+                            void qc.invalidateQueries({ queryKey: ["talo-paid"] });
+                          }}
+                        />
+                      </div>
                     )}
                   </td>
                 </tr>

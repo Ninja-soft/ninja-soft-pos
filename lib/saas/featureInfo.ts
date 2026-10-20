@@ -320,6 +320,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Cuenta de Ualá Bis. Para el link de pago integrado, las credenciales de Cobros online (usuario, Client ID y Client Secret de Ualá Bis, Cobros online, API); sin ellas se cobra en la app y se registra el número de operación.",
   },
+  talo: {
+    desc: "Cobros por transferencia con Talo: cada venta tiene su propio CVU y alias, el cliente transfiere desde cualquier banco o billetera y la venta se cierra sola cuando llega la plata. Si transfiere de más, la venta se cierra igual y la diferencia se devuelve desde la conciliación; si transfiere de menos, el POS muestra cuánto falta.",
+    impact: "Desactivado, Talo no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Cuenta de Talo y sus credenciales (User ID, Client ID y Client Secret del Dashboard de Talo, Usuario, Credenciales).",
+  },
   viumi: {
     desc: "Cobros con Viumi (Banco Macro) por link de pago, también como QR: el cliente paga con tarjeta en el checkout de Viumi y la venta se cierra sola al acreditarse. Las devoluciones se hacen desde la app o el panel de Viumi.",
     impact: "Desactivado, Viumi no aparece como medio de pago al cobrar.",
@@ -610,6 +616,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Prevención de fraude: señales por persona (anulaciones, descuentos altos, devoluciones, cobros rechazados y diferencias de caja), reglas con los umbrales del negocio y marca automática de las devoluciones y anulaciones de riesgo para revisarlas con nota, todo en la auditoría.",
     impact: "Desactivado, las devoluciones y anulaciones no se puntúan ni se marcan, y no hay vista de riesgo por persona (el servidor lo rechaza). El PIN de supervisor sigue funcionando.",
     minPlan: "Business",
+  },
+  alertas_programadas: {
+    desc: "Alertas programadas: reglas que el sistema revisa solo (stock bajo o negativo, ventas bajo costo, deuda vencida, cheques y facturas de compra por vencer, cajas sin cerrar, comprobantes sin CAE, mercadería parada, ajustes grandes, descuentos altos, presupuestos por vencer, clientes que dejaron de comprar, aumentos de costo, certificado de ARCA y anulaciones), con tus umbrales, cada hora, todos los días o algunos días a la hora que elijas, por sucursal. Avisan por la campana y por mail a los roles o personas que elijas, sólo con los casos nuevos, con Probar ahora e historial.",
+    impact: "Desactivado, cada control se mira a mano en su pantalla; las reglas guardadas dejan de correr (el servidor lo rechaza).",
+    minPlan: "Pro",
+    needs: "Para el resumen por mail, el email del negocio configurado en Configuración › Email.",
   },
   metricas_avanzadas: {
     desc: "Reportes de gestión: rentabilidad mes a mes con el costo de cada venta (ventas netas, costo, margen, gastos y resultado contra el período anterior) y mercadería parada valorizada.",

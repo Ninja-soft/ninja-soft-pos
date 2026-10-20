@@ -36,10 +36,11 @@ describe("catálogo y logos", () => {
     expect(groups[0]?.channels.map((c) => [c.key, c.channel])).toEqual([["viumi", "qr_link"]]);
   });
 
-  it("sin logo oficial todavía: la UI usa el respaldo genérico", () => {
-    expect(paymentIcon("viumi")).toBeNull();
-    expect(paymentWordmark("viumi")).toBeNull();
-    expect(TENDER_BY_ID["viumi:link"]?.logo).toBeNull();
+  it("logo oficial horizontal e isotipo (ícono oficial de la app)", () => {
+    expect(paymentIcon("viumi")).toBe("/images/payments/viumi-icon.webp");
+    expect(paymentWordmark("viumi")).toBe("/images/payments/viumi-wordmark.webp");
+    expect(paymentWordmark("viumi", { on: "dark" })).toBe("/images/payments/viumi-wordmark-on-dark.webp");
+    expect(TENDER_BY_ID["viumi:link"]?.logo).toBe("/images/payments/viumi-icon.webp");
   });
 
   it("feature de plan, copy, webhook y precalentado", () => {

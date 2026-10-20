@@ -40,6 +40,7 @@ const PROVIDER_NAME: Record<string, string> = {
   directo: "Directo",
   ualabis: "Ualá Bis",
   viumi: "Viumi",
+  talo: "Talo (transferencia)",
 };
 
 function money(n: number): string {

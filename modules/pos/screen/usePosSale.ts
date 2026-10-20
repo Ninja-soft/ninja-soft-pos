@@ -25,6 +25,9 @@ export function saleErrorTitle(msg: string): string {
   if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
   // F24 · H159: tope de descuento propio del usuario.
   if (msg.includes("discount_exceeds_user_limit")) return "El descuento supera tu tope personal";
+  // F24 · H158: productos no bonificables.
+  if (msg.includes("discount_not_discountable")) return "El descuento supera lo que se puede bonificar: hay productos que no aceptan descuento";
+  if (msg.includes("product_not_discountable")) return "Un producto no acepta descuento";
   // ADR-151: precio a definir al cobrar fuera del mínimo o el máximo del producto.
   if (msg.includes("open_price_out_of_range")) return "Un precio libre está fuera del mínimo o el máximo: tocá la línea y corregilo";
   // ADR-116: período del servicio y vencimiento del pago.

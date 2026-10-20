@@ -39,6 +39,7 @@ import { useCheques, useMyOpenShift, useTreasuryAccounts } from "@/modules/treas
 import { useFeature } from "@/modules/saas/gating";
 import { retentionErrorMessage } from "@/lib/tax/retentions";
 import { AgentRetentionsSection, useAgentRetentions } from "./AgentRetentions";
+import { ChequeDuplicateHint } from "@/components/treasury/ChequeDuplicateHint";
 import { ErrorList, FormField, SectionTitle, fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface LineRow {
@@ -469,6 +470,7 @@ export function PaymentOrderModal({
                     />
                   </div>
                 )}
+                {isOwnCheque && <ChequeDuplicateHint number={l.chequeNumber} bank={l.chequeBank || null} />}
                 {isThirdCheque && (
                   <select
                     aria-label="Cheque en cartera"

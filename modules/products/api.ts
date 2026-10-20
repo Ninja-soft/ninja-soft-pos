@@ -41,6 +41,8 @@ export type Product = Tables<"products"> & {
   plu: string | null;
   is_favorite: boolean;
   favorite_order: number;
+  // F24 · H158: no acepta descuento manual.
+  no_discount?: boolean;
   // Servicio (F12 · H38): duración por defecto del turno (min) y % de comisión.
   service_duration_min: number | null;
   commission_pct: number | null;
@@ -392,6 +394,8 @@ export const productsApi = {
         // Botón rápido del POS (H36): favorito + orden.
         is_favorite: input.is_favorite,
         favorite_order: input.favorite_order,
+        // F24 · H158: producto no bonificable.
+        no_discount: input.no_discount ?? false,
         // Servicio (H38): duración del turno + comisión (null = producto normal).
         service_duration_min: input.service_duration_min ?? null,
         commission_pct: input.commission_pct ?? null,
@@ -456,6 +460,8 @@ export const productsApi = {
         // Botón rápido del POS (H36): favorito + orden.
         is_favorite: input.is_favorite,
         favorite_order: input.favorite_order,
+        // F24 · H158: producto no bonificable.
+        no_discount: input.no_discount ?? false,
         // Servicio (H38): duración del turno + comisión (null = producto normal).
         service_duration_min: input.service_duration_min ?? null,
         commission_pct: input.commission_pct ?? null,

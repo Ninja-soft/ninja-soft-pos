@@ -745,6 +745,19 @@ export const posApi = {
     );
     if (error && !/Could not find the function|PGRST202/i.test(error.message ?? "")) throw error;
   },
+  // F24 · H158: productos del carrito que no aceptan descuento manual. Sin la
+  // columna (migración sin aplicar) o con error, ninguno (el servidor manda).
+  noDiscountProductIds: async (ids: string[]): Promise<string[]> => {
+    if (ids.length === 0) return [];
+    const { data, error } = await createClient()
+      .from("products")
+      .select("id")
+      .in("id", ids.slice(0, 500))
+      .eq("no_discount" as never, true as never);
+    if (error) return [];
+    return ((data ?? []) as { id: string }[]).map((r) => r.id);
+  },
+
   // Turno abierto de una caja. Sin caja (no hay ninguna operable) cae al
   // criterio histórico: el último turno abierto visible para el usuario.
   openShift: async (registerId?: string | null): Promise<CashShift | null> => {

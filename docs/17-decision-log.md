@@ -6299,3 +6299,33 @@ Se relevó completo InfoManager IM5, el ERP que usa La Jamonera (187 rutas, 119 
 - El roadmap suma 131 ítems pendientes; el total baja de 56 % a 51 % hecho.
 - Cada función nueva de F24 sigue el checklist de CLAUDE.md §6 (feature, plan, gating en el servidor, copy y comparación).
 - Las features nuevas de F24 (por ejemplo `alertas_programadas`) se crean al implementar el hito, no ahora.
+
+## ADR-171: Integridad y seguridad de la auditoría IM5: IA con permisos, factura de proveedor pagada, letra de compra, asiento con impuestos, producto no bonificable y cheque repetido (F24 · H158)
+
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270109100000_h158_integridad`, Edge `ai_assistant`) · **Base:** ADR-170 (F24), ADR-039 (IA con acceso de lectura), ADR-138 (capacidades), ADR-066 (asientos), ADR-059 (pagos y cheques)
+
+### Contexto
+
+La auditoría de InfoManager IM5 (ADR-170) encontró dos huecos P0 y cuatro arreglos chicos: el asistente de IA corre sus herramientas con service_role y le muestra a un cajero costos, valorización y ventas de sucursales que no ve; una factura de proveedor con pagos se podía anular o bajar de total y dejaba imputaciones colgadas; la letra de la factura de compra sólo la sugería el front; el asiento de la venta calculaba el IVA con la alícuota del producto e ignoraba percepciones e internos; no había forma de marcar un producto que no acepta descuento; y un cheque cargado dos veces no avisaba.
+
+### Decisión
+
+1. **IA con permisos.** La Edge lee las capacidades (`my_capabilities`) y las sucursales (`user_allowed_store_ids`) del usuario con su JWT (si falla, sin permisos). Las herramientas curadas piden su capacidad (`products.view`, `sales.view`, `customers.view`, `cash.view`, `stock.view`, `reports.view`); las que suman todo el negocio (ventas, top, caja) sólo para quien ve todas las sucursales, y el resto usa `ai_query`, que ya corre con la RLS de sucursal. Los resultados se recortan: sin `reports.costs` no salen costos ni márgenes; sin `stock.valuation`, no sale la valorización. El contexto del prompt sólo incluye lo que el usuario puede ver y el modelo sólo recibe las herramientas que puede usar. En SQL, `ai__query_catalog()` (la que lee `ai_query`) pasa a filtrar el catálogo por el usuario del JWT con el mapa `ai__query_entity_caps()` (generado desde `entityCapsForSql()`, con test); la versión completa queda como `ai__query_catalog_full()`.
+2. **Factura de proveedor pagada.** Trigger `supplier_invoice_paid_guard`: con imputaciones vigentes no se anula ni cambia de proveedor, tipo o moneda, y el total en pesos no baja de lo pagado (`invoice_has_payments`). Anulando la orden de pago (libera las imputaciones) se puede.
+3. **Letra de compra.** `supplier_invoice_letters(proveedor, negocio)` y trigger al grabar (y al cambiar letra o proveedor): exterior E; monotributo, exento, no alcanzado o no responsable C; responsable inscripto A o M a un inscripto, A o B a un monotributista (RG 5003 y comprobantes anteriores), B a un exento. Condición desconocida: sin control. El formulario sugiere la letra con la condición del negocio y avisa antes de grabar.
+4. **Asiento de la venta con sus impuestos.** Si la venta tiene `sale_tax_lines`, el IVA sale por alícuota de esos renglones, las percepciones van a "Percepciones de IIBB/IVA practicadas a depositar" (concepto `percepcion_venta`) y los internos a "Impuestos internos a pagar" (`internos_venta`); Ventas es el total menos esos impuestos, así el asiento siempre balancea. Las tres cuentas se crean en la plantilla (2.1.02.xx) para los negocios con contabilidad y al primer asiento. `acc_vat_sales` toma neto e IVA de los mismos renglones. Las ventas viejas sin renglones siguen como antes.
+5. **Producto no bonificable** (`products.no_discount`, BASE, sin feature: es un dato del producto). Trigger en `sale_items` rechaza descuento por renglón (`product_not_discountable`) y un trigger diferido en `sales` rechaza un descuento general mayor a lo bonificable (`discount_not_discountable`). Promociones y cupones siguen aplicando. En el POS, el tope del descuento general se calcula sobre lo bonificable y avisa por qué.
+6. **Cheque repetido.** Aviso (no bloqueo) en el alta de cheques de Tesorería y en el cheque propio de la orden de pago cuando ya hay otro con el mismo número (sin ceros a la izquierda) y banco, sin contar los anulados.
+
+### Alternativas descartadas
+
+- **Pasar `p_store_ids` a cada RPC `ai_*`:** son siete funciones; `ai_query` ya tiene la RLS de sucursal y alcanza con no ofrecer las agregadas a quien no ve todo.
+- **Bloquear el cheque repetido:** dos bancos pueden repetir número; el aviso evita el error sin frenar.
+- **Exigir la letra exacta del monotributista (sólo A):** las facturas B anteriores a la RG 5003 todavía se cargan.
+- **Validar el no bonificable dentro de `create_sale`:** es una función de 900 líneas; los triggers cubren también ventas offline y cualquier otro camino.
+
+### Consecuencias
+
+- Un cajero que preguntaba por ganancias ahora recibe "no tenés permiso". El dueño y el auditor no cambian.
+- Orden de deploy: migración, después Edge `ai_assistant` y el front. Front tolerante: sin la migración, el POS no encuentra no bonificables (ninguno) y el aviso de letra sólo informa.
+- Verificado con un dry-run en producción con rollback (resultados en el roadmap, H158) y `tests/unit/h158Integridad.test.ts`.

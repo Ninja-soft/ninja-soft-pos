@@ -70,6 +70,8 @@ export const ProductSchema = z.object({
   warranty_months: z.coerce.number().int().min(0).max(600).default(0),
   // Botón rápido del POS (H36): favorito + orden de aparición en la grilla.
   is_favorite: z.boolean().default(false),
+  // F24 · H158: no acepta descuento manual (promos y cupones sí).
+  no_discount: z.boolean().default(false),
   favorite_order: z.coerce.number().int().min(0).max(9999).default(0),
   // Servicio (F12 · H38): duración por defecto del turno (min) y % de comisión
   // del profesional. Vacío → null (producto normal, sin agenda).

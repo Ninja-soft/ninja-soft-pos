@@ -140,10 +140,12 @@ describe("comprobantes de compra", () => {
     expect(parseInvoiceNumber("0003-00001234")).toEqual({ pos: 3, number: 1234 });
     expect(parseInvoiceNumber("abc")).toBeNull();
     expect(defaultDueDate("2026-10-01", 30)).toBe("2026-10-31");
-    expect(suggestedLetter("monotributo", true)).toBe("C");
-    expect(suggestedLetter("responsable_inscripto", true)).toBe("A");
-    expect(suggestedLetter("responsable_inscripto", false)).toBe("B");
-    expect(suggestedLetter("exterior", true)).toBeNull();
+    expect(suggestedLetter("monotributo", "responsable_inscripto")).toBe("C");
+    expect(suggestedLetter("responsable_inscripto", "responsable_inscripto")).toBe("A");
+    expect(suggestedLetter("responsable_inscripto", "exento")).toBe("B");
+    expect(suggestedLetter("responsable_inscripto", "monotributo")).toBe("A");
+    expect(suggestedLetter("exterior", null)).toBe("E");
+    expect(suggestedLetter("consumidor_final", null)).toBeNull();
   });
 
   it("un pago cancela neto pagado más retenciones", () => {

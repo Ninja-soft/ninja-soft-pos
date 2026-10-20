@@ -1584,14 +1584,14 @@ Prioridad: **P0** sin esto el dato queda mal o expuesto · **P1** lo pide cualqu
 
 > **Orden sugerido:** primero los P0 y P1 chicos de H158 (correcciones de integridad y seguridad), después H159 (caja y cobros), H160 (costo en la venta, base de todos los márgenes) y H161 (alertas). Las balanzas etiquetadoras (H164) y el despiece (H165) son lo que más pesa para fiambrería y carnicería. El resto según demanda comercial. Cada función nueva sigue el checklist de CLAUDE.md §6 (feature, plan, gating en el servidor, copy y comparación de planes).
 
-- [ ] **H158 · Integridad y seguridad que la auditoría destapó.** · *BASE, sin feature nueva.*
-  - [ ] **P0 S** El asistente de IA respeta los permisos: chequea `reports.costs`, las sucursales permitidas y el tema (ventas, costos, cuentas corrientes, compras, stock, contabilidad) antes de responder. Hoy `ai_assistant` corre las RPC `ai_*` con service_role y expone el costo (`_shared/aiQuery.ts`).
-  - [ ] **P0 S** No dejar editar ni anular una factura de proveedor con pagos imputados (`supplier_invoice_save` y `supplier_invoice_void` no lo miran): pedir anular primero la orden de pago.
-  - [ ] **P1 S** El asiento de la venta lee `sale_tax_lines`: percepciones de IVA e IIBB e internos a su pasivo, exento y no gravado separados. Hoy `acc_sync_sale` usa `products.tax_rate` (por eso H109 "asientos automáticos por venta" pasa a parcial).
-  - [ ] **P1 S** Letra de la factura de compra validada en el servidor según la condición de IVA del proveedor y la del negocio (hoy sólo `suggestedLetter` en el front).
-  - [ ] **P1 S** Producto "no bonificable": no acepta descuento manual (ni con supervisor) pero sí promociones, validado en `create_sale`.
-  - [ ] **P2 S** Aviso de cheque repetido (banco + número) al cargar cheques de terceros, propios y e-cheqs.
-  - [ ] *Criterio:* un cajero sin `reports.costs` pregunta a la IA "¿cuánto gano con X?" y no ve costos; una factura pagada no se puede anular; el Mayor de "Percepciones IIBB cobradas" cuadra con el Libro IVA Ventas.
+- [x] **H158 · Integridad y seguridad que la auditoría destapó.** · *BASE, sin feature nueva.* *Hecho en ADR-171 (`fix/h158-integridad`), migración `20270109100000_h158_integridad`; dry-run en producción con rollback y `tests/unit/h158Integridad.test.ts`.*
+  - [x] **P0 S** El asistente de IA respeta los permisos: chequea `reports.costs`, las sucursales permitidas y el tema (ventas, costos, cuentas corrientes, compras, stock, contabilidad) antes de responder. Hoy `ai_assistant` corre las RPC `ai_*` con service_role y expone el costo (`_shared/aiQuery.ts`). *Hecho: tools curadas por capacidad y sucursales, costos y valorización recortados, contexto por permiso y `ai__query_catalog()` filtrado por el usuario del JWT.*
+  - [x] **P0 S** No dejar editar ni anular una factura de proveedor con pagos imputados (`supplier_invoice_save` y `supplier_invoice_void` no lo miran): pedir anular primero la orden de pago. *Hecho (ADR-171, migración `20270109100000_h158_integridad`).*
+  - [x] **P1 S** El asiento de la venta lee `sale_tax_lines`: percepciones de IVA e IIBB e internos a su pasivo, exento y no gravado separados. Hoy `acc_sync_sale` usa `products.tax_rate` (por eso H109 "asientos automáticos por venta" pasa a parcial). *Hecho (ADR-171): IVA por alícuota, percepciones e internos a cuentas nuevas de la plantilla y el Libro IVA Ventas desde los mismos renglones.*
+  - [x] **P1 S** Letra de la factura de compra validada en el servidor según la condición de IVA del proveedor y la del negocio (hoy sólo `suggestedLetter` en el front). *Hecho (ADR-171, migración `20270109100000_h158_integridad`).*
+  - [x] **P1 S** Producto "no bonificable": no acepta descuento manual (ni con supervisor) pero sí promociones, validado en `create_sale`. *Hecho (ADR-171): `products.no_discount`, triggers en `sale_items` y `sales`; el POS limita el descuento general a lo bonificable.*
+  - [x] **P2 S** Aviso de cheque repetido (banco + número) al cargar cheques de terceros, propios y e-cheqs. *Hecho (ADR-171): aviso en el alta de cheques y en la orden de pago, sin frenar.*
+  - [x] *Criterio:* un cajero sin `reports.costs` pregunta a la IA "¿cuánto gano con X?" y no ve costos; una factura pagada no se puede anular; el Mayor de "Percepciones IIBB cobradas" cuadra con el Libro IVA Ventas. *Dry-run: el cajero no ve `products.cost` (ai_query responde "Columna no permitida") y el dueño sí; factura con $600 pagados no se anula ni baja de $600; venta de $1.250 con percepción de $30: IVA $216,94, percepción $30 a "Percepciones de IIBB practicadas a depositar", Ventas $1.003,06, balance 0.*
 - [ ] **H159 · Caja PRO: arqueo, rendición y controles del cajero.** · *BASE (arqueo, apertura, auditoría) + OPTIONAL `tesoreria` (tránsito).* Enriquece H111 y H119.
   - [ ] **P1 M** Arqueo por denominación de billetes y monedas y conteo por medio (cupones, transferencias, cheques, vales) con "a rendir / rendido / diferencia" por medio; impresión con detalle.
   - [ ] **P1 S** Apertura con el fondo del cierre anterior sugerido, confirmación si se abre en $0 con saldo previo y diferencia de apertura auditada.
@@ -1909,9 +1909,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F21** | 3/4 | 0 | 1 | 75% | 75% |
 | **F22** | 6/14 | 0 | 8 | 43% | 43% |
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
-| **F24** | 0/131 | 0 | 131 | 0% | 0% |
+| **F24** | 8/131 | 0 | 123 | 6% | 6% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 678/1335 | 309 | 348 | 51% | 62% |
+| **Total** | 686/1335 | 309 | 340 | 51% | 63% |
 <!-- roadmap-progress:end -->
 
 ---

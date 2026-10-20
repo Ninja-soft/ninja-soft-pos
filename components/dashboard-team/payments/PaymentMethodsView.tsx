@@ -109,7 +109,7 @@ export function PaymentMethodsView({
         </div>
         {groups.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No encontramos No encontramos "{query.trim()}". Probáldquo;{query.trim()}No encontramos "{query.trim()}". Probárdquo;. Probá con el nombre de la marca o con lo que cobra (QR, tarjeta, transferencia).
+            No encontramos &ldquo;{query.trim()}&rdquo;. Probá con el nombre de la marca o con lo que cobra (QR, tarjeta, transferencia).
           </p>
         )}
       </div>

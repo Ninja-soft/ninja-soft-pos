@@ -320,7 +320,8 @@ describe.skipIf(!enabled)("F18 · compras v2 y tesorería", () => {
         p: {
           supplier_id: ctx.supplier,
           kind: "invoice",
-          letter: "C",
+          // ADR-171: el proveedor es responsable inscripto (default), así que C no corresponde.
+          letter: "B",
           point_of_sale: 2,
           number,
           issue_date: "2026-10-01",

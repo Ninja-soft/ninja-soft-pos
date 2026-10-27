@@ -312,7 +312,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con crédito Directo: el cliente financia la compra en cuotas fijas sin tarjeta. Con la API conectada, el POS muestra el QR y el link de la orden de Directo y la venta se cierra sola al aprobarse; sin conectar, se cobra en el portal de Directo y el POS registra el número de operación.",
     impact: "Desactivado, Directo no aparece como medio de pago al cobrar.",
     minPlan: "Pro",
-    needs: "Cuenta de comercio en Directo. Para el cobro integrado, las credenciales de la API de Directo (API Key, usuario y contraseña del comercio y URL de la API); sin ellas se cobra en su portal y se registra el número de operación.",
+    needs: "Cuenta de comercio en Directo. Para el cobro integrado, las credenciales de la API de Directo (usuario y contraseña de la API Ecommerce 2.0 y el Policy Product); al cobrar se pide DNI y nombre del cliente. Sin ellas se cobra en su portal y se registra el número de operación.",
   },
   ualabis: {
     desc: "Cobros con Ualá Bis. Con la API conectada, el POS arma un link de pago (también como QR): el cliente paga con tarjeta de crédito, débito o prepaga en el checkout de Ualá Bis y la venta se cierra sola al acreditarse; los cobros aprobados sin venta se pueden devolver desde la conciliación. Tu QR de Ualá, el POS Mini o Pro y Tap en tu celu no tienen API: se cobran en la app y el POS registra el número de operación.",

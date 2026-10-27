@@ -37,6 +37,14 @@ import {
   isAuthFailure as isDlocalAuthFailure,
   parseCreds as parseDlocalCreds,
 } from "../_shared/dlocalgo.ts";
+import {
+  clampTimeoutSeconds as clampDirectoTimeout,
+  directoClient,
+  isAuthFailure as isDirectoAuthFailure,
+  normalizeBaseUrl as normalizeDirectoBase,
+  normalizePolicyProduct as normalizeDirectoPolicy,
+  parseCreds as parseDirectoCreds,
+} from "../_shared/directo.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -66,9 +74,11 @@ const ALLOWED = new Set([
   // GO Cuotas (ADR-033): { api_key } de la sucursal (Bearer). El ambiente lo
   // define el switch Sandbox del medio (sandbox.gocuotas.com vs www).
   "gocuotas",
-  // Directo (ADR-041): api_key, merchant_username, merchant_password,
-  // merchant_name, subscription_key (opcional, APIM) y api_base_url (la URL
-  // de la API que Directo le da al comercio para QA o producción).
+  // Directo (ADR-181, API Ecommerce 2.0): username, password, policy_product
+  // (opcional, producto o código de política), timeout_seconds (opcional,
+  // 5..120) y api_base_url (avanzado, https). El host sale del switch Sandbox
+  // (QA o producción). Se prueban con un login antes de guardarlas (nunca un
+  // scoring).
   "directo",
   // Ualá Bis (ADR-143): username, client_id y client_secret_id de Ualá Bis ›
   // Cobros online › API. El ambiente lo define el switch Sandbox del medio
@@ -236,6 +246,38 @@ Deno.serve(async (req: Request) => {
     const t = await taloClient({ creds, env }).token(true);
     if (!t.ok && isTaloAuthFailure(t.httpStatus)) return json({ error: "talo_invalid_credentials" }, 422);
     delete clean.environment;
+  }
+
+  // Directo (ADR-181): sólo usuario y contraseña son obligatorios. Se prueba
+  // un login en el ambiente elegido; si Directo rechaza las credenciales, no
+  // se guardan (un corte de red no frena el guardado). Las claves de la API
+  // vieja (api_key, subscription_key, merchant_*) no se guardan más.
+  if (providerKey === "directo") {
+    const env = clean.environment === "test" ? "qa" : "prod";
+    delete clean.environment;
+    const next: Record<string, string> = {};
+    const username = clean.username ?? clean.merchant_username;
+    const password = clean.password ?? clean.merchant_password;
+    if (!username || !password) return json({ error: "directo_missing_fields" }, 400);
+    next.username = username;
+    next.password = password;
+    if (clean.policy_product) {
+      const pp = normalizeDirectoPolicy(clean.policy_product);
+      if (!pp) return json({ error: "directo_invalid_policy_product" }, 400);
+      next.policy_product = pp;
+    }
+    if (clean.timeout_seconds) next.timeout_seconds = String(clampDirectoTimeout(clean.timeout_seconds));
+    if (clean.api_base_url) {
+      const base = normalizeDirectoBase(clean.api_base_url);
+      if (!base) return json({ error: "directo_invalid_base_url" }, 400);
+      next.api_base_url = base;
+    }
+    const creds = parseDirectoCreds(next);
+    if (!creds) return json({ error: "directo_missing_fields" }, 400);
+    const t = await directoClient({ creds, env }).token(true);
+    if (!t.ok && isDirectoAuthFailure(t.httpStatus)) return json({ error: "directo_invalid_credentials" }, 422);
+    for (const k of Object.keys(clean)) delete clean[k];
+    Object.assign(clean, next);
   }
 
   // dLocal Go (ADR-180): se prueban con una consulta autenticada sin efectos

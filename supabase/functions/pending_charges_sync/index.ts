@@ -8,6 +8,7 @@
 // reintentos (Ualá Bis, ADR-143: 4 intentos sin firma; Viumi, ADR-173: sin
 // firma ni reintentos documentados; Talo, ADR-175: sin firma ni política de
 // reintentos documentada, y una transferencia puede llegar horas después;
+// Directo, ADR-181: webhook sin firma ni política de reintentos documentada;
 // dLocal Go, ADR-180: webhook firmado que sólo se acepta con firma válida, y
 // los cupones de pago en efectivo de Mercado Pago, ADR-180: se pagan días
 // después, el webhook topic order es por aplicación) y re-consulta cada
@@ -17,7 +18,7 @@
 // del negocio (misma regla que la Edge del proveedor).
 //
 // Los demás proveedores con webhook (Mercado Pago, MODO, Mobbex, Payway, Getnet,
-// Nave, GO Cuotas, Directo) no pasan por acá: su webhook ya actualiza el intent
+// Nave, GO Cuotas) no pasan por acá: su webhook ya actualiza el intent
 // y el trigger completa. El POS además sondea mientras está abierto.
 //
 // Deploy: verify_jwt = true (el cron manda el anon key como Bearer para pasar
@@ -52,6 +53,12 @@ import {
 } from "../_shared/dlocalgo_server.ts";
 import { tenantMpCredential } from "../_shared/mpAuth.ts";
 import { applyOrderToIntent, fetchOrder, ORDER_INTENT_COLUMNS, type OrderIntentRow } from "../_shared/mpIntents.ts";
+import {
+  INTENT_COLS as DIRECTO_INTENT_COLS,
+  loadCredsScoped as loadDirecto,
+  syncIntent as syncDirecto,
+  type IntentRow as DirectoIntentRow,
+} from "../_shared/directo_server.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -88,7 +95,7 @@ Deno.serve(async (req: Request) => {
     .eq("status", "waiting")
     .is("deleted_at", null)
     .gt("expires_at", new Date().toISOString())
-    .in("provider_key", ["pagos360", "ualabis", "viumi", "talo", "dlocalgo", "mp_cupon"])
+    .in("provider_key", ["pagos360", "ualabis", "viumi", "talo", "directo", "dlocalgo", "mp_cupon"])
     .order("created_at", { ascending: true })
     .limit(MAX_PER_RUN);
   if (error) return json({ error: "query_failed", detail: error.message }, 500);
@@ -151,6 +158,22 @@ Deno.serve(async (req: Request) => {
     return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
   };
 
+  // Directo: re-consulta get_order_status con la credencial exacta del cobro.
+  const syncDirectoCharge = async (tenantId: string, intentId: string) => {
+    const { data: row } = await admin
+      .from("mp_payment_intents")
+      .select(DIRECTO_INTENT_COLS)
+      .eq("id", intentId)
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "directo")
+      .maybeSingle();
+    if (!row) return null;
+    const conn = await loadDirecto(admin, tenantId, { scopeStoreId: await intentSecretScope(admin, intentId) });
+    if (!conn) return null;
+    const r = await syncDirecto(admin, row as DirectoIntentRow, conn.creds, "cron", null);
+    return "error" in r ? { ok: false as const } : { ok: true as const, status: r.status };
+  };
+
   // dLocal Go: re-consulta el pago con la credencial exacta del cobro.
   const syncDlocalCharge = async (tenantId: string, intentId: string) => {
     const { data: row } = await admin
@@ -209,6 +232,7 @@ Deno.serve(async (req: Request) => {
           if (c.provider_key === "ualabis") return await syncUalaCharge(tenantId, c.intent_id).catch(() => null);
           if (c.provider_key === "viumi") return await syncViumiCharge(tenantId, c.intent_id).catch(() => null);
           if (c.provider_key === "talo") return await syncTaloCharge(tenantId, c.intent_id).catch(() => null);
+          if (c.provider_key === "directo") return await syncDirectoCharge(tenantId, c.intent_id).catch(() => null);
           if (c.provider_key === "dlocalgo") return await syncDlocalCharge(tenantId, c.intent_id).catch(() => null);
           if (c.provider_key === "mp_cupon") return await syncCuponCharge(tenantId, c.intent_id).catch(() => null);
           const conn = await connFor(c.intent_id);

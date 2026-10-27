@@ -47,6 +47,7 @@ import {
   type ChannelCap,
 } from "./copy";
 import { useMyTenant } from "@/modules/tenants/hooks";
+import { directoErrorCopy } from "@/lib/payments/directo";
 import {
   BrandLogo,
   CapBadge,
@@ -173,34 +174,42 @@ const FORMS: Record<string, FormSpec> = {
   gocuotas: {
     fields: [{ name: "api_key", label: "API Key de la sucursal", secret: true, min: 8, placeholder: "Tu API Key" }],
   },
+  // Directo (ADR-181, API Ecommerce 2.0): usuario y contraseña del comercio
+  // (uno para QA y otro para producción) + Policy Product. El host sale del
+  // switch QA. Se prueban con un login al guardar (nunca un scoring).
   directo: {
     fields: [
-      { name: "api_key", label: "API Key", secret: true, min: 6, placeholder: "Tu API Key de Directo" },
-      { name: "merchant_username", label: "Usuario del comercio", min: 2, placeholder: "MERCHANT_USERNAME" },
-      { name: "merchant_password", label: "Contraseña del comercio", secret: true, min: 4, placeholder: "MERCHANT_PASSWORD" },
+      { name: "username", label: "Usuario", min: 2, placeholder: "El usuario que te dio Directo" },
+      { name: "password", label: "Contraseña", secret: true, min: 4, placeholder: "La contraseña que te dio Directo" },
       {
-        name: "merchant_name",
-        label: "Nombre del comercio",
-        min: 2,
-        placeholder: "Tal como lo dio de alta Directo",
-        hint: "Viaja en cada orden: tiene que coincidir con el alta en Directo.",
+        name: "policy_product",
+        label: "Policy Product",
+        optional: true,
+        placeholder: "Ej: BNPL o 62",
+        hint: "Lo da Directo: el producto (BNPL, ELECTRO…) o el código de política (ej. 62 en QA, 65 en producción). Obligatorio si tu usuario tiene más de una política.",
+        validate: (v) => (/^[A-Za-z0-9 _.-]{1,40}$/.test(v) ? undefined : "Sólo letras, números y guiones."),
+      },
+      {
+        name: "timeout_seconds",
+        label: "Timeout técnico (avanzado)",
+        optional: true,
+        placeholder: "30",
+        hint: "Segundos que esperamos a Directo en cada llamada, de 5 a 120. Si no sabés, dejalo vacío.",
+        validate: (v) => {
+          const n = Number(v);
+          return Number.isInteger(n) && n >= 5 && n <= 120 ? undefined : "Un número entero entre 5 y 120.";
+        },
       },
       {
         name: "api_base_url",
-        label: "URL de la API",
-        placeholder: "https://...",
-        hint: "Te la da Directo con las credenciales. Es distinta en QA y en producción.",
+        label: "URL de la API (avanzado)",
+        optional: true,
+        placeholder: "https://public.pro.directo.com.ar/ecommerce-pro",
+        hint: "Sólo si Directo te indica otra. Vacío usa la oficial del ambiente elegido.",
         validate: httpsUrl,
       },
-      {
-        name: "subscription_key",
-        label: "Subscription Key",
-        secret: true,
-        optional: true,
-        placeholder: "Sólo si Directo te la dio",
-      },
     ],
-    envNote: "Elegí QA (prueba) sólo si las credenciales y la URL son de QA.",
+    envNote: "Prueba usa el ambiente QA de Directo (public.qa.directo.com.ar). Las credenciales de QA y de producción son distintas.",
   },
   // Ualá Bis (ADR-143): las tres credenciales de Cobros online › API. Se
   // prueban al guardar (set_payment_secret pide un token en el ambiente).
@@ -469,8 +478,16 @@ export function ConnectProviderModal({
         providerKey === "dlocalgo" && e instanceof Error && e.message === "dlocalgo_invalid_credentials"
           ? "dLocal Go no aceptó estas claves en el ambiente elegido. Revisalas o probá el otro ambiente."
           : null;
+      // Directo (ADR-181): el servidor prueba un login antes de guardar.
+      const directoMsg = providerKey === "directo" && e instanceof Error ? directoErrorCopy(e.message) : null;
       setServerError(
-        getnetMsg ?? ualaMsg ?? viumiMsg ?? taloMsg ?? dlocalMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.",
+        getnetMsg ??
+          ualaMsg ??
+          viumiMsg ??
+          taloMsg ??
+          dlocalMsg ??
+          directoMsg ??
+          "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.",
       );
     } finally {
       setSaving(false);
@@ -526,6 +543,8 @@ export function ConnectProviderModal({
     }
     // Ambiente explícito + API detectada por la prueba (si la hubo).
     if (onProbe) Object.assign(secrets, probeSecrets(probe, env));
+    // Directo (ADR-181): el login de prueba se hace en el ambiente elegido.
+    if (providerKey === "directo") secrets.environment = env;
     run(() => onSave({ secrets, env: SANDBOX_PROVIDERS.has(providerKey) ? env : undefined }), () => setStep(2));
   };
 
@@ -1022,7 +1041,7 @@ export function ConnectProviderModal({
               )}
               {providerKey === "directo" && (
                 <NextStep n={2}>
-                  Al cobrar elegís Directo QR o Link: la venta se cierra sola cuando Directo aprueba el crédito.
+                  Al cobrar elegís Directo QR o Link y cargás DNI, apellido y nombre del cliente: la venta se cierra sola cuando Directo aprueba el crédito.
                 </NextStep>
               )}
               {providerKey === "fiserv" && (

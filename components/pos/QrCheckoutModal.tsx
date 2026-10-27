@@ -24,7 +24,17 @@ import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
-import { posApi, type MpCuponPayer, type MpCuponStatus, type MpCuponVoucher, type PaymentPlan, type TaloStatus } from "@/modules/pos/api";
+import {
+  posApi,
+  type DirectoBuyer,
+  type MpCuponPayer,
+  type MpCuponStatus,
+  type MpCuponVoucher,
+  type PaymentPlan,
+  type TaloStatus,
+} from "@/modules/pos/api";
+import { DirectoBuyerStep } from "@/components/pos/DirectoBuyerStep";
+import { directoErrorCopy } from "@/lib/payments/directo";
 import { TaloTransferPanel } from "@/components/pos/TaloTransferPanel";
 import { CuponPayerForm, CuponVoucherPanel } from "@/components/pos/MpCuponPanels";
 import { cuponErrorCopy } from "@/lib/payments/mpCupon";
@@ -165,6 +175,9 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
   // Cupón Rapipago / Pago Fácil (ADR-180).
   const cuponMsg = cuponErrorCopy(code);
   if (cuponMsg) return cuponMsg;
+  // Directo (ADR-181): códigos de la API Ecommerce 2.0.
+  const directoMsg = directoErrorCopy(code);
+  if (directoMsg) return directoMsg;
   switch (code) {
     case "payment_method_disabled_in_store":
       return `${providerName} está apagado en esta sucursal o caja (Configuración → Medios de pago).`;
@@ -190,12 +203,6 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
       return "GO Cuotas rechazó la API Key de la sucursal. Verificá que sea del mismo ambiente que el switch Sandbox del medio.";
     case "gocuotas_error":
       return "GO Cuotas devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
-    case "directo_auth_failed":
-      return "Directo rechazó las credenciales del comercio. Verificá que sean del mismo ambiente que el switch Sandbox del medio.";
-    case "directo_base_url_missing":
-      return "Falta la URL de la API de Directo. Cargala en Configuración → Medios de pago.";
-    case "directo_error":
-      return "Directo devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "ualabis_min_amount":
       return "Ualá Bis acepta cobros desde $25. Para montos menores usá otro medio de pago.";
     case "ualabis_max_amount":
@@ -313,7 +320,8 @@ export function QrCheckoutModal({
   // Nave; medio y cuotas se resuelven del lado de Nave.
   // GO Cuotas: checkout de GO Cuotas (el cliente elige 2 a 4 cuotas con su
   // débito ahí).
-  // Directo: el cliente arma su crédito en la página de Directo.
+  // Directo: el cliente arma su crédito en la página de Directo. Antes, el
+  // cajero confirma DNI y nombre del comprador (ADR-181, DirectoBuyerStep).
   // Ualá Bis: checkout de Ualá (tarjeta y cuotas se eligen ahí).
   // Viumi y dLocal Go: checkout propio (tarjeta y cuotas se eligen ahí).
   // Cupón Rapipago / Pago Fácil: se paga en efectivo, sin planes.
@@ -350,6 +358,8 @@ export function QrCheckoutModal({
   const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
   // Cuotas del plan elegido (solo Payway: viajan al formulario hosted).
   const instRef = useRef<number>(1);
+  // Directo (ADR-181): comprador confirmado por el cajero.
+  const directoBuyerRef = useRef<DirectoBuyer | null>(null);
   // Cobros en espera (ADR-048).
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -490,7 +500,8 @@ export function QrCheckoutModal({
                   : provider === "gocuotas"
                     ? posApi.createGoCuotasLink
                     : provider === "directo"
-                      ? posApi.createDirectoLink
+                      ? (a: number, t: string) =>
+                          posApi.createDirectoLink(a, t, { buyer: directoBuyerRef.current, customerId })
                       : provider === "ualabis"
                         ? posApi.createUalaBisLink
                         : provider === "viumi"
@@ -620,6 +631,7 @@ export function QrCheckoutModal({
     instRef.current = 1;
     startedRef.current = false;
     chosenRef.current = null;
+    directoBuyerRef.current = null;
     setShareOpen(false);
     setCopied(false);
     setParking(false);
@@ -650,7 +662,9 @@ export function QrCheckoutModal({
         setPhase("payer");
         return;
       }
-      startQr(round2(base + sc));
+      // Directo: primero el comprador (DirectoBuyerStep); el cobro sale al confirmarlo.
+      if (provider === "directo") setAmount(round2(base + sc));
+      else startQr(round2(base + sc));
     } else if (globalMode) {
       startedRef.current = true;
       const sc = round2((base * globalPct) / 100);
@@ -944,6 +958,8 @@ export function QrCheckoutModal({
   // MODO no la usa (sus cuotas se eligen en la app del cliente).
   const selecting =
     phase === "select" && !selfManaged && !globalMode && (loadingAll || activePlans.length > 0);
+  // Directo (ADR-181): datos del comprador antes de crear la orden.
+  const directoStep = provider === "directo" && phase === "select";
 
   // Logo del proveedor REAL del cobro (antes todo lo no mapeado caía al logo
   // de Mercado Pago: Payway/Pagos360 mostraban la marca equivocada).
@@ -980,6 +996,15 @@ export function QrCheckoutModal({
             selecting && "hidden md:flex",
           )}
         >
+          {directoStep && (
+            <div className={cn(stateBox, "hidden md:flex")}>
+              <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
+              <p className="max-w-[16rem] text-xs text-muted-foreground">
+                Confirmá los datos del cliente. El QR aparece acá.
+              </p>
+            </div>
+          )}
+
           {selecting && (
             <div className={stateBox}>
               <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
@@ -1152,6 +1177,18 @@ export function QrCheckoutModal({
             />
           )}
 
+          {directoStep && (
+            <DirectoBuyerStep
+              amount={amount}
+              customerId={customerId}
+              initial={directoBuyerRef.current}
+              onSubmit={(b) => {
+                directoBuyerRef.current = b;
+                startQr(amount);
+              }}
+            />
+          )}
+
           {phase === "creating" && (
             <p className="text-center text-sm text-muted-foreground md:text-left">Generando el cobro con {providerName}…</p>
           )}
@@ -1312,7 +1349,7 @@ export function QrCheckoutModal({
           )}
 
           <div className="mt-auto flex justify-end gap-2 pt-1">
-            {(phase === "creating" || phase === "waiting" || phase === "payer" || selecting) && (
+            {(phase === "creating" || phase === "waiting" || phase === "payer" || selecting || directoStep) && (
               <Button variant="ghost" className="w-full md:w-auto" onClick={close}>
                 Cancelar
               </Button>
@@ -1328,6 +1365,11 @@ export function QrCheckoutModal({
                 onClick={() => void pauseNow()}
               >
                 <Pause size={16} aria-hidden /> Pausar venta
+              </Button>
+            )}
+            {provider === "directo" && phase === "error" && (
+              <Button variant="secondary" className="w-full md:w-auto" onClick={() => setPhase("select")}>
+                Corregir datos
               </Button>
             )}
             {(phase === "rejected" || phase === "error") && (

@@ -193,6 +193,9 @@ export function chargeActions(
 // en SQL (tests/unit/pendingCharges.test.ts verifica que coincidan). Getnet
 // crea la orden con expireLimitMinutes 30; MODO y Nave vencen sus QR rápido.
 // Talo: el CVU vence a los ~5 días; se topea en 3 (ADR-175).
+// dLocal Go: el redirect_url vence a las 24 h. Cupón Rapipago / Pago Fácil de
+// Mercado Pago: se emite a 3 días y el cobro en espera dura lo mismo por
+// defecto (ADR-180).
 
 export const DEFAULT_TTL_MINUTES = 24 * 60;
 export const MIN_TTL_MINUTES = 5;
@@ -210,13 +213,20 @@ export const PROVIDER_MAX_TTL_MINUTES: Record<string, number> = {
   ualabis: 24 * 60,
   viumi: 24 * 60,
   talo: 3 * 24 * 60,
+  dlocalgo: 24 * 60,
+  mp_cupon: 3 * 24 * 60,
 };
+
+// Proveedores cuyo cobro en espera arranca con el tope (no con 24 h): el
+// cupón se paga en efectivo días después (ADR-180).
+const DEFAULT_TO_MAX = new Set(["mp_cupon"]);
 
 export function maxTtlMinutes(provider: string): number {
   return PROVIDER_MAX_TTL_MINUTES[provider] ?? DEFAULT_TTL_MINUTES;
 }
 
 export function defaultTtlMinutes(provider: string): number {
+  if (DEFAULT_TO_MAX.has(provider)) return maxTtlMinutes(provider);
   return Math.min(DEFAULT_TTL_MINUTES, maxTtlMinutes(provider));
 }
 

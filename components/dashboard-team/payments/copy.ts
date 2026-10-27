@@ -63,6 +63,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   ualabis: "Link de pago y QR por API, o registro de tu QR, POS o Tap",
   viumi: "Link de pago y QR con el checkout de Viumi",
   talo: "Un CVU y un alias por venta: se confirma solo al llegar la plata",
+  dlocalgo: "Link de pago y QR con el checkout de dLocal Go",
 };
 
 // Explicación desplegable por canal: qué pasa al activarlo y cómo es el cobro.
@@ -208,6 +209,15 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "Talo nos avisa, verificamos el pago y la venta se cierra sola. Si transfiere de menos, el POS muestra cuánto falta.",
     ],
   },
+  dlocalgo: {
+    activa:
+      "El POS arma un link de pago de dLocal Go (también como QR) y la venta se cierra sola al acreditarse. Las devoluciones totales se piden desde Cobros QR.",
+    pasos: [
+      "En el POS elegís dLocal Go: Link o QR.",
+      "El cliente abre el link o escanea el QR con la cámara del celular y paga con tarjeta en el checkout de dLocal Go.",
+      "dLocal Go nos avisa, verificamos el pago y la venta se cierra sola.",
+    ],
+  },
   pagos360: {
     activa: "Se genera una solicitud de pago y el cliente paga desde el link o el QR.",
     pasos: [
@@ -243,6 +253,7 @@ export const CHANNEL_CAPS: Record<string, ChannelCap[]> = {
   ualabis: ["qr", "link"],
   viumi: ["qr", "link"],
   talo: ["qr", "link"],
+  dlocalgo: ["qr", "link"],
   fiserv: ["point"],
   fiserv_point: ["point"],
 };
@@ -391,6 +402,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
     ],
     where: "Mail de credenciales de Viumi (consultas@viumi.com.ar)",
     note: "Prueba y producción tienen credenciales distintas. Las devoluciones se hacen desde la app o el panel de Viumi.",
+  },
+  dlocalgo: {
+    steps: [
+      { icon: "login", text: "Entrá al dashboard de dLocal Go (dashboard.dlocalgo.com) con tu cuenta." },
+      { icon: "code", text: "Abrí Integraciones › API Integration." },
+      { icon: "key", text: "Copiá la API Key y la Secret Key." },
+    ],
+    where: "Dashboard de dLocal Go › Integraciones › API Integration",
+    note: "Testing y producción son cuentas distintas, cada una con sus claves. La cuenta queda atada al sitio que declaraste en dLocal Go.",
   },
   talo: {
     steps: [

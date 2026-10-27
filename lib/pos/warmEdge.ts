@@ -21,6 +21,8 @@ export const QR_EDGE_BY_PROVIDER: Record<string, string[]> = {
   ualabis: ["ualabis"],
   viumi: ["viumi"],
   talo: ["talo"],
+  dlocalgo: ["dlocalgo"],
+  mp_cupon: ["mp_cupon"],
 };
 
 export function edgesToWarm(providers: (string | null | undefined)[], now = Date.now()): string[] {

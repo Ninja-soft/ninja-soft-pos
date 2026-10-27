@@ -135,6 +135,14 @@ export const BRANDS: BrandDef[] = [
     channels: ["talo"],
   },
   {
+    key: "dlocalgo",
+    name: "dLocal Go",
+    tagline: "Link de pago y QR con tarjeta",
+    credentialsUrl: "https://dashboard.dlocalgo.com",
+    credentialsLabel: "Dashboard de dLocal Go",
+    channels: ["dlocalgo"],
+  },
+  {
     key: "fiserv",
     name: "Fiserv",
     tagline: "Terminales Clover integradas y Posnet",
@@ -182,6 +190,7 @@ export const PROVIDER_CHANNEL_FALLBACK: Record<string, { brand: string; channel:
   ualabis: { brand: "ualabis", channel: "qr_link" },
   viumi: { brand: "viumi", channel: "qr_link" },
   talo: { brand: "talo", channel: "qr_link" },
+  dlocalgo: { brand: "dlocalgo", channel: "qr_link" },
 };
 
 // Canales con flujo de cobro real implementado. El resto se muestra como
@@ -206,6 +215,8 @@ export const IMPLEMENTED = new Set([
   "viumi",
   // Talo (ADR-175): transferencia con CVU / alias único por API.
   "talo",
+  // dLocal Go (ADR-180): link + QR del checkout de la Payments API.
+  "dlocalgo",
   // Fiserv (ADR-047): Posnet/Clover sin integrar (habilita la Tarjeta en
   // posnet) y Clover Point por Cloud Pay Display.
   "fiserv",
@@ -215,7 +226,7 @@ export const IMPLEMENTED = new Set([
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
 // getnet (ADR-065): prueba = Web Checkout sandbox u homologación.
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet", "ualabis", "viumi", "talo"]);
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet", "ualabis", "viumi", "talo", "dlocalgo"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point

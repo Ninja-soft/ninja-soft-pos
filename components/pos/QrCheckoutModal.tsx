@@ -24,10 +24,20 @@ import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
-import { posApi, type DirectoBuyer, type PaymentPlan, type TaloStatus } from "@/modules/pos/api";
+import {
+  posApi,
+  type DirectoBuyer,
+  type MpCuponPayer,
+  type MpCuponStatus,
+  type MpCuponVoucher,
+  type PaymentPlan,
+  type TaloStatus,
+} from "@/modules/pos/api";
 import { DirectoBuyerStep } from "@/components/pos/DirectoBuyerStep";
 import { directoErrorCopy } from "@/lib/payments/directo";
 import { TaloTransferPanel } from "@/components/pos/TaloTransferPanel";
+import { CuponPayerForm, CuponVoucherPanel } from "@/components/pos/MpCuponPanels";
+import { cuponErrorCopy } from "@/lib/payments/mpCupon";
 import { taloOverpaidNote } from "@/lib/payments/talo";
 import { usePosProviderPlans } from "@/modules/pos/hooks";
 import { BASE_LABEL, BRAND_LABEL } from "@/modules/pos/planConstants";
@@ -51,7 +61,8 @@ import {
   type ShareChannel,
 } from "@/modules/pending-charges/logic";
 
-type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error" | "parked";
+// payer: datos del pagador que Mercado Pago exige para el cupón en efectivo (ADR-180).
+type Phase = "select" | "payer" | "creating" | "waiting" | "approved" | "rejected" | "error" | "parked";
 
 /** Pedido de "Dejar en espera" (ADR-048): el intent vigente y cómo se compartió. */
 export interface QrParkRequest {
@@ -161,6 +172,9 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
   // Getnet (ADR-069): credenciales del juego equivocado o checkout propio apagado.
   const slotMsg = getnetSlotError(code);
   if (slotMsg) return slotMsg;
+  // Cupón Rapipago / Pago Fácil (ADR-180).
+  const cuponMsg = cuponErrorCopy(code);
+  if (cuponMsg) return cuponMsg;
   // Directo (ADR-181): códigos de la API Ecommerce 2.0.
   const directoMsg = directoErrorCopy(code);
   if (directoMsg) return directoMsg;
@@ -211,6 +225,14 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
       return "El monto supera el máximo por cobro de Talo. Dividí el cobro o usá otro medio.";
     case "talo_error":
       return "Talo devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
+    case "dlocalgo_min_amount":
+      return "El monto es menor al mínimo que acepta dLocal Go. Usá otro medio de pago.";
+    case "dlocalgo_max_amount":
+      return "El monto supera el máximo que acepta dLocal Go. Dividí el cobro o usá otro medio.";
+    case "dlocalgo_auth_failed":
+      return "dLocal Go rechazó las credenciales. Probalas en Configuración → Medios de pago → dLocal Go (y revisá que sean del mismo ambiente que el switch Sandbox).";
+    case "dlocalgo_error":
+      return "dLocal Go devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "nave_auth_failed":
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
@@ -259,7 +281,9 @@ export function QrCheckoutModal({
     | "directo"
     | "ualabis"
     | "viumi"
-    | "talo";
+    | "talo"
+    | "dlocalgo"
+    | "mp_cupon";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -299,7 +323,8 @@ export function QrCheckoutModal({
   // Directo: el cliente arma su crédito en la página de Directo. Antes, el
   // cajero confirma DNI y nombre del comprador (ADR-181, DirectoBuyerStep).
   // Ualá Bis: checkout de Ualá (tarjeta y cuotas se eligen ahí).
-  // Viumi: checkout de Viumi (tarjeta y cuotas se eligen ahí).
+  // Viumi y dLocal Go: checkout propio (tarjeta y cuotas se eligen ahí).
+  // Cupón Rapipago / Pago Fácil: se paga en efectivo, sin planes.
   const selfManaged = QR_SELF_MANAGED.has(provider);
   const { toast } = useToast();
   // Caja QR de MP registrada para esta caja (F17 · H93, ADR-049).
@@ -321,6 +346,10 @@ export function QrCheckoutModal({
   const [qrData, setQrData] = useState("");
   // Talo (ADR-175): CVU y alias únicos del cobro.
   const [transfer, setTransfer] = useState<{ cvu: string | null; alias: string | null } | null>(null);
+  // Cupón Rapipago / Pago Fácil (ADR-180): pagador elegido y cupón emitido.
+  const cuponPayerRef = useRef<MpCuponPayer | null>(null);
+  const cuponAmountRef = useRef<number>(base);
+  const [voucher, setVoucher] = useState<MpCuponVoucher | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [mpChannel, setMpChannel] = useState<MpChannel>("order");
   const [switching, setSwitching] = useState(false);
@@ -386,11 +415,13 @@ export function QrCheckoutModal({
     qr_data?: string;
     cvu?: string | null;
     alias?: string | null;
+    voucher?: MpCuponVoucher | null;
   }) {
     setIntentId(r.intent_id);
     setInitPoint(r.init_point);
     setQrData(r.qr_data ?? "");
     setTransfer(r.cvu || r.alias ? { cvu: r.cvu ?? null, alias: r.alias ?? null } : null);
+    setVoucher(r.voucher ?? null);
     setPhase("waiting");
   }
 
@@ -477,7 +508,15 @@ export function QrCheckoutModal({
                           ? posApi.createViumiLink
                           : provider === "talo"
                             ? posApi.createTaloPayment
-                            : posApi.createMpQr;
+                            : provider === "dlocalgo"
+                              ? posApi.createDlocalGoLink
+                              : provider === "mp_cupon"
+                                ? (a: number, t: string) =>
+                                    posApi.createMpCupon(a, t, {
+                                      ...(cuponPayerRef.current ?? { method: "rapipago" }),
+                                      customerId,
+                                    })
+                                : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => {
@@ -532,8 +571,9 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
-  //  - GO Cuotas, Directo, Ualá Bis, Viumi y Talo: baja local del intent (no
-  //    anulan órdenes por API; en Talo el CVU vence solo).
+  //  - GO Cuotas, Directo, Ualá Bis, Viumi, Talo y dLocal Go: baja local del
+  //    intent (no anulan órdenes por API; en Talo el CVU vence solo).
+  //  - Cupón Rapipago / Pago Fácil: se cancela la order en Mercado Pago.
   function close() {
     if (intentId && phase === "waiting" && !parkedRef.current && !parkingRef.current) {
       if (provider === "mercadopago" && mpChannel === "order") {
@@ -550,6 +590,11 @@ export function QrCheckoutModal({
         posApi.cancelViumiIntent(intentId).catch(() => null);
       } else if (provider === "talo") {
         posApi.cancelTaloIntent(intentId).catch(() => null);
+      } else if (provider === "dlocalgo") {
+        posApi.cancelDlocalGoIntent(intentId).catch(() => null);
+      } else if (provider === "mp_cupon") {
+        // Cupón sin dejar en espera: se anula para que no se pueda pagar.
+        posApi.cancelMpCupon(intentId).catch(() => null);
       }
     }
     onOpenChange(false);
@@ -577,6 +622,8 @@ export function QrCheckoutModal({
     setInitPoint("");
     setQrData("");
     setTransfer(null);
+    setVoucher(null);
+    cuponPayerRef.current = null;
     setErrorMsg("");
     setMpChannel(channel === "link" ? "link" : "order");
     setSwitching(false);
@@ -608,6 +655,13 @@ export function QrCheckoutModal({
       // se aplica acá porque el checkout hosted cobra el monto que le mandemos.
       const sc = round2((base * globalPct) / 100);
       chosenRef.current = sc > 0 ? { label: "Recargo", surcharge: sc } : null;
+      if (provider === "mp_cupon") {
+        // Cupón: primero los datos del pagador que pide Mercado Pago.
+        cuponAmountRef.current = round2(base + sc);
+        setAmount(cuponAmountRef.current);
+        setPhase("payer");
+        return;
+      }
       // Directo: primero el comprador (DirectoBuyerStep); el cobro sale al confirmarlo.
       if (provider === "directo") setAmount(round2(base + sc));
       else startQr(round2(base + sc));
@@ -651,7 +705,11 @@ export function QrCheckoutModal({
                         ? posApi.viumiIntentStatus(intentId!)
                         : provider === "talo"
                           ? posApi.taloIntentStatus(intentId!)
-                          : posApi.mpIntentStatus(intentId!),
+                          : provider === "dlocalgo"
+                            ? posApi.dlocalgoIntentStatus(intentId!)
+                            : provider === "mp_cupon"
+                              ? posApi.mpCuponStatus(intentId!)
+                              : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching && !parking,
@@ -689,6 +747,15 @@ export function QrCheckoutModal({
     // la validación quedaba inerte. El mp_payment_id solo sirve para logging.
     onApproved(intentId ?? "", finalAmount, extras);
   }
+
+  // Cupón (ADR-180): si Mercado Pago lo estaba procesando, llega con el poll.
+  useEffect(() => {
+    const v = provider === "mp_cupon" ? (status as MpCuponStatus | undefined)?.voucher : null;
+    if (v && !voucher) {
+      setVoucher(v);
+      setInitPoint(v.ticket_url);
+    }
+  }, [status, provider, voucher]);
 
   useEffect(() => {
     if (!status || firedRef.current || switching || parkingRef.current || parkedRef.current) return;
@@ -914,7 +981,9 @@ export function QrCheckoutModal({
       title={
         provider === "talo"
           ? `Cobrar con transferencia · ${providerName}`
-          : `Cobrar con ${channel === "link" ? "link" : "QR"} · ${providerName}`
+          : provider === "mp_cupon"
+            ? "Cupón Rapipago / Pago Fácil · Mercado Pago"
+            : `Cobrar con ${channel === "link" ? "link" : "QR"} · ${providerName}`
       }
       className="md:max-w-3xl"
     >
@@ -941,6 +1010,15 @@ export function QrCheckoutModal({
               <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
               <p className="max-w-[16rem] text-xs text-muted-foreground">
                 Elegí la tarjeta y el plan. El QR aparece acá con el total final.
+              </p>
+            </div>
+          )}
+
+          {phase === "payer" && (
+            <div className={cn(stateBox, "hidden md:flex")}>
+              <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
+              <p className="max-w-[16rem] text-xs text-muted-foreground">
+                Con los datos del cliente generamos el cupón. El QR que aparece acá abre el cupón en su celular.
               </p>
             </div>
           )}
@@ -1087,6 +1165,18 @@ export function QrCheckoutModal({
             </div>
           )}
 
+          {phase === "payer" && (
+            <CuponPayerForm
+              customerId={customerId}
+              customerName={park?.customerName ?? null}
+              customerEmail={park?.customerEmail ?? null}
+              onSubmit={(p) => {
+                cuponPayerRef.current = p;
+                startQr(cuponAmountRef.current);
+              }}
+            />
+          )}
+
           {directoStep && (
             <DirectoBuyerStep
               amount={amount}
@@ -1117,6 +1207,13 @@ export function QrCheckoutModal({
                   El QR abre el checkout de Viumi para pagar con tarjeta. No lo leen las billeteras virtuales.
                 </Callout>
               )}
+              {provider === "dlocalgo" && !shareOpen && (
+                // El QR de dLocal Go es el link de pago: abre su checkout para pagar con tarjeta.
+                <Callout tone="info" icon={Camera} title="Escaneá con la cámara del celular">
+                  El QR abre el checkout de dLocal Go para pagar con tarjeta. No lo leen las billeteras virtuales.
+                </Callout>
+              )}
+              {provider === "mp_cupon" && !shareOpen && <CuponVoucherPanel voucher={voucher} />}
               {provider === "talo" && !shareOpen && (
                 <TaloTransferPanel
                   cvu={transfer?.cvu ?? (status as TaloStatus | undefined)?.cvu ?? null}
@@ -1129,12 +1226,12 @@ export function QrCheckoutModal({
                 className={cn(
                   "text-center text-sm text-muted-foreground md:text-left",
                   shareOpen && "md:hidden",
-                  provider === "talo" && "hidden",
+                  (provider === "talo" || provider === "mp_cupon") && "hidden",
                 )}
               >
                 {isMpOrder
                   ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
-                  : provider === "ualabis" || provider === "viumi"
+                  : provider === "ualabis" || provider === "viumi" || provider === "dlocalgo"
                     ? "También podés compartirle el link. La pantalla se actualiza sola al acreditarse."
                   : channel === "link"
                     ? `Compartí el link para que el cliente pague con ${providerName}, o que escanee el QR. La pantalla se actualiza sola al acreditarse.`
@@ -1252,7 +1349,7 @@ export function QrCheckoutModal({
           )}
 
           <div className="mt-auto flex justify-end gap-2 pt-1">
-            {(phase === "creating" || phase === "waiting" || selecting || directoStep) && (
+            {(phase === "creating" || phase === "waiting" || phase === "payer" || selecting || directoStep) && (
               <Button variant="ghost" className="w-full md:w-auto" onClick={close}>
                 Cancelar
               </Button>

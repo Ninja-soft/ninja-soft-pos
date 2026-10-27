@@ -82,7 +82,10 @@ export type QrProviderKey =
   | "directo"
   | "ualabis"
   | "viumi"
-  | "talo";
+  | "talo"
+  | "dlocalgo"
+  // Cupón Rapipago / Pago Fácil de Mercado Pago (ADR-180).
+  | "mp_cupon";
 export type PointProviderKey = "mercadopago_point" | "nave_point" | "fiserv_point";
 
 export interface TenderDef {
@@ -189,6 +192,8 @@ const LOGO = {
   // horizontal sí está, ver lib/payments/logos).
   viumi: paymentIcon("viumi"),
   talo: icon("talo"),
+  dlocalgo: icon("dlocalgo"),
+  mp_cupon: icon("mercadopago"),
   clover: icon("fiserv_point"),
 } as const;
 
@@ -304,6 +309,18 @@ export const TENDERS: TenderDef[] = [
     flow: "point",
     pointProvider: "mercadopago_point",
     hint: "Lector conectado",
+  },
+  // Cupón Rapipago / Pago Fácil (ADR-180): canal de la conexión de Mercado
+  // Pago con su propia feature. Para cobrar a distancia y dejar en espera: el
+  // cliente paga en efectivo días después.
+  {
+    ...qr("mp_cupon", "Mercado Pago", "mercadopago", "link", "Paga en efectivo, a distancia"),
+    id: "mercadopago:cupon",
+    brand: "mercadopago",
+    label: "Cupón Rapipago / Pago Fácil",
+    shortLabel: "Cupón",
+    provider: "mercadopago",
+    connection: "mercadopago",
   },
   qr("payway", "Payway", "payway", "qr", "Checkout de la tienda"),
   qr("payway", "Payway", "payway", "link", "Para mandar por mensaje"),
@@ -427,6 +444,9 @@ export const TENDERS: TenderDef[] = [
   // Sólo con la API conectada; no hay registro manual.
   { ...qr("viumi", "Viumi", "wallets", "link", "Link de pago con tarjeta"), minAmount: 1 },
   { ...qr("viumi", "Viumi", "wallets", "qr", "Tarjeta desde el celular"), minAmount: 1 },
+  // dLocal Go (ADR-180): link de pago y QR del checkout de dLocal Go.
+  { ...qr("dlocalgo", "dLocal Go", "wallets", "link", "Link de pago con tarjeta"), minAmount: 1 },
+  { ...qr("dlocalgo", "dLocal Go", "wallets", "qr", "Tarjeta desde el celular"), minAmount: 1 },
   {
     // H160 (ADR-179): efectivo en dólares (feature efectivo_usd).
     id: "cash_usd",
@@ -546,7 +566,7 @@ export interface ProviderStatus {
 // Medios con checkout propio: medio y cuotas se resuelven en su pantalla, así
 // que el recargo plano del medio se suma siempre al monto del QR / link.
 // Espejo del criterio de QrCheckoutModal.
-export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis", "viumi", "talo"]);
+export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo", "ualabis", "viumi", "talo", "dlocalgo", "mp_cupon"]);
 
 export interface TenderContext {
   /** Todas las filas de tenant_payment_methods (habilitadas o no). */

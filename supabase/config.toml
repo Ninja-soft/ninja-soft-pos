@@ -135,6 +135,11 @@ verify_jwt = false
 [functions.talo_webhook]
 verify_jwt = false
 
+# dLocal Go (ADR-180): notificaciones de pagos y devoluciones (firmadas con
+# HMAC-SHA256; igual se re-consulta el pago).
+[functions.dlocalgo_webhook]
+verify_jwt = false
+
 # -----------------------------------------------------------------------------
 # Edge Functions con JWT declaradas explícitamente (no van en PUBLIC_FUNCTIONS).
 # catalog_sync (ADR-106): la llama el cron con X-Cron-Secret (anon key como

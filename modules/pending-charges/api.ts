@@ -267,6 +267,14 @@ export async function createProviderCharge(
       return posApi.createViumiLink(amount, title);
     case "talo":
       return posApi.createTaloPayment(amount, title);
+    case "dlocalgo":
+      return posApi.createDlocalGoLink(amount, title);
+    case "mp_cupon": {
+      // Cupón Rapipago / Pago Fácil (ADR-180): mismo medio que el anterior (el
+      // ticket_url lo nombra) y el pagador sale del cliente del cobro.
+      const method = previousShareUrl?.includes("pagofacil") ? "pagofacil" : "rapipago";
+      return posApi.createMpCupon(amount, title, { method, customerId });
+    }
     default:
       void channel;
       throw new Error("provider_not_supported");
@@ -303,6 +311,10 @@ export async function syncProviderStatus(
         return posApi.viumiIntentStatus(intentId);
       case "talo":
         return posApi.taloIntentStatus(intentId);
+      case "dlocalgo":
+        return posApi.dlocalgoIntentStatus(intentId);
+      case "mp_cupon":
+        return posApi.mpCuponStatus(intentId);
       case "mobbex":
         return posApi.mpIntentStatus(intentId);
       default:
@@ -327,6 +339,8 @@ export async function cancelAtProvider(provider: string, channel: "qr" | "link",
     else if (provider === "ualabis") await posApi.cancelUalaBisIntent(intentId);
     else if (provider === "viumi") await posApi.cancelViumiIntent(intentId);
     else if (provider === "talo") await posApi.cancelTaloIntent(intentId);
+    else if (provider === "dlocalgo") await posApi.cancelDlocalGoIntent(intentId);
+    else if (provider === "mp_cupon") await posApi.cancelMpCupon(intentId);
   } catch {
     /* el intent ya quedó cancelado localmente: un pago tardío queda para revisión */
   }

@@ -64,6 +64,8 @@ export function cuponErrorCopy(code: string): string | null {
       return "Elegí Rapipago o Pago Fácil.";
     case "mp_cupon_auth_failed":
       return "Mercado Pago rechazó la conexión. Reconectala en Configuración → Medios de pago → Mercado Pago.";
+    case "mp_cupon_forbidden":
+      return "Mercado Pago no habilitó los cupones de pago en efectivo para esta cuenta. La conexión sigue bien para QR y Point; consultá a Mercado Pago o cobrá con otro medio.";
     case "mp_cupon_payer_rejected":
       return "Mercado Pago rechazó los datos del cliente. Revisá el email y el documento.";
     case "mp_cupon_amount_rejected":

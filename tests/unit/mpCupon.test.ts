@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCuponOrderBody,
   cuponErrorCode,
+  mpErrorSummary,
   parsePayer,
   parseVoucher,
   splitName,
@@ -121,6 +122,16 @@ describe("order", () => {
     expect(cuponErrorCode(400, '{"errors":[{"code":"invalid_identification"}]}')).toBe("mp_cupon_payer_rejected");
     expect(cuponErrorCode(400, "payment_method not available")).toBe("mp_cupon_method_unavailable");
     expect(cuponErrorCode(500, "x")).toBe("mp_error");
+    expect(cuponErrorCode(403, '{"errors":[{"code":"unauthorized","message":"At least one policy returned UNAUTHORIZED."}]}')).toBe("mp_cupon_forbidden");
+    expect(cuponErrorCode(403, '{"message":"invalid_token"}')).toBe("mp_cupon_auth_failed");
+    expect(cuponErrorCopy("mp_cupon_forbidden")).toMatch(/no habilitó/);
+  });
+
+  it("resumen del error para la auditoría", () => {
+    expect(mpErrorSummary('{"errors":[{"code":"unauthorized","message":"policy"}]}')).toEqual({ code: "unauthorized", message: "policy" });
+    expect(mpErrorSummary('{"message":"invalid_token","error":"forbidden"}')).toEqual({ code: "forbidden", message: "invalid_token" });
+    expect(mpErrorSummary("<html> Forbidden </html>")).toEqual({ code: null, message: "<html> Forbidden </html>" });
+    expect(mpErrorSummary("x".repeat(500)).message?.length).toBe(200);
   });
 });
 

@@ -167,10 +167,34 @@ export function parseVoucher(order: unknown, createdAt: Date = new Date()): Vouc
   return null;
 }
 
+/**
+ * Resumen del error de la Orders API para la auditoría: sólo códigos y
+ * mensajes de `errors[]` (o `error` / `message`), recortados. Nunca el cuerpo
+ * entero ni headers.
+ */
+export function mpErrorSummary(detail: string): { code: string | null; message: string | null } {
+  let body: unknown = null;
+  try {
+    body = JSON.parse(detail);
+  } catch {
+    return { code: null, message: detail.replace(/\s+/g, " ").trim().slice(0, 200) || null };
+  }
+  if (!isObj(body)) return { code: null, message: null };
+  const errs = Array.isArray(body.errors) ? body.errors.filter(isObj) : [];
+  const codes = errs.map((e) => str(e.code)).filter(Boolean);
+  const msgs = errs.map((e) => str(e.message) ?? str(e.details)).filter(Boolean);
+  const code = (codes.join(",") || str(body.error) || str(body.code) || "").slice(0, 120) || null;
+  const message = (msgs.join(" | ") || str(body.message) || "").slice(0, 200) || null;
+  return { code, message };
+}
+
 /** Error de la Orders API → código estable para el POS. */
 export function cuponErrorCode(httpStatus: number, detail: string): string {
   const d = detail.toLowerCase();
-  if (httpStatus === 401 || httpStatus === 403) return "mp_cupon_auth_failed";
+  // 401 = token inválido o vencido. 403 = el token vale pero la cuenta o la
+  // aplicación no tiene permiso para órdenes online (no es "reconectá").
+  if (httpStatus === 401 || (httpStatus === 403 && /invalid[_ ]token|expired/.test(d))) return "mp_cupon_auth_failed";
+  if (httpStatus === 403) return "mp_cupon_forbidden";
   if (d.includes("identification") || d.includes("payer")) return "mp_cupon_payer_rejected";
   if (d.includes("amount")) return "mp_cupon_amount_rejected";
   if (d.includes("payment_method")) return "mp_cupon_method_unavailable";

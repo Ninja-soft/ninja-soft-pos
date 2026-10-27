@@ -35,6 +35,7 @@ import {
   buildCuponOrderBody,
   cuponErrorCode,
   isCuponMethod,
+  mpErrorSummary,
   parsePayer,
   parseVoucher,
   type Voucher,
@@ -164,9 +165,19 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify(buildCuponOrderBody({ intentId, amount, method, payer: payer.payer, description: title })),
     }).catch(() => null);
     if (!r || !r.ok) {
-      const detail = r ? (await r.text()).slice(0, 300) : "unreachable";
+      const detail = r ? (await r.text()).slice(0, 2000) : "unreachable";
+      const code = r ? cuponErrorCode(r.status, detail) : "mp_error";
       await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intentId);
-      return json({ error: r ? cuponErrorCode(r.status, detail) : "mp_error", detail: r ? `http_${r.status}` : "unreachable" }, 502);
+      // Qué contestó Mercado Pago (sin cuerpo entero ni datos del pagador).
+      await audit("mp_cupon_failed", intentId, {
+        amount,
+        method,
+        env: cred.env,
+        http: r?.status ?? 0,
+        code,
+        mp: r ? mpErrorSummary(detail) : { code: "unreachable", message: null },
+      });
+      return json({ error: code, detail: r ? `http_${r.status}` : "unreachable" }, 502);
     }
     const created = (await r.json()) as MpOrder & Record<string, unknown>;
     if (!created.id) {

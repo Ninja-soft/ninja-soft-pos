@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { Check, ChevronRight, CreditCard, Link2, QrCode, Smartphone } from "lucide-react";
+import { Check, ChevronRight, CreditCard, Link2, QrCode, Smartphone, Ticket } from "lucide-react";
 import { brandRuns, isManualTender, type CheckoutSection, type ResolvedTender } from "@/lib/pos/tenders";
 import { cn } from "@/lib/utils/cn";
 import { TenderLogo, tenderColorIcon, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
@@ -42,6 +42,9 @@ const CHANNEL_ICON = {
   point: Smartphone,
   manual: CreditCard,
 } as const;
+
+// Canales con ícono propio (no el de su tipo de canal).
+const TENDER_ICON: Record<string, typeof Ticket> = { "mercadopago:cupon": Ticket };
 
 const SURFACE = "border border-border bg-card";
 const SURFACE_HOVER = "hover:bg-muted/60";
@@ -510,7 +513,7 @@ function BrandRow({
         )}
       >
         {section.tenders.map((t) => {
-          const Icon = CHANNEL_ICON[t.channel];
+          const Icon = TENDER_ICON[t.id] ?? CHANNEL_ICON[t.channel];
           const on = t.id === activeId;
           const promo = promoBadge?.(t) ?? 0;
           return (
@@ -522,8 +525,9 @@ function BrandRow({
               onClick={() => onPick(t)}
               aria-checked={on}
               aria-label={`${t.brandLabel} ${t.label}`}
+              title={t.shortLabel ? t.label : undefined}
               className={cn(
-                "relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                "relative flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
                 big ? "h-12 text-sm" : dense ? "h-8" : "h-9",
                 on
                   ? "bg-[var(--seg-thumb)] text-foreground shadow-[var(--seg-thumb-shadow)]"
@@ -535,9 +539,9 @@ function BrandRow({
                   <Check size={10} strokeWidth={3.5} />
                 </span>
               ) : (
-                <Icon size={14} />
+                <Icon size={14} className="shrink-0" />
               )}
-              {t.label}
+              <span className="truncate">{t.shortLabel ?? t.label}</span>
               {promo > 0 && <span className="text-[11px] font-semibold text-success">%</span>}
             </button>
           );

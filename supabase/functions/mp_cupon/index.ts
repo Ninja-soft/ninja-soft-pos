@@ -21,6 +21,9 @@
 //     sincroniza el estado (action_required = pending).
 //   * cancel {intent_id} → POST /v1/orders/{id}/cancel (sólo mientras está
 //     action_required) y sincroniza.
+//   * limits {} → topes de monto de Rapipago y Pago Fácil en la cuenta del
+//     negocio (GET /v1/payment_methods: min / max_allowed_amount). create los
+//     vuelve a validar antes de pedir el cupón.
 //
 // Gating real: tenant_has_feature_for(tenant,'cupones_efectivo') y
 // tenant_has_feature_for(tenant,'mercado_pago') en create; Mercado Pago apagado
@@ -33,11 +36,14 @@ import { applyOrderToIntent, type OrderIntentRow } from "../_shared/mpIntents.ts
 import { locationOf, methodBlockedAt } from "../_shared/terminals.ts";
 import {
   buildCuponOrderBody,
+  checkCuponAmount,
   cuponErrorCode,
   isCuponMethod,
   mpErrorSummary,
+  parseCuponLimits,
   parsePayer,
   parseVoucher,
+  type CuponLimits,
   type Voucher,
 } from "../_shared/mpCupon.ts";
 import type { MpOrder } from "../_shared/mpOrders.ts";
@@ -56,6 +62,21 @@ const COLS =
 type Row = OrderIntentRow & { voucher: Voucher | null; created_at: string };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Topes por cuenta de Mercado Pago, en memoria de la instancia (10 min). Si la
+// consulta falla no se frena nada: decide Mercado Pago al crear la order.
+const LIMITS_TTL_MS = 10 * 60_000;
+const limitsCache = new Map<string, { at: number; limits: CuponLimits }>();
+
+async function cuponLimits(cacheKey: string, token: string): Promise<CuponLimits | null> {
+  const hit = limitsCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < LIMITS_TTL_MS) return hit.limits;
+  const r = await fetch(`${MP_API}/v1/payment_methods`, { headers: mpHeaders(token) }).catch(() => null);
+  if (!r || !r.ok) return null;
+  const limits = parseCuponLimits(await r.json().catch(() => null));
+  limitsCache.set(cacheKey, { at: Date.now(), limits });
+  return limits;
+}
 
 async function readOrder(token: string, orderId: string): Promise<{ ok: true; order: MpOrder & Record<string, unknown> } | { ok: false; status: number }> {
   const r = await fetch(`${MP_API}/v1/orders/${encodeURIComponent(orderId)}`, { headers: mpHeaders(token) }).catch(() => null);
@@ -85,7 +106,7 @@ Deno.serve(async (req: Request) => {
   if (!body) return json({ error: "invalid_json" }, 400);
   const b = body;
   const action = String(b.action ?? "");
-  if (!["create", "status", "cancel"].includes(action)) return json({ error: "invalid_action" }, 400);
+  if (!["create", "status", "cancel", "limits"].includes(action)) return json({ error: "invalid_action" }, 400);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: mem } = await admin
@@ -106,6 +127,13 @@ Deno.serve(async (req: Request) => {
       action: act,
       after_data: after,
     });
+
+  // ── limits ─────────────────────────────────────────────────────────────────
+  if (action === "limits") {
+    const cred = await tenantMpCredential(admin, tenantId, null, { storeId: bodyStoreId(b) });
+    if (!cred) return json({ error: "not_connected" }, 400);
+    return json({ limits: await cuponLimits(`${tenantId}:${cred.env}:${cred.scopeStoreId ?? ""}`, cred.token) });
+  }
 
   // ── create ─────────────────────────────────────────────────────────────────
   if (action === "create") {
@@ -149,6 +177,15 @@ Deno.serve(async (req: Request) => {
     ]);
     if (!cred) return json({ error: "not_connected" }, 400);
     if (blocked) return json({ error: "payment_method_disabled_in_store" }, 403);
+
+    // Tope del medio en la cuenta (Mercado Pago lo rechazaría igual).
+    const limits = await cuponLimits(`${tenantId}:${cred.env}:${cred.scopeStoreId ?? ""}`, cred.token);
+    const limit = limits?.[method] ?? null;
+    const check = checkCuponAmount(amount, limit);
+    if (check === "inactive") return json({ error: "mp_cupon_method_unavailable" }, 400);
+    if (check !== "ok") {
+      return json({ error: `mp_cupon_amount_${check}`, min: limit?.min ?? null, max: limit?.max ?? null }, 400);
+    }
 
     const intentId = crypto.randomUUID();
     const ins = await insertIntentWithScope(

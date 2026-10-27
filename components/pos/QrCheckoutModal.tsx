@@ -1167,6 +1167,7 @@ export function QrCheckoutModal({
 
           {phase === "payer" && (
             <CuponPayerForm
+              amount={cuponAmountRef.current}
               customerId={customerId}
               customerName={park?.customerName ?? null}
               customerEmail={park?.customerEmail ?? null}

@@ -259,7 +259,8 @@ export async function createProviderCharge(
     case "gocuotas":
       return posApi.createGoCuotasLink(amount, title);
     case "directo":
-      return posApi.createDirectoLink(amount, title);
+      // Directo (ADR-181) exige DNI y nombre: salen del cliente del cobro.
+      return posApi.createDirectoLink(amount, title, { customerId });
     case "ualabis":
       return posApi.createUalaBisLink(amount, title);
     case "viumi":

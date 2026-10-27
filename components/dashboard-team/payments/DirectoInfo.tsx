@@ -1,8 +1,9 @@
 "use client";
 
-// Directo (Crédito Directo S.A.). Dos caminos (ADR-041):
-//  - API conectada: el POS crea la orden en Directo y muestra su QR + link;
-//    la venta se cierra sola cuando Directo avisa que el crédito se aprobó.
+// Directo (Crédito Directo S.A.). Dos caminos:
+//  - API Ecommerce 2.0 conectada (ADR-181): el POS crea la orden en Directo
+//    con DNI y nombre del cliente y muestra su QR + link; la venta se cierra
+//    sola cuando Directo avisa que el crédito se aprobó.
 //  - Sin conectar (respaldo, ADR-034): el cajero cobra en el portal de
 //    comercios de Directo y en el POS registra el número de operación
 //    (payments.method = 'directo', reference = Nº de operación).
@@ -12,7 +13,7 @@ const PORTAL_URL = "https://minegocio.directo.com.ar/login";
 const ALTA_URL = "https://sumatucomercio.directo.com.ar/flow";
 
 const API_STEPS = [
-  "En el POS elegís Directo QR o Link al cobrar.",
+  "En el POS elegís Directo QR o Link y cargás DNI, apellido y nombre del cliente.",
   "El cliente escanea el QR o abre el link y arma su crédito en Directo.",
   "Directo nos avisa, verificamos la orden y la venta se cierra sola.",
 ];
@@ -54,7 +55,7 @@ export function DirectoInfo({
       <p className="text-xs text-muted-foreground">
         {connected
           ? "Mientras la API esté conectada, el registro manual con número de operación no se ofrece en el POS."
-          : "Si Directo te dio credenciales de integración por API, conectalas para cobrar con QR y link sin cargar nada a mano."}
+          : "Para cobrar con QR y link pedile a Directo el usuario y la contraseña de la API Ecommerce 2.0 (ayuda@directo.com.ar o tu ejecutivo comercial) y el Policy Product."}
       </p>
       <div className="flex flex-wrap gap-2">
         {!connected && onConnect && (

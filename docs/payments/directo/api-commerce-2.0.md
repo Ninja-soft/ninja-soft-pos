@@ -31,9 +31,23 @@ Usuario y contraseña del comercio los entrega Directo (uno para QA y otro para 
 
 Indica con qué política asignada al comercio se evalúa. Obligatorio si el usuario tiene más de una política, opcional si tiene una sola. Acepta el producto (`BNPL`, `ELECTRO`, `MOTO`…) o el código de política (`61`, `35`…); si hay varias políticas del mismo producto hay que mandar el código. Para Novogar: QA `62`, producción `65` (dato de Directo, como en el conector de E3).
 
+## Implementado (ADR-181, 2026-10-27)
+
+- Cliente puro: `supabase/functions/_shared/directo.ts` (tests en `tests/unit/directo.test.ts`); servidor: `_shared/directo_server.ts`, Edges `directo` (create, status, cancel, offer), `directo_webhook`, `set_payment_secret` y `pending_charges_sync`.
+- Host por el switch Sandbox del medio (QA o producción); `api_base_url` sólo como override avanzado (https).
+- Conexión: `username`, `password`, `policy_product` (opcional, recomendado), `timeout_seconds` (opcional, 5 a 120, por defecto 30). Se valida con un login, nunca con scoring. Credenciales viejas `merchant_username` / `merchant_password` se aceptan; el resto de la API vieja se ignora.
+- Token en cache por instancia (hash de ambiente + URL + credencial); 403 → login nuevo y un reintento.
+- Orden: `fullName` "APELLIDOS,NOMBRES" y `dni` confirmados por el cajero (prellenados con el cliente de la venta), `price` = total, `notifyUrl` = `https://hooks.soft.ninja/directo?intent=<id>`, regreso a `/pagar/listo?medio=directo`. `merchantOrderId` en `mp_payment_intents.preference_id`.
+- Webhook: `notification_id` → `get_by_notification` con la credencial del intent; aprueba sólo `Success` con el `merchantOrderId` guardado. Poll del POS y cron con `get_order_status`.
+- `amount` (capital) no frena la aprobación; si difiere del precio queda marcado. Datos del crédito en `audit_logs` (`directo_payment_approved`).
+- "Consultar oferta": `rating` + `deadlines`, sólo a pedido del cajero, tope de 20 por hora por negocio.
+- No implementado: `get_by_dni_type` en la UI (el cliente lo tiene, sin uso), cancelación o reversa en Directo.
+
 ## Pendiente de confirmar con Directo
 
 - Duración del token (sólo sabemos que vence con 403).
 - Si `price` admite decimales en string o sólo número (el ejemplo usa número).
 - Cancelación o reversa de una orden y devoluciones: el documento no las describe.
 - Firma del webhook: no hay; siempre se re-consulta por `notification_id`.
+- Si `maximumRate` del scoring es la cantidad máxima de cuotas (así lo mostramos) o una tasa.
+- Código HTTP de un login con credenciales inválidas (tomamos 400, 401 o 403).

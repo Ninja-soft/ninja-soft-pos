@@ -1,18 +1,18 @@
 // =============================================================================
-// Edge Function: directo_webhook · notificaciones + retorno de la orden de
-// Directo (F8 · ADR-041). verify_jwt = false (la llaman Directo y el
-// navegador del cliente).
+// Edge Function: directo_webhook · notificaciones de órdenes de Directo
+// (F8 · ADR-181, API Ecommerce 2.0). verify_jwt = false (la llama Directo, vía
+// hooks.soft.ninja/directo).
 //
-//   * GET ?view=success|failed → pantalla neutra de retorno
-//     (Return_Url_Success / Return_Url_Error). No confirma nada: el POS se
-//     entera por su poll.
-//   * POST ?intent=<uuid> → Notify_Url de la orden, cuerpo
-//     { notification_id }. NUNCA confía en el cuerpo: el id sólo indica qué
-//     notificación re-consultar (GET api/merchant/notification/{id}) con las
-//     credenciales del tenant. Acredita sólo status Successful +
-//     merchant_Order_Id = intent + monto exacto si Directo lo informa.
-//     Idempotente (updates condicionales; un intent approved no se toca).
-//     Siempre 200 para que Directo no reintente en loop.
+//   * POST ?intent=<uuid> → notifyUrl de la orden, cuerpo { notification_id }.
+//     NUNCA confía en el cuerpo: el id sólo indica qué notificación
+//     re-consultar (GET /api/v1/services/get_by_notification/{id}) con la
+//     credencial del negocio (o sucursal) con la que se creó el cobro. Acredita
+//     sólo status Success + merchantOrderId = el de la orden guardada en el
+//     intent. Cancel → cancelled; Pending → sigue. Idempotente (updates
+//     condicionales; un intent approved no se toca). Siempre 200 para que
+//     Directo no reintente en loop.
+//   * GET ?view=success|failed → pantalla neutra para órdenes viejas (ADR-041)
+//     que todavía apuntan acá. Las nuevas regresan a /pagar/listo.
 // =============================================================================
 import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
@@ -38,7 +38,7 @@ Deno.serve(withWebhookLog("directo", "directo_webhook", async (req: Request, wh)
       return html("<h1>Pago no completado</h1><p>Avisale al cajero para reintentar el cobro.</p>");
     }
     return html(
-      "<h1>¡Listo!</h1><p>Si Directo aprobó el pago, la venta se registra sola en el mostrador. Podés cerrar esta pantalla.</p>",
+      "<h1>¡Listo!</h1><p>Si Directo aprobó el crédito, la venta se registra sola en el mostrador. Podés cerrar esta pantalla.</p>",
     );
   }
   if (req.method !== "POST") return new Response("method_not_allowed", { status: 405 });
@@ -70,6 +70,12 @@ Deno.serve(withWebhookLog("directo", "directo_webhook", async (req: Request, wh)
     const row = data as IntentRow | null;
     if (row) wh.tenant(row.tenant_id);
     if (!row || row.status === "approved") return ok(); // idempotente
+    if (!row.preference_id) {
+      // Orden sin merchantOrderId guardado (vieja o creación cortada): no hay
+      // contra qué verificar.
+      wh.fail("intent sin merchantOrderId");
+      return ok();
+    }
 
     // ADR-057: la conexión (negocio o sucursal) con la que se creó el cobro.
     const creds = await loadCreds(admin, row.tenant_id, {
@@ -80,10 +86,12 @@ Deno.serve(withWebhookLog("directo", "directo_webhook", async (req: Request, wh)
       return ok();
     }
 
-    const res = await syncIntent(admin, row, creds, "webhook", notificationId, null);
+    const res = await syncIntent(admin, row, creds, "webhook", null, notificationId);
     if ("error" in res) {
       console.error("directo_webhook", res.error, res.detail ?? "");
       wh.fail(`Directo: ${String(res.error)}`);
+    } else if (res.state === "order_mismatch") {
+      wh.fail("la notificación es de otra orden");
     } else {
       wh.done();
     }

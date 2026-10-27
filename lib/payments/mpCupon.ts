@@ -2,6 +2,11 @@
 // textos y validación del lado del POS. Puro (sin React ni Supabase) para
 // testearlo. El servidor (Edge mp_cupon) vuelve a validar todo.
 
+import { checkCuponAmount, type CuponLimit } from "@/supabase/functions/_shared/mpCupon";
+import { formatCurrency } from "@/lib/utils/format";
+
+export { checkCuponAmount, type CuponLimit, type CuponLimits } from "@/supabase/functions/_shared/mpCupon";
+
 export type CuponMethod = "rapipago" | "pagofacil";
 
 export const CUPON_METHOD_LABEL: Record<CuponMethod, string> = {
@@ -64,6 +69,10 @@ export function cuponErrorCopy(code: string): string | null {
       return "Elegí Rapipago o Pago Fácil.";
     case "mp_cupon_auth_failed":
       return "Mercado Pago rechazó la conexión. Reconectala en Configuración → Medios de pago → Mercado Pago.";
+    case "mp_cupon_amount_above_max":
+      return "El total supera el máximo que Mercado Pago permite para un cupón en efectivo. Cobrá con otro medio o dividí el pago.";
+    case "mp_cupon_amount_below_min":
+      return "El total es menor al mínimo que Mercado Pago permite para un cupón en efectivo.";
     case "mp_cupon_forbidden":
       return "Mercado Pago no habilitó los cupones de pago en efectivo para esta cuenta. La conexión sigue bien para QR y Point; consultá a Mercado Pago o cobrá con otro medio.";
     case "mp_cupon_payer_rejected":
@@ -72,6 +81,24 @@ export function cuponErrorCopy(code: string): string | null {
       return "Mercado Pago no acepta este monto para un cupón en efectivo. Probá con otro medio.";
     case "mp_cupon_method_unavailable":
       return "Este medio no está disponible en tu cuenta de Mercado Pago. Probá con el otro.";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Aviso del tope de monto para el medio elegido (null = el total entra o no
+ * hay datos). El servidor vuelve a validar con los mismos datos.
+ */
+export function cuponLimitWarning(amount: number, method: CuponMethod, limit: CuponLimit | null): string | null {
+  const where = CUPON_METHOD_LABEL[method];
+  switch (checkCuponAmount(amount, limit)) {
+    case "above_max":
+      return `${where} acepta cupones de hasta ${formatCurrency(limit!.max!)} en tu cuenta de Mercado Pago. Cobrá con otro medio o dividí el pago.`;
+    case "below_min":
+      return `${where} acepta cupones desde ${formatCurrency(limit!.min!)}.`;
+    case "inactive":
+      return `${where} no está disponible en tu cuenta de Mercado Pago.`;
     default:
       return null;
   }

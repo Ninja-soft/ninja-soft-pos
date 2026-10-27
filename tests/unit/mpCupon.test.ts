@@ -3,15 +3,17 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCuponOrderBody,
+  checkCuponAmount,
   cuponErrorCode,
   mpErrorSummary,
+  parseCuponLimits,
   parsePayer,
   parseVoucher,
   splitName,
   CUPON_EXPIRATION,
 } from "@/supabase/functions/_shared/mpCupon";
 import { resolveOrder } from "@/supabase/functions/_shared/mpOrders";
-import { cuponErrorCopy, cuponExpiryLabel, formatBarcode, validateCuponPayer } from "@/lib/payments/mpCupon";
+import { cuponErrorCopy, cuponExpiryLabel, cuponLimitWarning, formatBarcode, validateCuponPayer } from "@/lib/payments/mpCupon";
 import { defaultTtlMinutes, extendOptions, PROVIDER_MAX_TTL_MINUTES } from "@/modules/pending-charges/logic";
 import { providerFeature } from "@/lib/payments/providerFeature";
 import { paymentIcon } from "@/lib/payments/logos";
@@ -164,5 +166,40 @@ describe("POS", () => {
       resolveTenders({ providers: [mp], features: f, hasCustomer: false, storeCreditBalance: 0 }).map((x) => x.id);
     expect(ids({ mercado_pago: true, cupones_efectivo: true })).toContain("mercadopago:cupon");
     expect(ids({ mercado_pago: true, cupones_efectivo: false })).not.toContain("mercadopago:cupon");
+  });
+});
+
+describe("topes de monto", () => {
+  const methods = [
+    { id: "visa", payment_type_id: "credit_card", status: "active", min_allowed_amount: 0.5, max_allowed_amount: 99999999 },
+    { id: "rapipago", payment_type_id: "ticket", status: "active", min_allowed_amount: 50, max_allowed_amount: 1000000 },
+    { id: "pagofacil", payment_type_id: "ticket", status: "inactive", min_allowed_amount: 50, max_allowed_amount: 1000000 },
+  ];
+
+  it("lee Rapipago y Pago Fácil de /v1/payment_methods", () => {
+    const l = parseCuponLimits(methods);
+    expect(l.rapipago).toEqual({ min: 50, max: 1000000, active: true });
+    expect(l.pagofacil?.active).toBe(false);
+    expect(parseCuponLimits(null)).toEqual({ rapipago: null, pagofacil: null });
+    expect(parseCuponLimits([{ id: "rapipago" }]).rapipago).toEqual({ min: null, max: null, active: true });
+  });
+
+  it("valida el monto contra el tope", () => {
+    const l = parseCuponLimits(methods);
+    expect(checkCuponAmount(258400, l.rapipago)).toBe("ok");
+    expect(checkCuponAmount(1000000, l.rapipago)).toBe("ok");
+    expect(checkCuponAmount(2523490, l.rapipago)).toBe("above_max");
+    expect(checkCuponAmount(10, l.rapipago)).toBe("below_min");
+    expect(checkCuponAmount(1000, l.pagofacil)).toBe("inactive");
+    // Sin datos no se frena: decide Mercado Pago.
+    expect(checkCuponAmount(99999999, null)).toBe("ok");
+  });
+
+  it("aviso del POS", () => {
+    const l = parseCuponLimits(methods);
+    expect(cuponLimitWarning(2523490, "rapipago", l.rapipago)).toMatch(/Rapipago acepta cupones de hasta \$\s?1\.000\.000/);
+    expect(cuponLimitWarning(1000, "rapipago", l.rapipago)).toBeNull();
+    expect(cuponLimitWarning(1000, "pagofacil", l.pagofacil)).toMatch(/no está disponible/);
+    expect(cuponErrorCopy("mp_cupon_amount_above_max")).toMatch(/máximo/);
   });
 });

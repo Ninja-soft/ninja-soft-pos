@@ -21,12 +21,13 @@ import { createClient } from "@/lib/supabase/client";
 import {
   CUPON_METHOD_LABEL,
   cuponExpiryLabel,
+  cuponLimitWarning,
   formatBarcode,
   validateCuponPayer,
   type CuponMethod,
   type CuponPayerErrors,
 } from "@/lib/payments/mpCupon";
-import type { MpCuponPayer, MpCuponVoucher } from "@/modules/pos/api";
+import { posApi, type MpCuponPayer, type MpCuponVoucher } from "@/modules/pos/api";
 
 // Logo chico de dónde paga el cliente: Rapipago no tiene isotipo (va su logo
 // en lugar del texto); Pago Fácil, su ícono cuadrado junto al nombre.
@@ -39,11 +40,14 @@ function methodOption(m: CuponMethod) {
 }
 
 export function CuponPayerForm({
+  amount,
   customerId,
   customerName,
   customerEmail,
   onSubmit,
 }: {
+  /** Total del cupón: se compara con el tope del medio en la cuenta. */
+  amount: number;
   customerId: string | null;
   customerName: string | null;
   customerEmail: string | null;
@@ -69,6 +73,14 @@ export function CuponPayerForm({
       return data as { name: string | null; email: string | null; document_number: string | null } | null;
     },
   });
+  // Topes de Rapipago y Pago Fácil en la cuenta de Mercado Pago.
+  const { data: limits } = useQuery({
+    queryKey: ["mp-cupon-limits"],
+    queryFn: () => posApi.mpCuponLimits(),
+    staleTime: 10 * 60_000,
+  });
+  const limitWarning = cuponLimitWarning(amount, method, limits?.[method] ?? null);
+
   useEffect(() => {
     if (!customer) return;
     setEmail((v) => v || customer.email || "");
@@ -78,6 +90,7 @@ export function CuponPayerForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (limitWarning) return;
     const errs = validateCuponPayer({ email, name, docNumber: doc });
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -98,6 +111,11 @@ export function CuponPayerForm({
         options={(Object.keys(CUPON_METHOD_LABEL) as CuponMethod[]).map(methodOption)}
         onChange={setMethod}
       />
+      {limitWarning && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {limitWarning}
+        </p>
+      )}
       <Input
         label="Email del cliente"
         type="email"
@@ -122,7 +140,7 @@ export function CuponPayerForm({
         error={errors.docNumber}
         onChange={(e) => setDoc(e.target.value)}
       />
-      <Button type="submit" className="w-full">
+      <Button type="submit" className="w-full" disabled={Boolean(limitWarning)}>
         Generar cupón
       </Button>
     </form>

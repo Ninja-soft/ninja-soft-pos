@@ -167,6 +167,43 @@ export function parseVoucher(order: unknown, createdAt: Date = new Date()): Vouc
   return null;
 }
 
+// ── Topes de monto ───────────────────────────────────────────────────────────
+
+/** Rango que Mercado Pago acepta para el cupón en esta cuenta (GET /v1/payment_methods). */
+export type CuponLimit = { min: number | null; max: number | null; active: boolean };
+export type CuponLimits = Record<CuponMethod, CuponLimit | null>;
+
+const num = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : Number.NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/** Topes de Rapipago y Pago Fácil a partir de GET /v1/payment_methods (null = no informado). */
+export function parseCuponLimits(methods: unknown): CuponLimits {
+  const out: CuponLimits = { rapipago: null, pagofacil: null };
+  if (!Array.isArray(methods)) return out;
+  for (const m of methods) {
+    if (!isObj(m) || !isCuponMethod(m.id)) continue;
+    out[m.id] = {
+      min: num(m.min_allowed_amount),
+      max: num(m.max_allowed_amount),
+      active: m.status === undefined || m.status === "active",
+    };
+  }
+  return out;
+}
+
+export type CuponAmountCheck = "ok" | "below_min" | "above_max" | "inactive";
+
+/** ¿El monto entra en el rango del medio? Sin datos del medio, no se frena (decide Mercado Pago). */
+export function checkCuponAmount(amount: number, limit: CuponLimit | null): CuponAmountCheck {
+  if (!limit) return "ok";
+  if (!limit.active) return "inactive";
+  if (limit.min !== null && amount < limit.min) return "below_min";
+  if (limit.max !== null && amount > limit.max) return "above_max";
+  return "ok";
+}
+
 /**
  * Resumen del error de la Orders API para la auditoría: sólo códigos y
  * mensajes de `errors[]` (o `error` / `message`), recortados. Nunca el cuerpo

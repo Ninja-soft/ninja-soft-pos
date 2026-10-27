@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { CloseCount } from "@/lib/cash/arqueo";
+import type { CuponLimits } from "@/lib/payments/mpCupon";
 import { emitirVentaEnSegundoPlano } from "@/modules/arca/api";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
@@ -1723,6 +1724,17 @@ export const posApi = {
       throw new Error((data as { error: string }).error);
     }
     return data as MpCuponStatus;
+  },
+
+  // Topes de monto de Rapipago y Pago Fácil en la cuenta (null = no se pudo
+  // consultar: no se frena, decide Mercado Pago).
+  mpCuponLimits: async (): Promise<CuponLimits | null> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_cupon", {
+      body: { action: "limits", ...posStoreBody() },
+    });
+    if (error) return null;
+    return ((data as { limits?: CuponLimits | null })?.limits ?? null) as CuponLimits | null;
   },
 
   // Anula el cupón en Mercado Pago mientras no se pagó (best-effort).

@@ -14,7 +14,9 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
+import { ThemedLogo } from "@/components/ui/ThemedLogo";
 import { useToast } from "@/components/ui/Toast";
+import { paymentIcon, paymentWordmark } from "@/lib/payments/logos";
 import { createClient } from "@/lib/supabase/client";
 import {
   CUPON_METHOD_LABEL,
@@ -25,6 +27,16 @@ import {
   type CuponPayerErrors,
 } from "@/lib/payments/mpCupon";
 import type { MpCuponPayer, MpCuponVoucher } from "@/modules/pos/api";
+
+// Logo chico de dónde paga el cliente: Rapipago no tiene isotipo (va su logo
+// en lugar del texto); Pago Fácil, su ícono cuadrado junto al nombre.
+function methodOption(m: CuponMethod) {
+  const label = CUPON_METHOD_LABEL[m];
+  const word = paymentWordmark(m);
+  const icon = paymentIcon(m);
+  if (word && !icon) return { value: m, label, preview: <ThemedLogo src={word} alt={label} className="h-3.5 w-auto" /> };
+  return { value: m, label, icon: icon ? <ThemedLogo src={icon} alt="" className="h-[18px] w-[18px] rounded-[4px]" /> : undefined };
+}
 
 export function CuponPayerForm({
   customerId,
@@ -83,7 +95,7 @@ export function CuponPayerForm({
         fill
         aria-label="Dónde paga el cliente"
         value={method}
-        options={(Object.keys(CUPON_METHOD_LABEL) as CuponMethod[]).map((m) => ({ value: m, label: CUPON_METHOD_LABEL[m] }))}
+        options={(Object.keys(CUPON_METHOD_LABEL) as CuponMethod[]).map(methodOption)}
         onChange={setMethod}
       />
       <Input

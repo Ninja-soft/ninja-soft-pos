@@ -46,17 +46,24 @@ const FILE_PREFIX: Record<string, string> = {
   // el isotipo "go" de su SVG oficial (sólo el círculo, sin halo ni sombra);
   // la variante oscura pasa el texto negro a blanco.
   dlocalgo: "dlocalgo",
+  // Cupón de Mercado Pago (ADR-180): dónde paga el cliente. Rapipago: logo
+  // oficial de rapipago.com.ar (blanco con el trazo magenta, para fondo
+  // oscuro); la variante clara pasa el texto blanco a casi negro. No tiene
+  // isotipo. Pago Fácil: su ícono cuadrado oficial (pagofacil.com.ar, SVG),
+  // que ya es la marca completa.
+  rapipago: "rapipago",
+  pagofacil: "pagofacil",
 };
 
 // Marcas sin logo horizontal propio (son genéricos).
-const NO_WORDMARK = new Set(["cash", "transfer"]);
+const NO_WORDMARK = new Set(["cash", "transfer", "pagofacil"]);
 
 // Marcas sin isotipo oficial (paymentIcon devuelve null: respaldo genérico).
-const NO_ICON = new Set<string>();
+const NO_ICON = new Set<string>(["rapipago"]);
 
 // Logos con versión para fondo oscuro (los demás se leen bien en ambos).
 const ICON_ON_DARK = new Set(["transfer", "payway", "clover", "ualabis", "viumi"]);
-const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo", "viumi", "dlocalgo"]);
+const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover", "ualabis", "talo", "viumi", "dlocalgo", "rapipago"]);
 
 // Canales con logo de producto propio (no el de su marca): la terminal
 // integrada de Fiserv es Clover.

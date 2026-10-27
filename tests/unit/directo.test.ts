@@ -1,325 +1,472 @@
-import { createCipheriv } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  baseHeaders,
+  DIRECTO_BASE,
+  buildFullName,
   buildOrderBody,
+  buildRatingBody,
+  clampTimeoutSeconds,
+  classifyError,
+  clearTokenCache,
   decideIntentUpdate,
   directoClient,
   directoEnv,
+  dniFromDocument,
   extractNotificationId,
+  isAuthFailure,
+  isOfficialBase,
   mapDirectoStatus,
-  merchantHash,
   normalizeBaseUrl,
-  notificationHashPayload,
+  normalizeDni,
   parseCreds,
-  parseLoginResponse,
+  parseDeadlinesResponse,
   parseOrderResponse,
-  pick,
+  parseOrderStatus,
+  parseRatingResponse,
   resolveBaseUrl,
+  sexTypeId,
+  splitCustomerName,
+  tokenUntil,
   type DirectoCreds,
 } from "@/supabase/functions/_shared/directo";
+import { directoErrorCopy } from "@/lib/payments/directo";
 
-const INTENT = "6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f";
-const OTHER = "11111111-2222-4333-8444-555555555555";
-const BASE = "https://api.qa.directo.example/";
-
+const QA = DIRECTO_BASE.qa;
 const CREDS: DirectoCreds = {
-  apiKey: "ak-123",
   username: "comercio",
   password: "secreto",
-  merchantName: "Kiosco Ninja",
-  subscriptionKey: "sub-456",
-  baseUrl: BASE,
+  policyProduct: "62",
+  timeoutMs: 30_000,
+  baseUrl: null,
 };
-
-// Clave/IV de prueba (los reales viven en los secretos de la función).
-const DIRECTO_HASH_KEY_B64 = Buffer.alloc(32, 7).toString("base64");
-const DIRECTO_HASH_IV_B64 = Buffer.alloc(16, 3).toString("base64");
-const HASH = { keyB64: DIRECTO_HASH_KEY_B64, ivB64: DIRECTO_HASH_IV_B64 };
 
 const res = (status: number, body: unknown) =>
   new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
 
-// Mismo cálculo que openssl_encrypt(AES-256-CBC, OPENSSL_RAW_DATA) del plugin.
-function opensslHash(plain: string) {
-  const c = createCipheriv(
-    "aes-256-cbc",
-    Buffer.from(DIRECTO_HASH_KEY_B64, "base64"),
-    Buffer.from(DIRECTO_HASH_IV_B64, "base64"),
-  );
-  return Buffer.concat([c.update(plain, "utf8"), c.final()]).toString("base64");
+type Call = { url: string; init: RequestInit };
+function fakeFetch(handler: (url: string, init: RequestInit, n: number) => Response | Promise<Response>) {
+  const calls: Call[] = [];
+  const f = vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({ url, init: init ?? {} });
+    return handler(url, init ?? {}, calls.length);
+  });
+  return { f, calls };
 }
+const bodyOf = (c: Call) => JSON.parse(String(c.init.body));
+const authOf = (c: Call) => (c.init.headers as Record<string, string>).Authorization;
 
 const ORDER = {
-  amount: 12500.5,
-  merchantOrderId: INTENT,
-  notifyUrl: `https://x.supabase.co/functions/v1/directo_webhook?intent=${INTENT}`,
-  successUrl: "https://x.supabase.co/functions/v1/directo_webhook?view=success",
-  errorUrl: "https://x.supabase.co/functions/v1/directo_webhook?view=failed",
+  amount: 2356.75,
+  fullName: "PEREZ,JUAN CARLOS",
+  dni: "25555777",
+  notifyUrl: "https://hooks.soft.ninja/directo?intent=abc",
+  returnUrlSuccess: "https://pos.soft.ninja/pagar/listo?estado=ok&medio=directo",
+  returnUrlError: "https://pos.soft.ninja/pagar/listo?estado=error&medio=directo",
 };
 
-describe("directo · ambiente y URL base", () => {
-  it("el switch Sandbox elige QA", () => {
+beforeEach(() => clearTokenCache());
+
+describe("directo · hosts y conexión", () => {
+  it("hosts oficiales por ambiente (switch Sandbox = QA)", () => {
+    expect(DIRECTO_BASE.qa).toBe("https://public.qa.directo.com.ar/ecommerce-qa");
+    expect(DIRECTO_BASE.prod).toBe("https://public.pro.directo.com.ar/ecommerce-pro");
     expect(directoEnv(true)).toBe("qa");
     expect(directoEnv(false)).toBe("prod");
-    expect(directoEnv(undefined)).toBe("prod");
+    expect(directoEnv(null)).toBe("prod");
+    expect(resolveBaseUrl("qa", null)).toBe(QA);
+    expect(resolveBaseUrl("prod", "")).toBe(DIRECTO_BASE.prod);
   });
 
-  it("normaliza la URL base con / final y sólo https", () => {
-    expect(normalizeBaseUrl("https://api.directo.example")).toBe("https://api.directo.example/");
-    expect(normalizeBaseUrl(" https://api.directo.example/v2 ")).toBe("https://api.directo.example/v2/");
-    expect(normalizeBaseUrl("http://api.directo.example/")).toBeNull();
-    expect(normalizeBaseUrl("https://u:p@api.directo.example/")).toBeNull();
-    expect(normalizeBaseUrl("https://api.directo.example/?x=1")).toBeNull();
-    expect(normalizeBaseUrl("no es url")).toBeNull();
-    expect(normalizeBaseUrl("")).toBeNull();
+  it("override avanzado: sólo https, normalizado sin barra final", () => {
+    expect(normalizeBaseUrl("https://public.qa.directo.com.ar/ecommerce-qa/")).toBe(QA);
+    expect(normalizeBaseUrl("http://x.com")).toBeNull();
+    expect(normalizeBaseUrl("https://u:p@x.com")).toBeNull();
+    expect(normalizeBaseUrl("https://x.com/?a=1")).toBeNull();
+    expect(resolveBaseUrl("prod", "https://otro.example/api")).toBe("https://otro.example/api");
+    expect(resolveBaseUrl("prod", "http://inseguro")).toBe(DIRECTO_BASE.prod);
+    expect(isOfficialBase(`${QA}/`)).toBe(true);
+    expect(isOfficialBase("https://otro.example")).toBe(false);
   });
 
-  it("usa la URL de la conexión y falla claro si no hay ninguna", () => {
-    expect(resolveBaseUrl("prod", "https://a.example")).toBe("https://a.example/");
-    expect(() => resolveBaseUrl("qa", null)).toThrow("directo_base_url_missing");
-  });
-});
-
-describe("directo · credenciales", () => {
-  it("exige api_key, usuario, contraseña y nombre del comercio", () => {
-    const ok = parseCreds({
-      api_key: " ak ",
-      merchant_username: "u",
-      merchant_password: "p",
-      merchant_name: "N",
-      api_base_url: BASE,
-    });
-    expect(ok).toEqual({
-      apiKey: "ak",
-      username: "u",
-      password: "p",
-      merchantName: "N",
-      subscriptionKey: null,
-      baseUrl: BASE,
-    });
-    expect(parseCreds({ api_key: "ak", merchant_username: "u", merchant_password: "p" })).toBeNull();
+  it("parseCreds 2.0 con policy product y timeout acotado", () => {
+    const c = parseCreds({ username: " u ", password: "p", policy_product: "BNPL", timeout_seconds: "500" });
+    expect(c).toEqual({ username: "u", password: "p", policyProduct: "BNPL", timeoutMs: 120_000, baseUrl: null });
+    expect(parseCreds({ username: "u", password: "p", timeout_seconds: "2" })?.timeoutMs).toBe(5_000);
+    expect(parseCreds({ username: "u", password: "p" })?.timeoutMs).toBe(30_000);
+    expect(parseCreds({ username: "u" })).toBeNull();
     expect(parseCreds(null)).toBeNull();
   });
 
-  it("headers del plugin: ApiKey y la Subscription Key de APIM sólo si existe", () => {
-    expect(baseHeaders(CREDS)).toMatchObject({
-      ApiKey: "ak-123",
-      "Ocp-Apim-Subscription-Key": "sub-456",
-      "Content-Type": "application/json",
+  it("compatibilidad: secretos viejos (ADR-041) se mapean e ignoran api_key, hash y su URL", () => {
+    const c = parseCreds({
+      api_key: "ak",
+      subscription_key: "sk",
+      merchant_name: "Kiosco",
+      merchant_username: "viejo",
+      merchant_password: "clave",
+      api_base_url: "https://gateway.viejo.example/",
     });
-    expect(baseHeaders({ ...CREDS, subscriptionKey: null })).not.toHaveProperty("Ocp-Apim-Subscription-Key");
+    expect(c).toEqual({ username: "viejo", password: "clave", policyProduct: null, timeoutMs: 30_000, baseUrl: null });
+  });
+
+  it("timeout técnico: 30 por defecto, entre 5 y 120", () => {
+    expect(clampTimeoutSeconds(undefined)).toBe(30);
+    expect(clampTimeoutSeconds("abc")).toBe(30);
+    expect(clampTimeoutSeconds(1)).toBe(5);
+    expect(clampTimeoutSeconds(45)).toBe(45);
+    expect(clampTimeoutSeconds(999)).toBe(120);
   });
 });
 
-describe("directo · MerchantHash", () => {
-  it("coincide con openssl AES-256-CBC del plugin oficial", async () => {
-    const plain = notificationHashPayload("tok", "abc-123");
-    expect(await merchantHash(plain, DIRECTO_HASH_KEY_B64, DIRECTO_HASH_IV_B64)).toBe(opensslHash(plain));
-    const body = buildOrderBody({ ...ORDER, token: "tok", merchantName: "Kiosco" });
-    expect(await merchantHash(body, DIRECTO_HASH_KEY_B64, DIRECTO_HASH_IV_B64)).toBe(opensslHash(body));
+describe("directo · comprador", () => {
+  it("fullName APELLIDOS,NOMBRES en mayúsculas y sin comas internas", () => {
+    expect(buildFullName("Pérez", "Juan Carlos")).toBe("PÉREZ,JUAN CARLOS");
+    expect(buildFullName("  de la  Torre ", "ana, maría")).toBe("DE LA TORRE,ANA MARÍA");
+    expect(buildFullName("Pérez", "")).toBeNull();
+    expect(buildFullName("", "Juan")).toBeNull();
   });
 
-  it("sin clave/IV configurados no firma (vienen de los secretos)", async () => {
-    await expect(merchantHash("x")).rejects.toThrow("directo_hash_config");
+  it("splitCustomerName propone apellido y nombres", () => {
+    expect(splitCustomerName("Pérez, Juan Carlos")).toEqual({ lastName: "Pérez", firstName: "Juan Carlos" });
+    expect(splitCustomerName("Juan Carlos Pérez")).toEqual({ lastName: "Pérez", firstName: "Juan Carlos" });
+    expect(splitCustomerName("Pérez")).toEqual({ lastName: "Pérez", firstName: "" });
+    expect(splitCustomerName(null)).toEqual({ lastName: "", firstName: "" });
   });
 
-  it("rechaza una clave o IV de largo inválido", async () => {
-    await expect(merchantHash("x", "AAAA", DIRECTO_HASH_IV_B64)).rejects.toThrow("directo_hash_config");
+  it("DNI desde el documento del cliente", () => {
+    expect(normalizeDni("25.555.777")).toBe("25555777");
+    expect(normalizeDni("12")).toBeNull();
+    expect(dniFromDocument("dni", "25555777")).toBe("25555777");
+    expect(dniFromDocument("cuil", "20-25555777-3")).toBe("25555777");
+    expect(dniFromDocument("cuit", "30712345678")).toBeNull();
+    expect(dniFromDocument("passport", "AB123")).toBeNull();
+  });
+
+  it("sexTypeId: 2/M masculino, 3/F femenino", () => {
+    expect(sexTypeId("M")).toBe("2");
+    expect(sexTypeId("m")).toBe("2");
+    expect(sexTypeId(2)).toBe("2");
+    expect(sexTypeId("F")).toBe("3");
+    expect(sexTypeId("3")).toBe("3");
+    expect(sexTypeId("X")).toBeNull();
   });
 });
 
-describe("directo · cuerpo de la orden", () => {
-  it("mismos campos y orden que el plugin, con el intent como Merchant_Order_Id", () => {
-    const body = buildOrderBody({
-      ...ORDER,
-      token: "tok",
-      merchantName: " Kiosco Ninja ",
-      email: "a@b.com",
-      phone: "+54 9 11 1234-5678",
+describe("directo · cuerpos", () => {
+  it("create_order con la forma del documento (price número, 2 decimales)", () => {
+    const b = buildOrderBody({ ...ORDER, amount: 2356.749, policyProduct: "BNPL" });
+    expect(b).toEqual({
+      price: 2356.75,
+      fullName: "PEREZ,JUAN CARLOS",
+      dni: "25555777",
+      notifyUrl: ORDER.notifyUrl,
+      returnUrlSuccess: ORDER.returnUrlSuccess,
+      returnUrlError: ORDER.returnUrlError,
+      policyProduct: "BNPL",
     });
-    const o = JSON.parse(body);
-    expect(Object.keys(o)).toEqual([
-      "Currency",
-      "Merchant_Name",
-      "Products",
-      "Document",
-      "Phone_Number",
-      "Address",
-      "Description",
-      "Email",
-      "Merchant_Order_Id",
-      "Notify_Url",
-      "Price",
-      "Additional_Data",
-      "Return_Url_Success",
-      "Return_Url_Error",
-      "Merchanthash",
-      "Integration_Type",
+    expect("policyProduct" in buildOrderBody(ORDER)).toBe(false);
+    expect(() => buildOrderBody({ ...ORDER, amount: 0 })).toThrow("invalid_amount");
+    expect(() => buildOrderBody({ ...ORDER, fullName: "PEREZ JUAN" })).toThrow("invalid_full_name");
+    expect(() => buildOrderBody({ ...ORDER, dni: "x" })).toThrow("invalid_dni");
+  });
+
+  it("rating con name, dni, sexTypeId y policyProduct", () => {
+    expect(buildRatingBody({ fullName: "PEREZ,JUAN", dni: "25555777", sex: "M", policyProduct: "62" })).toEqual({
+      name: "PEREZ,JUAN",
+      dni: "25555777",
+      sexTypeId: "2",
+      policyProduct: "62",
+    });
+    expect(() => buildRatingBody({ fullName: "PEREZ,JUAN", dni: "25555777", sex: "" })).toThrow("invalid_sex");
+  });
+
+  it("respuestas de orden, estado, rating y planes", () => {
+    expect(
+      parseOrderResponse({
+        merchantOrderId: "CZQB334059",
+        creationDate: "2024-01-25T11:34:04.0098952",
+        redirectUrl: "https://uat-app.directo.com.ar/compra-cuotas?hash=abc",
+      }),
+    ).toEqual({
+      merchantOrderId: "CZQB334059",
+      creationDate: "2024-01-25T11:34:04.0098952",
+      redirectUrl: "https://uat-app.directo.com.ar/compra-cuotas?hash=abc",
+    });
+    expect(parseOrderResponse({ merchantOrderId: "X", redirectUrl: "http://inseguro" })).toBeNull();
+    expect(parseOrderResponse({ merchantOrderId: "../x", redirectUrl: "https://a" })).toBeNull();
+
+    expect(
+      parseOrderStatus({
+        status: "Success",
+        merchantOrderId: "GSPN891045",
+        installments: "3",
+        installmentAmount: "13232.43",
+        amount: "39697.29",
+        creditNumber: "8698",
+      }),
+    ).toEqual({
+      status: "Success",
+      merchantOrderId: "GSPN891045",
+      installments: 3,
+      installmentAmount: 13232.43,
+      amount: 39697.29,
+      creditNumber: "8698",
+    });
+
+    expect(
+      parseRatingResponse({
+        pendingRequestId: 11222333,
+        offer: [{ maximumAmount: 550000, minimumAmount: 1000, maximumRate: 12 }],
+        campaignMessage: "RENOVADOR",
+      }),
+    ).toEqual({
+      pendingRequestId: "11222333",
+      offers: [{ maximumAmount: 550000, minimumAmount: 1000, maximumRate: 12 }],
+      campaignMessage: "RENOVADOR",
+    });
+
+    const plans = parseDeadlinesResponse({
+      pendingRequestId: 11222333,
+      deadlines: [
+        {
+          quantityRate: 2,
+          amountRate: 25000.03,
+          expirationDate: "2024-07-07T00:00:00",
+          disclaimer: [{ type: "date", content: "se paga la primer cuota hoy" }],
+          plan: [{ expiration: "Hoy!", quote: "1", amount: "25000.03" }],
+          planType: "DEFERRED_PAYMENT",
+        },
+      ],
+    });
+    expect(plans).toEqual([
+      {
+        installments: 2,
+        installmentAmount: 25000.03,
+        planType: "DEFERRED_PAYMENT",
+        disclaimers: ["se paga la primer cuota hoy"],
+        schedule: [{ expiration: "Hoy!", quote: "1", amount: 25000.03 }],
+      },
     ]);
-    expect(o).toMatchObject({
-      Currency: "ARS",
-      Merchant_Name: "Kiosco Ninja",
-      Products: "Compra en Kiosco Ninja",
-      Merchant_Order_Id: INTENT,
-      Price: "12500.50",
-      Additional_Data: "{}",
-      Merchanthash: "tok",
-      Email: "a@b.com",
-      Phone_Number: "+5491112345678",
-      Notify_Url: ORDER.notifyUrl,
-    });
-  });
-
-  it("monto inválido no arma orden", () => {
-    expect(() => buildOrderBody({ ...ORDER, amount: 0, token: "t", merchantName: "N" })).toThrow("invalid_amount");
-    expect(() => buildOrderBody({ ...ORDER, amount: NaN, token: "t", merchantName: "N" })).toThrow("invalid_amount");
-  });
-
-  it("sin email ni teléfono viajan null", () => {
-    const o = JSON.parse(buildOrderBody({ ...ORDER, token: "t", merchantName: "N" }));
-    expect(o.Email).toBeNull();
-    expect(o.Phone_Number).toBeNull();
   });
 });
 
-describe("directo · respuestas", () => {
-  it("login devuelve credentials", () => {
-    expect(parseLoginResponse({ credentials: "tok" })).toBe("tok");
-    expect(parseLoginResponse({ Credentials: "tok2" })).toBe("tok2");
-    expect(parseLoginResponse({})).toBeNull();
-  });
-
-  it("orden devuelve redirect_Url https", () => {
-    expect(parseOrderResponse({ redirect_Url: "https://pay.directo.example/x" })).toEqual({
-      redirectUrl: "https://pay.directo.example/x",
-    });
-    expect(parseOrderResponse({ redirect_Url: "javascript:alert(1)" })).toBeNull();
-    expect(parseOrderResponse({ redirect_Url: "http://pay.directo.example" })).toBeNull();
-    expect(parseOrderResponse(null)).toBeNull();
-  });
-
-  it("pick ignora mayúsculas", () => {
-    expect(pick({ merchant_Order_Id: "a" }, "merchant_order_id")).toBe("a");
-    expect(pick("x", "a")).toBeUndefined();
-  });
-});
-
-describe("directo · webhook", () => {
-  it("el cuerpo sólo aporta el notification_id (validado)", () => {
-    expect(extractNotificationId({ notification_id: "abc-123" })).toBe("abc-123");
-    expect(extractNotificationId({ notification_id: 42 })).toBe("42");
-    expect(extractNotificationId({ notification_id: "../orders" })).toBeNull();
-    expect(extractNotificationId("nada")).toBeNull();
-  });
-
-  it("estados: sólo Successful acredita", () => {
-    expect(mapDirectoStatus("Successful")).toBe("approved");
-    expect(mapDirectoStatus("Approved")).toBe("pending");
+describe("directo · estados y webhook", () => {
+  it("mapea Success / Cancel / Pending", () => {
+    expect(mapDirectoStatus("Success")).toBe("approved");
     expect(mapDirectoStatus("Cancel")).toBe("cancelled");
-    expect(mapDirectoStatus("Rejected")).toBe("rejected");
     expect(mapDirectoStatus("Pending")).toBe("pending");
+    expect(mapDirectoStatus("Successful")).toBe("pending");
     expect(mapDirectoStatus(undefined)).toBe("pending");
   });
-});
 
-describe("directo · decisión sobre la notificación re-consultada", () => {
-  it("acredita Successful con la referencia propia", () => {
-    expect(decideIntentUpdate({ merchant_Order_Id: INTENT, status: "Successful" }, 100, INTENT)).toEqual({
-      status: "approved",
-      state: "Successful",
-      reason: "amount_not_reported",
+  it("notification_id del cuerpo: sólo ids seguros para el path", () => {
+    expect(extractNotificationId({ notification_id: 1255 })).toBe("1255");
+    expect(extractNotificationId({ notification_id: "../x" })).toBeNull();
+    expect(extractNotificationId({})).toBeNull();
+    expect(extractNotificationId("x")).toBeNull();
+  });
+
+  it("aprueba Success sólo con el merchantOrderId de la orden propia", () => {
+    const st = { status: "Success", merchantOrderId: "GSPN891045", installments: "3", amount: "39697.29", creditNumber: "8698" };
+    const ok = decideIntentUpdate(st, { merchantOrderId: "GSPN891045", amount: 39697.29 });
+    expect(ok.status).toBe("approved");
+    expect(ok.credit).toEqual({
+      credit_number: "8698",
+      installments: 3,
+      installment_amount: null,
+      capital: 39697.29,
+      capital_differs: false,
     });
+    const other = decideIntentUpdate(st, { merchantOrderId: "OTRA", amount: 39697.29 });
+    expect(other).toEqual({ status: "pending", state: "Success", reason: "order_mismatch" });
   });
 
-  it("ignora notificaciones de otra orden", () => {
-    expect(decideIntentUpdate({ merchant_Order_Id: OTHER, status: "Successful" }, 100, INTENT)).toMatchObject({
-      status: "pending",
-      reason: "reference_mismatch",
-    });
+  it("capital distinto del precio: aprueba y lo marca (ADR-181)", () => {
+    const d = decideIntentUpdate(
+      { status: "Success", merchantOrderId: "A1", amount: "30000" },
+      { merchantOrderId: "A1", amount: 39697.29 },
+    );
+    expect(d.status).toBe("approved");
+    expect(d.credit?.capital_differs).toBe(true);
   });
 
-  it("si informa monto, tiene que ser exacto", () => {
-    expect(
-      decideIntentUpdate({ merchant_Order_Id: INTENT, status: "Successful", price: "100.00" }, 100, INTENT),
-    ).toEqual({ status: "approved", state: "Successful" });
-    expect(
-      decideIntentUpdate({ merchant_Order_Id: INTENT, status: "Successful", Price: 99.5 }, 100, INTENT),
-    ).toMatchObject({ status: "rejected", reason: "amount_mismatch" });
-  });
-
-  it("Cancel cancela y lo desconocido queda pendiente", () => {
-    expect(decideIntentUpdate({ merchant_Order_Id: INTENT, status: "Cancel" }, 100, INTENT).status).toBe(
+  it("Cancel cancela y Pending sigue esperando", () => {
+    expect(decideIntentUpdate({ status: "Cancel", merchantOrderId: "A1" }, { merchantOrderId: "A1", amount: 1 }).status).toBe(
       "cancelled",
     );
-    expect(decideIntentUpdate({ merchant_Order_Id: INTENT, status: "InProgress" }, 100, INTENT).status).toBe(
+    expect(decideIntentUpdate({ status: "Pending", merchantOrderId: "A1" }, { merchantOrderId: "A1", amount: 1 }).status).toBe(
       "pending",
     );
-    expect(decideIntentUpdate(null, 100, INTENT).status).toBe("pending");
+    expect(decideIntentUpdate(null, { merchantOrderId: "A1", amount: 1 }).status).toBe("pending");
+  });
+});
+
+describe("directo · errores", () => {
+  it("clasifica los mensajes del documento", () => {
+    expect(classifyError(400, "Invalid Person")).toBe("directo_invalid_person");
+    expect(classifyError(400, "policyProduct field is spected")).toBe("directo_policy_required");
+    expect(classifyError(404, "Rejected")).toBe("directo_rejected");
+    expect(classifyError(404, "InvalidPlan")).toBe("directo_invalid_plan");
+    expect(classifyError(404, "No Installments found")).toBe("directo_no_installments");
+    expect(classifyError(400, "Invalid Request")).toBe("directo_invalid_request");
+    expect(classifyError(500, "Comunication error")).toBe("directo_error");
+    expect(classifyError(403, "http_403")).toBe("directo_auth_failed");
+    expect(classifyError(0, "timeout")).toBe("directo_timeout");
+    expect(classifyError(0, "network")).toBe("directo_unreachable");
+    expect(isAuthFailure(401)).toBe(true);
+    expect(isAuthFailure(500)).toBe(false);
+  });
+
+  it("cada código tiene copy en castellano", () => {
+    for (const code of [
+      "directo_invalid_person",
+      "directo_policy_required",
+      "directo_rejected",
+      "directo_invalid_plan",
+      "directo_no_installments",
+      "directo_auth_failed",
+      "directo_timeout",
+      "directo_buyer_required",
+      "directo_rate_limited",
+    ]) {
+      expect(directoErrorCopy(code)).toBeTruthy();
+    }
+    expect(directoErrorCopy("otra_cosa")).toBeNull();
   });
 });
 
 describe("directo · cliente HTTP", () => {
-  it("login una vez por invocación, orden firmada y notificación firmada", async () => {
-    const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      calls.push({ url, init: init ?? {} });
-      if (url.endsWith("api/merchant/login")) return res(200, { credentials: "tok" });
-      if (url.endsWith("api/merchant/orders")) return res(200, { redirect_Url: "https://pay.example/o/1" });
-      return res(200, { merchant_Order_Id: INTENT, status: "Successful" });
+  it("login + create_order con Bearer, cuerpo oficial y token cacheado", async () => {
+    const { f, calls } = fakeFetch((url) => {
+      if (url.endsWith("/api/v1/auth/token")) return res(200, { token: "tok-1" });
+      return res(200, { merchantOrderId: "CZQB334059", creationDate: "x", redirectUrl: "https://uat-app.directo.com.ar/c" });
     });
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
+    const c = directoClient({ creds: CREDS, env: "qa", fetchImpl: f });
+    const r = await c.createOrder(ORDER);
+    expect(r).toEqual({
+      ok: true,
+      value: { merchantOrderId: "CZQB334059", creationDate: "x", redirectUrl: "https://uat-app.directo.com.ar/c" },
+    });
+    expect(calls[0]!.url).toBe(`${QA}/api/v1/auth/token`);
+    expect(bodyOf(calls[0]!)).toEqual({ username: "comercio", password: "secreto" });
+    expect(calls[1]!.url).toBe(`${QA}/api/v1/services/create_order`);
+    expect(authOf(calls[1]!)).toBe("Bearer tok-1");
+    expect(bodyOf(calls[1]!)).toMatchObject({ price: 2356.75, fullName: "PEREZ,JUAN CARLOS", dni: "25555777", policyProduct: "62" });
+    const h = calls[1]!.init.headers as Record<string, string>;
+    expect(h.ApiKey).toBeUndefined();
+    expect(h.MerchantHash).toBeUndefined();
 
-    const order = await client.createOrder(ORDER);
-    expect(order).toEqual({ ok: true, value: { redirectUrl: "https://pay.example/o/1" } });
-    const n = await client.getNotification("n-1");
-    expect(n.ok).toBe(true);
+    // Segunda llamada: reutiliza el token (sin otro login).
+    await c.getOrderStatus("CZQB334059");
+    expect(calls.filter((x) => x.url.endsWith("/auth/token"))).toHaveLength(1);
+    expect(calls[2]!.url).toBe(`${QA}/api/v1/services/get_order_status/CZQB334059`);
+  });
 
-    expect(calls.map((c) => c.url)).toEqual([
-      `${BASE}api/merchant/login`,
-      `${BASE}api/merchant/orders`,
-      `${BASE}api/merchant/notification/n-1`,
+  it("403 = token vencido: re-login y un solo reintento", async () => {
+    let logins = 0;
+    const { f, calls } = fakeFetch((url) => {
+      if (url.endsWith("/auth/token")) return res(200, { token: `tok-${++logins}` });
+      const auth = (calls[calls.length - 1]!.init.headers as Record<string, string>).Authorization;
+      return auth === "Bearer tok-1" ? res(403, "") : res(200, { status: "Pending", merchantOrderId: "A1" });
+    });
+    const c = directoClient({ creds: CREDS, env: "prod", fetchImpl: f });
+    const r = await c.getOrderStatus("A1");
+    expect(r.ok).toBe(true);
+    expect(logins).toBe(2);
+    expect(calls.map((x) => x.url.replace(DIRECTO_BASE.prod, ""))).toEqual([
+      "/api/v1/auth/token",
+      "/api/v1/services/get_order_status/A1",
+      "/api/v1/auth/token",
+      "/api/v1/services/get_order_status/A1",
     ]);
-    const [login, create, notif] = calls as [(typeof calls)[0], (typeof calls)[0], (typeof calls)[0]];
-    expect(JSON.parse(String(login.init.body))).toEqual({ user: "comercio", password: "secreto" });
-
-    const orderHeaders = create.init.headers as Record<string, string>;
-    expect(orderHeaders.Credentials).toBe("tok");
-    expect(orderHeaders.ApiKey).toBe("ak-123");
-    expect(orderHeaders.MerchantHash).toBe(opensslHash(String(create.init.body)));
-
-    const nHeaders = notif.init.headers as Record<string, string>;
-    expect(notif.init.method).toBe("GET");
-    expect(nHeaders.MerchantHash).toBe(opensslHash(notificationHashPayload("tok", "n-1")));
   });
 
-  it("login fallido corta antes de crear la orden", async () => {
-    const fetchImpl = vi.fn(async () => res(401, "unauthorized"));
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
-    expect(await client.createOrder(ORDER)).toMatchObject({ ok: false, httpStatus: 401 });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  it("403 persistente: no reintenta en loop", async () => {
+    const { f, calls } = fakeFetch((url) => (url.endsWith("/auth/token") ? res(200, { token: "t" }) : res(403, "")));
+    const r = await directoClient({ creds: CREDS, env: "qa", fetchImpl: f }).getOrderStatus("A1");
+    expect(r).toEqual({ ok: false, httpStatus: 403, detail: "http_403" });
+    expect(calls).toHaveLength(4);
   });
 
-  it("orden sin redirect_Url es error", async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      url.endsWith("login") ? res(200, { credentials: "tok" }) : res(200, { ok: true }),
+  it("login rechazado devuelve el HTTP para no guardar credenciales", async () => {
+    const { f } = fakeFetch(() => res(401, { status: "Error", message: "Unauthorized" }));
+    const t = await directoClient({ creds: CREDS, env: "qa", fetchImpl: f }).token(true);
+    expect(t).toEqual({ ok: false, httpStatus: 401, detail: "Unauthorized" });
+  });
+
+  it("timeout técnico por AbortController", async () => {
+    let signal: AbortSignal | undefined;
+    const f = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_res, rej) => {
+          signal = init?.signal ?? undefined;
+          signal?.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" })));
+        }),
     );
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
-    expect(await client.createOrder(ORDER)).toMatchObject({ ok: false, detail: "order_without_redirect_url" });
+    // timeoutMs viene de parseCreds (5..120 s); acá se acorta para el test.
+    const r = await directoClient({ creds: { ...CREDS, timeoutMs: 30 }, env: "qa", fetchImpl: f }).token(true);
+    expect(r).toEqual({ ok: false, httpStatus: 0, detail: "timeout" });
+    expect(signal?.aborted).toBe(true);
   });
 
-  it("no consulta ids de notificación inválidos", async () => {
-    const fetchImpl = vi.fn();
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
-    expect(await client.getNotification("../x")).toMatchObject({ ok: false, httpStatus: 400 });
-    expect(fetchImpl).not.toHaveBeenCalled();
-  });
-
-  it("error de red se informa como 502", async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error("boom");
+  it("errores de rating sin exponer el cuerpo crudo", async () => {
+    const { f } = fakeFetch((url) =>
+      url.endsWith("/auth/token") ? res(200, { token: "t" }) : res(404, { status: "Error", message: "Rejected", dni: "25555777" }),
+    );
+    const r = await directoClient({ creds: CREDS, env: "qa", fetchImpl: f }).rating({
+      fullName: "PEREZ,JUAN",
+      dni: "25555777",
+      sex: "F",
     });
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
-    expect(await client.login()).toMatchObject({ ok: false, httpStatus: 502 });
+    expect(r).toEqual({ ok: false, httpStatus: 404, detail: "Rejected" });
+  });
+
+  it("rating + deadlines con los cuerpos del documento", async () => {
+    const { f, calls } = fakeFetch((url) => {
+      if (url.endsWith("/auth/token")) return res(200, { token: "t" });
+      if (url.endsWith("/rating")) return res(200, { pendingRequestId: 11222333, offer: [{ maximumAmount: 550000, minimumAmount: 1000, maximumRate: 12 }] });
+      return res(200, { pendingRequestId: 11222333, deadlines: [{ quantityRate: 3, amountRate: 16666.68 }] });
+    });
+    const c = directoClient({ creds: CREDS, env: "qa", fetchImpl: f });
+    const o = await c.rating({ fullName: "PEREZ,JUAN", dni: "25555777", sex: "F" });
+    expect(o.ok && o.value.pendingRequestId).toBe("11222333");
+    expect(bodyOf(calls[1]!)).toEqual({ name: "PEREZ,JUAN", dni: "25555777", sexTypeId: "3", policyProduct: "62" });
+    const d = await c.deadlines(50000, "11222333");
+    expect(d.ok && d.value[0]?.installments).toBe(3);
+    expect(bodyOf(calls[2]!)).toEqual({ amount: 50000, pendingRequestId: "11222333" });
+  });
+
+  it("webhook: re-consulta get_by_notification y valida la orden", async () => {
+    const { f, calls } = fakeFetch((url) =>
+      url.endsWith("/auth/token")
+        ? res(200, { token: "t" })
+        : res(200, { status: "Success", merchantOrderId: "GSPN891045", installments: "3", creditNumber: "8698" }),
+    );
+    const c = directoClient({ creds: CREDS, env: "prod", fetchImpl: f });
+    const id = extractNotificationId({ notification_id: 1255 })!;
+    const r = await c.getByNotification(id);
+    expect(calls[1]!.url).toBe(`${DIRECTO_BASE.prod}/api/v1/services/get_by_notification/1255`);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(decideIntentUpdate(r.value, { merchantOrderId: "GSPN891045", amount: 100 }).status).toBe("approved");
+    expect(decideIntentUpdate(r.value, { merchantOrderId: "AJENA", amount: 100 }).reason).toBe("order_mismatch");
+    expect((await c.getByNotification("../../x")).ok).toBe(false);
+  });
+
+  it("buscar persona con sexTypeId y DNI en la query", async () => {
+    const { f, calls } = fakeFetch((url) =>
+      url.endsWith("/auth/token") ? res(200, { token: "t" }) : res(200, { names: [{ firstName: "MARIA", lastName: "VILLALBA" }] }),
+    );
+    const r = await directoClient({ creds: CREDS, env: "qa", fetchImpl: f }).findPerson("37.893.234", "F");
+    expect(calls[1]!.url).toBe(`${QA}/api/v1/services/get_by_dni_type?sexTypeId=3&dni=37893234`);
+    expect(r).toEqual({ ok: true, value: [{ firstName: "MARIA", lastName: "VILLALBA" }] });
+  });
+});
+
+describe("directo · vencimiento del token", () => {
+  it("usa exp del JWT (menos 1 minuto) o 30 minutos", () => {
+    const now = 1_700_000_000_000;
+    const payload = Buffer.from(JSON.stringify({ exp: now / 1000 + 3600 })).toString("base64url");
+    expect(tokenUntil(`h.${payload}.s`, now)).toBe(now + 3600_000 - 60_000);
+    expect(tokenUntil("opaco", now)).toBe(now + 30 * 60_000);
   });
 });

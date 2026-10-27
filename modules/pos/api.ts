@@ -230,6 +230,25 @@ export interface TaloStatus {
   cvu?: string | null;
   alias?: string | null;
 }
+
+// Directo (ADR-181): comprador de la orden y resultado de "Consultar oferta".
+export interface DirectoBuyer {
+  dni: string;
+  last_name: string;
+  first_name: string;
+}
+export interface DirectoOfferResult {
+  offers: { maximumAmount: number | null; minimumAmount: number | null; maximumRate: number | null }[];
+  campaign_message: string | null;
+  amount_in_range: boolean;
+  plans: {
+    installments: number | null;
+    installmentAmount: number | null;
+    planType: string | null;
+    disclaimers: string[];
+  }[];
+  plans_error: string | null;
+}
 // payment_plans.valid_from / valid_until (H27) aún no están en los tipos
 // generados (no se regeneran en este PR): se intersectan acá. NULL = sin límite.
 export type PaymentPlan = Tables<"payment_plans"> & {
@@ -1384,17 +1403,26 @@ export const posApi = {
     });
   },
 
-  // ── Directo (ADR-041): orden de la API de comercios como QR + link ─────────
-  // create devuelve el redirect_Url como init_point. La confirmación llega por
-  // el webhook (directo_webhook); status re-verifica contra Directo cuando ya
-  // hay una notificación conocida.
+  // ── Directo (ADR-181): orden de la API Ecommerce 2.0 como QR + link ───────
+  // create devuelve el redirectUrl como init_point. Directo exige el comprador
+  // (DNI + "APELLIDOS,NOMBRES"): lo confirma el cajero (`buyer`) o sale del
+  // cliente de la venta (`customerId`). La confirmación llega por el webhook
+  // (directo_webhook); status re-consulta la orden en Directo.
   createDirectoLink: async (
     amount: number,
     title: string,
+    opts: { buyer?: DirectoBuyer | null; customerId?: string | null } = {},
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("directo", {
-      body: { action: "create", amount, title, ...posStoreBody() },
+      body: {
+        action: "create",
+        amount,
+        title,
+        ...(opts.buyer ? { buyer: opts.buyer } : {}),
+        ...(opts.customerId ? { customer_id: opts.customerId } : {}),
+        ...posStoreBody(),
+      },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1415,6 +1443,20 @@ export const posApi = {
       throw new Error((data as { error: string }).error);
     }
     return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // "Consultar oferta" (rating + planes): sólo por acción explícita del
+  // cajero; el servidor limita a 20 consultas por hora por negocio.
+  directoOffer: async (input: { buyer: DirectoBuyer; sex: "M" | "F"; amount: number }): Promise<DirectoOfferResult> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("directo", {
+      body: { action: "offer", ...input, ...posStoreBody() },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as DirectoOfferResult;
   },
 
   // Baja local best-effort (si el cliente ya pagó, gana el pago).

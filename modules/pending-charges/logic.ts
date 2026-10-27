@@ -409,6 +409,8 @@ export function pendingChargeErrorCopy(msg: string): string {
     return "Hay cobros en espera en esta caja: elegí qué hacer con ellos.";
   if (m.includes("invalid_ttl")) return "El nuevo vencimiento no es válido para este medio.";
   if (m.includes("unsupported_origin")) return "Las mesas y los pedidos de delivery no se pueden dejar en espera.";
+  if (m.includes("directo_buyer_required"))
+    return "Directo necesita el DNI y el nombre del cliente: asigná a la venta un cliente con DNI (o CUIL) y nombre.";
   return "No se pudo completar la acción.";
 }
 

@@ -1406,7 +1406,7 @@ Archivos: `tailwind.config.ts`, `app/globals.css` (comentario de `bg-fg-*`).
 
 ## ADR-041: Directo por API de comercios (QR + link) con respaldo manual
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración, deploy y validación en QA) · **Hito:** F8 · H21e · **Reemplaza parcialmente:** ADR-034
+**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración, deploy y validación en QA) · **Hito:** F8 · H21e · **Reemplaza parcialmente:** ADR-034 · **Reemplazada en la API por:** ADR-181 (API Ecommerce 2.0; el flujo QR + link y el respaldo manual siguen)
 
 ### Contexto
 
@@ -6584,3 +6584,33 @@ La auditoría IM5 marcó que el recibo de cuenta corriente acepta un solo medio,
 - Pendiente de H160: reglas de medios según el comprobante y por usuario con monto máximo, y la botonera de cobro configurable; arancel, TNA y CFT del plan (no hay columnas todavía); el vuelto en pesos de una venta en dólares anulada en otro turno no vuelve solo al cajón; la devolución parcial de una venta pagada con cheque no toca el cheque.
 - Orden de deploy: migración y después el front (el modal y la configuración leen columnas nuevas).
 - Tests: `tests/unit/h160Cobros.test.ts` (incluye el criterio: $60.000 en efectivo, e-cheq de $38.000 y retención de IIBB de $2.000 cancelan $100.000 y el e-cheq queda en cartera). Sin dry-run en base.
+
+## ADR-181: Directo por la API Ecommerce 2.0 oficial (login con Bearer, comprador con DNI, webhook re-consultado)
+
+**Fecha:** 2026-10-27 · **Estado:** aceptada (sin migración; pendiente de deploy y prueba en QA) · **Hito:** F8 · **Reemplaza:** las suposiciones de API de ADR-041 (el flujo QR + link y el respaldo manual de ADR-034 siguen)
+
+### Contexto
+
+ADR-041 integró Directo infiriendo la API del plugin de WooCommerce (API Key, Subscription Key, MerchantHash AES, URL cargada por el comercio). El dueño consiguió el documento oficial "Documento de integración API (versión Directo 2.0) · Ecommerce" (`docs/payments/directo/IntegracionApiCommerce20.pdf`, resumen en `docs/payments/directo/api-commerce-2.0.md`): otra API, sin API Key ni hash, con hosts fijos y que exige los datos del comprador.
+
+### Decisión
+
+1. **Cliente puro reescrito** (`supabase/functions/_shared/directo.ts`): hosts fijos por ambiente (switch Sandbox = QA `public.qa.directo.com.ar/ecommerce-qa`, si no producción `public.pro.directo.com.ar/ecommerce-pro`); `api_base_url` queda como override avanzado (sólo https). Login `POST /api/v1/auth/token` → Bearer; token en cache por instancia con clave SHA-256 de ambiente + URL + credencial (como Ualá Bis); **403 = token vencido → un login nuevo y un solo reintento**. Timeout técnico con AbortController en cada llamada (30 s por defecto, 5 a 120 configurable).
+2. **Credencial** (`set_payment_secret`, provider `directo`): `{ username, password, policy_product?, timeout_seconds?, api_base_url? }`. Antes de guardar se prueba **sólo el login** en el ambiente elegido (nunca un scoring); si Directo la rechaza (400/401/403) no se guarda, un corte de red no frena el guardado. Compatibilidad: si quedó una credencial vieja con `merchant_username` / `merchant_password`, se usa como usuario y contraseña; `api_key`, `subscription_key`, `merchant_name`, el hash y la URL vieja se ignoran. `DIRECTO_HASH_KEY` / `DIRECTO_HASH_IV` dejan de usarse (si están cargados no molestan).
+3. **Orden desde el POS**: Directo exige `dni` y `fullName` "APELLIDOS,NOMBRES". El checkout de Directo arranca con un paso (`DirectoBuyerStep`) que prellena con el cliente de la venta (`customers.name`, y el DNI de `document_number` si es DNI o el del medio de un CUIL/CUIT de persona) y el cajero confirma o carga DNI, apellido y nombre. `price` = total del cobro (número, 2 decimales), `notifyUrl` = `hooks.soft.ninja/directo?intent=<id>`, regreso a `/pagar/listo?medio=directo`. El `merchantOrderId` que genera Directo queda en `mp_payment_intents.preference_id`; el `redirectUrl` es el init_point (QR + link). En cobros en espera el comprador sale del cliente del cobro (sin cliente con DNI: `directo_buyer_required`).
+4. **Webhook**: nunca se confía en el cuerpo. Con el `notification_id` se llama `get_by_notification` con la credencial (negocio o sucursal) con la que se creó el intent y se exige `merchantOrderId` igual al guardado. `Success` aprueba, `Cancel` cancela, `Pending` (o un estado desconocido) sigue esperando. El poll del POS y `pending_charges_sync` (Directo se suma al cron) usan `get_order_status/{merchantOrderId}`.
+5. **Monto**: el documento dice que `price` coincide con `amount`, pero `amount` es el **capital del crédito** y es opcional. Por ahora se aprueba con `Success` + orden propia aunque el capital difiera; la diferencia queda marcada (`capital_differs`). `mp_payment_id` = `creditNumber` (o el `merchantOrderId` si no viene). Cuotas, valor de cuota, capital y número de crédito quedan en `audit_logs.after_data` de `directo_payment_approved`: `mp_payment_intents` no tiene columna de metadata y no se justificaba una migración.
+6. **"Consultar oferta"** (opcional): si el cajero elige el sexo del DNI y toca el botón, `rating` (+ `deadlines` si el total entra en el rango) muestra el rango ofrecido y los planes. Nunca automático (el documento prohíbe el scoring masivo y advierte bloqueos); tope server-side de **20 consultas por hora por negocio** contado en `audit_logs` (`directo_offer_checked`, DNI enmascarado). Errores del documento con copy propio: Invalid Person, policyProduct requerido, Rejected, InvalidPlan, No Installments found.
+
+### Alternativas descartadas
+
+- **Seguir con la API inferida:** el documento oficial la contradice (otra autenticación, otros endpoints).
+- **Generar nuestro propio id de orden:** en 2.0 lo genera Directo (`merchantOrderId`); la referencia propia viaja en el `notifyUrl` (`?intent=`).
+- **Columna nueva de metadata en `mp_payment_intents`:** la auditoría alcanza para conciliar y evita una migración en una tabla caliente.
+- **Rechazar si el capital difiere del precio:** el capital puede no venir o no coincidir por cómo Directo arma el crédito; rechazar dejaría ventas pagadas sin registrar.
+
+### Consecuencias
+
+- Sin migración. Orden de deploy: Edges `directo`, `directo_webhook`, `set_payment_secret`, `pending_charges_sync` y después el front. Los negocios con credencial vieja tienen que volver a cargar usuario, contraseña y Policy Product de la API 2.0 (las de la API vieja no sirven en estos hosts).
+- Inferido, a confirmar con Directo en QA: duración del token (se usa `exp` del JWT o 30 minutos), el HTTP de un login inválido, que `maximumRate` sea la cantidad máxima de cuotas (así se muestra), cancelación o devolución de órdenes (el documento no las describe; la baja es local).
+- Tests: `tests/unit/directo.test.ts` (login, 403 con re-login único, timeout, cuerpos, estados, webhook con fetch simulado, fullName, sexTypeId, compatibilidad de secretos).

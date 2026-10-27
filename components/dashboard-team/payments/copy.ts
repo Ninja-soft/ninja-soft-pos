@@ -367,12 +367,12 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
   },
   directo: {
     steps: [
-      { icon: "mail", text: "Pedile a Directo las credenciales de integración por API." },
-      { icon: "key", text: "Copiá la API Key, el usuario, la contraseña y el nombre del comercio." },
-      { icon: "code", text: "Sumá la URL de la API (y la Subscription Key si te la dieron)." },
+      { icon: "mail", text: "Pedile a Directo el acceso a la API Ecommerce 2.0: escribí a ayuda@directo.com.ar o a tu ejecutivo comercial." },
+      { icon: "key", text: "Copiá el usuario y la contraseña del comercio (uno para QA y otro para producción)." },
+      { icon: "code", text: "Pediles también el Policy Product: el producto (BNPL, ELECTRO…) o el código de política." },
     ],
-    where: "Mail de integración de Directo (comercial o soporte de comercios)",
-    note: "QA y producción usan credenciales y URL distintas. Sin conectar, igual podés cobrar en su portal y registrar el número de operación.",
+    where: "Mail de Directo (ayuda@directo.com.ar o tu ejecutivo comercial)",
+    note: "QA y producción usan usuarios distintos: elegí el ambiente que corresponde. Sin conectar, igual podés cobrar en su portal y registrar el número de operación.",
   },
   ualabis: {
     steps: [

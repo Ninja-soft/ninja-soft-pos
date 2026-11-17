@@ -35,6 +35,10 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # La tabla de avance de docs/02-roadmap.md tiene que estar recalculada (OPS-13).
+      - name: Roadmap progress
+        run: node scripts/roadmap-progress.mjs --check
+
       - name: Typecheck
         # tsc del proyecto entero supera el heap por defecto de Node 20 (~2 GB)
         # en el runner: sin esto muere por OOM (SEC-03, 2026-11-16).

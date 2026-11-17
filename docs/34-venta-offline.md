@@ -1,6 +1,6 @@
 # 34 · Venta offline
 
-> Estado: entregable conservador en `feat/venta-offline` (F3 · Venta offline / AFIP offline). Migración `20261103200000_venta_offline` sin aplicar. Decisión: [ADR-077](./17-decision-log.md#adr-077-venta-offline-conservadora-cola-local-idempotente-sync_offline_sale-y-revisión-del-dueño). Abrir y recargar el POS sin conexión (PWA, service worker): [ADR-087](./17-decision-log.md#adr-087-pos-instalable-que-abre-y-recarga-sin-conexión-service-worker-propio-shell-anónimo-y-sesión-local-h65-paso-pwa), §8. Lo que falta de offline-first (comandas, stock, caja) sigue en F14 · H65.
+> Estado: entregable conservador en `feat/venta-offline` (F3 · Venta offline / AFIP offline). Migración `20261103200000_venta_offline` aplicada. Decisión: [ADR-077](./17-decision-log.md#adr-077-venta-offline-conservadora-cola-local-idempotente-sync_offline_sale-y-revisión-del-dueño). Abrir y recargar el POS sin conexión (PWA, service worker): [ADR-087](./17-decision-log.md#adr-087-pos-instalable-que-abre-y-recarga-sin-conexión-service-worker-propio-shell-anónimo-y-sesión-local-h65-paso-pwa), §8. Lo que falta de offline-first (comandas, stock, caja) sigue en F14 · H65.
 
 ## 1. Qué resuelve
 

@@ -1565,7 +1565,7 @@ El dueño pidió avanzar con Fiserv y Clover y con los Points que falten. Fiserv
 
 ## ADR-045: Sucursales y cajas administrables, venta en la sucursal del turno y personal por sucursal con vigencias (F17 · H89 a H91)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/multisucursal-base`; migraciones sin aplicar) · **Hitos:** F17 · H89, H90 y H91 · **Base:** ADR-043
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/multisucursal-base`; migraciones aplicadas) · **Hitos:** F17 · H89, H90 y H91 · **Base:** ADR-043 · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1726,7 +1726,7 @@ No había proveedores, compras ni costos más allá de `products.cost` (único y
 
 ## ADR-049: Configuración heredable por sucursal y caja, terminales e impresoras (F17 · H92 y H93)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-config-terminales`; migraciones sin aplicar, Edges sin desplegar) · **Hitos:** F17 · H92, H93 (más cierres de H90, H91, H94 y H97) · **Base:** ADR-043, ADR-045, ADR-046 · **Numeración:** ADR-048 queda reservada para "cobros en espera".
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-config-terminales`; migraciones aplicadas, Edges desplegadas) · **Hitos:** F17 · H92, H93 (más cierres de H90, H91, H94 y H97) · **Base:** ADR-043, ADR-045, ADR-046 · **Numeración:** ADR-048 queda reservada para "cobros en espera". · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1769,7 +1769,7 @@ Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, m
 
 ## ADR-051: Personal con estados, propiedad de la caja, PIN de supervisor por acción y auditoría del negocio (F17 · H113 a H119)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-personal-cajas`, migraciones sin aplicar) · **Base:** ADR-045, ADR-049 (personal al invitar y `audit_logs.store_id`), ADR-052 · **Auditoría:** [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md)
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-personal-cajas`, migraciones aplicadas) · **Base:** ADR-045, ADR-049 (personal al invitar y `audit_logs.store_id`), ADR-052 · **Auditoría:** [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1824,7 +1824,7 @@ El dueño pidió que cada usuario trabaje sólo en su sucursal, que el dueño co
 
 ## ADR-053: Terminal integrada (posnet y pinpad conectados a la caja), base vendor-agnóstica y simulador
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/terminal-integrada-payway`; migración sin aplicar; Payway sin homologar; Fiserv y Getnet pendientes del kit) · **Hito:** F8 · H19b · **Base:** ADR-042, ADR-044, ADR-047, ADR-049, ADR-052 · **Numeración:** ADR-054 queda para la tarjeta en posnet offline.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/terminal-integrada-payway`; migración aplicada; Payway sin homologar; Fiserv y Getnet pendientes del kit) · **Hito:** F8 · H19b · **Base:** ADR-042, ADR-044, ADR-047, ADR-049, ADR-052 · **Numeración:** ADR-054 queda para la tarjeta en posnet offline. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1857,7 +1857,7 @@ El dueño: "lo que quiero es que la terminal cobre y envíe los datos al POS, ya
 
 ## ADR-054: Posnet offline pro: adquirente, reglas del cupón y validación en el servidor
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/posnet-offline-pro`; migración `20261018300000_posnet_offline_cupon.sql` sin aplicar) · **Base:** ADR-042 (Tarjeta en posnet), ADR-044 (conciliación), ADR-049 (configuración heredable).
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/posnet-offline-pro`; migración `20261018300000_posnet_offline_cupon.sql` aplicada) · **Base:** ADR-042 (Tarjeta en posnet), ADR-044 (conciliación), ADR-049 (configuración heredable). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1900,7 +1900,7 @@ No es una feature de plan nueva: es parte de Tarjeta en posnet (BASE, ADR-042). 
 
 ## ADR-055: Cuentas para cobrar por transferencia, catálogo de bancos y pantalla de transferencia
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/transferencias-bancos`, migración sin aplicar) · **Base:** ADR-049 (herencia), ADR-052 (`internal_scope`)
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/transferencias-bancos`, migración aplicada) · **Base:** ADR-049 (herencia), ADR-052 (`internal_scope`) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1931,7 +1931,7 @@ El dueño pidió poder configurar en Transferencia el banco, el CBU, el alias y 
 
 ## ADR-056: Precio autoritativo en el servidor, cambio de precio con PIN e historial de precios (F18 · H100 P0)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/precio-servidor`, migraciones sin aplicar) · **Base:** ADR-043, ADR-045, ADR-048, ADR-049, ADR-051, ADR-052 · **Auditoría:** [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md) §1.2 · **Numeración:** ADR-053 a ADR-055 reservadas por otras ramas.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/precio-servidor`, migraciones aplicadas) · **Base:** ADR-043, ADR-045, ADR-048, ADR-049, ADR-051, ADR-052 · **Auditoría:** [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md) §1.2 · **Numeración:** ADR-053 a ADR-055 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -1968,7 +1968,7 @@ El dueño pidió poder configurar en Transferencia el banco, el CBU, el alias y 
 
 ## ADR-057: Credenciales y planes por sucursal, plantilla de sucursal, clientes, comparativo y monitor de sucursales (F17 · H89, H93, H96, H97, H99)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/f17-resto`, migraciones `20261020100000` a `20261020150000` sin aplicar, Edges sin desplegar) · **Base:** ADR-043, ADR-045, ADR-049, ADR-051, ADR-052 · **Numeración:** ADR-053 a ADR-056 quedan para otras ramas.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/f17-resto`, migraciones `20261020100000` a `20261020150000` aplicadas, Edges desplegadas) · **Base:** ADR-043, ADR-045, ADR-049, ADR-051, ADR-052 · **Numeración:** ADR-053 a ADR-056 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2005,7 +2005,7 @@ Quedaban pendientes de F17 (ADR-049 y ADR-051): credenciales de proveedor por su
 
 ## ADR-059: Compras v2: devoluciones a proveedor, anulación de recepciones, órdenes de pago, tesorería básica, consumo por lote y listas del proveedor (F18 · H101, H102, H106, H111)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/compras-v2` sobre `integ/tanda-h`, migraciones `20261022100000` a `20261022100500` sin aplicar) · **Base:** ADR-046, ADR-050, ADR-051, ADR-052, ADR-055 · **Numeración:** ADR-058 queda para otra rama.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/compras-v2` sobre `integ/tanda-h`, migraciones `20261022100000` a `20261022100500` aplicadas) · **Base:** ADR-046, ADR-050, ADR-051, ADR-052, ADR-055 · **Numeración:** ADR-058 queda para otra rama. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2041,7 +2041,7 @@ Compras v1 (ADR-050) dejó pendientes: devoluciones al proveedor, recepciones in
 
 ## ADR-060: PIN autenticador: rotativo, de un uso y app TOTP para autorizar como supervisor
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/pin-autenticador`, migración `20261023100000_pin_autenticador.sql` sin aplicar) · **Base:** ADR-051 (PIN por acción, `supervisor_auth_tokens`, `require_supervisor()`), ADR-052 (`internal_scope`), ADR-056 (varios tokens por request) · **Numeración:** ADR-058 y ADR-059 quedan para otras ramas.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/pin-autenticador`, migración `20261023100000_pin_autenticador.sql` aplicada) · **Base:** ADR-051 (PIN por acción, `supervisor_auth_tokens`, `require_supervisor()`), ADR-052 (`internal_scope`), ADR-056 (varios tokens por request) · **Numeración:** ADR-058 y ADR-059 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2077,7 +2077,7 @@ Pedido del dueño: "El PIN puede ser fijo, pero lo ideal sería que los usuarios
 
 ## ADR-058: Listas de precios PRO: tipos, programados, plazos, escalas, redondeo, mantenimiento masivo y etiquetas (F18 · H100)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/listas-precios-pro`, migraciones `20261021100000` a `20261021100300` sin aplicar) · **Base:** ADR-049, ADR-050, ADR-052, ADR-056 · **Auditoría:** [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md) §2.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/listas-precios-pro`, migraciones `20261021100000` a `20261021100300` aplicadas) · **Base:** ADR-049, ADR-050, ADR-052, ADR-056 · **Auditoría:** [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md) §2. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2114,7 +2114,7 @@ Con el precio autoritativo (ADR-056) el servidor ya calculaba el precio de lista
 
 ## ADR-061: Detalle de la venta con datos del procesador y conciliación de procesadores (Mercado Pago automático, Payway y adquirentes por archivo)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/detalle-venta-conciliacion`; migraciones `20261024100000` y `20261024100100` sin aplicar; Edges `payment_provider_data` y `settlements` sin desplegar) · **Base:** ADR-032 (Orders API), ADR-041, ADR-044 (conciliación de tarjetas), ADR-047, ADR-049 y ADR-057 (n° de comercio y credenciales por sucursal), ADR-052 (`internal_scope`), ADR-053.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/detalle-venta-conciliacion`; migraciones `20261024100000` y `20261024100100` aplicadas; Edges `payment_provider_data` y `settlements` desplegadas) · **Base:** ADR-032 (Orders API), ADR-041, ADR-044 (conciliación de tarjetas), ADR-047, ADR-049 y ADR-057 (n° de comercio y credenciales por sucursal), ADR-052 (`internal_scope`), ADR-053. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2184,7 +2184,7 @@ El dueño pidió (1) ver en el detalle de la venta todo lo de cada cobro: proces
 
 ## ADR-062: Integración con NubCeo: envío de ventas con sus cobros, monitor y asientos contables
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/nubceo`, migraciones `20261025100000` y `20261025100100` sin aplicar, Edge `nubceo_sync` sin desplegar) · **Base:** ADR-052 (`internal_scope`), ADR-054 (`card_voucher.adquirente`), patrón de cron interno de `account_reminders` y `pending_charges_sync` · **Numeración:** ADR-061 queda para otra rama. Documento vivo: [`30-nubceo.md`](./30-nubceo.md).
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/nubceo`, migraciones `20261025100000` y `20261025100100` aplicadas, Edge `nubceo_sync` desplegada) · **Base:** ADR-052 (`internal_scope`), ADR-054 (`card_voucher.adquirente`), patrón de cron interno de `account_reminders` y `pending_charges_sync` · **Numeración:** ADR-061 queda para otra rama. Documento vivo: [`30-nubceo.md`](./30-nubceo.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2254,7 +2254,7 @@ En producción el dueño conectó Getnet y todo cobro QR o link fallaba en el to
 
 ## ADR-064: Contracargos, reclamos y devoluciones de Mercado Pago: detección, avisos, Ventas y conciliación
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/contracargos-devoluciones`; migración `20261027100000_payment_disputes.sql` sin aplicar; Edges `settlements` y `mp_webhook` sin redesplegar) · **Base:** ADR-061 (conciliación de procesadores, `settlement_lines`, Edge `settlements` y cron `settlements-sync`), ADR-052 (`internal_scope`), ADR-057 (credenciales por sucursal), ADR-048 (patrón de notificaciones del sistema) · **Numeración:** ADR-063 queda para otra rama.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/contracargos-devoluciones`; migración `20261027100000_payment_disputes.sql` aplicada; Edges `settlements` y `mp_webhook` sin redesplegar) · **Base:** ADR-061 (conciliación de procesadores, `settlement_lines`, Edge `settlements` y cron `settlements-sync`), ADR-052 (`internal_scope`), ADR-057 (credenciales por sucursal), ADR-048 (patrón de notificaciones del sistema) · **Numeración:** ADR-063 queda para otra rama. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2291,7 +2291,7 @@ El dueño pidió ver los contracargos y las devoluciones de Mercado Pago en la c
 
 ## ADR-063: Balanza y cajón de dinero: reglas por negocio o sucursal, equipos por caja y apertura auditada
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/balanza-cajon`; migraciones `20261026100000` y `20261026100100` sin aplicar; presets de balanza sin validar con equipos) · **Hitos:** F10 · H23 (etiquetas de balanza), H24 (lectura de balanza), H26 (diagnóstico) y F17 · H119 ("abrir el cajón sin venta con PIN") · **Base:** ADR-049 (herencia y registros por caja), ADR-051 y ADR-060 (PIN de supervisor), ADR-052 (`internal_scope`), ADR-053 (transportes Web Serial, WebUSB y puente local).
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/balanza-cajon`; migraciones `20261026100000` y `20261026100100` aplicadas; presets de balanza sin validar con equipos) · **Hitos:** F10 · H23 (etiquetas de balanza), H24 (lectura de balanza), H26 (diagnóstico) y F17 · H119 ("abrir el cajón sin venta con PIN") · **Base:** ADR-049 (herencia y registros por caja), ADR-051 y ADR-060 (PIN de supervisor), ADR-052 (`internal_scope`), ADR-053 (transportes Web Serial, WebUSB y puente local). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2333,7 +2333,7 @@ El dueño pidió productos pesables con balanza y apertura del cajón por caja, 
 
 ## ADR-067: Reintegro por Mercado Pago en las devoluciones y ficha del cliente 360
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/reintegro-mp-cliente360`; migraciones `20261030100000`, `20261030100100` y `20261030100200` sin aplicar; Edge `mp_refund` sin desplegar) · **Base:** ADR-051 y ADR-060 (PIN de supervisor por acción y sus modos), ADR-052 (`internal_scope`), ADR-057 (credenciales por sucursal: `secret_store_id` del intent), ADR-061 (detalle de la venta y conciliación de procesadores), ADR-064 (disputas con origen `pos` / `provider`) · **Numeración:** ADR-065 y ADR-066 quedan para otras ramas (impuestos y contabilidad).
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/reintegro-mp-cliente360`; migraciones `20261030100000`, `20261030100100` y `20261030100200` aplicadas; Edge `mp_refund` desplegada) · **Base:** ADR-051 y ADR-060 (PIN de supervisor por acción y sus modos), ADR-052 (`internal_scope`), ADR-057 (credenciales por sucursal: `secret_store_id` del intent), ADR-061 (detalle de la venta y conciliación de procesadores), ADR-064 (disputas con origen `pos` / `provider`) · **Numeración:** ADR-065 y ADR-066 quedan para otras ramas (impuestos y contabilidad). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2387,7 +2387,7 @@ Lucas pidió (2026-10-12) dos cosas: **H21h**, devolver la plata por Mercado Pag
 
 ## ADR-066: Contabilidad v1: plan de cuentas, asientos automáticos por triggers, mapeos, cierre mensual, libros y export a estudios (F18 · H109)
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/contabilidad` sobre `integ/tanda-j`, migraciones `20261029100000` a `20261029100300` sin aplicar) · **Base:** ADR-050 y ADR-059 (compras, órdenes de pago, tesorería), ADR-061 y ADR-064 (conciliación de procesadores y disputas), ADR-062 (asientos de NubCeo), ADR-052 (`internal_scope`) · **Numeración:** ADR-065 queda para la rama del motor de impuestos. Documento vivo: [`31-contabilidad.md`](./31-contabilidad.md).
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/contabilidad` sobre `integ/tanda-j`, migraciones `20261029100000` a `20261029100300` aplicadas) · **Base:** ADR-050 y ADR-059 (compras, órdenes de pago, tesorería), ADR-061 y ADR-064 (conciliación de procesadores y disputas), ADR-062 (asientos de NubCeo), ADR-052 (`internal_scope`) · **Numeración:** ADR-065 queda para la rama del motor de impuestos. Documento vivo: [`31-contabilidad.md`](./31-contabilidad.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2430,7 +2430,7 @@ La auditoría fiscal (§6) marcó la contabilidad como faltante P1: sin plan de 
 
 ## ADR-068: Base fiscal: catálogo de IVA, impuestos internos, condición fiscal, percepciones con padrones y retenciones sugeridas
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/impuestos`; migraciones `20261028100000` a `20261028100300` sin aplicar; valores normativos orientativos a validar con un contador) · **Hitos:** F18 · H103 (IVA e internos), H104 (condición fiscal y padrones), H105 (percepciones), H106 (retenciones, parte) · **Base:** ADR-043 (auditoría fiscal), ADR-050 y ADR-059 (compras, órdenes de pago), ADR-052 (`internal_scope`), ADR-056 y ADR-058 (precio en el servidor y resolver PRO). **Numeración:** 065 a 067 tomadas por otras ramas.
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/impuestos`; migraciones `20261028100000` a `20261028100300` aplicadas; valores normativos orientativos a validar con un contador) · **Hitos:** F18 · H103 (IVA e internos), H104 (condición fiscal y padrones), H105 (percepciones), H106 (retenciones, parte) · **Base:** ADR-043 (auditoría fiscal), ADR-050 y ADR-059 (compras, órdenes de pago), ADR-052 (`internal_scope`), ADR-056 y ADR-058 (precio en el servidor y resolver PRO). **Numeración:** 065 a 067 tomadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2475,7 +2475,7 @@ Ley de IVA (texto ordenado 1997), art. 10 (internos discriminados fuera del prec
 
 ## ADR-070: Observabilidad de los webhooks de cobro sin servicios externos (webhook_events y Salud de webhooks)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/observabilidad`; migración `20261031100000_webhook_events.sql` sin aplicar; Edges sin desplegar) · **Base:** ADR-052 (`internal_scope`), ADR-048 (log JSON de tiempos en las Edge de cobro). **Numeración:** 069 queda libre para otra rama.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/observabilidad`; migración `20261031100000_webhook_events.sql` aplicada; Edges desplegadas) · **Base:** ADR-052 (`internal_scope`), ADR-048 (log JSON de tiempos en las Edge de cobro). **Numeración:** 069 queda libre para otra rama. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2507,7 +2507,7 @@ Cuando un webhook de un procesador falla (credencial vencida, API del proveedor 
 
 ## ADR-071: Permisos por rol en la base: solo lectura no escribe, el cajero no toca catálogo ni stock a mano y anula sólo ventas del día
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `test/permisos-roles`; migración `20261031200000_permisos_por_rol.sql` sin aplicar) · **Base:** docs/06-permissions-roles.md §4, ADR-045 (alcance por sucursal), ADR-051 (caja propia y PIN), ADR-052 (`internal_scope`). **Numeración:** 069 y 070 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `test/permisos-roles`; migración `20261031200000_permisos_por_rol.sql` aplicada) · **Base:** docs/06-permissions-roles.md §4, ADR-045 (alcance por sucursal), ADR-051 (caja propia y PIN), ADR-052 (`internal_scope`). **Numeración:** 069 y 070 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2548,7 +2548,7 @@ Los módulos nuevos (listas PRO, compras, tesorería, impuestos, contabilidad, c
 
 ## ADR-069: Getnet con dos juegos de credenciales y checkout propio con la Checkout API
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada con el cobro APAGADO hasta resolver PCI (código en `feat/getnet-checkout-api`; migración `20261031300000` sin aplicar; Edges sin desplegar; adenda 2026-10-13: sólo Web Checkout para el cliente) · **Base:** ADR-029 y H17b (checkout propio de Payway), ADR-031, ADR-057 (credenciales por sucursal), ADR-065 (Getnet con dos APIs) · **Numeración:** si otra rama tomó el 069, renumerar al mergear.
+**Fecha:** 2026-10-12 · **Estado:** aceptada con el cobro APAGADO hasta resolver PCI (código en `feat/getnet-checkout-api`; migración `20261031300000` aplicada; Edges desplegadas; adenda 2026-10-13: sólo Web Checkout para el cliente) · **Base:** ADR-029 y H17b (checkout propio de Payway), ADR-031, ADR-057 (credenciales por sucursal), ADR-065 (Getnet con dos APIs) · **Numeración:** si otra rama tomó el 069, renumerar al mergear. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2597,7 +2597,7 @@ El dueño tiene dos juegos de credenciales de Getnet: "Web Checkout / Plugin Mag
 
 ## ADR-073: Administración interna de negocios: alta manual, ciclo de vida con motivo y timeline de auditoría (F7 · H11c)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/admin-tenants`; migración y Edges sin aplicar) · **Hito:** F7 · H11c
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/admin-tenants`; migración y Edges aplicada) · **Hito:** F7 · H11c · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2633,7 +2633,7 @@ Auditoría del panel interno de negocios: ya existían cambio de plan (`PlanCard
 
 ## ADR-072: Facturación electrónica con ARCA (WSFEv1): cola fiscal, certificados por negocio, homologación y producción, contingencia CAEA y asistente
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/arca-wsfe`; migraciones `20261101100000` a `20261101100200` sin aplicar; Edge `arca_wsfe` sin desplegar; probado con fixtures SOAP y con FEDummy real de homologación; el CAE real queda para el smoke test con el certificado de homologación) · **Hitos:** F3 completo salvo los criterios que piden certificado real, F18 · H107 (parte: tipo de comprobante, `AlicIva` y `Tributos`, QR, request y response) · **Base:** ADR-043, ADR-045 (punto de venta por sucursal y caja), ADR-052 (`internal_scope`), ADR-062 (patrón de cola y cron de NubCeo), ADR-068 (letra, desglose de IVA y tributos por venta). **Numeración:** 069 a 071 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/arca-wsfe`; migraciones `20261101100000` a `20261101100200` aplicadas; Edge `arca_wsfe` desplegada; probado con fixtures SOAP y con FEDummy real de homologación; el CAE real queda para el smoke test con el certificado de homologación) · **Hitos:** F3 completo salvo los criterios que piden certificado real, F18 · H107 (parte: tipo de comprobante, `AlicIva` y `Tributos`, QR, request y response) · **Base:** ADR-043, ADR-045 (punto de venta por sucursal y caja), ADR-052 (`internal_scope`), ADR-062 (patrón de cola y cron de NubCeo), ADR-068 (letra, desglose de IVA y tributos por venta). **Numeración:** 069 a 071 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2682,7 +2682,7 @@ Manual para el desarrollador WSFEv1 de ARCA (RG 4291 y modificatorias) y el WSDL
 
 ## ADR-075: Perfiles por rubro: presets versionados que prenden flags operativos y sugieren, sin otorgar features de plan
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/perfiles-rubro`; migración `20261102200000_perfiles_rubro` sin aplicar) · **Hito:** F5 (perfiles de rubro; el marketplace queda fuera) · **Base:** ADR-052 (`internal_scope`), ADR-063 (balanza), F12 · H35 (`apply_industry_preset`), F13 · H43/H47 (modo gastronómico). **Numeración:** 069 a 074 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/perfiles-rubro`; migración `20261102200000_perfiles_rubro` aplicada) · **Hito:** F5 (perfiles de rubro; el marketplace queda fuera) · **Base:** ADR-052 (`internal_scope`), ADR-063 (balanza), F12 · H35 (`apply_industry_preset`), F13 · H43/H47 (modo gastronómico). **Numeración:** 069 a 074 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2718,7 +2718,7 @@ El rubro vivía en `tenants.industry` (12 verticales) y en dos lugares sueltos: 
 
 ## ADR-076: Libro IVA Digital: archivos de importación del Portal IVA armados en el servidor, con revisión previa y dentro de `facturacion_afip`
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/libro-iva-digital` sobre `feat/arca-wsfe`; migración `20261103100000_libro_iva_digital` sin aplicar; diseño de registro orientativo a validar con un contador y con una importación real en el Portal IVA) · **Hito:** F18 · H108 (Libro IVA Digital; SICORE, SIRE, DDJJ de IIBB y prorrateo de crédito fiscal quedan pendientes) · **Base:** ADR-068 (desglose de IVA y tributos por venta), ADR-072 (comprobantes de ARCA), ADR-050 y ADR-059 (comprobantes de compra), ADR-052 (`internal_scope`). **Numeración:** 073 a 075 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/libro-iva-digital` sobre `feat/arca-wsfe`; migración `20261103100000_libro_iva_digital` aplicada; diseño de registro orientativo a validar con un contador y con una importación real en el Portal IVA) · **Hito:** F18 · H108 (Libro IVA Digital; SICORE, SIRE, DDJJ de IIBB y prorrateo de crédito fiscal quedan pendientes) · **Base:** ADR-068 (desglose de IVA y tributos por venta), ADR-072 (comprobantes de ARCA), ADR-050 y ADR-059 (comprobantes de compra), ADR-052 (`internal_scope`). **Numeración:** 073 a 075 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2752,7 +2752,7 @@ Los Responsables Inscriptos presentan cada mes el Libro IVA Digital (RG 4597) en
 
 ## ADR-074: Motor de promociones PRO con cálculo autoritativo en create_sale, combinables, topes y feature OPTIONAL
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/promociones-v2` sobre `integ/tanda-k`; migraciones `20261102100000` a `20261102100300` sin aplicar) · **Hitos:** F9 · H53, H54 y H56 · **Base:** ADR-049 y ADR-057 (herencia negocio → sucursal), ADR-052 (`internal_scope`), ADR-054 (cupón del posnet), ADR-056 (precio autoritativo), ADR-068 (orden con impuestos y percepciones)
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/promociones-v2` sobre `integ/tanda-k`; migraciones `20261102100000` a `20261102100300` aplicadas) · **Hitos:** F9 · H53, H54 y H56 · **Base:** ADR-049 y ADR-057 (herencia negocio → sucursal), ADR-052 (`internal_scope`), ADR-054 (cupón del posnet), ADR-056 (precio autoritativo), ADR-068 (orden con impuestos y percepciones) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2786,7 +2786,7 @@ Las promos se definían en `promotions` y el POS elegía la mejor, pero `create_
 
 ## ADR-077: Venta offline conservadora: cola local idempotente, sync_offline_sale y revisión del dueño
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/venta-offline`; migración `20261103200000_venta_offline` sin aplicar) · **Hito:** F3 · Venta offline / AFIP offline (base; lo completo sigue en F14 · H65) · **Base:** ADR-051 (caja propia), ADR-052 (`internal_scope`), ADR-054 (cupón del posnet), ADR-056 (precio en el servidor), ADR-068 (`create_sale` más nueva) · **Numeración:** 069 a 076 tomadas o reservadas por otras ramas. Diseño: [`34-venta-offline.md`](./34-venta-offline.md).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/venta-offline`; migración `20261103200000_venta_offline` aplicada) · **Hito:** F3 · Venta offline / AFIP offline (base; lo completo sigue en F14 · H65) · **Base:** ADR-051 (caja propia), ADR-052 (`internal_scope`), ADR-054 (cupón del posnet), ADR-056 (precio en el servidor), ADR-068 (`create_sale` más nueva) · **Numeración:** 069 a 076 tomadas o reservadas por otras ramas. Diseño: [`34-venta-offline.md`](./34-venta-offline.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2823,7 +2823,7 @@ El POS dependía de la conexión para cada cobro: un corte de internet frenaba e
 
 ## ADR-078: Importaciones XLSX con motor único, revisión en el servidor (dry-run) y confirmación (TX-4)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/importaciones-xlsx`; migraciones `20261104100000` y `20261104100100` sin aplicar) · **Hitos:** TX-4, F11 · H34 · **Base:** ADR-052 (`internal_scope`), ADR-046 (stock por sucursal), ADR-056 y ADR-058 (historial y listas de precios), TX-2 (`exportXlsx`). **Numeración:** 069 a 077 tomadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/importaciones-xlsx`; migraciones `20261104100000` y `20261104100100` aplicadas) · **Hitos:** TX-4, F11 · H34 · **Base:** ADR-052 (`internal_scope`), ADR-046 (stock por sucursal), ADR-056 y ADR-058 (historial y listas de precios), TX-2 (`exportXlsx`). **Numeración:** 069 a 077 tomadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2859,7 +2859,7 @@ Productos y clientes se importaban con un parser propio por entidad y un `insert
 
 ## ADR-080: F17 pendientes: cobros y traslados por sucursal, cierres Z por sucursal y caja, heartbeat de cajas, producción por sucursal, tránsito y contexto cruzado (F17 · H90, H91, H94, H95, H97, H99)
 
-**Fecha:** 2026-11-05 · **Estado:** aceptada (código en `feat/f17-pendientes`; migraciones `20261105100000` a `20261105100300` sin aplicar) · **Base:** ADR-045, ADR-046, ADR-049, ADR-051, ADR-052, ADR-057 · **Numeración:** ADR-069 a ADR-079 quedan para otras ramas.
+**Fecha:** 2026-11-05 · **Estado:** aceptada (código en `feat/f17-pendientes`; migraciones `20261105100000` a `20261105100300` aplicadas) · **Base:** ADR-045, ADR-046, ADR-049, ADR-051, ADR-052, ADR-057 · **Numeración:** ADR-069 a ADR-079 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2896,7 +2896,7 @@ Auditoría de los ítems abiertos de F17 contra el código. Varios ya estaban he
 
 ## ADR-079: Retenciones como agente en la orden de pago: Ganancias RG 830 con acumulado mensual, SUSS, certificados, SICORE y ARBA
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/retenciones-agente` sobre `feat/libro-iva-digital`; migraciones `20261104200000_retenciones_agente_catalogo` y `20261104200100_retenciones_agente_motor` sin aplicar; valores normativos y diseños de archivo orientativos a validar con un contador y con una importación real) · **Hito:** F18 · H106 (como agente; como sujeto queda pendiente) · **Base:** ADR-059 (órdenes de pago), ADR-066 (motor de asientos), ADR-068 (regímenes, padrones, exclusiones, retención sugerida), ADR-076 (criterio de formateador puro con golden files), ADR-052 (`internal_scope`). **Numeración:** 077 y 078 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/retenciones-agente` sobre `feat/libro-iva-digital`; migraciones `20261104200000_retenciones_agente_catalogo` y `20261104200100_retenciones_agente_motor` aplicadas; valores normativos y diseños de archivo orientativos a validar con un contador y con una importación real) · **Hito:** F18 · H106 (como agente; como sujeto queda pendiente) · **Base:** ADR-059 (órdenes de pago), ADR-066 (motor de asientos), ADR-068 (regímenes, padrones, exclusiones, retención sugerida), ADR-076 (criterio de formateador puro con golden files), ADR-052 (`internal_scope`). **Numeración:** 077 y 078 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2934,7 +2934,7 @@ ADR-068 dejó la retención de IIBB e IVA **sugerida** desde el padrón (`tax_re
 
 ## ADR-082: Agenda de servicios: recursos con bloqueo de doble reserva, lista de espera, datos de ejemplo y métricas de activación (F12 · H38, H42)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f12-comercios` sobre `integ/tanda-k`; migraciones `20261106100000` a `20261106100300` sin aplicar) · **Base:** ADR-052 (`internal_scope`), ADR-026 (agenda y packs BASE), H38/H39 (agenda, comisiones y lectura sólo-propia).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f12-comercios` sobre `integ/tanda-k`; migraciones `20261106100000` a `20261106100300` aplicadas) · **Base:** ADR-052 (`internal_scope`), ADR-026 (agenda y packs BASE), H38/H39 (agenda, comisiones y lectura sólo-propia). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2965,7 +2965,7 @@ Auditoría de F12 contra el código (2026-10-13): la agenda (H38) no tenía sill
 
 ## ADR-081: Gastronomía PRO: mover y unir mesas, anulación con motivo, SLA del KDS, lista de espera y rotación con propinas por mozo
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f13-gastronomia`; migraciones `20261105200000` a `20261105200400` sin aplicar) · **Hitos:** F13 · H44, H45, H46, H51, H52 · **Base:** ADR-014 (Gastronomía PRO), ADR-022 (policies sin `FOR ALL`), ADR-026 (Gastronomía como flag operativo), ADR-052 (`internal_scope`), ADR-056 (precio en el servidor, trigger de ítems de mesa).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f13-gastronomia`; migraciones `20261105200000` a `20261105200400` aplicadas) · **Hitos:** F13 · H44, H45, H46, H51, H52 · **Base:** ADR-014 (Gastronomía PRO), ADR-022 (policies sin `FOR ALL`), ADR-026 (Gastronomía como flag operativo), ADR-052 (`internal_scope`), ADR-056 (precio en el servidor, trigger de ítems de mesa). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -2997,7 +2997,7 @@ La auditoría de F13 contra el código mostró el núcleo de salón, KDS, cursos
 - Tests: `tests/unit/gastro-f13-ops.test.ts` (SLA, lista de espera, teléfonos AR, reparto de propinas, destinos de mover, ítem enviado, validación de anulación, mensajes de error); RLS `tests/integration/rls-f13-gastronomia.test.ts` (mover, unir, transferir, mozo ajeno, anulación por RPC/update/delete directos, aislamiento de anulaciones y lista de espera, SLA por rol, cobro en el turno del mozo con propina y reporte). Cadena completa de migraciones aplicada sobre PGlite con un humo de todas las RPCs nuevas con rol `authenticated`.
 ## ADR-083: current_tenant_id() por membresía activa y audit_logs inmutable con retención y hash encadenado (H117 · H118)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/seguridad-h117-h118`, migración sin aplicar) · **Base:** ADR-051 (residual S-07), ADR-052 (`internal_scope()`)
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/seguridad-h117-h118`, migración aplicada) · **Base:** ADR-051 (residual S-07), ADR-052 (`internal_scope()`) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3035,7 +3035,7 @@ La auditoría de F13 contra el código mostró el núcleo de salón, KDS, cursos
 
 ## ADR-084: Panel interno para operar la plataforma: acceso como el negocio con duración y banner, miembros, ficha 360, salud y anuncios por segmento (F7 · H11c, H13b)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f7-interno`; migraciones `20261107100000` a `20261107100300` sin aplicar; Edges `internal_impersonate` e `internal_tenant_members` sin desplegar) · **Base:** ADR-052 (`internal_scope`), ADR-073 (admin de negocios), ADR-051 (estados del personal). **Numeración:** 081 a 083 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f7-interno`; migraciones `20261107100000` a `20261107100300` aplicadas; Edges `internal_impersonate` e `internal_tenant_members` desplegadas) · **Base:** ADR-052 (`internal_scope`), ADR-073 (admin de negocios), ADR-051 (estados del personal). **Numeración:** 081 a 083 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3068,7 +3068,7 @@ Auditoría de F7 contra el código: el acceso como el negocio era un magic link 
 
 ## ADR-085: Depósitos internos como desglose del stock de la sucursal, importación de depósitos, ítems vendidos en el Cierre Z y ficha del cliente desde el POS (F11 · H33, H34, H30b, H31)
 
-**Fecha:** 2026-11-07 · **Estado:** aceptada (código en `feat/f11-retail`; migraciones `20261107200000` a `20261107200300` sin aplicar) · **Base:** ADR-046 (stock por sucursal y traslados), ADR-052 (`internal_scope`), ADR-071 (`role_write_guard`), ADR-078 (motor de importación XLSX), ADR-080 (alcance de sucursal y numeración de Z), ADR-083 (`(select current_tenant_id())`, auditoría inmutable) · **Numeración:** ADR-081 a ADR-084 quedan para otras ramas.
+**Fecha:** 2026-11-07 · **Estado:** aceptada (código en `feat/f11-retail`; migraciones `20261107200000` a `20261107200300` aplicadas) · **Base:** ADR-046 (stock por sucursal y traslados), ADR-052 (`internal_scope`), ADR-071 (`role_write_guard`), ADR-078 (motor de importación XLSX), ADR-080 (alcance de sucursal y numeración de Z), ADR-083 (`(select current_tenant_id())`, auditoría inmutable) · **Numeración:** ADR-081 a ADR-084 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3100,7 +3100,7 @@ La auditoría de F11 contra el código (primer commit de la rama) dejó como pen
 - **Tests:** `tests/unit/warehouses.test.ts` (salón, estado, reposición con reparto entre depósitos, recepción espejo del servidor, errores, tipo desde la planilla, feature e importaciones registradas), `tests/unit/zItems.test.ts` (resumen del Z y link a la ficha); RLS `tests/integration/rls-depositos.test.ts` (dueño crea y cuenta; cajero y solo lectura no; nadie escribe por REST; tránsito, recepción parcial del cajero, cierre con faltante sólo del encargado y sin descuadre de ADR-046; venta del cajero en su turno baja el salón; Z con ítems; otro negocio aislado y sin la feature rechazado; importación en seco y aplicada; inserts multi-fila con todas las claves). Cadena completa de migraciones sobre PGlite (con y sin la migración de ADR-083) y recorrido de humo de depósitos, Z e importación.
 ## ADR-086: Escuela NinjaSoft mínima, ayuda contextual versionada en el repo y checklist de activación por rubro (F15 · H69, H71 parcial, H72)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f15-escuela` sobre `integ/tanda-s`; migraciones `20261108100000` a `20261108100200` sin aplicar) · **Base:** ADR-052 (`internal_scope`), ADR-071 (permisos por rol), ADR-075 (perfiles por rubro), ADR-082 (métricas de activación), ADR-083 (`current_tenant_id()` por membresía, `audit_logs` inmutable). **Numeración:** 084 y 085 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f15-escuela` sobre `integ/tanda-s`; migraciones `20261108100000` a `20261108100200` aplicadas) · **Base:** ADR-052 (`internal_scope`), ADR-071 (permisos por rol), ADR-075 (perfiles por rubro), ADR-082 (métricas de activación), ADR-083 (`current_tenant_id()` por membresía, `audit_logs` inmutable). **Numeración:** 084 y 085 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3138,7 +3138,7 @@ F15 estaba sólo en planificación. Había ayuda suelta (tips del perfil por rub
 
 ## ADR-088: create_sale salda deudas: venta desde el salón con depósitos, seña de turnos y devolución parcial con promo prorrateada
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/create-sale-deudas` sobre `integ/tanda-u`; migración `20261108200000_create_sale_deudas` sin aplicar) · **Base:** ADR-085 (depósitos), ADR-082 (agenda), ADR-074 (promociones), ADR-077 (venta offline), ADR-068 (impuestos), ADR-056 (precio en el servidor), ADR-071 (permisos por rol), ADR-051 (caja propia), ADR-083 (`(select current_tenant_id())`, auditoría inmutable) · **Numeración:** 086 y 087 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/create-sale-deudas` sobre `integ/tanda-u`; migración `20261108200000_create_sale_deudas` aplicada) · **Base:** ADR-085 (depósitos), ADR-082 (agenda), ADR-074 (promociones), ADR-077 (venta offline), ADR-068 (impuestos), ADR-056 (precio en el servidor), ADR-071 (permisos por rol), ADR-051 (caja propia), ADR-083 (`(select current_tenant_id())`, auditoría inmutable) · **Numeración:** 086 y 087 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3226,7 +3226,7 @@ Con ADR-077 el POS sigue cobrando si se corta internet **con la pantalla abierta
 
 ## ADR-089: Recorridos guiados y sugerencias por evento configurables desde internal, score de activación y cuentas trabadas con correctivos (F15 · H70, H71, H74)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f15-tours` sobre `integ/tanda-v`; migraciones `20261108300000` a `20261108300400` sin aplicar) · **Base:** ADR-052 (`internal_scope`), ADR-083 (`(select current_tenant_id())`, `audit_logs` inmutable), ADR-084 (salud por negocio, anuncios por segmento), ADR-086 (ayuda, Escuela, `onboarding_activation_status`). **Numeración:** 087 y 088 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f15-tours` sobre `integ/tanda-v`; migraciones `20261108300000` a `20261108300400` aplicadas) · **Base:** ADR-052 (`internal_scope`), ADR-083 (`(select current_tenant_id())`, `audit_logs` inmutable), ADR-084 (salud por negocio, anuncios por segmento), ADR-086 (ayuda, Escuela, `onboarding_activation_status`). **Numeración:** 087 y 088 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3263,7 +3263,7 @@ El primer corte de F15 (ADR-086) dejó ayuda, Escuela y un checklist por rubro, 
 - **Tests:** `tests/unit/onboardingTours.test.ts` (42: motor, vista por pantalla y ancla, teclado, foco plano, ubicación del globo, persistencia, esquema y espejo SQL, segmentación, cooldown, impresiones, vigencia, topes por sesión y día de Buenos Aires, venta fallida, correctivos, CTA sin links externos, score y cuentas trabadas, recorridos sembrados con el criterio de la heladería, anclas en el TSX, policies, auditoría y gating). `tests/integration/rls-onboarding-tours.test.ts` (el negocio no lee ni escribe la configuración ni con el header forjado; audiencia por rubro y rol; eventos multi-fila con todas las claves aislados por usuario y negocio; `shown` sólo del servidor; prioridad, sesión, cooldown y tope diario; venta fallida; soporte no edita; publicar con versión y auditoría; correctivo recibido y consumido; métricas y activación del staff; claves de `onboarding_status`; guardarraíles en 0). Sin base local la integración se saltó; la cadena completa de migraciones se aplicó sobre PGlite con un humo de las mismas RPC, policies y triggers con rol `authenticated` (`rls_internal_scope_leaks` y `rls_bare_current_tenant_policies` en 0).
 ## ADR-090: F4 escalado, primer corte: índices de las tablas operativas, RLS con initplan en todas las policies y auditoría de rendimiento reutilizable
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `perf/f4-escalado` sobre `integ/tanda-x`; migración `20261108500000_perf_f4_indices_rls_initplan` sin aplicar) · **Base:** ADR-083 (`current_tenant_id()` por membresía e initplan), ADR-080 (policy de `payments` con `exists` sobre `sales`), ADR-052 (`internal_scope()`), ADR-045 (policies RESTRICTIVE por sucursal)
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `perf/f4-escalado` sobre `integ/tanda-x`; migración `20261108500000_perf_f4_indices_rls_initplan` aplicada) · **Base:** ADR-083 (`current_tenant_id()` por membresía e initplan), ADR-080 (policy de `payments` con `exists` sobre `sales`), ADR-052 (`internal_scope()`), ADR-045 (policies RESTRICTIVE por sucursal) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3302,7 +3302,7 @@ F4 pide que un negocio con 3 sucursales opere sin latencia perceptible. ADR-083 
 - **Pendiente (F4):** `create_sale` con `tenant_id` explícito; búsqueda en `catalog_products` por RPC con el índice trigram si alguna vez se lee por la API; medir el `exists` de `payments_branch_scope` con volumen real; P5 y P7 sobre todas las tablas cuando el volumen lo pida; los 91 DEFAULT y 2 triggers con `current_tenant_id()` (P3) son informativos.
 ## ADR-091: F16 primer corte: cockpit de comercio unificado, reservas de stock con retiro en tienda, riesgo operativo y runbooks de soporte (F16 · H76, H77, H78, H82, H85)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f16-unificado` sobre `integ/tanda-y`; migraciones `20261109100000` a `20261109100300` sin aplicar) · **Base:** ADR-045 y ADR-080 (alcance por sucursal, `report_store_filter`, heartbeat), ADR-046 (stock por sucursal), ADR-051 (PIN de supervisor), ADR-052 (`internal_scope`), ADR-060 (`otp_random_digits`), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-084 (acceso como el negocio), ADR-085 (`warehouse_item_info`) · **Numeración:** 089 y 090 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f16-unificado` sobre `integ/tanda-y`; migraciones `20261109100000` a `20261109100300` aplicadas) · **Base:** ADR-045 y ADR-080 (alcance por sucursal, `report_store_filter`, heartbeat), ADR-046 (stock por sucursal), ADR-051 (PIN de supervisor), ADR-052 (`internal_scope`), ADR-060 (`otp_random_digits`), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-084 (acceso como el negocio), ADR-085 (`warehouse_item_info`) · **Numeración:** 089 y 090 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3334,7 +3334,7 @@ La auditoría de F16 contra el código (primer commit de la rama) mostró que la
 
 ## ADR-092: Primer corte de F14: maker-checker comercial, alertas de margen, conteo cíclico ABC y garantías por serie (F14 · H63, H64, H67)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f14-comercial` sobre `integ/tanda-z`; migraciones `20261109200000` a `20261109200400` sin aplicar) · **Base:** ADR-046 (stock por sucursal, `adjust_store_stock`), ADR-050 (tres costos por producto), ADR-052 (`internal_scope`), ADR-057 (planes de cuotas por sucursal), ADR-058 (listas PRO, `min_price`, aprobación de precios masivos), ADR-071 (`role_write_guard`), ADR-074 (promociones), ADR-083 (`(select current_tenant_id())`, `audit_logs` inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 090 y 091 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f14-comercial` sobre `integ/tanda-z`; migraciones `20261109200000` a `20261109200400` aplicadas) · **Base:** ADR-046 (stock por sucursal, `adjust_store_stock`), ADR-050 (tres costos por producto), ADR-052 (`internal_scope`), ADR-057 (planes de cuotas por sucursal), ADR-058 (listas PRO, `min_price`, aprobación de precios masivos), ADR-071 (`role_write_guard`), ADR-074 (promociones), ADR-083 (`(select current_tenant_id())`, `audit_logs` inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 090 y 091 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3366,7 +3366,7 @@ La auditoría de F14 contra el código (primer commit de la rama) mostró que H6
 
 ## ADR-093: F4 escalado, segundo corte: create_sale y return_sale_v2 con tenant_id explícito y catalog_search con el índice trigram
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `perf/f4-create-sale` sobre `integ/tanda-aa`; migración `20261108600000_perf_f4_create_sale_tenant` sin aplicar) · **Base:** ADR-090 (auditoría y pendientes de F4), ADR-088 (definición vigente de `create_sale` y `return_sale_v2`), ADR-083 (`current_tenant_id()` por membresía), ADR-052 (`internal_scope()`) · **Numeración:** 091 y 092 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `perf/f4-create-sale` sobre `integ/tanda-aa`; migración `20261108600000_perf_f4_create_sale_tenant` aplicada) · **Base:** ADR-090 (auditoría y pendientes de F4), ADR-088 (definición vigente de `create_sale` y `return_sale_v2`), ADR-083 (`current_tenant_id()` por membresía), ADR-052 (`internal_scope()`) · **Numeración:** 091 y 092 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3398,7 +3398,7 @@ ADR-090 dejó dos pendientes. Primero, `create_sale` no pasaba `tenant_id` al in
 
 ## ADR-096: create_sale conoce las reservas de stock y enlaza la garantía extendida al producto que cubre (F16 · H77, F14 · H64)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/create-sale-ronda2` sobre `integ/tanda-ad`; migración `20261109500000_create_sale_reservas_garantia` sin aplicar) · **Base:** ADR-091 (reservas de stock, deuda a y b), ADR-092 (garantías por serie, vínculo por nombre), ADR-093 (definición vigente de `create_sale`, `tenant_id` explícito, P8), ADR-088 y ADR-085 (salón y depósitos), ADR-077 (venta offline), ADR-083 (`audit_logs` inmutable) · **Numeración:** 094 y 095 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/create-sale-ronda2` sobre `integ/tanda-ad`; migración `20261109500000_create_sale_reservas_garantia` aplicada) · **Base:** ADR-091 (reservas de stock, deuda a y b), ADR-092 (garantías por serie, vínculo por nombre), ADR-093 (definición vigente de `create_sale`, `tenant_id` explícito, P8), ADR-088 y ADR-085 (salón y depósitos), ADR-077 (venta offline), ADR-083 (`audit_logs` inmutable) · **Numeración:** 094 y 095 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3429,7 +3429,7 @@ ADR-091 dejó como deuda que `create_sale` no conoce las reservas: una venta de 
 
 ## ADR-094: API pública v1 para Enterprise: OAuth2 client_credentials por negocio, rutas /api/v1 de Next sin service_role y una RPC por operación que resuelve el negocio desde el token (F5)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/api-publica` sobre `integ/tanda-ac`; migraciones `20261109400000` a `20261109400300` sin aplicar) · **Base:** ADR-046 (stock por sucursal, `adjust_store_stock`), ADR-052 y ADR-083 (aislamiento entre negocios, `(select current_tenant_id())`, `audit_logs` inmutable), ADR-071 (`role_write_guard`, permisos por rol), ADR-090 (auditoría de rendimiento), CLAUDE.md §6. **Numeración:** 093 y 095 quedan para otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/api-publica` sobre `integ/tanda-ac`; migraciones `20261109400000` a `20261109400300` aplicadas) · **Base:** ADR-046 (stock por sucursal, `adjust_store_stock`), ADR-052 y ADR-083 (aislamiento entre negocios, `(select current_tenant_id())`, `audit_logs` inmutable), ADR-071 (`role_write_guard`, permisos por rol), ADR-090 (auditoría de rendimiento), CLAUDE.md §6. **Numeración:** 093 y 095 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3466,7 +3466,7 @@ F5 promete "API pública con OAuth para clientes Enterprise" con el criterio "si
 
 ## ADR-097: Gastronomía PRO, ronda 2: ticket separado por comensal, KDS por curso con prioridad, anulación de delivery y aviso automático a la lista de espera
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f13-gastro-r2` sobre `feat/create-sale-ronda2`; migraciones `20261109600000` a `20261109600300` sin aplicar) · **Hitos:** F13 · H43, H44, H45, H46, H49, H51 · **Base:** ADR-081 (ronda 1 y su deuda), ADR-096 (definición vigente de `create_sale`, no se recrea), ADR-071 (`role_write_guard`), ADR-083 (`audit_logs` inmutable, `(select current_tenant_id())`), ADR-090 (auditoría de rendimiento), ADR-026 (Gastronomía como flag operativo).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f13-gastro-r2` sobre `feat/create-sale-ronda2`; migraciones `20261109600000` a `20261109600300` aplicadas) · **Hitos:** F13 · H43, H44, H45, H46, H49, H51 · **Base:** ADR-081 (ronda 1 y su deuda), ADR-096 (definición vigente de `create_sale`, no se recrea), ADR-071 (`role_write_guard`), ADR-083 (`audit_logs` inmutable, `(select current_tenant_id())`), ADR-090 (auditoría de rendimiento), ADR-026 (Gastronomía como flag operativo). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3504,7 +3504,7 @@ ADR-081 dejó como deuda el ticket separado por comensal, agrupar el KDS por cur
 
 ## ADR-095: Impuestos como sujeto: retenciones y percepciones sufridas, reclasificación contable y liquidación mensual de Ingresos Brutos (F18 · H106, H108, H110)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f18-fiscal` sobre `integ/tanda-ab`; migraciones `20261109300000_retenciones_sufridas`, `20261109300100_iibb_liquidacion` y `20261109300200_asientos_impuestos_sujeto` sin aplicar; valores normativos y diseños de archivo orientativos a validar con un contador) · **Base:** ADR-061 (liquidaciones de procesadores y `charges_details`), ADR-066 (motor de asientos), ADR-068 (catálogo fiscal, `tax_suffered`), ADR-079 (retenciones como agente), ADR-059 (tesorería). **Numeración:** 093 y 094 tomadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f18-fiscal` sobre `integ/tanda-ab`; migraciones `20261109300000_retenciones_sufridas`, `20261109300100_iibb_liquidacion` y `20261109300200_asientos_impuestos_sujeto` aplicadas; valores normativos y diseños de archivo orientativos a validar con un contador) · **Base:** ADR-061 (liquidaciones de procesadores y `charges_details`), ADR-066 (motor de asientos), ADR-068 (catálogo fiscal, `tax_suffered`), ADR-079 (retenciones como agente), ADR-059 (tesorería). **Numeración:** 093 y 094 tomadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3606,7 +3606,7 @@ F8 tenía pendientes que no dependen de credenciales, kits ni cobros reales de u
 
 ## ADR-100: Reportes con filtros guardables, presets y orden por usuario; atajos del POS sin chocar con el navegador; toasts y skeletons consistentes (TX-5, TX-3)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/tx-f10` sobre `integ/tanda-ag`; migración `20261109900000_reportes_filtros_medio_categoria` sin aplicar) · **Hitos:** TX-5, TX-3 · **Base:** ADR-049 (alcance por sucursal de los reportes, `report_store_filter`), ADR-057 (vista consolidada o por sucursal), TX-1 (`DateRangePicker`).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/tx-f10` sobre `integ/tanda-ag`; migración `20261109900000_reportes_filtros_medio_categoria` aplicada) · **Hitos:** TX-5, TX-3 · **Base:** ADR-049 (alcance por sucursal de los reportes, `report_store_filter`), ADR-057 (vista consolidada o por sucursal), TX-1 (`DateRangePicker`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3653,7 +3653,7 @@ Faltaban en F10 la cola de impresión con reintentos, imprimir tickets por ESC/P
 - Tests: `tests/unit/escposPrintQueue.test.ts`.
 ## ADR-105: Impuestos 100 % personalizables por el negocio: plantillas de NinjaSoft con versiones con vigencia, valores propios, perfiles de padrón y cálculo con el valor efectivo
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/impuestos-personalizables` sobre `integ/tanda-ai`; migraciones `20261110100000_impuestos_personalizables` y `20261110100100_impuestos_personalizables_calculo` sin aplicar; valores normativos orientativos a validar con un contador) · **Hito:** F18 (H103 a H106, H108) · **Base:** ADR-068 (base fiscal), ADR-076 (Libro IVA), ADR-079 (retenciones como agente), ADR-095 (sujeto e IIBB), ADR-083 (auditoría inmutable), ADR-090 y ADR-093 (rendimiento, `(select ...)` y `tenant_id` explícito). **Numeración:** 099 y 100 reservadas por otras ramas.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/impuestos-personalizables` sobre `integ/tanda-ai`; migraciones `20261110100000_impuestos_personalizables` y `20261110100100_impuestos_personalizables_calculo` aplicadas; valores normativos orientativos a validar con un contador) · **Hito:** F18 (H103 a H106, H108) · **Base:** ADR-068 (base fiscal), ADR-076 (Libro IVA), ADR-079 (retenciones como agente), ADR-095 (sujeto e IIBB), ADR-083 (auditoría inmutable), ADR-090 y ADR-093 (rendimiento, `(select ...)` y `tenant_id` explícito). **Numeración:** 099 y 100 reservadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3690,7 +3690,7 @@ Pedido del dueño (literal): "la configuración impositiva debe ser 100 % person
 
 ## ADR-103: Envíos y logística, fase 1: núcleo multi-carrier, Andreani real, simulador y etiquetas por la cola de impresión (F19 · H120, H121)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/envios-logistica` sobre `integ/tanda-ak`; migraciones `20261110300000` a `20261110300300` sin aplicar; Edge `shipping` sin desplegar) · **Base:** ADR-057 (credenciales por sucursal con herencia), ADR-101 (cola de impresión), ADR-052 (`internal_scope`, sin `OR is_internal()`), ADR-083 (auditoría inmutable), ADR-093 (tenant_id explícito), ADR-098 (Edge públicas declaradas) · **Numeración:** ADR-102 queda para otra rama.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/envios-logistica` sobre `integ/tanda-ak`; migraciones `20261110300000` a `20261110300300` aplicadas; Edge `shipping` desplegada) · **Base:** ADR-057 (credenciales por sucursal con herencia), ADR-101 (cola de impresión), ADR-052 (`internal_scope`, sin `OR is_internal()`), ADR-083 (auditoría inmutable), ADR-093 (tenant_id explícito), ADR-098 (Edge públicas declaradas) · **Numeración:** ADR-102 queda para otra rama. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3725,7 +3725,7 @@ El dueño quiere gestionar envíos con etiquetas de logísticas integradas (Andr
 
 ## ADR-104: Mercado Libre MVP: cuentas por OAuth con PKCE, inbox y outbox idempotentes, una venta por carrito sin caja y facturación con la cola ARCA (H87)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/mercadolibre-mvp`; migraciones `20261110400000` a `20261110400300` sin aplicar) · **Hitos:** H87 (fase MVP) · **Base:** ADR-072 (cola ARCA), ADR-046 (stock por sucursal), ADR-085 (depósitos), ADR-070 (webhook_events), ADR-098 (Edge públicas), ADR-101 (cola de impresión). Investigación de la doc oficial de ML (2026-10-13) resumida en `docs/38-mercadolibre.md`.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/mercadolibre-mvp`; migraciones `20261110400000` a `20261110400300` aplicadas) · **Hitos:** H87 (fase MVP) · **Base:** ADR-072 (cola ARCA), ADR-046 (stock por sucursal), ADR-085 (depósitos), ADR-070 (webhook_events), ADR-098 (Edge públicas), ADR-101 (cola de impresión). Investigación de la doc oficial de ML (2026-10-13) resumida en `docs/38-mercadolibre.md`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3756,7 +3756,7 @@ El dueño pidió una integración con Mercado Libre "muy robusta y profesional".
 
 ## ADR-102: Canales de delivery externos: núcleo genérico con webhook firmado, ingesta idempotente, comanda automática, cola saliente con reintentos, facturación con el medio "plataforma" y simulador (F13 · H49 integraciones)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/canales-delivery` sobre `integ/tanda-ak`; migraciones `20261110200000` a `20261110200300` sin aplicar; Edge `delivery_channel_webhook` y `delivery_channel_worker` sin desplegar) · **Hitos:** F13 · H49 (integración con apps de delivery) · **Base:** ADR-097 (anulación de ítems de delivery, `delivery_order_voids`), ADR-081 (patrón de anulación con motivo), ADR-072 (cola fiscal ARCA, `arca_on_void`), ADR-096 (definición vigente de `create_sale`, no se recrea), ADR-098 (Edge públicas declaradas, `requestGuard`), ADR-071 (`role_write_guard`), ADR-083 (`audit_logs` inmutable), ADR-090 (auditoría de rendimiento), ADR-062 (patrón de cron interno con `X-Cron-Secret`).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/canales-delivery` sobre `integ/tanda-ak`; migraciones `20261110200000` a `20261110200300` aplicadas; Edge `delivery_channel_webhook` y `delivery_channel_worker` desplegada) · **Hitos:** F13 · H49 (integración con apps de delivery) · **Base:** ADR-097 (anulación de ítems de delivery, `delivery_order_voids`), ADR-081 (patrón de anulación con motivo), ADR-072 (cola fiscal ARCA, `arca_on_void`), ADR-096 (definición vigente de `create_sale`, no se recrea), ADR-098 (Edge públicas declaradas, `requestGuard`), ADR-071 (`role_write_guard`), ADR-083 (`audit_logs` inmutable), ADR-090 (auditoría de rendimiento), ADR-062 (patrón de cron interno con `X-Cron-Secret`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3798,7 +3798,7 @@ El dueño pidió que los pedidos de PedidosYa, Rappi y Uber Eats entren solos, c
 
 ## ADR-106: Pausar venta y Limpiar en el POS: la venta en curso (carrito, hoja de cobro y pagos) se guarda por negocio, sucursal, caja y turno, y se retoma con el criterio del servidor (F8 · H21j)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausar-venta`, migración `20261111100000_pausar_venta` sin aplicar) · **Base:** ADR-048 (cobros en espera), ADR-051 (caja propia), ADR-056 y ADR-058 (precio del servidor), ADR-077 (venta offline), ADR-100 (atajos).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausar-venta`, migración `20261111100000_pausar_venta` aplicada) · **Base:** ADR-048 (cobros en espera), ADR-051 (caja propia), ADR-056 y ADR-058 (precio del servidor), ADR-077 (venta offline), ADR-100 (atajos). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3840,7 +3840,7 @@ Pedido literal del dueño: "si estoy cobrando y el cliente quiere hacer algo e i
 
 ## ADR-108: Ventas pausadas que vencen a las 24 h (baja lógica, job cada 15 min, criterio del servidor) y las que tienen pagos no se borran solas
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausadas-24h`, migración `20261111100100_pausadas_vencen_24h` sin aplicar) · **Base:** ADR-106 (pausar venta). ADR-107 queda reservado para el PR abierto del catálogo.
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausadas-24h`, migración `20261111100100_pausadas_vencen_24h` aplicada) · **Base:** ADR-106 (pausar venta). ADR-107 queda reservado para el PR abierto del catálogo. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3872,7 +3872,7 @@ Pedido del dueño: "que se borren a las 24 hs y mejorame el diseño: acá no mue
 
 ## ADR-107: Catálogo Tiendita sincronizado desde el feed del scraper en Railway (reemplaza el import por Excel)
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-sync-railway`; migración `20261110500000_catalogo_sync_railway` sin aplicar; Edge `catalog_sync` sin desplegar; secrets sin setear) · **Base:** ADR-052 (`internal_scope()`), ADR-062 (patrón de cron interno con `X-Cron-Secret`), ADR-083 (`audit_logs`), ADR-090 (auditoría de rendimiento), ADR-093 (`catalog_search` sobre `catalog_products`).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-sync-railway`; migración `20261110500000_catalogo_sync_railway` aplicada; Edge `catalog_sync` desplegada; secrets sin setear) · **Base:** ADR-052 (`internal_scope()`), ADR-062 (patrón de cron interno con `X-Cron-Secret`), ADR-083 (`audit_logs`), ADR-090 (auditoría de rendimiento), ADR-093 (`catalog_search` sobre `catalog_products`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -3905,7 +3905,7 @@ El catálogo precargado se cargaba con un Excel gigante que el dueño bajaba del
 
 ## ADR-109: Catálogo maestro por EAN (una ficha por producto, fusionada de todas las tiendas) y ofertas por tienda y vendedor; import sin precio y referencia de mercado
 
-**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-maestro-ean`; migración `20261111200000_catalogo_maestro_ean` sin aplicar; Edges `catalog_sync` y `tiendita_copy_image` sin desplegar; scraper en la rama local `feat/feed-catalogo-maestro` sin deployar) · **Base:** ADR-107 (sync con el feed), ADR-093 (`catalog_search` con trigram), ADR-052 (`internal_scope()`), ADR-083 (auditoría).
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-maestro-ean`; migración `20261111200000_catalogo_maestro_ean` aplicada; Edges `catalog_sync` y `tiendita_copy_image` desplegadas; scraper en la rama local `feat/feed-catalogo-maestro` sin deployar) · **Base:** ADR-107 (sync con el feed), ADR-093 (`catalog_search` con trigram), ADR-052 (`internal_scope()`), ADR-083 (auditoría). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4059,7 +4059,7 @@ En "Pagos de plataforma", el Client ID tiene cargado un email.
 
 ## ADR-113: Agenda editable de la sincronización del catálogo desde el panel interno (tick por minuto en vez de reprogramar pg_cron), pausa y cancelación de corridas, y rediseño de la pestaña Catálogos
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/catalogo-sync-config`; migración `20261111400000_catalogo_sync_config` sin aplicar; Edge `catalog_sync` sin desplegar) · **Base:** ADR-107 (sync con el feed), ADR-109 (catálogo maestro), ADR-052 (`internal_scope()`), ADR-083 (`audit_logs`).
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/catalogo-sync-config`; migración `20261111400000_catalogo_sync_config` aplicada; Edge `catalog_sync` desplegada) · **Base:** ADR-107 (sync con el feed), ADR-109 (catálogo maestro), ADR-052 (`internal_scope()`), ADR-083 (`audit_logs`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4091,7 +4091,7 @@ El dueño pidió poder modificar la sincronización automática del catálogo de
 
 ## ADR-115: Cuenta corriente de la plataforma (F20-1): ledger inmutable con imputación FIFO alimentado por billing_records, cargos por período con descuentos y prorrateo, permiso Cobranzas con topes por nivel y exclusión de negocios del staff y de prueba
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-ledger`; migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar) · **Hito:** H127 (F20-1) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §6.3, §10, §17, §18 y §22 · **Base:** ADR-110, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-083 (auditoría inmutable). **Numeración:** 112 la toma `feat/plantillas-factura`.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-ledger`; migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` aplicadas) · **Hito:** H127 (F20-1) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §6.3, §10, §17, §18 y §22 · **Base:** ADR-110, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-083 (auditoría inmutable). **Numeración:** 112 la toma `feat/plantillas-factura`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4154,7 +4154,7 @@ Pedido del dueño: optimizar la velocidad del POS. Medido sobre `main`: `/pos` c
 - Tests: `tests/unit/offlineSync.test.ts` (ajuste de turno, sucursal y política de la foto sin tocar el catálogo).
 ## ADR-112: Motor de comprobantes con modelos de factura A4 y ticket, personalización por negocio y sello "Un software de Ninja Soft" ocultable por plan
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar) · **Base:** ADR-068 (impuestos y transparencia fiscal), ADR-072 (factura electrónica ARCA, CAE/CAEA y QR), H9b (plantillas de ticket), ADR-110 (cobranza SaaS, factura de la plataforma). **Numeración:** 109, 110 y 111 están tomados en `main` y en `feat/ticket-post-venta`.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración aplicada) · **Base:** ADR-068 (impuestos y transparencia fiscal), ADR-072 (factura electrónica ARCA, CAE/CAEA y QR), H9b (plantillas de ticket), ADR-110 (cobranza SaaS, factura de la plataforma). **Numeración:** 109, 110 y 111 están tomados en `main` y en `feat/ticket-post-venta`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4186,7 +4186,7 @@ Hasta ahora el comprobante sin plantilla propia era el ticket de bloques y el "A
 
 ## ADR-116: Servicios profesionales: catálogo en modo servicios, aclaración por renglón y factura de servicios con período y vencimiento del pago
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar) · **Base:** ADR-068 (`products.is_service`, concepto de WSFE), ADR-072 (cola fiscal ARCA), ADR-075 (perfiles de rubro), ADR-096 (última `create_sale`), ADR-112 (motor de comprobantes). **Numeración:** 113 está en `feat/catalogo-sync-config`; 114 y 115, en `feat/cobranza-ledger`.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración aplicada) · **Base:** ADR-068 (`products.is_service`, concepto de WSFE), ADR-072 (cola fiscal ARCA), ADR-075 (perfiles de rubro), ADR-096 (última `create_sale`), ADR-112 (motor de comprobantes). **Numeración:** 113 está en `feat/catalogo-sync-config`; 114 y 115, en `feat/cobranza-ledger`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4219,7 +4219,7 @@ Ya existían el rubro "Servicios profesionales" (`tenants.industry = 'servicios'
 
 ## ADR-117: Datos fiscales del cliente para la factura de NinjaSoft: emisor configurable con letra pendiente, verificación sólo desde una consulta al padrón grabada por el servidor e historia por vigencia (F20-3)
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-110 (cobranza SaaS), ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §7.2, §8 y §22. **Numeración:** 113 lo toma `feat/catalogo-sync-config`; 114 está en `main`.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración aplicada, Edge desplegada) · **Base:** ADR-110 (cobranza SaaS), ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §7.2, §8 y §22. **Numeración:** 113 lo toma `feat/catalogo-sync-config`; 114 está en `main`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4252,7 +4252,7 @@ F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea l
 
 ## ADR-119: Comprobantes v2: un solo motor para todo comprobante, más modelos y opciones, fotos de producto, selector Ticket o A4 al imprimir, PDF del email igual a la vista previa y nota de crédito de la devolución
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/comprobantes-v2`; migración `20261116200000_comprobantes_v2` sin aplicar; Edge `ai_assistant` sin desplegar) · **Base:** ADR-112 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-072 (facturación ARCA), ADR-077 (venta offline), H9b (plantillas de ticket), H22 (perfiles de impresión). **Numeración:** 117 es la mayor en `main`; 118 puede estar tomada en una rama abierta.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/comprobantes-v2`; migración `20261116200000_comprobantes_v2` aplicada; Edge `ai_assistant` desplegada) · **Base:** ADR-112 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-072 (facturación ARCA), ADR-077 (venta offline), H9b (plantillas de ticket), H22 (perfiles de impresión). **Numeración:** 117 es la mayor en `main`; 118 puede estar tomada en una rama abierta. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4361,7 +4361,7 @@ Después, para la misma rama: poder elegir un modelo de factura que muestre la f
 
 ## ADR-118: Productos sin EAN por tienda, EAN con separadores limpiados, cierre de la sync por lotes y conteo de catálogos guardado
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/catalogo-sin-ean`; migración `20261115200000_catalogo_sin_ean` sin aplicar; Edge `catalog_sync` sin desplegar; scraper en la rama local `feat/feed-sin-ean` sin deployar) · **Base:** ADR-107 (sync con el feed), ADR-109 (catálogo maestro por EAN y ámbito por tienda), ADR-113 (agenda, pausa y cancelación).
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/catalogo-sin-ean`; migración `20261115200000_catalogo_sin_ean` aplicada; Edge `catalog_sync` desplegada; scraper en la rama local `feat/feed-sin-ean` sin deployar) · **Base:** ADR-107 (sync con el feed), ADR-109 (catálogo maestro por EAN y ámbito por tienda), ADR-113 (agenda, pausa y cancelación). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4396,7 +4396,7 @@ La primera corrida completa del catálogo maestro (14/10) terminó "ok" con 683.
 
 ## ADR-120: Suscripción por cuenta corriente (F20-8): cuentas de cobro con el editor de Transferencia, avisos idempotentes por cuota, "Ya transferí" verificado por el staff, cambio de modalidad sin cobros dobles y códigos de invitación de cuenta corriente
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-cta-cte`; migración `20261116100000_cobranza_cuenta_corriente` sin aplicar; Edges `mp_billing_webhook` y `mp_subscription_checkout` sin desplegar) · **Hito:** H134 (F20-8) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §9.3, §10.1, §12.3, §14.5, §22 y §24 · **Base:** ADR-110, ADR-115 (ledger y modalidad), ADR-117, ADR-055 (cuentas de Transferencia), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 118 y 119 pueden estar tomadas por ramas abiertas.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-cta-cte`; migración `20261116100000_cobranza_cuenta_corriente` aplicada; Edges `mp_billing_webhook` y `mp_subscription_checkout` desplegadas) · **Hito:** H134 (F20-8) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §9.3, §10.1, §12.3, §14.5, §22 y §24 · **Base:** ADR-110, ADR-115 (ledger y modalidad), ADR-117, ADR-055 (cuentas de Transferencia), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 118 y 119 pueden estar tomadas por ramas abiertas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4433,7 +4433,7 @@ El dueño pidió (§22 #13 y el pedido del 14/10): cobrarles por transferencia a
 
 ## ADR-121: Participación del staff sobre el cobrado neto: motor puro único para borrador, cierre, proyección y simulador; cada hecho de plata se liquida una sola vez; liquidación inmutable verificada al centavo en SQL y pagos con la operación de Mercado Pago leída del servidor (F21)
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-110 y ADR-115 (ledger de la plataforma: `platform_payments`, `platform_ledger`), ADR-052 (`internal_scope`), ADR-055 (cuentas de Transferencia y catálogo de bancos), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §20 y §22 #15. **Numeración:** 118 a 120 están en `main`.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración aplicada, Edge desplegada) · **Base:** ADR-110 y ADR-115 (ledger de la plataforma: `platform_payments`, `platform_ledger`), ADR-052 (`internal_scope`), ADR-055 (cuentas de Transferencia y catálogo de bancos), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §20 y §22 #15. **Numeración:** 118 a 120 están en `main`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4471,7 +4471,7 @@ El dueño pidió construir F21, que estaba como futuro: porcentaje del cobrado n
 
 ## ADR-122: Presupuestos con número propio, revisiones, link de aceptación y conversión en venta; tipos de servicio por negocio y portadas con IA (Gemini) del complemento Asistente IA
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migraciones sin aplicar, Edge sin desplegar) · **Base:** ADR-116 (servicios profesionales: `products.is_service`, unidad, `invoice_detail`, aclaraciones, `catalog_mode`), ADR-112 (motor de comprobantes), ADR-056 (cambio de precio con motivo), ADR-071 (permisos por rol), ADR-083 (auditoría), addon `asistente_ia` (`ai_config` en `platform_secrets`). **Numeración:** 118 a 121 los usan ramas abiertas.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migraciones aplicadas, Edge desplegada) · **Base:** ADR-116 (servicios profesionales: `products.is_service`, unidad, `invoice_detail`, aclaraciones, `catalog_mode`), ADR-112 (motor de comprobantes), ADR-056 (cambio de precio con motivo), ADR-071 (permisos por rol), ADR-083 (auditoría), addon `asistente_ia` (`ai_config` en `platform_secrets`). **Numeración:** 118 a 121 los usan ramas abiertas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4543,7 +4543,7 @@ El dueño pidió que "quede todo explicado, todo intuitivo y fácil": un dueño 
 - Tests: `tests/unit/billingLetterGuide.test.ts`.
 ## ADR-124: Nombre de fantasía como dato de la marca del negocio, con un helper único para mostrar el nombre del negocio en toda la app
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edges sin desplegar) · **Base:** ADR-112 / ADR-119 (motor de comprobantes, `invoice_style.trade_name`), ADR-049 (herencia de configuración por grupo y sucursal), ADR-122 (presupuestos), H8 (`tenant_branding`).
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración aplicada, Edges desplegadas) · **Base:** ADR-112 / ADR-119 (motor de comprobantes, `invoice_style.trade_name`), ADR-049 (herencia de configuración por grupo y sucursal), ADR-122 (presupuestos), H8 (`tenant_branding`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4576,7 +4576,7 @@ El dueño pidió "agregá en Marca el nombre de fantasía, e incorporalo en la i
 
 ## ADR-123: Presupuestos v2: envío por email con el PDF, hoja como la de cobro, contactos del cliente y del negocio separados, sin vencimiento y emisor para comisiones
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-122 (presupuestos), ADR-112 y ADR-119 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-042 (hoja de cobro), ADR-083 (auditoría).
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración aplicada, Edge desplegada) · **Base:** ADR-122 (presupuestos), ADR-112 y ADR-119 (motor de comprobantes), ADR-111 (ventana del ticket), ADR-042 (hoja de cobro), ADR-083 (auditoría). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4615,7 +4615,7 @@ Sin key nueva: todo es parte de `presupuestos` (OPTIONAL, Pro+). El gating real 
 
 ## ADR-126: La app de Mercado Libre se configura desde el panel interno (platform_secrets.ml_app) con prioridad sobre los secrets de Edge, que quedan como compatibilidad
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (sin migración; Edges sin desplegar) · **Base:** ADR-104 (Mercado Libre MVP), H15 / F20-0b (Pagos de plataforma, `set_platform_secret`, `platform_secrets`), ADR-069 (dominio propio de webhooks).
+**Fecha:** 2026-10-14 · **Estado:** aceptada (sin migración; Edges desplegadas) · **Base:** ADR-104 (Mercado Libre MVP), H15 / F20-0b (Pagos de plataforma, `set_platform_secret`, `platform_secrets`), ADR-069 (dominio propio de webhooks). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4693,7 +4693,7 @@ El dashboard interno calculaba el MRR con los precios y el estado de hoy y recon
 
 ## ADR-128: Punitorios recalculados desde cero con la misma función en SQL y en TypeScript, escalera de mora configurable que reemplaza a saas-dunning, promesas que la frenan y ND/NC pendientes de H130 (F20-9)
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h135-mora-punitorios`; migración `20261124100000_cobranza_mora_punitorios` sin aplicar; sin Edges) · **Hito:** H135 (F20-9) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §10.3, §10.5, §11, §13.2, §18 y §22 #4, #5, #6 y #10 · **Base:** ADR-110, ADR-115 (ledger, imputación FIFO, topes y rol de cobranza), ADR-120, ADR-127, ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 129 la toma otra rama abierta.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h135-mora-punitorios`; migración `20261124100000_cobranza_mora_punitorios` aplicada; sin Edges) · **Hito:** H135 (F20-9) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.1, §10.3, §10.5, §11, §13.2, §18 y §22 #4, #5, #6 y #10 · **Base:** ADR-110, ADR-115 (ledger, imputación FIFO, topes y rol de cobranza), ADR-120, ADR-127, ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 129 la toma otra rama abierta. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4777,7 +4777,7 @@ H32 pedía el circuito de un local con salón y caja separados: el vendedor arma
 
 ## ADR-130: Carrito y pedido del catálogo público como pedido de salón de H32, con precios y stock del servidor, rate limit por IP y negocio, honeypot y seguimiento por token (F6 · H10)
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h10-carrito-catalogo`; migraciones `20261125100000_features_catalogo_pedidos` y `20261125100100_catalogo_pedidos` sin aplicar; sin Edges) · **Base:** ADR-129 (pedidos de salón, reserva canal `pedido`, expedición, cross-branch), ADR-091 (reservas de stock), ADR-106 (formato del carrito pausado), ADR-056 (cambio de precio con motivo), ADR-124 (nombre de fantasía), ADR-122 (link público con token), H10 (listas de precios por canal), H13b (centro de notificaciones), cola `system_emails` (mailer de plataforma).
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h10-carrito-catalogo`; migraciones `20261125100000_features_catalogo_pedidos` y `20261125100100_catalogo_pedidos` aplicadas; sin Edges) · **Base:** ADR-129 (pedidos de salón, reserva canal `pedido`, expedición, cross-branch), ADR-091 (reservas de stock), ADR-106 (formato del carrito pausado), ADR-056 (cambio de precio con motivo), ADR-124 (nombre de fantasía), ADR-122 (link público con token), H10 (listas de precios por canal), H13b (centro de notificaciones), cola `system_emails` (mailer de plataforma). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4819,7 +4819,7 @@ H10 quedaba con "solo carrito/pedido": el catálogo público (`/c/<slug>`) mostr
 
 ## ADR-131: Prorrateo con un único cálculo en SQL y TypeScript, conciliación diaria con Mercado Pago por una Edge de sólo lectura con bandeja de diferencias, y cobranza 360 con permisos finos sobre Cobranzas (F20-10 y F20-11)
 
-**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h136-cobranza-360`; migración `20261126100000_cobranza_360` sin aplicar; Edge nueva `platform_mp_reconcile` sin desplegar) · **Hito:** H136 (F20-10 y F20-11) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §9.5, §10.6, §14.3, §17.2, §17.3, §17.4, §18, §22 #8, #9 y #12 y §27 · **Base:** ADR-110, ADR-115 (ledger, prorrateo de upgrade, permiso Cobranzas y topes), ADR-120, ADR-127, ADR-128 (escalera, promesas, timeline), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 130 la toma otra rama abierta.
+**Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/h136-cobranza-360`; migración `20261126100000_cobranza_360` aplicada; Edge `platform_mp_reconcile` desplegada) · **Hito:** H136 (F20-10 y F20-11) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §9.5, §10.6, §14.3, §17.2, §17.3, §17.4, §18, §22 #8, #9 y #12 y §27 · **Base:** ADR-110, ADR-115 (ledger, prorrateo de upgrade, permiso Cobranzas y topes), ADR-120, ADR-127, ADR-128 (escalera, promesas, timeline), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Numeración:** 130 la toma otra rama abierta. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4860,7 +4860,7 @@ F20-1 dejó un prorrateo sólo de upgrade del mismo ciclo (trigger sobre `subscr
 
 ## ADR-133: Padrón de ARCA para todos los negocios con el certificado de NinjaSoft, clientes verificados por el servidor y tipo de comprobante forzado sólo dentro de la matriz de ARCA
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/clientes-padron-arca`; migraciones `20261128100000_features_padron_arca` y `20261128100100_clientes_padron_arca` sin aplicar; Edges `arca_padron` (nueva), `arca_wsfe` y `platform_billing` sin desplegar; sin prueba contra ARCA real porque no hay certificado de padrón cargado) · **Hitos:** F18 · H104 (constancia de ARCA por CUIT) y H107 (tipo de comprobante) · **Base:** ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA, cola de ARCA), ADR-117 (padrón A5 de la plataforma, parser `_shared/arca/padron.ts`), ADR-125 (`inferLetter` y guía de letras), ADR-052 (`internal_scope`).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/clientes-padron-arca`; migraciones `20261128100000_features_padron_arca` y `20261128100100_clientes_padron_arca` aplicadas; Edges `arca_padron` (nueva), `arca_wsfe` y `platform_billing` desplegada; sin prueba contra ARCA real porque no hay certificado de padrón cargado) · **Hitos:** F18 · H104 (constancia de ARCA por CUIT) y H107 (tipo de comprobante) · **Base:** ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA, cola de ARCA), ADR-117 (padrón A5 de la plataforma, parser `_shared/arca/padron.ts`), ADR-125 (`inferLetter` y guía de letras), ADR-052 (`internal_scope`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4903,7 +4903,7 @@ El dueño pidió: crear clientes desde el panel de ventas; si tienen CUIT, verif
 
 ## ADR-132: Gestor de Mercado Libre: publicación rápida en lote y en varios tipos con el precio de cada tipo calculado en el servidor, y una feature aparte (`mercadolibre_gestor`) para métricas, posventa y embudos (H141)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (parte A en `feat/ml-gestor`: migración `20261127100000_ml_gestor_publicaciones` sin aplicar, Edge `ml_api` sin desplegar; parte B en `feat/ml-gestor-posventa`, apilada: migraciones `20261127100100_features_mercadolibre_gestor`, `20261127100200_ml_gestor_posventa` y `20261127100300_ml_gestor_cron` sin aplicar; Edge nueva `ml_gestor` y `ml_worker` / `ml_webhook` modificadas, sin desplegar) · **Hito:** H141 · **Base:** ADR-104 (Mercado Libre MVP), ADR-126 (app de ML en internal), ADR-035 (ECharts), ADR-052 (`internal_scope`, sin `OR is_internal()`), ADR-083 (auditoría inmutable), ADR-093 (tenant_id explícito). Diseño: [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (parte A en `feat/ml-gestor`: migración `20261127100000_ml_gestor_publicaciones` aplicada, Edge `ml_api` desplegada; parte B en `feat/ml-gestor-posventa`, apilada: migraciones `20261127100100_features_mercadolibre_gestor`, `20261127100200_ml_gestor_posventa` y `20261127100300_ml_gestor_cron` aplicadas; Edge `ml_gestor` y `ml_worker` / `ml_webhook` modificadas, desplegada) · **Hito:** H141 · **Base:** ADR-104 (Mercado Libre MVP), ADR-126 (app de ML en internal), ADR-035 (ECharts), ADR-052 (`internal_scope`, sin `OR is_internal()`), ADR-083 (auditoría inmutable), ADR-093 (tenant_id explícito). Diseño: [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4937,7 +4937,7 @@ Lecturas reales del 15/10/2026 con la cuenta conectada del dueño (sólo GET y `
 
 ## ADR-135: Cotización del dólar oficial (venta) de ArgentinaDatos en el panel interno, diaria por cron, con carga manual que manda y uso en la liquidación del staff
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/cotizacion-dolar-api`; migración `20261130100000_cotizacion_dolar_api` sin aplicar; Edge nueva `platform_fx_sync` y Edge `staff_payouts` sin desplegar) · **Base:** ADR-121 (F21, participación del staff y gastos en USD), ADR-131 (patrón de cron + Edge con `X-Cron-Secret`), ADR-035 (ECharts), ADR-052 (`internal_scope`).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/cotizacion-dolar-api`; migración `20261130100000_cotizacion_dolar_api` aplicada; Edge `platform_fx_sync` y Edge `staff_payouts` desplegada) · **Base:** ADR-121 (F21, participación del staff y gastos en USD), ADR-131 (patrón de cron + Edge con `X-Cron-Secret`), ADR-035 (ECharts), ADR-052 (`internal_scope`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -4998,7 +4998,7 @@ El dueño pidió poder reordenar el menú lateral a su gusto, por usuario, ocult
 - Tests: `tests/unit/navMenuLayout.test.ts` (merge, permisos, movimientos) y `tests/components/MenuCustomizer.test.tsx` (teclado, cruce de grupos, Escape, grupos, ojo).
 ## ADR-139: Tipos de garantía extendida con % sobre el precio, alcance por categoría y producto con precedencia producto > categoría más específica > todos, y precio validado por el servidor al enlazar la garantía en la venta
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/garantias-extendidas-tipos`; migración `20261205100000_garantias_extendidas_tipos` sin aplicar) · **Hito:** H28 (garantías extendidas) · **Base:** ADR-092 (garantías por serie), ADR-096 (garantía enlazada a la línea que cubre en `create_sale`), ADR-056 (precio autoritativo y cobro en espera), ADR-077 (venta offline), ADR-083 (`audit_logs` inmutable) · **Numeración:** 134 a 138 quedan para otras ramas.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/garantias-extendidas-tipos`; migración `20261205100000_garantias_extendidas_tipos` aplicada) · **Hito:** H28 (garantías extendidas) · **Base:** ADR-092 (garantías por serie), ADR-096 (garantía enlazada a la línea que cubre en `create_sale`), ADR-056 (precio autoritativo y cobro en espera), ADR-077 (venta offline), ADR-083 (`audit_logs` inmutable) · **Numeración:** 134 a 138 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5033,7 +5033,7 @@ El dueño pidió: "Para las garantías extendidas debo poder configurar varios t
 - **Tests:** PGlite (49 chequeos: migración dos veces, precio SQL = TS, RPC con roles, plan y validaciones, alcance SQL = TS en todas las combinaciones, reemplazo con baja lógica, auditoría, RLS entre negocios, trigger con precio, exclusión, tipo pausado, vínculo inválido, offline auditado y vencimiento en hora de Argentina). `tests/unit/garantiasExtendidas.test.ts`, `tests/unit/warrantyOptionCards.test.tsx` y `tests/integration/rls-garantias-extendidas.test.ts` (se salta sin base local).
 ## ADR-136: Depósitos vendibles por sucursal, venta de stock de otras sucursales, entregas partidas sobre la expedición de H32 y remitos de entrega y envío con COT (F11 · H33 y H32)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/depositos-entregas-remitos` (PR A: depósitos, configuración, venta de otras sucursales y entregas partidas) y `feat/depositos-entregas-remitos-b` (PR B: remitos con COT), apilados; migraciones `20261202100000_features_entregas_remitos`, `20261202100100_depositos_venta_entregas` y `20261202100200_remitos` aplicadas en producción, verificado el 2026-10-15 en la auditoría de ADR-149; Edge `send_receipt_email` con remitos sin desplegar) · **Base:** ADR-085 (depósitos como desglose del stock de la sucursal), ADR-088 (`_sale_salon_take`, vender de la reserva), ADR-046 (stock por sucursal, invariante del total), ADR-129 (pedidos de salón, `dispatches`, cross-branch), ADR-112 y ADR-119 (motor de comprobantes, PDF del email), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 132, 134 y 135 pueden estar tomadas en ramas abiertas.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/depositos-entregas-remitos` (PR A: depósitos, configuración, venta de otras sucursales y entregas partidas) y `feat/depositos-entregas-remitos-b` (PR B: remitos con COT), apilados; migraciones `20261202100000_features_entregas_remitos`, `20261202100100_depositos_venta_entregas` y `20261202100200_remitos` aplicadas en producción, verificado el 2026-10-15 en la auditoría de ADR-149; Edge `send_receipt_email` con remitos desplegada) · **Base:** ADR-085 (depósitos como desglose del stock de la sucursal), ADR-088 (`_sale_salon_take`, vender de la reserva), ADR-046 (stock por sucursal, invariante del total), ADR-129 (pedidos de salón, `dispatches`, cross-branch), ADR-112 y ADR-119 (motor de comprobantes, PDF del email), ADR-071 (`role_write_guard`), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-090 (auditoría de rendimiento). **Numeración:** 132, 134 y 135 pueden estar tomadas en ramas abiertas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5079,7 +5079,7 @@ Hasta acá un depósito era de una sola sucursal (ADR-085), la venta tomaba de "
 
 ## ADR-137: Inventario rediseñado con ajustes de stock con motivo y aprobación por dueño o auditor, capacidades por miembro y Excel de stock, conteo y ajustes sobre el motor único de importación
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada, **unificada con ADR-138** (código en `feat/permisos-inventario`, que reemplaza a `feat/inventario-pro-intuitivo`; migraciones `20261203100000_features_ajustes_stock` y `20261204100300_ajustes_stock_aprobacion` sin aplicar; la segunda reemplaza a `20261203100100`, que nunca se aplicó) · **Hitos:** F14 · H64 (inventario físico, ajustes masivos y auditoría) y F11 · H34 (importación masiva por Excel) · **Base:** ADR-046 (stock por sucursal, `adjust_store_stock`), ADR-071 (permisos por rol, `role_write_guard`), ADR-078 (motor único de importación), ADR-085 (depósitos internos), ADR-092 (Inventario PRO: conteo cíclico y series).
+**Fecha:** 2026-10-15 · **Estado:** aceptada, **unificada con ADR-138** (código en `feat/permisos-inventario`, que reemplaza a `feat/inventario-pro-intuitivo`; migraciones `20261203100000_features_ajustes_stock` y `20261204100300_ajustes_stock_aprobacion` aplicadas; la segunda reemplaza a `20261203100100`, que nunca se aplicó) · **Hitos:** F14 · H64 (inventario físico, ajustes masivos y auditoría) y F11 · H34 (importación masiva por Excel) · **Base:** ADR-046 (stock por sucursal, `adjust_store_stock`), ADR-071 (permisos por rol, `role_write_guard`), ADR-078 (motor único de importación), ADR-085 (depósitos internos), ADR-092 (Inventario PRO: conteo cíclico y series). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5124,7 +5124,7 @@ El dueño pidió: "La parte de inventario PRO no se entiende, debo poder generar
 
 ## ADR-138: Permisos por capacidad sobre el nivel base, roles de sistema idénticos a los de hoy, roles a medida y permisos puntuales con la feature roles_permisos (deja de ser MARKETING-FUTURO)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/permisos-modelo` y `feat/permisos-editor`; migraciones `20261204100000_features_roles_permisos`, `20261204100100_permisos_capacidades` y `20261204100200_roles_personalizados` sin aplicar; Edges `member_admin` e `invite_user` sin desplegar) · **Base:** ADR-026 (`roles_permisos` como SOLO-MARKETING), ADR-045 (rol por sucursal), ADR-051 (estados del personal, jerarquía), ADR-052 (`internal_scope`), ADR-071 (`role_write_guard`, `void_sale`), ADR-083 (`current_tenant_id()` por membresía, auditoría inmutable), ADR-090 (initplan, auditoría de rendimiento). **Numeración:** 134 a 137 pueden estar tomadas por ramas abiertas.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/permisos-modelo` y `feat/permisos-editor`; migraciones `20261204100000_features_roles_permisos`, `20261204100100_permisos_capacidades` y `20261204100200_roles_personalizados` aplicadas; Edges `member_admin` e `invite_user` desplegadas) · **Base:** ADR-026 (`roles_permisos` como SOLO-MARKETING), ADR-045 (rol por sucursal), ADR-051 (estados del personal, jerarquía), ADR-052 (`internal_scope`), ADR-071 (`role_write_guard`, `void_sale`), ADR-083 (`current_tenant_id()` por membresía, auditoría inmutable), ADR-090 (initplan, auditoría de rendimiento). **Numeración:** 134 a 137 pueden estar tomadas por ramas abiertas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5165,7 +5165,7 @@ Este modelo es el **único** del sistema: Inventario (ADR-137) no tiene tablas n
 
 ## ADR-140: Costo final y utilidad del producto, costos en dólares con la cotización de la plataforma, piso global y asistente de actualización por dólar con regla automática (F18 · H100)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/listas-precios-costo-usd`, sobre `feat/cotizacion-dolar-api` de ADR-135; migraciones `20261207100000` a `20261207100200` sin aplicar) · **Base:** ADR-050, ADR-056, ADR-058, ADR-068, ADR-135 · **Investigación:** [`42-listas-de-precios.md`](./42-listas-de-precios.md) (Odoo, Tango, Bejerman, SAP B1, Dux y Xubio).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/listas-precios-costo-usd`, sobre `feat/cotizacion-dolar-api` de ADR-135; migraciones `20261207100000` a `20261207100200` aplicadas) · **Base:** ADR-050, ADR-056, ADR-058, ADR-068, ADR-135 · **Investigación:** [`42-listas-de-precios.md`](./42-listas-de-precios.md) (Odoo, Tango, Bejerman, SAP B1, Dux y Xubio). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5200,7 +5200,7 @@ El dueño pidió actualizar precios por el dólar (en las listas y categorías q
 
 ## ADR-142: Mercado Libre Full como depósito virtual por cuenta fuera del stock vendible, envíos a Full registrados (la API no los crea) con tránsito y conciliación, etiquetas Code 128 del código de inventario y ventas por Full que nunca descuentan el stock propio
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/ml-full`; migraciones `20261209100000_features_mercadolibre_full`, `20261209100100_mercadolibre_full` y `20261209100200_mercadolibre_full_cron` sin aplicar; Edge nueva `ml_full` sin desplegar) · **Base:** ADR-104 (Mercado Libre MVP: cliente, tokens, `ml_ingest_pack`, `full_only`), ADR-085 (depósitos), ADR-046 (stock por sucursal, `transfer_move_stock`), ADR-071 (`role_write_guard`), ADR-083 y ADR-090 (`(select current_tenant_id())`, auditoría inmutable). Guía: `docs/42-mercadolibre-full.md`.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/ml-full`; migraciones `20261209100000_features_mercadolibre_full`, `20261209100100_mercadolibre_full` y `20261209100200_mercadolibre_full_cron` aplicadas; Edge `ml_full` desplegada) · **Base:** ADR-104 (Mercado Libre MVP: cliente, tokens, `ml_ingest_pack`, `full_only`), ADR-085 (depósitos), ADR-046 (stock por sucursal, `transfer_move_stock`), ADR-071 (`role_write_guard`), ADR-083 y ADR-090 (`(select current_tenant_id())`, auditoría inmutable). Guía: `docs/42-mercadolibre-full.md`. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5259,7 +5259,7 @@ El dueño pidió sumar Ualá Bis y hacer todas las integraciones posibles. Relev
 
 ## ADR-144: Publicar en Mercado Libre "antibalas": los avisos de /items/validate no frenan, el envío sale del estado real de la cuenta y la configuración va por secciones
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (sin migración; Edge `ml_api` modificada, sin desplegar) · **Base:** ADR-104 (Mercado Libre MVP), ADR-132 (gestor y publicación rápida). **Numeración:** si otra rama abierta tomó la 136, renumerar al mergear.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (sin migración; Edge `ml_api` modificada, desplegada) · **Base:** ADR-104 (Mercado Libre MVP), ADR-132 (gestor y publicación rápida). **Numeración:** si otra rama abierta tomó la 136, renumerar al mergear. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5294,7 +5294,7 @@ El dueño publicaba con "Publicación rápida" un horno Whirlpool WOB71AS (MLA10
 
 ## ADR-141: Facturación de Mercado Libre con reglas como ANDESMAR: factura armada por venta en el worker y emitida sólo por SQL contra la matriz de ARCA, percepciones de IIBB cobradas por link de pago antes de la factura A, elección por venta de qué factura sale y cuál se sube, y una feature aparte (`mercadolibre_facturacion`) (H142)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (parte A en `feat/ml-vincular-fotos`: migración `20261208100000_ml_vincular_candidatos` sin aplicar, Edge `ml_api` sin desplegar; parte B en `feat/ml-facturacion-pro`, apilada: migraciones `20261208100100_features_ml_facturacion`, `20261208100200_ml_facturacion` y `20261208100300_ml_facturacion_cron` sin aplicar; Edge nueva `ml_facturacion` y `ml_worker`, `ml_api`, `arca_wsfe` modificadas, sin desplegar; sin comprobantes reales ni facturas subidas a ML en las pruebas) · **Hito:** H142 · **Base:** ADR-104 (Mercado Libre MVP), ADR-132 (gestor y reclamos), ADR-133 (padrón y matriz de ARCA), ADR-072 (cola de ARCA), ADR-068 y ADR-105 (motor de impuestos y padrones de IIBB), ADR-048 (link de pago y `mp_payment_intents`), ADR-052 (sin `OR is_internal()`). Diseño: [`43-mercadolibre-facturacion.md`](./43-mercadolibre-facturacion.md).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (parte A en `feat/ml-vincular-fotos`: migración `20261208100000_ml_vincular_candidatos` aplicada, Edge `ml_api` desplegada; parte B en `feat/ml-facturacion-pro`, apilada: migraciones `20261208100100_features_ml_facturacion`, `20261208100200_ml_facturacion` y `20261208100300_ml_facturacion_cron` aplicadas; Edge `ml_facturacion` y `ml_worker`, `ml_api`, `arca_wsfe` modificadas, desplegada; sin comprobantes reales ni facturas subidas a ML en las pruebas) · **Hito:** H142 · **Base:** ADR-104 (Mercado Libre MVP), ADR-132 (gestor y reclamos), ADR-133 (padrón y matriz de ARCA), ADR-072 (cola de ARCA), ADR-068 y ADR-105 (motor de impuestos y padrones de IIBB), ADR-048 (link de pago y `mp_payment_intents`), ADR-052 (sin `OR is_internal()`). Diseño: [`43-mercadolibre-facturacion.md`](./43-mercadolibre-facturacion.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5334,7 +5334,7 @@ El dueño factura las ventas de Mercado Libre a gran escala en ANDESMAR (MeliOmn
 
 ## ADR-148: Etiquetas PRO: impresión con @page exacto en mm desde un iframe, selección por stock/sucursal/depósito/categorías, ocho modelos personalizables con plantillas, rollos y A4 con grilla, ZPL y QR a una ficha pública con simulador de cuotas (H24)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261216100000_etiquetas_pro.sql` sin aplicar; sin Edge Functions) · **Hito:** H24 · **Base:** ADR-058 (precio de góndola por sucursal y cola de reimpresión), ADR-142 (Code 128 sin dependencias), ADR-063 (EAN-13 de balanza), ADR-130 (catálogo con pedidos, H10), ADR-104/103 (cola ZPL), ADR-052 (sin `OR is_internal()`). **Numeración:** 146 y 147 las tomaron otras ramas abiertas; si cambia, renumerar al mergear.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261216100000_etiquetas_pro.sql` aplicada; sin Edge Functions) · **Hito:** H24 · **Base:** ADR-058 (precio de góndola por sucursal y cola de reimpresión), ADR-142 (Code 128 sin dependencias), ADR-063 (EAN-13 de balanza), ADR-130 (catálogo con pedidos, H10), ADR-104/103 (cola ZPL), ADR-052 (sin `OR is_internal()`). **Numeración:** 146 y 147 las tomaron otras ramas abiertas; si cambia, renumerar al mergear. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5395,7 +5395,7 @@ Pedido del dueño sobre la hoja de cobro "¿Cómo paga?": "quiero poder manejar 
 - Deuda: envío desde otra sucursal o depósito con el atajo (hoy por Repartir), costo de envío dentro del reparto completo, cotización automática del envío (ADR-103).
 ## ADR-145: Configuración de la facturación de Mercado Libre por pasos con vista previa, mensaje al facturar y leyenda con plantillas activas por defecto, y sucursal y depósito por tipo de envío (H142)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261213100000_ml_facturacion_config_ux` sin aplicar; Edges `ml_worker` y `ml_facturacion` modificadas, sin desplegar; sin mensajes ni facturas reales en las pruebas) · **Hito:** H142 · **Base:** ADR-141 (facturación de ML), ADR-142 (Full), ADR-104, ADR-136 (depósitos). **Numeración:** si otra rama abierta tomó la 145, renumerar al mergear.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261213100000_ml_facturacion_config_ux` aplicada; Edges `ml_worker` y `ml_facturacion` modificadas, desplegadas; sin mensajes ni facturas reales en las pruebas) · **Hito:** H142 · **Base:** ADR-141 (facturación de ML), ADR-142 (Full), ADR-104, ADR-136 (depósitos). **Numeración:** si otra rama abierta tomó la 145, renumerar al mergear. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5425,7 +5425,7 @@ Todo lo nuevo es parte de `mercadolibre_facturacion` (no hay feature nueva: es c
 - Tests: `tests/unit/mlFacturacionConfig.test.ts`, `tests/components/MlBillingSettings.test.tsx`, `tests/components/SegmentedScroll.test.tsx` y ajustes en `tests/unit/mlFacturacion.test.ts` y `tests/components/MlBillingTab.test.tsx`.
 ## ADR-147: Maestro de motivos de reclamo de Mercado Libre como tabla de plataforma, sembrado con GET reales y completado por la Edge, con selector en la configuración del gestor
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261214100000_ml_claim_reasons` sin aplicar; Edge `ml_api` con la acción `reasons_fill`, sin desplegar) · **Hito:** H141 · **Base:** ADR-132 (gestor de ML), ADR-104. Diseño: [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md) §3.6.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261214100000_ml_claim_reasons` aplicada; Edge `ml_api` con la acción `reasons_fill`, desplegada) · **Hito:** H141 · **Base:** ADR-132 (gestor de ML), ADR-104. Diseño: [`41-mercadolibre-gestor.md`](./41-mercadolibre-gestor.md) §3.6. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5462,7 +5462,7 @@ Relevamiento del 15/10/2026:
 
 ## ADR-149: Logística unificada sobre la entrega, reparto propio con hojas de ruta, rol Repartidor, mapas y ruteo con servicios gratuitos y COT automático por el web service de ARBA (F22)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada; L0 (H143) en código en `feat/logistica-l0` con la migración `20261221100000_logistica_l0_arreglos` sin aplicar; L1 a L6 propuestas · **Hitos:** F22 · H143 a H149 · **Base:** ADR-129 (pedidos y expedición), ADR-136 (depósitos, entregas y remitos con COT), ADR-146 (cliente y entrega en la hoja de cobro), ADR-103 (envíos con logísticas), ADR-137/138 (permisos por capacidad), ADR-046 (traslados), ADR-087 (PWA y venta offline), H49 (delivery gastronómico). Auditoría y diseño completos: [`45-logistica-reparto.md`](./45-logistica-reparto.md).
+**Fecha:** 2026-10-15 · **Estado:** aceptada; L0 (H143) en código en `feat/logistica-l0` con la migración `20261221100000_logistica_l0_arreglos` aplicada; L1 a L6 propuestas · **Hitos:** F22 · H143 a H149 · **Base:** ADR-129 (pedidos y expedición), ADR-136 (depósitos, entregas y remitos con COT), ADR-146 (cliente y entrega en la hoja de cobro), ADR-103 (envíos con logísticas), ADR-137/138 (permisos por capacidad), ADR-046 (traslados), ADR-087 (PWA y venta offline), H49 (delivery gastronómico). Auditoría y diseño completos: [`45-logistica-reparto.md`](./45-logistica-reparto.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5503,7 +5503,7 @@ La auditoría (doc 45 §2) encontró 28 hallazgos. Los centrales: cinco circuito
 
 ## ADR-153: Pasar a facturar en real con ARCA: estado de la conexión por ambiente, guía paso a paso con verificación de cada paso y errores de ARCA con la acción concreta
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `fix/arca-pasar-a-real`; migración `20261217100000_arca_conexion_por_ambiente` sin aplicar; Edge `arca_wsfe` sin desplegar) · **Base:** ADR-072 (asistente, checklist de producción), ADR-125 (guía de requisitos con estado real), ADR-133 (certificado de la plataforma)
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `fix/arca-pasar-a-real`; migración `20261217100000_arca_conexion_por_ambiente` aplicada; Edge `arca_wsfe` desplegada) · **Base:** ADR-072 (asistente, checklist de producción), ADR-125 (guía de requisitos con estado real), ADR-133 (certificado de la plataforma) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5536,7 +5536,7 @@ Caso real de un negocio (15/10/2026): con el certificado de producción cargado,
 
 ## ADR-150: Tesorería ordenada: las cuentas de dinero de Tesorería son la única definición de dónde está la plata, cada hecho genera un movimiento y un asiento desde su documento, y una sola fuente (NinjaPOS o NubCeo) para los asientos de liquidación (F22)
 
-**Fecha:** 2026-10-15 · **Estado:** propuesta (auditoría y plan; arreglos chicos en `docs/plan-tesoreria`, migración `20261217100000` sin aplicar y Edge `nubceo_sync` sin desplegar) · **Base:** ADR-044, ADR-059, ADR-061, ADR-062, ADR-064, ADR-066, ADR-095 · **Numeración:** ADR-149 queda para otra rama. Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md)
+**Fecha:** 2026-10-15 · **Estado:** propuesta (auditoría y plan; arreglos chicos en `docs/plan-tesoreria`, migración `20261217100000` aplicada y Edge `nubceo_sync` desplegada) · **Base:** ADR-044, ADR-059, ADR-061, ADR-062, ADR-064, ADR-066, ADR-095 · **Numeración:** ADR-149 queda para otra rama. Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5577,7 +5577,7 @@ En producción nadie usa todavía Tesorería, Contabilidad ni NubCeo (0 filas): 
 
 ## ADR-152: Aislamiento entre cuentas: caché por negocio y por área, membresía del negocio activo, notificaciones del negocio activo e is_internal() suelto a internal_scope()
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `fix/aislamiento-cuentas`; migración `20261220100000_aislamiento_cuentas` sin aplicar) · **Base:** ADR-052 (`internal_scope()`), ADR-083 (`current_tenant_id()` por membresía activa), ADR-084 (anuncios por segmento). **Numeración:** 150 y 151 quedan para otras ramas.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `fix/aislamiento-cuentas`; migración `20261220100000_aislamiento_cuentas` aplicada) · **Base:** ADR-052 (`internal_scope()`), ADR-083 (`current_tenant_id()` por membresía activa), ADR-084 (anuncios por segmento). **Numeración:** 150 y 151 quedan para otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5622,7 +5622,7 @@ Pedido del dueño: "que los datos de la cuenta no se mezclen con ninguna otra: n
 
 ## ADR-155: Facturación ARCA: modo Prueba o Real con un toque (verificando los puntos de venta), respaldo CAEA explicado aparte, y factura o sólo ticket en cada venta
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/arca-modos-y-ticket-no-fiscal`; migración `20261223100000_arca_modos_ticket_no_fiscal` sin aplicar; sin cambios de Edge) · **Base:** ADR-072 (ARCA, contingencia CAEA), ADR-133 (tipo de comprobante forzado con intención pendiente), ADR-153 (conexión por ambiente, guía de producción), ADR-125
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/arca-modos-y-ticket-no-fiscal`; migración `20261223100000_arca_modos_ticket_no_fiscal` aplicada; sin cambios de Edge) · **Base:** ADR-072 (ARCA, contingencia CAEA), ADR-133 (tipo de comprobante forzado con intención pendiente), ADR-153 (conexión por ambiente, guía de producción), ADR-125 · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5660,7 +5660,7 @@ El error al pasar a real era `checklist_incomplete` por el ítem `puntos_de_vent
 - Tests: `tests/unit/arcaModosTicket.test.ts` (modo inicial, atajo, bloqueo en Preguntar, avisos, propuesta de puntos de venta con el caso real 1 contra 100, requisitos, aviso de CAEA, contratos de la migración) y `tests/components/ArcaModosTicket.test.tsx` (pasar a real verificando y actualizando el punto de venta, guía si falta el certificado, volver a prueba, contingencia, modo por defecto, interruptor y Shift + F9, orden "registrar y después vender", falla del registro). La migración se corrió sobre PGlite con stubs de la base: intención aplicada al cliente correcto, otra venta sin tocar, encolado salteado y manual permitido, marca inmutable, insert directo forzado a false, auditoría y gating.
 ## ADR-151: Precio a definir al cobrar marcado por el producto y validado en create_sale, ficha de precio con el precio de venta primero, editor rápido de precios sobre el motor de lotes y auditoría de listas de precios (F18 · H100)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/precios-servicios-editor`; migraciones `20261219100000_features_precio_libre_editor` y `20261219100100_precio_libre_editor_precios` sin aplicar) · **Base:** ADR-056 (precio en el servidor), ADR-058 (listas PRO, lotes y deshacer), ADR-116 (servicios y última `create_sale`), ADR-140 (costo final, margen y markup, asistente v2). **Numeración:** 149 y 150 tomadas por otras ramas.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/precios-servicios-editor`; migraciones `20261219100000_features_precio_libre_editor` y `20261219100100_precio_libre_editor_precios` aplicadas) · **Base:** ADR-056 (precio en el servidor), ADR-058 (listas PRO, lotes y deshacer), ADR-116 (servicios y última `create_sale`), ADR-140 (costo final, margen y markup, asistente v2). **Numeración:** 149 y 150 tomadas por otras ramas. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5720,7 +5720,7 @@ Hecho en `feat/logistica-l0`, migración `20261221100000_logistica_l0_arreglos` 
 
 ## ADR-156: Complemento "Email con dominio NinjaSoft" por escalones que se suma a la suscripción, y auditoría del cobro: una sola regla de addon vigente, monto del próximo débito de Mercado Pago sincronizado solo y la autorización del débito que deja de acreditarse como pago
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/addon-emails-y-cobro`; migración `20261224100000_addon_email_cobro` sin aplicar; Edges sin desplegar) · **Base:** ADR-115 (cuenta corriente), ADR-120 (modalidad de cobro), ADR-127 (MRR), ADR-128 (mora), ADR-131 (prorrateo de addons y conciliación), ADR-123 (envío con el email del negocio), ADR-152 (aislamiento, `internal_scope()`). **Numeración:** 154 es del registro (rama `tanda/registro-onboarding-int`, no está en main) y 155 la toma otra rama.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/addon-emails-y-cobro`; migración `20261224100000_addon_email_cobro` aplicada; Edges desplegadas) · **Base:** ADR-115 (cuenta corriente), ADR-120 (modalidad de cobro), ADR-127 (MRR), ADR-128 (mora), ADR-131 (prorrateo de addons y conciliación), ADR-123 (envío con el email del negocio), ADR-152 (aislamiento, `internal_scope()`). **Numeración:** 154 es del registro (rama `tanda/registro-onboarding-int`, no está en main) y 155 la toma otra rama. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5779,7 +5779,7 @@ Verificado sin cambios: idempotencia del webhook por evento (`claim_mp_webhook_e
 
 ## ADR-154: Registro que no pierde datos (alta pendiente en la cuenta), IA en el paso del plan, códigos de invitación con IA y descuento, membresía del negocio activo y puesta en marcha reordenada
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261218100000_registro_onboarding` sin aplicar; Edge `create_tenant` sin desplegar) · **Base:** ADR-120 (códigos de cuenta corriente), ADR-086 (checklist por rubro), ADR-116 (modo de catálogo por rubro), ADR-134 (pie del menú).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261218100000_registro_onboarding` aplicada; Edge `create_tenant` desplegada) · **Base:** ADR-120 (códigos de cuenta corriente), ADR-086 (checklist por rubro), ADR-116 (modo de catálogo por rubro), ADR-134 (pie del menú). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5807,7 +5807,7 @@ Una cuenta nueva de prueba (rubro Servicios) reportó: el rubro elegido no se gu
 
 ## ADR-157: Cliente obligatorio para enviar y direcciones reales: customer_addresses con lat/lng, copia en la entrega, Edge geo (Photon, Georef, Nominatim inverso) con caché y cupo, AddressAutocomplete con mini mapa y hoja de cobro con pestañas Pago / Cliente / Envío (F22 · H144 · L1)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/logistica-l1-direcciones`; migración `20261226100000_logistica_l1_direcciones` sin aplicar; Edge `geo` sin desplegar) · **Hitos:** F22 · H144 · **Base:** ADR-149 (plan de logística, §4.2, §4.3, §4.13, §4.14, §7.2, §9.1), ADR-146 (cliente y entrega en la hoja de cobro), ADR-136 (`pos_sale_create_fulfilled`), ADR-133 (alta rápida de cliente), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-152 (`internal_scope()`).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/logistica-l1-direcciones`; migración `20261226100000_logistica_l1_direcciones` aplicada; Edge `geo` desplegada) · **Hitos:** F22 · H144 · **Base:** ADR-149 (plan de logística, §4.2, §4.3, §4.13, §4.14, §7.2, §9.1), ADR-146 (cliente y entrega en la hoja de cobro), ADR-136 (`pos_sale_create_fulfilled`), ADR-133 (alta rápida de cliente), ADR-083 (`(select current_tenant_id())`, auditoría inmutable), ADR-152 (`internal_scope()`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5845,7 +5845,7 @@ Pedido textual del dueño: "para enviar debe cargarse un cliente, al seleccionar
 
 ## ADR-159: Portal de desarrolladores de la API pública con una sola definición tipada, colección de Postman, OpenAPI 3.1 generado y sandbox con credenciales de prueba que hacen dry_run en la base (H68b)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261228100000_api_portal_sandbox` sin aplicar; sin Edges) · **Base:** ADR-094 (API pública v1), ADR-071 (rol de integración), CLAUDE.md §6.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20261228100000_api_portal_sandbox` aplicada; sin Edges) · **Base:** ADR-094 (API pública v1), ADR-071 (rol de integración), CLAUDE.md §6. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5877,7 +5877,7 @@ El dueño pidió (15/10) que Configuración › Integraciones › API sea un por
 - **Pendiente (H68b):** sandbox público sin login con un dataset ficticio, documentación descargable en PDF / HTML y por email, y alta de productos completa por API (marca, categoría, impuestos, variantes, atributos, listas e imágenes), que hoy la API v1 no expone. Webhooks siguen en H68.
 ## ADR-158: Tesorería unificada: cajas, bancos, billeteras y "a acreditar" como cuentas de dinero; cobro por transferencia y gasto con su asiento en la misma cuenta; menú propio y controles de caja (F23 · H150, H154, H155, H156)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/tesoreria-cuentas-unificadas`; migraciones `20261227100000_tesoreria_cuentas_unificadas`, `20261227100100_tesoreria_asientos_por_cuenta` y `20261227100200_caja_controles_cierre` sin aplicar; sin Edges) · **Base:** ADR-150 (auditoría y plan), ADR-059 (Tesorería), ADR-066 (Contabilidad), ADR-055 (cuentas de cobro por transferencia), ADR-082 y ADR-088 (señas), ADR-051 (propiedad de la caja). Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md).
+**Fecha:** 2026-10-15 · **Estado:** aceptada (código en `feat/tesoreria-cuentas-unificadas`; migraciones `20261227100000_tesoreria_cuentas_unificadas`, `20261227100100_tesoreria_asientos_por_cuenta` y `20261227100200_caja_controles_cierre` aplicadas; sin Edges) · **Base:** ADR-150 (auditoría y plan), ADR-059 (Tesorería), ADR-066 (Contabilidad), ADR-055 (cuentas de cobro por transferencia), ADR-082 y ADR-088 (señas), ADR-051 (propiedad de la caja). Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5941,7 +5941,7 @@ El detalle de un evento de auditoría listaba todas las columnas crudas de la fi
 
 ## ADR-162: Liquidaciones a la billetera o al banco con asiento por estado, extracto bancario contra Tesorería y NubCeo como fuente opcional de los asientos de liquidación (F23 · H151, H152, H153, H157)
 
-**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/tesoreria-liquidaciones`; migraciones `20261231100000_tesoreria_liquidaciones`, `20261231100100_conciliacion_bancaria` y `20261231100200_nubceo_contabilidad` sin aplicar; Edges `settlements` y `nubceo_sync` cambiadas sin desplegar) · **Base:** ADR-150 (auditoría y plan), ADR-158 (cuentas de dinero unificadas, aplicada), ADR-061 y ADR-064 (conciliación de procesadores y contracargos), ADR-062 (NubCeo), ADR-066 (Contabilidad), ADR-095 (retenciones sufridas). Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md) §8.2. **Numeración:** 161 queda para otra rama.
+**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/tesoreria-liquidaciones`; migraciones `20261231100000_tesoreria_liquidaciones`, `20261231100100_conciliacion_bancaria` y `20261231100200_nubceo_contabilidad` aplicadas; Edges `settlements` y `nubceo_sync` cambiadas desplegadas) · **Base:** ADR-150 (auditoría y plan), ADR-158 (cuentas de dinero unificadas, aplicada), ADR-061 y ADR-064 (conciliación de procesadores y contracargos), ADR-062 (NubCeo), ADR-066 (Contabilidad), ADR-095 (retenciones sufridas). Documento vivo: [`46-tesoreria.md`](./46-tesoreria.md) §8.2. **Numeración:** 161 queda para otra rama. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -5974,7 +5974,7 @@ ADR-158 dejó cuentas de dinero unificadas y el cobro por transferencia con su a
 - **Pendiente:** validar con un extracto real de MP y una devolución parcial (T7), la forma real de `GET /reconciler/sales` de NubCeo y el signo de sus importes (§9 pregunta 2), los encabezados reales de los presets de bancos y abrir el export en Xubio (criterio de H157).
 ## ADR-163: Portal público de desarrolladores en /developers, sandbox con dataset ficticio sin base, documentación HTML y PDF desde el spec y envío por email auditado (H68b)
 
-**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20270101100000_api_sandbox_publico` sin aplicar; sin Edges) · **Base:** ADR-159 (portal y credenciales de prueba), ADR-094 (API pública v1), ADR-160 (auditoría legible), CLAUDE.md §6.
+**Fecha:** 2026-10-15 · **Estado:** aceptada (migración `20270101100000_api_sandbox_publico` aplicada; sin Edges) · **Base:** ADR-159 (portal y credenciales de prueba), ADR-094 (API pública v1), ADR-160 (auditoría legible), CLAUDE.md §6. · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6022,7 +6022,7 @@ Exponer marca, categoría, impuestos, variantes con stock, imágenes y precios p
 
 ## ADR-161: Reparto propio: flota con fotos, hojas de ruta con paradas, eventos de entrega idempotentes con geo, firma y foto, rol de sistema Repartidor aislado por RLS, Configuración › Logística, remitos con copias y modelos y app /reparto con cola offline (F22 · H145 · L2)
 
-**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/logistica-l2-flota`, sobre `feat/logistica-l1-direcciones`; migración `20261230100000_logistica_l2_flota` sin aplicar; sin Edges) · **Hitos:** F22 · H145 · **Base:** ADR-149 (plan, doc 45 §4.4 a §4.8, §4.11, §5, §6, §10, §12, §14), ADR-157 (direcciones y `ship_to`), ADR-149 § L0 (`fulfillment_mode`, `shipped_at`), ADR-136 (remitos), ADR-137/138 (capacidades), ADR-083 (initplan, auditoría), ADR-152 (`internal_scope()`).
+**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/logistica-l2-flota`, sobre `feat/logistica-l1-direcciones`; migración `20261230100000_logistica_l2_flota` aplicada; sin Edges) · **Hitos:** F22 · H145 · **Base:** ADR-149 (plan, doc 45 §4.4 a §4.8, §4.11, §5, §6, §10, §12, §14), ADR-157 (direcciones y `ship_to`), ADR-149 § L0 (`fulfillment_mode`, `shipped_at`), ADR-136 (remitos), ADR-137/138 (capacidades), ADR-083 (initplan, auditoría), ADR-152 (`internal_scope()`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6062,7 +6062,7 @@ Pedido del dueño (resumen): crear un usuario repartidor que cargue los estados 
 
 ## ADR-164: Mapa del reparto, planificación entre camiones por localidad y capacidad (heurística local y OpenRouteService opcional), seguimiento en lote desde la app del repartidor, mapa en vivo con polling, desvíos y detalle de cada entrega en el mapa (F22 · H146 · L3)
 
-**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/logistica-l3-mapa`; migración `20270102100000_logistica_l3_mapa` sin aplicar; Edge `routing` sin desplegar) · **Hitos:** F22 · H146 · **Base:** ADR-149 (plan, doc 45 §4.6, §4.10, §7.3, §7.4, §11, §14), ADR-157 (Leaflet + tiles de OSM, `geo_usage` y `geo_providers`), ADR-161 (hojas, paradas, eventos, rol Repartidor, cola offline), ADR-083 (initplan, auditoría), ADR-152 (`internal_scope()`).
+**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/logistica-l3-mapa`; migración `20270102100000_logistica_l3_mapa` aplicada; Edge `routing` desplegada) · **Hitos:** F22 · H146 · **Base:** ADR-149 (plan, doc 45 §4.6, §4.10, §7.3, §7.4, §11, §14), ADR-157 (Leaflet + tiles de OSM, `geo_usage` y `geo_providers`), ADR-161 (hojas, paradas, eventos, rol Repartidor, cola offline), ADR-083 (initplan, auditoría), ADR-152 (`internal_scope()`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6098,7 +6098,7 @@ Con L2 el dueño arma hojas de a una y el repartidor entrega con firma, foto y u
 - **Deuda:** `logistics.track` sigue marcada `ui` en el catálogo aunque ya se exige en el servidor (cambiarla obliga a regenerar el seed de capacidades, que L5 también toca: se regenera en la rama que entre última); peso de los productos para usar `capacity_kg`; ventanas horarias por entrega; arrastrar paradas en el mapa; "Trazar por calles" para una hoja armada a mano (la RPC `route_set_path` y la acción `directions` ya están); la ETA en vivo no usa el tráfico; con la pantalla apagada no hay seguimiento (PWA); service worker con alcance `/reparto` (de L2).
 ## ADR-165: Expedición robusta: escaneo configurable al armar, cargar y entregar con registro de cruces, resultado por producto (entregado, roto, rechazado, faltante), rotura a merma con foto, entrega hija por lo pendiente, pedido de stock a otra sucursal enlazado a la entrega y pestaña Con problemas (F22 · H148 · L5)
 
-**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/logistica-l5-expedicion`; migración `20270103100000_logistica_l5_expedicion` sin aplicar; sin Edges) · **Hitos:** F22 · H148 · **Base:** ADR-149 (plan, doc 45 §4.9, §6, §9.2, §9.3, §14, §15 L5), ADR-161 (hojas, eventos, `/reparto`, `logistics_settings`), ADR-136 (`dispatch_items`, venta partida), ADR-149 § L0 (`_dispatch_close`, `dispatch_sale_pending`), ADR-088 (depósitos), traslados (`transfer_save`, `transfer_submit`), ADR-138 (capacidades), ADR-083 (initplan, auditoría), ADR-152 (`internal_scope()`).
+**Fecha:** 2026-10-16 · **Estado:** aceptada (código en `feat/logistica-l5-expedicion`; migración `20270103100000_logistica_l5_expedicion` aplicada; sin Edges) · **Hitos:** F22 · H148 · **Base:** ADR-149 (plan, doc 45 §4.9, §6, §9.2, §9.3, §14, §15 L5), ADR-161 (hojas, eventos, `/reparto`, `logistics_settings`), ADR-136 (`dispatch_items`, venta partida), ADR-149 § L0 (`_dispatch_close`, `dispatch_sale_pending`), ADR-088 (depósitos), traslados (`transfer_save`, `transfer_submit`), ADR-138 (capacidades), ADR-083 (initplan, auditoría), ADR-152 (`internal_scope()`). · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6245,7 +6245,7 @@ La API v1 (ADR-094) devolvía sólo los campos básicos del producto. Para armar
 
 ## ADR-169: Ficha del cliente 360 completa: comprobantes, Debe / Haber, adjuntos, cambios auditados y accesos (H31b)
 
-**Fecha:** 2026-10-19 · **Estado:** aceptada (migración `20270108100000_cliente_360_completo` sin aplicar, sin Edges) · **Base:** ADR-067 (ficha 360), ADR-160 (presentador de auditoría), ADR-111 (impresión y email del comprobante)
+**Fecha:** 2026-10-19 · **Estado:** aceptada (migración `20270108100000_cliente_360_completo` aplicada, sin Edges) · **Base:** ADR-067 (ficha 360), ADR-160 (presentador de auditoría), ADR-111 (impresión y email del comprobante) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6366,7 +6366,7 @@ La auditoría de InfoManager IM5 mostró controles de caja que un comercio usa t
 
 ## ADR-173: Viumi (Banco Macro) por link de pago y QR con la Checkout API v2 (F8)
 
-**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270111100000_viumi` sin aplicar, Edges `viumi` y `viumi_webhook`) · **Base:** ADR-143 (Ualá Bis, misma arquitectura), ADR-031 (Getnet, misma plataforma Geopagos), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de webhooks)
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270111100000_viumi` aplicada, Edges `viumi` y `viumi_webhook`) · **Base:** ADR-143 (Ualá Bis, misma arquitectura), ADR-031 (Getnet, misma plataforma Geopagos), ADR-048 (cobros en espera), ADR-057 (credenciales por sucursal), ADR-069 (dominio de webhooks) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6521,7 +6521,7 @@ La auditoría de InfoManager IM5 marcó que un artículo tiene un solo código d
 
 ## ADR-178: Compras PRO: import de Mis Comprobantes de ARCA, lectura de facturas con IA y bandeja, factura con renglones, NC y anticipos imputados, padrón y saldo inicial del proveedor (F24 · H167)
 
-**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270116100000_h167_compras` sin aplicar, Edge `purchase_invoice_ocr` sin desplegar) · **Base:** ADR-170 (F24), ADR-050 y ADR-059 (compras), ADR-171 (H158: guard de factura pagada y letra), ADR-133 (padrón de ARCA), ADR-122 (IA de la plataforma)
+**Fecha:** 2026-10-20 · **Estado:** aceptada (migración `20270116100000_h167_compras` aplicada, Edge `purchase_invoice_ocr` desplegada) · **Base:** ADR-170 (F24), ADR-050 y ADR-059 (compras), ADR-171 (H158: guard de factura pagada y letra), ADR-133 (padrón de ARCA), ADR-122 (IA de la plataforma) · **Despliegue:** verificado en prod el 2026-11-17 (ADR-185)
 
 ### Contexto
 
@@ -6707,4 +6707,19 @@ Los default privileges de `public` daban todo a `anon` sobre cada tabla nueva: a
 
 - Aplicar el PR #311: reabría tablas cerradas.
 - Revocar con `revoke … on all tables` y volver a otorgar con `on all tables`: no preserva las tablas cerradas ni los grants por columna.
+
+## ADR-185: Reconciliación de estados de despliegue en la documentación (OPS-07 a OPS-11)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada · **Hito:** OPS (docs)
+
+### Contexto
+
+Roadmap, CHANGELOG, decision-log y specs acumulaban notas "sin aplicar" / "sin desplegar" escritas al mergear cada rama. Las migraciones se aplicaban después por SQL directo sin actualizar los documentos, así que la mayoría eran falsas y no servían para saber qué faltaba de verdad.
+
+### Decisión
+
+1. **Método de verificación.** Migraciones: SEC-02 verificó en prod los objetos de las 278 aplicadas por SQL directo (4178 funciones, tablas, columnas, índices, policies, triggers y crons, más las features y proveedores de pago que insertan) antes de registrarlas; el historial de prod es igual al repo (ADR-183). Edge Functions: las nombradas en los documentos están ACTIVE en prod (`list_edge_functions`); se verificó por muestreo que el código desplegado incluya los cambios citados (p. ej. `readJsonLimited` en las públicas), pero **no** se comparó cada Edge con el repo: eso queda para el control nocturno `deploy-check --remote` (OPS-19).
+2. **Qué se cambió.** Roadmap (OPS-07/08/09): la frase de estado. CHANGELOG (OPS-10): se quitan los sufijos de estado y una nota arriba de `[Unreleased]` dice que todo está desplegado. Decision-log (OPS-11): sólo la línea `**Fecha:** … **Estado:**` de 104 ADR, con la marca "Despliegue: verificado en prod el 2026-11-17 (ADR-185)"; el cuerpo de cada ADR es historia y no se reescribe. Specs (`40-cobranza-saas`, `46-tesoreria`, `45-logistica-reparto`, `04-database`, `34-venta-offline`): las frases de estado.
+3. **Excepciones.** Se mantienen los faltantes funcionales (credenciales, validaciones con terceros, UI pendiente) y los pasos de procedimiento (p. ej. `30-nubceo.md` "Desplegar la Edge…"). El PR #311 ya no es excepción: los grants explícitos se aplicaron con SEC-07/SEC-08 (ADR-184).
+4. **Regla desde ahora.** Un PR que mergea una migración o Edge no escribe "sin aplicar" en la documentación: la tanda la aplica antes del deploy (protocolo de la cola) y el estado real lo da `deploy-check`.
 

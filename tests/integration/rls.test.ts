@@ -192,6 +192,17 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
   // Aislamiento de lectura
   // ---------------------------------------------------------------------------
 
+  it("SEC-12: los triggers siguen corriendo aunque sus funciones no se ejecuten por el Data API", async () => {
+    // customers_fill_store_alta / role_write_guard corren al insertar como owner.
+    const { data, error } = await ctx.ownerA
+      .from("customers")
+      .insert({ tenant_id: ctx.tenantA, name: `Trigger ${STAMP}` } as never)
+      .select("id, created_at")
+      .single();
+    expect(error).toBeNull();
+    expect(data).toBeTruthy();
+  });
+
   it("SEC-07: anon no escribe por el Data API y authenticated no lee las tablas cerradas", async () => {
     const anon = createClient(URL_!, ANON!, { auth: { persistSession: false } });
     const writes: Array<[string, Record<string, unknown>]> = [

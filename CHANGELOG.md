@@ -127,6 +127,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **Seguridad: las funciones de trigger no se ejecutan por el Data API (SEC-12).** Se revoca EXECUTE a `public`, `anon` y `authenticated` sobre las 225 funciones de trigger de `public` (66 eran ejecutables por anon, 22 de ellas SECURITY DEFINER). Los triggers siguen corriendo igual: Postgres no chequea ese permiso al dispararlos. Migración `20270120100200_sec12_revoke_trigger_fns`.
+
 - **Cobros QR y links que nunca se pagaron pasan a Vencido (PAY-01).** Un barrido cada hora vence los cobros pendientes de más de 72 horas (los cupones de efectivo, de más de 4 días) de Mercado Pago (QR, link y cupón), Mobbex, MODO, dLocal Go, Payway y Clover que no estén en un cobro en espera, en una venta pausada ni en un link de percepción de ML, y deja el resumen en la auditoría. Talo, Ualá Bis, Viumi, Directo, GO Cuotas, Getnet, Pagos360, Nave y Mercado Pago Point todavía no se vencen: sólo acreditan cobros pendientes y se perdería un pago tardío. El POS deja de esperar un QR que quedó vencido. No cancela nada en el proveedor: si el cliente paga tarde, el pago entra igual y la conciliación lo marca. **Ventas › Cobros QR** muestra los estados Vencido y Cancelado y suma el filtro "Vencidos". Migración `20270119100200_intents_expire_sweep` (cron `payment-intents-expire`).
 - **Seguridad: dependencias vulnerables (OPS-46 · ADR-182).** DOMPurify pasa a 3.4.18 (había una crítica) y se fuerzan `uuid` 11 y `form-data` 4.0.6 en las dependencias de `exceljs` y compañía. ECharts 5 y zod 3 quedan con el riesgo mitigado y documentado (los gráficos no usan la serie afectada y escapan los nombres en los tooltips; la API pública limita el tamaño de las listas) hasta pasar a ECharts 6 y zod 4 en tareas aparte.
 

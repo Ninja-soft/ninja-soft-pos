@@ -6777,3 +6777,37 @@ Con el flag prendido, `is_internal()` lee el flag (PK) la primera vez de cada tr
 ### Verificación
 
 Unit: `tests/unit/internalMfa.test.ts` (decisión del middleware, cache del flag, helper de Edges, RPC inexistente, lista de Edges de staff, migración y grants) y `tests/unit/authRedirect.test.ts` (open redirect). Integración: `tests/integration/rls-internal-mfa.test.ts` — con psql dentro de una transacción con rollback (prender el flag no se ve desde las suites que corren en paralelo): staff `aal1` recibe `forbidden` en `internal_tenant_360` con el flag prendido y pasa con el flag apagado o con `aal2`; con la API: `internal_mfa_reset` rechaza a quien no es `super_admin`, a sí mismo y a cuentas que no son staff, y audita.
+
+## ADR-187: Clave de idempotencia en `create_sale` (SEC-43, deuda de ADR-098)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · migración `20270123100000_sec43_create_sale_idempotency` · **Hito:** F1.5 / SEC
+
+### Contexto
+
+ADR-098 documentó que, si la red se corta después de que el servidor grabó la venta y antes de la respuesta, un nuevo "Cobrar" online duplica la venta (stock, caja, cupón). La venta offline ya tenía `client_sale_id`; la online no. Quedó como deuda para la próxima recreación de `create_sale`.
+
+### Decisión
+
+1. **Columna e índice:** `sales.client_request_id uuid` + índice único parcial `sales_client_request_uniq (tenant_id, client_request_id) where client_request_id is not null`. Única por negocio.
+2. **Parámetro opcional al final:** `create_sale(..., p_client_request_id uuid default null)`. Se borra la firma de 14 argumentos en la misma migración (una sola `create_sale`) y se reaplican los grants de producción (`authenticated` y `service_role`, nunca `anon`). Los llamadores internos siguen con 14 argumentos. Sin clave, todo es igual que antes: la API y los clientes viejos no cambian.
+3. **Copia de producción:** el cuerpo es `pg_get_functiondef` de prod (igual a `20261219100100`, ADR-151) con bloques marcados `SEC-43`; `tests/unit/saleIdempotency.test.ts` lo compara quitando los bloques. Lo mismo `pos_sale_create_fulfilled` (igual a `20261215100000`, ADR-146).
+4. **Reintento:** con clave, después de resolver el negocio se toma `pg_advisory_xact_lock(hashtext('sale_request:' || tenant || ':' || clave))` y se busca la venta. Si existe, se devuelve el mismo jsonb que la primera vez, rearmado desde las filas por `_sale_replay_result(tenant, sale)` (SECURITY DEFINER, sin EXECUTE para `anon` ni `authenticated`), sin ningún efecto.
+5. **Carrera:** dos envíos simultáneos se serializan en ese lock, que va antes de cualquier lock de fila (mesa, delivery, turno, reserva) o escritura; el segundo ve la venta del primero (read committed). Como red de seguridad, el insert de la venta (la primera escritura de la función) usa `on conflict (tenant_id, client_request_id) where client_request_id is not null do nothing` y devuelve la venta existente. Con `sales_client_request_uniq` como único árbitro, cualquier otra violación de unicidad sigue siendo error.
+6. **Venta con reparto:** `pos_sale_create_fulfilled` lee la clave de `p_sale` (`p_client_request_id`) y hace el mismo chequeo **antes** de mover stock entre sucursales (si no, el reintento movía stock otra vez aunque `create_sale` devolviera la venta). Devuelve la venta y sus entregas desde `dispatches`, sin el código de retiro (sólo se guarda el hash).
+7. **POS:** `lib/pos/saleRequestKey.ts` (lógica pura) + `usePosSale`: la clave nace en el primer "Cobrar", se reusa mientras el carrito (renglones, cliente, mesa, delivery, turno de agenda, reserva) no cambie y se descarta al confirmar la venta. Viaja en `create_sale` y, con reparto, dentro de `p_sale`.
+
+### Alternativas descartadas
+
+- **Capturar `unique_violation` del índice en un bloque `exception`:** abre una subtransacción en cada venta y obliga a envolver la parte con efectos. Con el lock al principio y `on conflict` en la primera escritura no hay nada que deshacer.
+- **Clave por cobro abierto (al abrir la hoja):** cerrar y reabrir la hoja después de un corte generaba otra clave y duplicaba igual. La firma del carrito sigue al cobro real.
+- **Comparar el payload del reintento con la venta grabada y fallar si difiere:** la venta ya entró; devolverla es lo que evita el duplicado, aunque el cajero haya cambiado el medio de pago.
+- **Clave obligatoria:** rompe la API pública, las integraciones y los clientes viejos.
+
+### Pendiente
+
+- `pos_sale_create_delivery` guarda la dirección nueva del cliente antes de llamar a `pos_sale_create_fulfilled`; en un reintento con la misma clave la vuelve a guardar. No se recreó porque no se tenía su definición de producción para compararla.
+- La cola offline (`client_sale_id`) y la venta online (`client_request_id`) no comparten clave: después de un corte, guardar sin conexión una venta que sí entró la duplica al sincronizar. Se mantiene la regla operativa de mirar Ventas.
+
+### Verificación
+
+Unit: `tests/unit/saleIdempotency.test.ts`. Integración (CI, base local): `tests/integration/rls-sale-idempotency.test.ts`: misma clave dos veces y en paralelo dan una venta, un movimiento de stock y uno de caja con el mismo resultado; sin clave son dos ventas; otro negocio con la misma clave no choca; el helper no se ejecuta desde el cliente. `grants.expected.json` con la firma nueva y el helper.

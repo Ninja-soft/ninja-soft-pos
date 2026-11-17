@@ -2224,6 +2224,13 @@
       "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
+      "sig": "_sale_replay_result(p_tenant uuid, p_sale uuid)"
+    },
+    {
+      "anon": false,
+      "authenticated": false,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
       "sig": "_sale_reserved_short(p_store uuid, p_product uuid, p_variant uuid, p_qty numeric, p_salon boolean, p_exclude uuid)"
     },
     {
@@ -5220,7 +5227,7 @@
       "authenticated": true,
       "config": "search_path=public, pg_temp",
       "secdef": true,
-      "sig": "create_sale(p_items jsonb, p_payments jsonb, p_discount_total numeric, p_customer_id uuid, p_notes text, p_extras jsonb, p_table_order_id uuid, p_delivery_order_id uuid, p_promo_discount numeric, p_promo_id uuid, p_promo_name text, p_coupon_id uuid, p_cash_shift_id uuid, p_service jsonb)"
+      "sig": "create_sale(p_items jsonb, p_payments jsonb, p_discount_total numeric, p_customer_id uuid, p_notes text, p_extras jsonb, p_table_order_id uuid, p_delivery_order_id uuid, p_promo_discount numeric, p_promo_id uuid, p_promo_name text, p_coupon_id uuid, p_cash_shift_id uuid, p_service jsonb, p_client_request_id uuid)"
     },
     {
       "anon": true,

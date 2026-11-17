@@ -15,6 +15,7 @@ import { toSalePayments, type CreateSaleResult, type SaleServiceInput } from "@/
 import { fulfillmentErrorMessage, type PlanPayload } from "@/lib/stock/fulfillment";
 import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
 import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflinePos";
+import { nextSaleRequestKey, saleCartSignature, type SaleRequestKey } from "@/lib/pos/saleRequestKey";
 
 // Registro de la venta (create_sale) del POS. Movido tal cual desde la página:
 // mismos ítems, extras, packs, promo, cupón, mesa/delivery atómicos y el mismo
@@ -205,11 +206,15 @@ export function usePosSale(ctx: {
   const qc = useQueryClient();
   const { sale } = usePosMutations();
   const handlePriceMismatch = usePriceRefresh();
-  // Idempotencia del lado del POS (docs/35-idempotencia-ventas.md): create_sale
-  // no tiene clave de idempotencia online, así que un segundo "Cobrar" mientras
-  // el primero está en vuelo se descarta acá. `sale.isPending` deshabilita el
-  // botón recién en el próximo render; el ref corta el doble toque del mismo frame.
+  // Idempotencia del lado del POS (docs/35-idempotencia-ventas.md): un segundo
+  // "Cobrar" mientras el primero está en vuelo se descarta acá. `sale.isPending`
+  // deshabilita el botón recién en el próximo render; el ref corta el doble
+  // toque del mismo frame.
   const inFlight = useRef(false);
+  // SEC-43 (ADR-187): clave de idempotencia del cobro. Se reusa en los
+  // reintentos del mismo carrito (corte de red, PIN, otro medio de pago) y se
+  // descarta al confirmar la venta: el servidor devuelve la venta ya grabada.
+  const requestKey = useRef<SaleRequestKey | null>(null);
 
   async function handleSale(
     payments: CheckoutPayment[],
@@ -258,6 +263,17 @@ export function usePosSale(ctx: {
         : saleExtras;
       // ADR-096: la venta entrega la reserva en la misma transacción.
       const allExtras = ctx.reservationId ? [...withAppt, { kind: "reservation", id: ctx.reservationId }] : withAppt;
+      requestKey.current = nextSaleRequestKey(
+        requestKey.current,
+        saleCartSignature({
+          items,
+          customerId: ctx.customerId,
+          tableOrderId: ctx.tableOrderId ?? null,
+          deliveryOrderId: ctx.deliveryOrderId ?? null,
+          appointmentId: ctx.appointmentId ?? null,
+          reservationId: ctx.reservationId ?? null,
+        }),
+      );
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
@@ -276,7 +292,11 @@ export function usePosSale(ctx: {
         service: ctx.service ?? null,
         // ADR-136: con reparto, la venta y las entregas en una transacción.
         fulfillment: plan,
+        // SEC-43: misma clave en el reintento del mismo cobro.
+        clientRequestId: requestKey.current.key,
       });
+      // La venta quedó: la próxima, aunque sea igual, es otro cobro.
+      requestKey.current = null;
       if (res.deliveries && res.deliveries.length > 0) ctx.onDeliveries?.(res.deliveries, res.number);
       // Turno (H38): enlazar la venta y marcarlo 'realizado' (best-effort).
       if (ctx.appointmentId) {

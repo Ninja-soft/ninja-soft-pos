@@ -143,8 +143,15 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Mismo heap que el typecheck de `quality`: el chequeo de tipos de
+      # `next build` muere por OOM con el default (~2 GB) y el step igual
+      # termina en 0 sin .next; por eso se valida BUILD_ID.
       - name: Build
-        run: pnpm build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          pnpm build
+          test -f .next/BUILD_ID || { echo "next build no generó .next/BUILD_ID"; exit 1; }
 
       - name: Start app
         run: |

@@ -12,6 +12,12 @@
 //   (el webhook responde 503 y MP reintenta) en vez de devolver null o el
 //   token vencido. `refreshTimeoutMs` corta el POST /oauth/token. Sin esas
 //   opciones el comportamiento es el de siempre (mp_qr, mp_point, etc.).
+// * PAY-28 (ADR-191): si el refresh sale bien pero no se puede guardar el
+//   token rotado, se reintenta el guardado 2 veces (backoff corto) y, si sigue
+//   fallando, queda un rastro en audit_logs (`mp_oauth_refresh_save_failed`,
+//   sin tokens) para que staff reconecte. Vale para TODOS los llamadores y no
+//   cambia el valor devuelto. `forceRefresh` (sólo los webhooks, ante un 401
+//   de MP con credencial OAuth) refresca aunque `expires_at` diga vigente.
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { type MpEnv, pickMpCredential } from "./mpOrders.ts";
@@ -36,7 +42,72 @@ export type MpCredentialOpts = {
   strict?: boolean;
   /** PAY-27: timeout del POST /oauth/token (sin valor: sin timeout, como antes). */
   refreshTimeoutMs?: number;
+  /** PAY-28: refrescar aunque `expires_at` diga vigente (401 de MP con OAuth). */
+  forceRefresh?: boolean;
 };
+
+/**
+ * PAY-28: esperas entre los reintentos del guardado del token rotado (2
+ * reintentos: 3 intentos en total). Cortas: corren dentro del tope de la
+ * credencial de los webhooks (6 s) o, si se pasa, en wh.defer.
+ */
+export const MP_TOKEN_SAVE_BACKOFF_MS = [150, 400] as const;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const errText = (e: unknown) =>
+  String((e as { message?: string } | null)?.message ?? e).slice(0, 200);
+
+/**
+ * PAY-28: guarda el token rotado con reintentos. Si no sale, deja el rastro
+ * operable en audit_logs (sin tokens: sólo negocio, fila, sucursal, intentos y
+ * el error) y lo loguea. Nunca lanza: el token nuevo ya está en memoria.
+ */
+async function saveRotatedToken(admin: SupabaseClient, ref: RowRef, updated: Secrets): Promise<void> {
+  const target = { rowId: ref.rowId, tenantId: ref.tenantId, providerKey: "mercadopago", storeId: ref.storeId };
+  let lastErr: unknown = null;
+  const attempts = MP_TOKEN_SAVE_BACKOFF_MS.length + 1;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleep(MP_TOKEN_SAVE_BACKOFF_MS[i - 1] ?? 0);
+    let error: unknown;
+    try {
+      ({ error } = await updateSecretRow(admin, target, updated as Record<string, unknown>));
+    } catch (e) {
+      error = e;
+    }
+    if (!error) return;
+    lastErr = error;
+  }
+  // PAY-27: no se lanza ni en modo estricto. MP ya rotó el refresh_token y el
+  // access_token nuevo está en memoria: usarlo acredita este pago; un 503
+  // haría que el reintento refresque con el refresh_token viejo (ya inválido).
+  console.error(JSON.stringify({
+    evt: "mp_oauth_refresh_save_failed",
+    tenant: ref.tenantId,
+    store: ref.storeId,
+    attempts,
+    error: errText(lastErr),
+  }));
+  try {
+    const { error: auditErr } = await admin.from("audit_logs").insert({
+      tenant_id: ref.tenantId,
+      actor_user_id: null,
+      entity_type: "payment_secrets",
+      entity_id: ref.rowId,
+      action: "mp_oauth_refresh_save_failed",
+      after_data: {
+        provider_key: "mercadopago",
+        store_id: ref.storeId,
+        attempts,
+        error: errText(lastErr),
+        hint: "reconectar Mercado Pago (el refresh_token guardado ya no sirve)",
+      },
+    });
+    if (auditErr) throw auditErr;
+  } catch (e) {
+    console.error(JSON.stringify({ evt: "mp_oauth_refresh_save_failed_audit_error", tenant: ref.tenantId, error: errText(e) }));
+  }
+}
 
 /** Refresh OAuth que no se pudo hacer con el token ya vencido (modo estricto). */
 export class MpRefreshError extends Error {
@@ -50,14 +121,15 @@ async function refreshIfNeeded(
   admin: SupabaseClient,
   ref: RowRef,
   sec: Secrets,
-  opts: { strict?: boolean; refreshTimeoutMs?: number } = {},
+  opts: { strict?: boolean; refreshTimeoutMs?: number; forceRefresh?: boolean } = {},
 ): Promise<Secrets> {
   const aboutToExpire =
     sec.expires_at && Date.parse(sec.expires_at) - Date.now() < 5 * 60 * 1000;
-  if (!(sec.via === "oauth" && sec.refresh_token && aboutToExpire)) return sec;
+  if (!(sec.via === "oauth" && sec.refresh_token && (aboutToExpire || opts.forceRefresh))) return sec;
   // Estricto: si el refresh no sale y el token todavía sirve (vence en < 5
-  // min), se usa igual; sólo se lanza si ya venció.
-  const expired = () => Date.parse(sec.expires_at!) <= Date.now();
+  // min, o se forzó con el token vigente), se usa igual; sólo se lanza si ya
+  // venció.
+  const expired = () => !!sec.expires_at && Date.parse(sec.expires_at) <= Date.now();
   const giveUp = (detail: string): Secrets => {
     if (opts.strict && expired()) throw new MpRefreshError(detail);
     return sec;
@@ -98,24 +170,9 @@ async function refreshIfNeeded(
       ? new Date(Date.now() + t.expires_in * 1000).toISOString()
       : sec.expires_at,
   };
-  // Se reescribe la MISMA fila usada (negocio o sucursal, ADR-057).
-  const saved = await updateSecretRow(
-    admin,
-    { rowId: ref.rowId, tenantId: ref.tenantId, providerKey: "mercadopago", storeId: ref.storeId },
-    updated as Record<string, unknown>,
-  );
-  if (saved.error) {
-    // PAY-27: no se lanza ni en modo estricto. MP ya rotó el refresh_token y
-    // el access_token nuevo está en memoria: usarlo acredita este pago; un 503
-    // haría que el reintento refresque con el refresh_token viejo (ya
-    // inválido) y el pago no se acreditaría nunca por webhook.
-    console.error(JSON.stringify({
-      evt: "mp_oauth_refresh_save_failed",
-      tenant: ref.tenantId,
-      store: ref.storeId,
-      error: String((saved.error as { message?: string }).message ?? saved.error).slice(0, 200),
-    }));
-  }
+  // Se reescribe la MISMA fila usada (negocio o sucursal, ADR-057), con
+  // reintentos y rastro en audit_logs si no sale (PAY-28).
+  await saveRotatedToken(admin, ref, updated);
   return updated;
 }
 
@@ -134,7 +191,7 @@ export async function tenantMpCredential(
   forceEnv?: MpEnv | null,
   opts: MpCredentialOpts = {},
 ): Promise<{ token: string; env: MpEnv; scopeStoreId: string | null; oauth: boolean } | null> {
-  const { strict, refreshTimeoutMs, ...scope } = opts;
+  const { strict, refreshTimeoutMs, forceRefresh, ...scope } = opts;
   // Secreto y switch Sandbox en paralelo (antes eran dos rondas seguidas).
   const [loaded, methodRes] = await Promise.all([
     loadProviderSecret(admin, tenantId, "mercadopago", { ...scope, strict }),
@@ -158,6 +215,7 @@ export async function tenantMpCredential(
     sec = await refreshIfNeeded(admin, { rowId: loaded?.rowId ?? null, tenantId, storeId: scopeStoreId }, sec, {
       strict,
       refreshTimeoutMs,
+      forceRefresh,
     });
     return sec.access_token
       ? { token: sec.access_token, env: "prod", scopeStoreId, oauth: sec.via === "oauth" }

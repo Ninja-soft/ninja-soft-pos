@@ -1342,6 +1342,13 @@
       "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
+      "sig": "_mp_intent_transition(p_intent uuid, p_status text, p_mp_payment_id text, p_only_pending boolean, p_audit_action text, p_actor uuid, p_audit_after jsonb)"
+    },
+    {
+      "anon": false,
+      "authenticated": false,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
       "sig": "_mp_refund_claim(p_id uuid, p_tenant uuid, p_user uuid)"
     },
     {

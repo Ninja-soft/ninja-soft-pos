@@ -6934,3 +6934,40 @@ Una devolución con pata MP pasa por dos controles: `sale_return` (trigger, con 
 ### Verificación
 
 `tests/integration/flujo-devoluciones.test.ts` (CI, Supabase local): 7c ahora valida con el acumulado (un token por el valor de esa sola devolución no alcanza; el del total de la venta sí); 8a dos devoluciones de $300 con umbral $500 → la segunda pide PIN; 8b el mismo token en dos devoluciones en paralelo → pasa una sola y queda una auditoría (se serializan por el lock de negocio: documenta el comportamiento, no la carrera); 8g regresión real con psql (una conexión tiene el token tomado y lo consume; `require_supervisor` en otra conexión con ese token → `supervisor_token_invalid`; el código anterior lo consumía de nuevo); 8c `exchange_sale`, 8d `return_sale` (legado) y 8e vale (`store_credit`) piden PIN y pasan con el token; 8f `total < 0` → `invalid_total`.
+
+## ADR-191: Bordes de los webhooks de Mercado Pago: token rotado sin guardar, estado + auditoría atómicos, order antes de `mp_order_id` y 401 con OAuth (PAY-28)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · migración `20270127100000_pay28_mp_intent_transition` · **Hito:** F1.5 / PAY
+
+### Contexto
+
+Review de PAY-27 (ADR-188). Cuatro bordes en los que un cobro podía quedar sin acreditar o sin rastro:
+
+1. **Token rotado sin guardar** (`_shared/mpAuth.ts`): si el refresh OAuth salía bien pero `updateSecretRow` fallaba, sólo se logueaba. MP ya había rotado el `refresh_token`: el guardado queda muerto y cada refresh posterior falla → 503 en bucle hasta que el negocio reconecte, sin nada visible para staff.
+2. **Estado y auditoría por separado** (`applyOrderToIntent`, `_shared/mpIntents.ts`): update de `mp_payment_intents` y después insert en `audit_logs`. Si el segundo fallaba, el webhook respondía 200 con el intent acreditado y sin auditoría, y el reintento salía por "ya acreditado" sin escribirla.
+3. **Aviso de order antes de guardar `mp_order_id`**: `mp_qr` y `mp_point` crean la order en MP y recién después guardan `mp_order_id`; un aviso que llega en ese hueco no encuentra el intent y respondía 200 (MP no reintenta; el polling del POS lo cubría si seguía abierto).
+4. **401 con OAuth**: respondía 503 y MP reintentaba, pero el reintento volvía a usar el mismo token si `expires_at` decía vigente (token revocado / rotado por otro lado): 503 hasta agotar los reintentos.
+
+### Decisión
+
+1. **Reintentos + rastro operable.** El guardado del token rotado se reintenta **2 veces** (backoff 150 ms y 400 ms: 3 intentos, dentro del tope de credencial de 6 s; si el tope vence, la cadena sigue en `wh.defer`). Si sigue fallando: `console.error` (`mp_oauth_refresh_save_failed`, como antes) e insert en **`audit_logs`** con `action = 'mp_oauth_refresh_save_failed'`, `entity_type = 'payment_secrets'`, `entity_id` = fila de la credencial, `tenant_id`, y `after_data` `{provider_key, store_id, attempts, error, hint}` — **sin tokens**. Se eligió `audit_logs` porque no existe una tabla de alertas de staff (`ops_alerts` / `platform_alerts` no existen; `alert_events` es de reglas del negocio, H162) y el panel interno ya lee `audit_logs` por negocio. Sigue sin lanzar (ADR-188 §4: el token nuevo en memoria acredita este pago). Aplica a **todos** los llamadores de `tenantMpCredential` sin cambiar su valor de retorno.
+2. **RPC `_mp_intent_transition`** (`SECURITY DEFINER`, `search_path = public, pg_temp`, `revoke all … from public, anon, authenticated`, `grant execute … to service_role`): en una transacción hace el update con la **misma condición** de antes (`p_only_pending = false` → `status <> 'approved'` para acreditar; `true` → `status = 'pending'` para rechazo / vencimiento; `mp_payment_id = coalesce(p_mp_payment_id, mp_payment_id)`) y, si cambió una fila y viene `p_audit_action`, inserta el audit con el payload que arma la Edge (el mismo de siempre). Si el insert falla, se revierte el update. Valida estado (`approved|rejected|cancelled|expired`) y acción (`mp_order_approved|mp_order_amount_mismatch`). Devuelve `true` si cambió el intent.
+   - La usa `applyOrderToIntent`, así que cubre a **todos** sus llamadores: `mp_orders_webhook` (estricto: un error → `IntentWriteError` → 503, sin audit suelto), `mp_qr`, `mp_point`, `mp_cupon` y `pending_charges_sync` (no estrictos: el error se loguea y sigue, como antes; el polling vuelve). Misma semántica de transición e idempotencia.
+   - **Compatibilidad de despliegue:** si la función no existe todavía (`PGRST202` / `42883`), cae al camino de dos pasos de antes. El orden migración / Edge no rompe nada.
+   - **`mp_webhook` (Checkout Pro) no cambia:** hoy **no** escribe `audit_logs` al acreditar (sólo el update con `.neq("status","approved")`), así que no hay par estado / audit que unir. Agregar una auditoría nueva ahí queda como decisión aparte.
+3. **Order desconocida → 503 en ventana.** Si el intent no se encuentra por `mp_order_id`, se responde **503** (`wh.note("order_not_found_yet")`) sólo si el aviso tiene **≤ 10 min** (`MP_ORDER_NOT_FOUND_WINDOW_MS`); fuera de la ventana, o sin hora, **200** como siempre (órdenes de otras integraciones de la misma cuenta no se reintentan para siempre). **Fuente del tiempo:** la **más vieja** entre `date_created` del cuerpo del aviso y `ts` de `x-signature` (ms, o s si tiene < 13 dígitos); se descartan valores ilegibles o más de 10 min en el futuro. Se toma la más vieja para que un `ts` regenerado en cada reintento (no confirmado, ADR-189) no estire la ventana. Reloj: `deps.nowMs` (el mismo de la firma). No se lee la order en MP (sin intent no hay credencial del negocio). No se tocan `mp_qr` / `mp_point`.
+4. **401 con OAuth → refresh forzado.** Ante un 401 al leer el pago / la order con credencial OAuth, se pide la credencial de nuevo con `forceRefresh: true` (refresca aunque `expires_at` diga vigente) **una vez**, y si dio un token **distinto** se relee. Si el refresh no sale (sin token nuevo, error, tope) o MP vuelve a dar 401 → 503 como antes. Presupuesto: el handler lleva un reloj de **20 s** (`MP_WEBHOOK_BUDGET_MS`, MP corta a los 22 s); la credencial forzada usa `min(6 s, lo que queda − 1,5 s)` y la relectura `min(8 s, lo que queda)`; con menos de 3 s restantes no se intenta. En modo estricto, un refresh forzado fallido con el token todavía vigente no lanza (se usa el mismo token y se responde 503).
+
+### Riesgos
+
+- El refresh forzado rota el `refresh_token`: si en paralelo otra Edge refresca con el viejo, esa falla (riesgo que ya existía con el refresh normal). El guardado con reintentos + audit de §1 lo deja visible.
+- La ventana de §3 puede dar hasta ~10 min de 503 (y filas `error` en `webhook_events`) para avisos de orders de otras integraciones de la cuenta.
+
+### Pendiente
+
+- Auditoría al acreditar en `mp_webhook` (Checkout Pro), si se decide.
+- Vista / alerta de staff sobre `audit_logs.action = 'mp_oauth_refresh_save_failed'` (hoy se consulta a mano).
+
+### Verificación
+
+`tests/unit/mpWebhooks.test.ts` (bloque PAY-28): guardado del token que falla 3 veces → 3 intentos + un audit sin tokens y acredita; que sale al 3.er intento → guarda sin audit; llamador no estricto → mismo valor de retorno; la RPC recibe la condición y el payload de siempre; audit que falla dentro de la RPC → 503, intent `pending` y sin audit, el reintento escribe los dos; monto distinto → `p_only_pending` + `mp_order_amount_mismatch`; base sin la función → camino viejo; polling con error de la RPC no lanza; order desconocida dentro / fuera de la ventana, más vieja entre `date_created` y `ts`, sin hora → 200, y reintento que acredita cuando aparece `mp_order_id`; 401 con OAuth → refresh forzado → acredita (pagos y orders), 401 de nuevo → 503 con un solo refresh, token manual sin refresh. `tests/integration/rls-mp-intent-transition.test.ts` (Supabase local): sin EXECUTE para anon / authenticated, transición una sola vez con un audit, approved intocable, rechazo sólo desde pending, estado / acción inválidos sin escribir.

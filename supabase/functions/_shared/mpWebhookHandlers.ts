@@ -34,6 +34,19 @@
 // antes de leer MP o escribir el estado: en enforce una firma mala responde
 // 401 sin escribir nada. La defensa de fondo sigue siendo re-leer el pago /
 // order en MP con el token del negocio.
+// PAY-28 (ADR-191):
+//   * 401 de MP con credencial OAuth: se fuerza UN refresh del token (aunque
+//     expires_at diga vigente) dentro del presupuesto y se vuelve a leer; si
+//     el refresh no da un token nuevo o MP vuelve a dar 401 → 503 como antes.
+//   * Order que todavía no está en mp_payment_intents (mp_qr / mp_point
+//     guardan mp_order_id DESPUÉS del POST a MP y el aviso puede llegar
+//     antes): 503 para que MP reintente, sólo si el aviso tiene menos de
+//     MP_ORDER_NOT_FOUND_WINDOW_MS (10 min). Hora del aviso: la MÁS VIEJA
+//     entre `date_created` del cuerpo y `ts` de x-signature (ms o s). Sin
+//     ninguna de las dos, o fuera de la ventana, 200 como siempre (órdenes de
+//     otras integraciones de la cuenta no se reintentan para siempre).
+//   * La escritura del estado + auditoría es atómica (RPC
+//     _mp_intent_transition vía applyOrderToIntent).
 // =============================================================================
 import { amountsMatch, type MpEnv, type MpOrder, parseOrderNotification } from "./mpOrders.ts";
 import {
@@ -84,7 +97,7 @@ export type CredentialFn = (
   db: WebhookDb,
   tenantId: string,
   env: MpEnv,
-  opts: { scopeStoreId: string | null; strict?: boolean; refreshTimeoutMs?: number },
+  opts: { scopeStoreId: string | null; strict?: boolean; refreshTimeoutMs?: number; forceRefresh?: boolean },
 ) => Promise<MpCredential>;
 
 /** intentSecretScope (_shared/paymentSecrets.ts); `strict` lanza ante error de base. */
@@ -183,6 +196,37 @@ export const MP_READ_TIMEOUT_MS = 8000;
 export const MP_CREDENTIAL_TIMEOUT_MS = 6000;
 /** Timeout del POST /oauth/token dentro del tope de la credencial. */
 const MP_REFRESH_TIMEOUT_MS = 5000;
+/**
+ * PAY-28: presupuesto total del handler (MP corta a los 22 s). El refresh
+ * forzado ante un 401 y la segunda lectura sólo corren con lo que quede.
+ */
+export const MP_WEBHOOK_BUDGET_MS = 20000;
+/** PAY-28: lo mínimo que tiene que quedar para intentar el refresh forzado + relectura. */
+const MP_FORCED_RETRY_MIN_MS = 1500;
+/** PAY-28: ventana en la que una order desconocida responde 503 (MP reintenta). */
+export const MP_ORDER_NOT_FOUND_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * PAY-28: hora del aviso (ms) para la ventana de la order desconocida: la más
+ * vieja entre `date_created` del cuerpo y `ts` de x-signature (ms, o s si
+ * tiene menos de 13 dígitos). Se descartan valores ilegibles o más de 10 min
+ * en el futuro. null si no hay ninguna.
+ */
+export function mpNoticeTimeMs(body: unknown, signature: string | null, nowMs: number): number | null {
+  const out: number[] = [];
+  const created = (body && typeof body === "object" ? (body as { date_created?: unknown }).date_created : null);
+  if (typeof created === "string") {
+    const t = Date.parse(created);
+    if (Number.isFinite(t)) out.push(t);
+  }
+  const m = /(?:^|,)\s*ts=(\d{1,13})\s*(?:,|$)/i.exec(signature ?? "");
+  if (m?.[1]) {
+    const n = Number(m[1]);
+    out.push(m[1].length >= 13 ? n : n * 1000);
+  }
+  const valid = out.filter((t) => t > 0 && t <= nowMs + MP_ORDER_NOT_FOUND_WINDOW_MS);
+  return valid.length ? Math.min(...valid) : null;
+}
 
 /** SEC-60: firma rechazada en modo enforce (como mp_billing_webhook). */
 const invalidSignature = () =>
@@ -321,14 +365,16 @@ async function webhookCredential(
   tenantId: string,
   env: MpEnv,
   intentId: string,
+  opts: { forceRefresh?: boolean; timeoutMs?: number } = {},
 ): Promise<CredentialStep> {
-  const ms = deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS;
+  const ms = opts.timeoutMs ?? deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS;
   const chain = (async () => {
     const scopeStoreId = await deps.secretScope(admin, intentId, { strict: true });
     return deps.credential(admin, tenantId, env, {
       scopeStoreId,
       strict: true,
       refreshTimeoutMs: Math.min(MP_REFRESH_TIMEOUT_MS, ms),
+      ...(opts.forceRefresh ? { forceRefresh: true } : {}),
     });
   })();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -360,6 +406,41 @@ function shouldRetryMpStatus(status: number, cred: NonNullable<MpCredential>): b
   return isRetryableMpStatus(status) || (status === 401 && cred.oauth === true);
 }
 
+/** PAY-28: reloj del presupuesto total del handler. */
+function budgetLeft(startedAt: number): number {
+  return MP_WEBHOOK_BUDGET_MS - (Date.now() - startedAt);
+}
+
+type ForcedStep = { kind: "cred"; cred: NonNullable<MpCredential>; readMs: number } | { kind: "give_up" };
+
+/**
+ * PAY-28: 401 de MP con credencial OAuth. Fuerza UN refresh (aunque
+ * `expires_at` diga vigente) con lo que quede del presupuesto. Sólo sigue si
+ * el refresh dio un token distinto y queda tiempo para releer; si no, el
+ * llamador responde 503 como antes. Un error / tope de la credencial forzada
+ * también es give_up (queda en wh.fail).
+ */
+async function forceRefreshCredential(
+  admin: WebhookDb,
+  deps: { credential: CredentialFn; secretScope: SecretScopeFn; credentialTimeoutMs?: number; timeoutMs?: number },
+  wh: WebhookCtx,
+  ids: { tenantId: string; env: MpEnv; intentId: string },
+  old: NonNullable<MpCredential>,
+  startedAt: number,
+): Promise<ForcedStep> {
+  const left = budgetLeft(startedAt);
+  if (left < MP_FORCED_RETRY_MIN_MS * 2) return { kind: "give_up" };
+  const credMs = Math.min(deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS, left - MP_FORCED_RETRY_MIN_MS);
+  const step = await webhookCredential(admin, deps, wh, ids.tenantId, ids.env, ids.intentId, {
+    forceRefresh: true,
+    timeoutMs: credMs,
+  });
+  if (step.kind !== "cred" || step.cred.token === old.token) return { kind: "give_up" };
+  const leftToRead = budgetLeft(startedAt);
+  if (leftToRead < MP_FORCED_RETRY_MIN_MS) return { kind: "give_up" };
+  return { kind: "cred", cred: step.cred, readMs: Math.min(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, leftToRead) };
+}
+
 // ---------------------------------------------------------------------------
 // mp_orders_webhook — topic `order` de la Orders API (QR dinámico y Point).
 // ---------------------------------------------------------------------------
@@ -382,6 +463,7 @@ async function readOrder(
   sigDataId: string,
   wh: WebhookCtx,
   deps: MpOrdersWebhookDeps,
+  notice: { body: unknown; startedAt: number },
 ): Promise<OrderStep> {
   const admin = deps.db();
   const modeP = startModeRead(admin, deps.nowMs);
@@ -396,7 +478,19 @@ async function readOrder(
     return { kind: "retry" };
   }
   const row = rowRaw as OrdersIntentRow | null;
-  if (!row) return { kind: "skip" }; // order que no es nuestra (u otra integración de la cuenta).
+  if (!row) {
+    // PAY-28: mp_qr / mp_point guardan mp_order_id DESPUÉS del POST a MP; un
+    // aviso reciente puede llegar antes. Dentro de la ventana, 503 (MP
+    // reintenta); fuera, o sin hora del aviso, es una order que no es nuestra
+    // (u otra integración de la cuenta): 200 como siempre.
+    const now = deps.nowMs?.() ?? Date.now();
+    const at = mpNoticeTimeMs(notice.body, req.headers.get("x-signature"), now);
+    if (at != null && now - at <= MP_ORDER_NOT_FOUND_WINDOW_MS) {
+      wh.note("order_not_found_yet");
+      return { kind: "retry" };
+    }
+    return { kind: "skip" };
+  }
   wh.tenant(row.tenant_id);
   if (row.status === "approved") return { kind: "skip" }; // ya acreditado: idempotente.
 
@@ -425,15 +519,32 @@ async function readOrder(
   if (mode !== "enforce") {
     await signatureGate(admin, req, wh, { mode, dataId: sigDataId, platformApp: cred.oauth === true, nowMs: deps.nowMs });
   }
-  let got: Awaited<ReturnType<MpOrdersWebhookDeps["fetchOrder"]>>;
-  try {
-    got = await withMpTimeout(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, (signal) =>
-      deps.fetchOrder(cred.token, orderId, { signal }),
+  type Got = Awaited<ReturnType<MpOrdersWebhookDeps["fetchOrder"]>>;
+  const read = async (token: string, ms: number): Promise<Got | null> => {
+    try {
+      return await withMpTimeout(ms, (signal) => deps.fetchOrder(token, orderId, { signal }));
+    } catch (e) {
+      deps.log.error("[mp_orders_webhook] no se pudo leer la order", { orderId, error: String(e).slice(0, 200) });
+      wh.fail(e);
+      return null;
+    }
+  };
+  let got = await read(cred.token, deps.timeoutMs ?? MP_READ_TIMEOUT_MS);
+  if (!got) return { kind: "retry" };
+  // PAY-28: 401 con OAuth → un refresh forzado y una relectura.
+  if (!got.ok && got.status === 401 && cred.oauth === true) {
+    const forced = await forceRefreshCredential(
+      admin,
+      deps,
+      wh,
+      { tenantId: row.tenant_id, env, intentId: row.id },
+      cred,
+      notice.startedAt,
     );
-  } catch (e) {
-    deps.log.error("[mp_orders_webhook] no se pudo leer la order", { orderId, error: String(e).slice(0, 200) });
-    wh.fail(e);
-    return { kind: "retry" };
+    if (forced.kind === "cred") {
+      got = await read(forced.cred.token, forced.readMs);
+      if (!got) return { kind: "retry" };
+    }
   }
   if (!got.ok) {
     deps.log.error("[mp_orders_webhook] no se pudo leer la order", {
@@ -451,6 +562,7 @@ export async function handleMpOrdersWebhook(
   wh: WebhookCtx,
   deps: MpOrdersWebhookDeps,
 ): Promise<Response> {
+  const startedAt = Date.now();
   try {
     const reqUrl = new URL(req.url);
     let body: unknown = null;
@@ -467,14 +579,14 @@ export async function handleMpOrdersWebhook(
 
     // MP arma el manifest con el data.id de la query (si vino).
     const sigDataId = reqUrl.searchParams.get("data.id") || n.orderId;
-    const step = await readOrder(n.orderId, req, sigDataId, wh, deps);
+    const step = await readOrder(n.orderId, req, sigDataId, wh, deps, { body, startedAt });
     if (step.kind === "retry") return retryLater();
     if (step.kind === "reject") return invalidSignature();
     if (step.kind === "skip") return ok();
 
-    // Sincrónico: si la escritura del estado falla, 503 y MP reintenta. La
-    // auditoría va después del update; si falla sólo se loguea (el reintento
-    // sale por "ya acreditado" y no la duplica).
+    // Sincrónico: si la escritura del estado falla, 503 y MP reintenta.
+    // PAY-28: estado + auditoría en una transacción (_mp_intent_transition):
+    // un error no deja el intent acreditado sin su auditoría.
     await deps.applyOrder(step.admin, step.row, step.order, { userId: null, source: "webhook" }, { strict: true });
     wh.done();
     return ok();
@@ -562,6 +674,7 @@ export const MP_PAYMENT_STATUS: Record<string, string> = {
 };
 
 export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebhookDeps): Promise<Response> {
+  const startedAt = Date.now();
   try {
     const reqUrl = new URL(req.url);
     const intentId = reqUrl.searchParams.get("intent");
@@ -659,8 +772,7 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     const credStep = await webhookCredential(admin, deps, wh, intent.tenant_id, env, intentId);
     if (credStep.kind === "retry") return retryLater();
     if (credStep.kind === "none") return ok();
-    const cred = credStep.cred;
-    const accessToken = cred.token;
+    let cred = credStep.cred;
 
     // SEC-60: report / off, después de la credencial y antes de leer MP (no corta).
     if (mode !== "enforce") {
@@ -668,21 +780,41 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     }
 
     type MpPayment = { status?: string; external_reference?: string; transaction_amount?: number };
-    let read: { status: number; pay: MpPayment | null };
-    try {
-      // Lectura completa (respuesta + cuerpo) dentro del timeout.
-      read = await withMpTimeout(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, async (signal) => {
-        const payRes = await deps.fetchMp(
-          `https://api.mercadopago.com/v1/payments/${paymentId}`,
-          { headers: { Authorization: `Bearer ${accessToken}` }, signal },
-        );
-        if (!payRes.ok) return { status: payRes.status, pay: null };
-        return { status: payRes.status, pay: (await payRes.json()) as MpPayment };
-      });
-    } catch (e) {
-      // Red caída, timeout o cuerpo ilegible: MP reintenta.
-      wh.fail(e);
-      return retryLater();
+    type PayRead = { status: number; pay: MpPayment | null };
+    const readPay = async (token: string, ms: number): Promise<PayRead | null> => {
+      try {
+        // Lectura completa (respuesta + cuerpo) dentro del timeout.
+        return await withMpTimeout(ms, async (signal) => {
+          const payRes = await deps.fetchMp(
+            `https://api.mercadopago.com/v1/payments/${paymentId}`,
+            { headers: { Authorization: `Bearer ${token}` }, signal },
+          );
+          if (!payRes.ok) return { status: payRes.status, pay: null };
+          return { status: payRes.status, pay: (await payRes.json()) as MpPayment };
+        });
+      } catch (e) {
+        // Red caída, timeout o cuerpo ilegible: MP reintenta.
+        wh.fail(e);
+        return null;
+      }
+    };
+    let read = await readPay(cred.token, deps.timeoutMs ?? MP_READ_TIMEOUT_MS);
+    if (!read) return retryLater();
+    // PAY-28: 401 con OAuth → un refresh forzado y una relectura.
+    if (!read.pay && read.status === 401 && cred.oauth === true) {
+      const forced = await forceRefreshCredential(
+        admin,
+        deps,
+        wh,
+        { tenantId: intent.tenant_id, env, intentId },
+        cred,
+        startedAt,
+      );
+      if (forced.kind === "cred") {
+        cred = forced.cred;
+        read = await readPay(cred.token, forced.readMs);
+        if (!read) return retryLater();
+      }
     }
     if (!read.pay) {
       wh.fail(`MP /v1/payments respondió ${read.status}`);

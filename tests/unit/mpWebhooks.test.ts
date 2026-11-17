@@ -66,7 +66,7 @@ type Fault = { table: string; op: "select" | "update" | "insert"; message: strin
 
 function createFakeDb(
   seed: Record<string, Row[]>,
-  opts: { failUpdate?: string; failSelect?: string; faults?: Fault[] } = {},
+  opts: { failUpdate?: string; failSelect?: string; faults?: Fault[]; rpcMissing?: boolean } = {},
 ) {
   const faults = (opts.faults ?? []).map((f) => ({ ...f, seen: 0, failed: 0 }));
   const fault = (table: string, op: Fault["op"]): string | null => {
@@ -87,8 +87,54 @@ function createFakeDb(
   };
   for (const [k, v] of Object.entries(seed)) tables[k] = v.map((r) => ({ ...r }));
   const writes: Write[] = [];
+  const rpcCalls: Row[] = [];
 
   const db = {
+    /**
+     * PAY-28: _mp_intent_transition como en la migración: update del intent
+     * (sólo desde pending, o salvo approved) + audit en UNA transacción. Una
+     * falla inyectada en el update del intent o en el insert del audit hace
+     * fallar la RPC entera sin dejar nada escrito. `rpcMissing`: base sin la
+     * migración (PGRST202).
+     */
+    rpc(fn: string, args: Row) {
+      const run = (): { data: unknown; error: unknown } => {
+        if (opts.rpcMissing) {
+          return { data: null, error: { code: "PGRST202", message: `Could not find the function public.${fn}` } };
+        }
+        if (fn !== "_mp_intent_transition") return { data: null, error: { message: `rpc ${fn} no simulada` } };
+        rpcCalls.push(args);
+        const injected = fault("mp_payment_intents", "update") ?? (opts.failUpdate || null);
+        if (injected) return { data: null, error: { message: injected } };
+        const intents = tables.mp_payment_intents;
+        const hit = intents.filter(
+          (r) => r.id === args.p_intent && (args.p_only_pending ? r.status === "pending" : r.status !== "approved"),
+        );
+        const values: Row = { status: args.p_status };
+        if (args.p_mp_payment_id != null) values.mp_payment_id = args.p_mp_payment_id;
+        const target = hit[0];
+        if (target && args.p_audit_action) {
+          const auditFault = fault("audit_logs", "insert");
+          if (auditFault) return { data: null, error: { message: auditFault } }; // rollback: nada escrito
+        }
+        for (const r of hit) Object.assign(r, values);
+        writes.push({ table: "mp_payment_intents", op: "update", values, affected: hit.length });
+        if (target && args.p_audit_action) {
+          const audit: Row = {
+            tenant_id: target.tenant_id,
+            actor_user_id: args.p_actor ?? null,
+            entity_type: "mp_payment_intents",
+            entity_id: args.p_intent,
+            action: args.p_audit_action,
+            after_data: JSON.parse(JSON.stringify(args.p_audit_after ?? null)),
+          };
+          tables.audit_logs.push(audit);
+          writes.push({ table: "audit_logs", op: "insert", values: audit, affected: 1 });
+        }
+        return { data: hit.length > 0, error: null };
+      };
+      return { then: (ok?: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve().then(run).then(ok, ko) };
+    },
     from(table: string) {
       const rows = (tables[table] ??= []);
       const filters: Filter[] = [];
@@ -163,7 +209,7 @@ function createFakeDb(
       return q;
     },
   };
-  return { db: db as unknown as WebhookDb, tables, writes };
+  return { db: db as unknown as WebhookDb, tables, writes, rpcCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -1362,5 +1408,403 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
       expect(state.ref).toBeNull();
     }
     expect(deps.db).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// PAY-28 (ADR-191): token rotado sin guardar, estado + audit atómicos, order
+// antes de guardar mp_order_id y 401 con OAuth → refresh forzado.
+// ===========================================================================
+describe("PAY-28", () => {
+  const intent = paymentApproved.intent;
+  const payPath = `/v1/payments/${paymentApproved.mpResponse.id}`;
+  const orderPath = `/v1/orders/${orderProcessed.intent.mp_order_id}`;
+  const NEW_TOKEN = "APP_USR-nuevo-por-refresh";
+
+  /** /oauth/token de MP que entrega un token nuevo (y cuenta las llamadas). */
+  function oauthOk() {
+    return vi.fn(async () => new Response(JSON.stringify({ access_token: NEW_TOKEN, refresh_token: "TG-2", expires_in: 3600 })));
+  }
+
+  // -------------------------------------------------------------------------
+  // 1) Token rotado que no se pudo guardar.
+  // -------------------------------------------------------------------------
+  it("guardado del token rotado que falla: 2 reintentos (3 intentos) + audit mp_oauth_refresh_save_failed sin tokens; acredita igual", async () => {
+    const fake = createFakeDb(
+      { mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [oauthSecrets(-60_000)], platform_secrets: [PLATFORM] },
+      // Falla exactamente 3 veces: un 4.º intento saldría bien (prueba que son 3).
+      { faults: [{ table: "payment_secrets", op: "update", message: "connection reset", times: 3 }] },
+    );
+    vi.stubGlobal("fetch", oauthOk());
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(fake.db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(mp.calls[0]?.auth).toBe(`Bearer ${NEW_TOKEN}`);
+    expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    const alerts = fake.tables.audit_logs.filter((a) => a.action === "mp_oauth_refresh_save_failed");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      tenant_id: TENANT,
+      entity_type: "payment_secrets",
+      entity_id: SECRETS.id,
+      after_data: { provider_key: "mercadopago", store_id: null, attempts: 3, error: "connection reset" },
+    });
+    const serialized = JSON.stringify(alerts[0]);
+    expect(serialized).not.toContain(NEW_TOKEN);
+    expect(serialized).not.toContain("TG-2");
+    expect(serialized).not.toContain(TOKEN);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("mp_oauth_refresh_save_failed"));
+    expect(fake.tables.payment_secrets[0]?.secrets).toMatchObject({ access_token: TOKEN }); // no hubo 4.º intento
+  });
+
+  it("guardado que sale en el 2.º reintento (3.er intento): guarda el token nuevo y no deja audit", async () => {
+    const fake = createFakeDb(
+      { mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [oauthSecrets(-60_000)], platform_secrets: [PLATFORM] },
+      { faults: [{ table: "payment_secrets", op: "update", message: "connection reset", times: 2 }] },
+    );
+    vi.stubGlobal("fetch", oauthOk());
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), createWh().wh, paymentDeps(fake.db, mp.fetchMp));
+
+    expect(res.status).toBe(200);
+    expect(fake.tables.payment_secrets[0]?.secrets).toMatchObject({ access_token: NEW_TOKEN, refresh_token: "TG-2" });
+    expect(fake.tables.audit_logs.filter((a) => a.action === "mp_oauth_refresh_save_failed")).toEqual([]);
+  });
+
+  it("guardado que sale al primer reintento: sin audit; llamador NO estricto recibe el mismo valor de siempre", async () => {
+    const fake = createFakeDb(
+      { payment_secrets: [oauthSecrets(-60_000)], platform_secrets: [PLATFORM] },
+      { faults: [{ table: "payment_secrets", op: "update", message: "deadlock detected", times: 1 }] },
+    );
+    vi.stubGlobal("fetch", oauthOk());
+
+    const cred = await (real.tenantMpCredential as unknown as (
+      db: WebhookDb,
+      t: string,
+      env: string,
+      o: Record<string, unknown>,
+    ) => Promise<unknown>)(fake.db, TENANT, "prod", { scopeStoreId: null });
+
+    expect(cred).toEqual({ token: NEW_TOKEN, env: "prod", scopeStoreId: null, oauth: true });
+    expect(fake.tables.audit_logs).toEqual([]);
+    expect(fake.tables.payment_secrets[0]?.secrets).toMatchObject({ access_token: NEW_TOKEN, refresh_token: "TG-2" });
+  });
+
+  it("llamador no estricto con el guardado siempre fallando: devuelve el token nuevo (sin lanzar) y deja el audit", async () => {
+    const fake = createFakeDb(
+      { payment_secrets: [oauthSecrets(-60_000)], platform_secrets: [PLATFORM] },
+      { faults: [{ table: "payment_secrets", op: "update", message: "connection reset" }] },
+    );
+    vi.stubGlobal("fetch", oauthOk());
+
+    const cred = await (real.tenantMpCredential as unknown as (
+      db: WebhookDb,
+      t: string,
+      env: string,
+      o: Record<string, unknown>,
+    ) => Promise<unknown>)(fake.db, TENANT, "prod", { scopeStoreId: null });
+
+    expect(cred).toEqual({ token: NEW_TOKEN, env: "prod", scopeStoreId: null, oauth: true });
+    expect(fake.writes.filter((w) => w.table === "payment_secrets")).toHaveLength(0); // ninguno salió
+    expect(fake.tables.audit_logs.map((a) => a.action)).toEqual(["mp_oauth_refresh_save_failed"]);
+  });
+
+  // -------------------------------------------------------------------------
+  // 2) Estado + auditoría atómicos (_mp_intent_transition).
+  // -------------------------------------------------------------------------
+  function orderSetup(faults: Fault[] = [], opts: { rpcMissing?: boolean } = {}) {
+    const fake = createFakeDb(
+      { mp_payment_intents: [orderIntentRow(orderProcessed.intent)], payment_secrets: [SECRETS], audit_logs: [] },
+      { faults, ...opts },
+    );
+    const mp = createFakeMp({ [orderPath]: { body: orderProcessed.mpResponse } });
+    vi.stubGlobal("fetch", mp.fetchMp);
+    return { ...fake, mp };
+  }
+
+  it("acreditar usa la RPC atómica con la condición de siempre (salvo approved) y el payload del audit", async () => {
+    const { db, rpcCalls, tables } = orderSetup();
+    const { wh } = createWh();
+
+    await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(db));
+
+    expect(rpcCalls).toEqual([
+      {
+        p_intent: orderProcessed.intent.id,
+        p_status: "approved",
+        p_mp_payment_id: "PAY01JQ4S4KY8HWQ6NA5PXB65B3D4",
+        p_only_pending: false,
+        p_audit_action: "mp_order_approved",
+        p_actor: null,
+        p_audit_after: {
+          provider_key: "mercadopago_qr",
+          mp_order_id: orderProcessed.intent.mp_order_id,
+          mp_payment_id: "PAY01JQ4S4KY8HWQ6NA5PXB65B3D4",
+          amount: 1500,
+          env: "prod",
+          source: "webhook",
+          previous_status: "pending",
+        },
+      },
+    ]);
+    expect(tables.audit_logs).toHaveLength(1);
+  });
+
+  it("falla el audit dentro de la RPC: 503, el intent NO queda acreditado y no hay audit suelto; el reintento escribe los dos", async () => {
+    const { db, tables } = orderSetup([{ table: "audit_logs", op: "insert", message: "audit chain locked", times: 1 }]);
+
+    const first = createWh();
+    const r1 = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), first.wh, ordersDeps(db));
+    expect(await bodyOf(r1)).toEqual(RETRY_503);
+    expect(String(first.state.failures[0])).toContain("audit chain locked");
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "pending" });
+    expect(tables.audit_logs).toEqual([]);
+
+    const second = createWh();
+    const r2 = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), second.wh, ordersDeps(db));
+    expect(await bodyOf(r2)).toEqual(OK_200);
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(tables.audit_logs.map((a) => a.action)).toEqual(["mp_order_approved"]);
+  });
+
+  it("monto distinto: rechazo sólo desde pending + audit mp_order_amount_mismatch en la misma RPC", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent, { amount: 1499.99 })],
+      payment_secrets: [SECRETS],
+      audit_logs: [],
+    });
+    vi.stubGlobal("fetch", createFakeMp({ [orderPath]: { body: orderProcessed.mpResponse } }).fetchMp);
+    const { wh } = createWh();
+
+    await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db));
+
+    expect(fake.rpcCalls).toHaveLength(1);
+    expect(fake.rpcCalls[0]).toMatchObject({ p_status: "rejected", p_only_pending: true, p_audit_action: "mp_order_amount_mismatch" });
+    expect(fake.tables.audit_logs.map((a) => a.action)).toEqual(["mp_order_amount_mismatch"]);
+  });
+
+  it("base sin la migración (PGRST202): cae al update + audit de antes y acredita", async () => {
+    const { db, tables, writes } = orderSetup([], { rpcMissing: true });
+    const { wh } = createWh();
+
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(db));
+
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(tables.audit_logs.map((a) => a.action)).toEqual(["mp_order_approved"]);
+    expect(writes.map((w) => `${w.table}:${w.op}`)).toEqual(["mp_payment_intents:update", "audit_logs:insert"]);
+  });
+
+  it("llamador no estricto (polling): un error de la RPC no lanza ni deja audit; devuelve el resultado resuelto", async () => {
+    const { db, tables } = orderSetup([{ table: "mp_payment_intents", op: "update", message: "connection reset" }]);
+    const apply = real.applyOrderToIntent as unknown as (
+      admin: WebhookDb,
+      row: Row,
+      order: unknown,
+      actor: { userId: string | null; source: "poll" | "webhook" },
+    ) => Promise<{ status: string }>;
+
+    const res = await apply(db, orderIntentRow(orderProcessed.intent), orderProcessed.mpResponse, { userId: null, source: "poll" });
+
+    expect(res.status).toBe("approved");
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "pending" });
+    expect(tables.audit_logs).toEqual([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // 3) Aviso de una order antes de que se guarde mp_order_id.
+  // -------------------------------------------------------------------------
+  const T0 = 1763391600000;
+  function unknownOrderRequest(o: { dateCreated?: string | null; ts?: string | null }) {
+    const body: Record<string, unknown> = { ...orderProcessed.request.body };
+    if (o.dateCreated === null) delete body.date_created;
+    else if (o.dateCreated) body.date_created = o.dateCreated;
+    const headers: Record<string, string> = { ...orderProcessed.request.headers };
+    if (o.ts === null) delete headers["x-signature"];
+    else if (o.ts) headers["x-signature"] = `ts=${o.ts},v1=${"0".repeat(64)}`;
+    return toRequest("mp_orders_webhook", { ...orderProcessed.request, headers, body });
+  }
+  async function runUnknownOrder(req: Request, nowMs: number, mode: unknown = "off") {
+    const fake = createFakeDb({
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent, { mp_order_id: null })],
+      payment_secrets: [SECRETS],
+      system_settings: [modeRow(mode)],
+    });
+    const mp = createFakeMp({ [orderPath]: { body: orderProcessed.mpResponse } });
+    vi.stubGlobal("fetch", mp.fetchMp);
+    const deps = ordersDeps(fake.db);
+    deps.nowMs = () => nowMs;
+    const { wh, state } = createWh();
+    const res = await handleMpOrdersWebhook(req, wh, deps);
+    return { res, state, mp, ...fake };
+  }
+
+  it("order desconocida con aviso reciente (< 10 min): 503 para que MP reintente, sin leer MP ni escribir", async () => {
+    const req = unknownOrderRequest({ dateCreated: new Date(T0).toISOString(), ts: String(T0) });
+    const { res, state, mp, writes } = await runUnknownOrder(req, T0 + 2 * 60_000);
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.notes).toEqual(["order_not_found_yet"]);
+    expect(mp.calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("order desconocida fuera de la ventana (> 10 min): 200 como siempre", async () => {
+    const req = unknownOrderRequest({ dateCreated: new Date(T0).toISOString(), ts: String(T0) });
+    const { res, state, writes } = await runUnknownOrder(req, T0 + 11 * 60_000);
+
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(state.notes).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("la hora del aviso es la MÁS VIEJA entre date_created y ts (un ts nuevo de un reintento no estira la ventana)", async () => {
+    const req = unknownOrderRequest({ dateCreated: new Date(T0).toISOString(), ts: String(T0 + 30 * 60_000) });
+    const { res } = await runUnknownOrder(req, T0 + 31 * 60_000);
+    expect(await bodyOf(res)).toEqual(OK_200);
+
+    // ts en segundos, sin date_created: dentro de la ventana.
+    const secs = unknownOrderRequest({ dateCreated: null, ts: String(Math.floor(T0 / 1000)) });
+    const inWindow = await runUnknownOrder(secs, T0 + 60_000);
+    expect(await bodyOf(inWindow.res)).toEqual(RETRY_503);
+  });
+
+  it("order desconocida sin hora del aviso (sin date_created ni x-signature): 200", async () => {
+    const req = unknownOrderRequest({ dateCreated: null, ts: null });
+    const { res } = await runUnknownOrder(req, T0);
+    expect(await bodyOf(res)).toEqual(OK_200);
+  });
+
+  it("503 dentro de la ventana y, cuando mp_qr guardó mp_order_id, el reintento acredita", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent, { mp_order_id: null })],
+      payment_secrets: [SECRETS],
+      audit_logs: [],
+      system_settings: [modeRow("off")],
+    });
+    vi.stubGlobal("fetch", createFakeMp({ [orderPath]: { body: orderProcessed.mpResponse } }).fetchMp);
+    const req = () => unknownOrderRequest({ dateCreated: new Date(T0).toISOString(), ts: String(T0) });
+    const deps = ordersDeps(fake.db);
+    deps.nowMs = () => T0 + 30_000;
+
+    const r1 = await handleMpOrdersWebhook(req(), createWh().wh, deps);
+    const row = fake.tables.mp_payment_intents[0];
+    if (row) row.mp_order_id = orderProcessed.intent.mp_order_id; // mp_qr termina de guardar
+    const r2 = await handleMpOrdersWebhook(req(), createWh().wh, deps);
+
+    expect([r1.status, r2.status]).toEqual([503, 200]);
+    expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(fake.tables.audit_logs).toHaveLength(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // 4) 401 con OAuth → refresh forzado (aunque expires_at diga vigente).
+  // -------------------------------------------------------------------------
+  it("mp_webhook: 401 con OAuth vigente → refresh forzado → relectura con el token nuevo y acredita", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [paymentIntentRow(intent)],
+      payment_secrets: [oauthSecrets(24 * 3600_000)],
+      platform_secrets: [PLATFORM],
+    });
+    const refresh = oauthOk();
+    vi.stubGlobal("fetch", refresh);
+    const auths: (string | undefined)[] = [];
+    const fetchMp = vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      auths.push(init.headers.Authorization);
+      return init.headers.Authorization === `Bearer ${NEW_TOKEN}`
+        ? new Response(JSON.stringify(paymentApproved.mpResponse), { status: 200 })
+        : new Response(JSON.stringify({ message: "invalid_token" }), { status: 401 });
+    });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(fake.db, fetchMp));
+
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(auths).toEqual([`Bearer ${TOKEN}`, `Bearer ${NEW_TOKEN}`]);
+    expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(fake.tables.payment_secrets[0]?.secrets).toMatchObject({ access_token: NEW_TOKEN });
+    expect(state).toMatchObject({ done: true, failures: [] });
+  });
+
+  it("mp_webhook: 401 → refresh forzado → 401 otra vez: 503 sin escribir (un solo refresh)", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [paymentIntentRow(intent)],
+      payment_secrets: [oauthSecrets(24 * 3600_000)],
+      platform_secrets: [PLATFORM],
+    });
+    const refresh = oauthOk();
+    vi.stubGlobal("fetch", refresh);
+    const mp = createFakeMp({ [payPath]: { status: 401, body: { message: "invalid_token" } } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(fake.db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(mp.calls.map((c) => c.auth)).toEqual([`Bearer ${TOKEN}`, `Bearer ${NEW_TOKEN}`]);
+    expect(state.failures).toEqual(["MP /v1/payments respondió 401"]);
+    expect(fake.writes.filter((w) => w.table === "mp_payment_intents")).toEqual([]);
+  });
+
+  it("mp_webhook: 401 con token manual no fuerza refresh (200 como antes)", async () => {
+    const fake = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS], platform_secrets: [PLATFORM] });
+    const refresh = oauthOk();
+    vi.stubGlobal("fetch", refresh);
+    const mp = createFakeMp({ [payPath]: { status: 401, body: {} } });
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), createWh().wh, paymentDeps(fake.db, mp.fetchMp));
+
+    expect(res.status).toBe(200);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(mp.calls).toHaveLength(1);
+  });
+
+  it("mp_orders_webhook: 401 con OAuth vigente → refresh forzado → relectura y acredita", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent)],
+      payment_secrets: [oauthSecrets(24 * 3600_000)],
+      platform_secrets: [PLATFORM],
+      audit_logs: [],
+    });
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
+        const path = new URL(url).pathname;
+        calls.push(`${path} ${init?.headers?.Authorization ?? ""}`.trim());
+        if (path === "/oauth/token") {
+          return new Response(JSON.stringify({ access_token: NEW_TOKEN, refresh_token: "TG-2", expires_in: 3600 }));
+        }
+        return init?.headers?.Authorization === `Bearer ${NEW_TOKEN}`
+          ? new Response(JSON.stringify(orderProcessed.mpResponse), { status: 200 })
+          : new Response("{}", { status: 401 });
+      }),
+    );
+    const { wh, state } = createWh();
+
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db));
+
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(calls).toEqual([`${orderPath} Bearer ${TOKEN}`, "/oauth/token", `${orderPath} Bearer ${NEW_TOKEN}`]);
+    expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(fake.tables.audit_logs).toHaveLength(1);
+    expect(state.failures).toEqual([]);
+  });
+});
+
+describe("PAY-28 · mpNoticeTimeMs", () => {
+  it("toma la más vieja entre date_created y ts (ms o s) y descarta lo ilegible o muy futuro", async () => {
+    const { mpNoticeTimeMs } = await import("@/supabase/functions/_shared/mpWebhookHandlers");
+    const now = 1763391600000;
+    expect(mpNoticeTimeMs({ date_created: new Date(now - 5000).toISOString() }, `ts=${now},v1=x`, now)).toBe(now - 5000);
+    expect(mpNoticeTimeMs({}, `ts=${Math.floor(now / 1000)},v1=x`, now)).toBe(now);
+    expect(mpNoticeTimeMs({ date_created: "no es fecha" }, null, now)).toBeNull();
+    expect(mpNoticeTimeMs(null, `ts=${now + 3_600_000},v1=x`, now)).toBeNull();
+    expect(mpNoticeTimeMs(null, "v1=abc", now)).toBeNull();
   });
 });

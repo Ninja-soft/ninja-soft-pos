@@ -6973,3 +6973,35 @@ Review de PAY-27 (ADR-188). Cuatro bordes en los que un cobro podía quedar sin 
 ### Verificación
 
 `tests/unit/mpWebhooks.test.ts` (bloque PAY-28): guardado del token que falla 3 veces → 3 intentos + un audit sin tokens y acredita; que sale al 3.er intento → guarda sin audit; llamador no estricto → mismo valor de retorno; la RPC recibe la condición y el payload de siempre; audit que falla dentro de la RPC → 503, intent `pending` y sin audit, el reintento escribe los dos; monto distinto → `p_only_pending` + `mp_order_amount_mismatch`; base sin la función → camino viejo con log; polling con la RPC fallida → camino de dos pasos y devuelve lo guardado; RPC y update viejo fallidos → devuelve `pending` sin audit; estricto con la RPC fallida → 503 sin caer al camino viejo; order desconocida dentro / fuera de la ventana, más vieja entre `date_created` y `ts`, sin hora → 200, y reintento que acredita cuando aparece `mp_order_id`; 401 con OAuth → refresh forzado → acredita (pagos y orders), 401 de nuevo → 503 con un solo refresh, token manual sin refresh, otra Edge ya rotó → usa el guardado sin `/oauth/token`, 401 persistente en 3 reintentos → un solo refresh (cooldown), `updated_at` reciente → no fuerza. `tests/integration/rls-mp-intent-transition.test.ts` (Supabase local): sin EXECUTE para anon / authenticated, transición una sola vez con un audit, approved intocable, rechazo sólo desde pending, estado / acción inválidos sin escribir.
+
+## ADR-192: El cupón se calcula sobre el subtotal del carrito, como el POS (PRD-62)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · migración `20270129100000_prd62_coupon_base` · **Hito:** F9 · H54 / PRD
+
+### Contexto
+
+PRD-02 (tests de integridad del motor de promociones) encontró una divergencia entre el POS y `create_sale`. El POS (`modules/pos/screen/usePosPricing.ts`) calcula el cupón sobre `subtotal = cartSubtotal(lines)`: porcentaje, mínimo de compra (`validate_coupon` también recibe ese subtotal) y tope `subtotal - discountTotal`. La hoja de cobro suma después el recargo del medio de pago / cuotas y la prima de garantía extendida **enteros** (`buildSaleItemsAndExtras` los agrega al final de `p_items` como líneas sin producto y los anuncia en `p_extras` con `kind` `surcharge` / `warranty` y su monto).
+
+`create_sale` calculaba el cupón sobre `v_subtotal`, que incluye esas líneas. Con carrito $1.000, cupón 10 % y recargo $100, el POS cobraba $1.000 (1.000 − 100 + 100) y el servidor grababa cupón $110 y total $990: el total registrado quedaba por debajo de lo cobrado (y el mínimo del cupón se podía alcanzar con el recargo).
+
+### Decisión
+
+- **La base correcta es la del POS:** subtotal del carrito, sin recargo del medio de pago ni garantía extendida. Un recargo financia el medio de pago y la garantía es un servicio aparte; ninguno es mercadería sobre la que el comercio quiso dar el descuento. Es además lo que el cajero y el cliente ven en pantalla.
+- `create_sale` (copia de producción de SEC-43 con bloques `PRD-62`) arma `v_coupon_base`: `v_subtotal` menos las líneas sin `product_id` cuyo monto (`round(unit_price * quantity, 2)`) coincide con un extra `warranty` / `surcharge` de `p_extras`, consumiendo cada extra una vez y recorriendo `p_items` desde el final (donde los agrega la hoja). Es el mismo criterio de pool de montos que ya usa el control de precio (ADR-056). La venta libre, los packs y los ítems sin producto de mesa / delivery no tienen extra con su monto y siguen en la base, igual que en `cartSubtotal`.
+- Porcentaje, mínimo de compra (`coupon_min_amount`) y tope del cupón usan `v_coupon_base`. El tope de F9 · H54 sobre `v_subtotal` se conserva como piso del total (es redundante, `v_coupon_base ≤ v_subtotal`).
+- El total sigue siendo `v_subtotal − descuento − promo − cupón`: recargo y garantía se cobran enteros. Misma firma (15 argumentos), `SECURITY DEFINER`, `search_path` y grants; sin `drop`.
+- **Idempotencia (SEC-43):** la huella `client_request_hash` incluye sólo `coupon_id`, no el monto, y `_sale_replay_result` lee la venta grabada: no cambian. Un reintento de una venta grabada antes de la migración devuelve lo grabado.
+
+### Riesgos
+
+- Un extra `surcharge` / `warranty` mandado sin su línea no saca nada de la base (no hay línea que coincida); uno con monto igual a una venta libre la sacaría de la base (sólo achica el cupón del propio cobro, nunca lo agranda).
+- Un carrito que antes llegaba al mínimo del cupón sólo gracias al recargo ahora falla con `coupon_min_amount`, igual que sin recargo.
+
+### Pendiente
+
+- PRD-02 (PR #592) deja este caso como `it.fails` en `tests/unit/createSalePromoIntegrity.test.ts` y `tests/integration/rls-promociones-create-sale.test.ts`: el que se mergee segundo los pasa a `it()`.
+- Aplicar la migración en producción.
+
+### Verificación
+
+`tests/unit/couponBase.test.ts`: la nueva `create_sale` es la de SEC-43 más los bloques PRD-62 (sólo reemplaza el mínimo y la fórmula del cupón), firma / grants / encabezado iguales, es la última definición, fórmula y orden sobre `v_coupon_base`, pool sólo de `warranty` / `surcharge`, huella de SEC-43 sin el monto del cupón y contrato con `buildSaleItemsAndExtras` y `usePosPricing`. `tests/integration/rls-cupon-base.test.ts` (Supabase local): recargo de cuotas + cupón 10 % → cupón 10 % del carrito, total = carrito − cupón + recargo = lo que cobra el POS; recargo + garantía; cupón de monto topeado al carrito; mínimo que el recargo ya no habilita. El guard de linaje de PRD-02 pasa con la nueva definición.

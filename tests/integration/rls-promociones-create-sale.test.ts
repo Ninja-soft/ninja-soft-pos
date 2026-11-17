@@ -397,12 +397,12 @@ describe.skipIf(!enabled)("PRD-02 · promociones en la create_sale vigente", () 
     expect(second.error?.message).toMatch(/coupon_customer_exceeded/);
   });
 
-  // DIVERGENCIA: create_sale calcula el cupón % sobre v_subtotal, que incluye
-  // las líneas sin producto de la hoja de cobro (recargo de cuotas, garantía).
-  // El POS lo calcula sobre el subtotal del carrito (usePosPricing) y cobra el
-  // recargo entero: acá el POS cobra 1000 (1000 − 100 + 100) y el servidor
-  // graba un total de 990 (cupón de 110). Ver tests/unit/createSalePromoIntegrity.test.ts.
-  it.fails("DIVERGENCIA: cupón % con recargo de cuotas: el servidor descuenta lo mismo que el POS", async () => {
+  // PRD-62 (ADR-192): create_sale calcula el cupón % sobre el subtotal del
+  // carrito, sin las líneas sin producto de la hoja de cobro (recargo de
+  // cuotas, garantía), igual que el POS (usePosPricing): el POS cobra 1000
+  // (1000 − 100 + 100) y el servidor graba cupón 100 y total 1000. Antes era
+  // DIVERGENCIA (cupón 110, total 990). Más casos en tests/integration/rls-cupon-base.test.ts.
+  it("cupón % con recargo de cuotas: el servidor descuenta lo mismo que el POS (PRD-62)", async () => {
     const coupon = await addCoupon({ code: `REC-${STAMP}`, discount_type: "percent", discount_value: 10 });
     const r = await sell({
       p_items: [item(ctx.gaseosa, 1, 1000), { product_id: null, name: "Recargo 3 cuotas", quantity: 1, unit_price: 100, discount: 0 }],

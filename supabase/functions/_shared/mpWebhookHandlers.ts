@@ -11,7 +11,15 @@
 // llega por `deps`. Cada index.ts arma las deps reales (createClient con
 // service_role, fetch, tenantMpCredential, ...) y llama al handler dentro del
 // mismo withWebhookLog. El comportamiento es el de antes de la extracción
-// (mismos códigos, cuerpos, orden de validaciones, escrituras y logs).
+// (mismos códigos, cuerpos, orden de validaciones, escrituras y logs), salvo
+// PAY-27 (ADR-188):
+//   * Si no se pudo leer el pago / la order en MP por una falla transitoria
+//     (fetch rechaza, timeout, 5xx o 429) o falla la base, se responde 503
+//     {ok:false, retry:true} para que MP reintente. Reintentar es seguro: la
+//     acreditación es idempotente (sólo transiciona desde pending).
+//   * Un 4xx de MP (404 pago inexistente, 401/403 credencial) sigue en 200:
+//     reintentar no lo arregla. Queda como error en webhook_events (wh.fail).
+//   * Toda lectura a MP tiene timeout (MP_READ_TIMEOUT_MS, AbortController).
 // =============================================================================
 import { amountsMatch, type MpEnv, type MpOrder, parseOrderNotification } from "./mpOrders.ts";
 import {
@@ -81,6 +89,7 @@ export interface MpOrdersWebhookDeps {
   fetchOrder: (
     token: string,
     orderId: string,
+    opts?: { signal?: AbortSignal },
   ) => Promise<{ ok: true; order: MpOrder } | { ok: false; status: number; detail: string }>;
   /** applyOrderToIntent (_shared/mpIntents.ts) con actor webhook. */
   applyOrder: (
@@ -92,6 +101,8 @@ export interface MpOrdersWebhookDeps {
   /** runInBackground (_shared/mpAuth.ts). */
   runInBackground: (work: Promise<unknown>) => Promise<unknown> | null;
   log: WebhookLogger;
+  /** Timeout de la lectura a MP (default MP_READ_TIMEOUT_MS; los tests lo bajan). */
+  timeoutMs?: number;
 }
 
 export interface MpDisputesPort {
@@ -108,10 +119,12 @@ export interface MpWebhookDeps {
   credential: CredentialFn;
   secretScope: SecretScopeFn;
   /** fetch hacia api.mercadopago.com (GET /v1/payments/{id}). */
-  fetchMp: (url: string, init: { headers: Record<string, string> }) => Promise<Response>;
+  fetchMp: (url: string, init: { headers: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
   /** disputesEnabled / fetchChargeback / fetchClaim / fetchPayment / saveDisputes (_shared/disputesSync.ts). */
   disputes: MpDisputesPort;
   log: WebhookLogger;
+  /** Timeout de la lectura a MP (default MP_READ_TIMEOUT_MS; los tests lo bajan). */
+  timeoutMs?: number;
 }
 
 const ok = () =>
@@ -120,22 +133,82 @@ const ok = () =>
     headers: { "Content-Type": "application/json" },
   });
 
+/**
+ * PAY-27: falla transitoria (MP caído / lento / 429 o error de base). MP
+ * reintenta las notificaciones que no reciben 2xx (con backoff), así que un
+ * 503 no pierde el pago. withWebhookLog lo registra como 'error' (status >= 500).
+ */
+const retryLater = () =>
+  new Response(JSON.stringify({ ok: false, retry: true }), {
+    status: 503,
+    headers: { "Content-Type": "application/json", "Retry-After": "60" },
+  });
+
+/**
+ * Timeout de cada lectura a MP. MP corta la notificación a los 22 s y la
+ * reintenta (cabecera de mp_orders_webhook/index.ts): 8 s de lectura más las
+ * consultas a la base dejan margen de sobra para responder dentro del límite.
+ */
+export const MP_READ_TIMEOUT_MS = 8000;
+
+/** 5xx o 429 de MP: reintentar más tarde puede funcionar. */
+export function isRetryableMpStatus(status: number): boolean {
+  return status >= 500 || status === 429;
+}
+
+/**
+ * Corre `work` con un AbortSignal que se aborta a los `ms`. Además corre una
+ * carrera contra el mismo plazo, así una dependencia que ignore el signal
+ * tampoco deja la Edge colgada.
+ */
+async function withMpTimeout<T>(ms: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctrl = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new DOMException(`Mercado Pago no respondió en ${ms} ms`, "TimeoutError");
+      ctrl.abort(err);
+      reject(err);
+    }, ms);
+  });
+  try {
+    return await Promise.race([work(ctrl.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // mp_orders_webhook — topic `order` de la Orders API (QR dinámico y Point).
 // ---------------------------------------------------------------------------
 
-async function handleOrder(orderId: string, wh: WebhookCtx, deps: MpOrdersWebhookDeps): Promise<void> {
+type OrderStep =
+  | { kind: "skip" }
+  | { kind: "retry" }
+  | { kind: "apply"; admin: WebhookDb; row: OrdersIntentRow; order: MpOrder };
+
+/**
+ * Parte sincrónica (PAY-27, opción a): busca el intent y RE-LEE la order en
+ * MP con timeout antes de responder, así una falla transitoria vuelve como
+ * 503 y MP reintenta. Sólo applyOrder (escrituras locales) queda en segundo
+ * plano.
+ */
+async function readOrder(orderId: string, wh: WebhookCtx, deps: MpOrdersWebhookDeps): Promise<OrderStep> {
   const admin = deps.db();
 
-  const { data: rowRaw } = await admin
+  const { data: rowRaw, error: rowErr } = await admin
     .from("mp_payment_intents")
     .select(deps.intentColumns)
     .eq("mp_order_id", orderId)
     .maybeSingle();
+  if (rowErr) {
+    wh.fail(rowErr); // base caída: no sabemos si la order es nuestra.
+    return { kind: "retry" };
+  }
   const row = rowRaw as OrdersIntentRow | null;
-  if (!row) return; // order que no es nuestra (u otra integración de la cuenta).
+  if (!row) return { kind: "skip" }; // order que no es nuestra (u otra integración de la cuenta).
   wh.tenant(row.tenant_id);
-  if (row.status === "approved") return; // ya acreditado: idempotente.
+  if (row.status === "approved") return { kind: "skip" }; // ya acreditado: idempotente.
 
   // ADR-057: la credencial (negocio o sucursal) con la que se creó el cobro.
   const cred = await deps.credential(admin, row.tenant_id, row.mp_env ?? "prod", {
@@ -143,19 +216,27 @@ async function handleOrder(orderId: string, wh: WebhookCtx, deps: MpOrdersWebhoo
   });
   if (!cred) {
     wh.fail("sin credencial de Mercado Pago");
-    return;
+    return { kind: "skip" };
   }
-  const got = await deps.fetchOrder(cred.token, orderId);
+  let got: Awaited<ReturnType<MpOrdersWebhookDeps["fetchOrder"]>>;
+  try {
+    got = await withMpTimeout(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, (signal) =>
+      deps.fetchOrder(cred.token, orderId, { signal }),
+    );
+  } catch (e) {
+    deps.log.error("[mp_orders_webhook] no se pudo leer la order", { orderId, error: String(e).slice(0, 200) });
+    wh.fail(e);
+    return { kind: "retry" };
+  }
   if (!got.ok) {
     deps.log.error("[mp_orders_webhook] no se pudo leer la order", {
       orderId,
       status: got.status,
     });
     wh.fail(`no se pudo leer la order (${got.status})`);
-    return;
+    return isRetryableMpStatus(got.status) ? { kind: "retry" } : { kind: "skip" };
   }
-  await deps.applyOrder(admin, row, got.order, { userId: null, source: "webhook" });
-  wh.done();
+  return { kind: "apply", admin, row, order: got.order };
 }
 
 export async function handleMpOrdersWebhook(
@@ -177,7 +258,14 @@ export async function handleMpOrdersWebhook(
     if (n.type !== "order" || !n.orderId) return ok();
     wh.ref(n.orderId);
 
-    const work = handleOrder(n.orderId, wh, deps);
+    const step = await readOrder(n.orderId, wh, deps);
+    if (step.kind === "retry") return retryLater();
+    if (step.kind === "skip") return ok();
+
+    const work = (async () => {
+      await deps.applyOrder(step.admin, step.row, step.order, { userId: null, source: "webhook" });
+      wh.done();
+    })();
     wh.defer(work);
     const pending = deps.runInBackground(work);
     if (pending) await pending;
@@ -314,11 +402,15 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
 
     const admin = deps.db();
 
-    const { data: intentRaw } = await admin
+    const { data: intentRaw, error: intentErr } = await admin
       .from("mp_payment_intents")
       .select("id, tenant_id, status, amount, mp_env")
       .eq("id", intentId)
       .maybeSingle();
+    if (intentErr) {
+      wh.fail(intentErr); // base caída: no es un intent desconocido, reintentar.
+      return retryLater();
+    }
     const intent = intentRaw as { tenant_id: string; amount: unknown; mp_env?: MpEnv | null } | null;
     if (!intent) return ok();
     wh.tenant(intent.tenant_id);
@@ -337,19 +429,29 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     }
     const accessToken = cred.token;
 
-    const payRes = await deps.fetchMp(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (!payRes.ok) {
-      wh.fail(`MP /v1/payments respondió ${payRes.status}`);
-      return ok();
+    type MpPayment = { status?: string; external_reference?: string; transaction_amount?: number };
+    let read: { status: number; pay: MpPayment | null };
+    try {
+      // Lectura completa (respuesta + cuerpo) dentro del timeout.
+      read = await withMpTimeout(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, async (signal) => {
+        const payRes = await deps.fetchMp(
+          `https://api.mercadopago.com/v1/payments/${paymentId}`,
+          { headers: { Authorization: `Bearer ${accessToken}` }, signal },
+        );
+        if (!payRes.ok) return { status: payRes.status, pay: null };
+        return { status: payRes.status, pay: (await payRes.json()) as MpPayment };
+      });
+    } catch (e) {
+      // Red caída, timeout o cuerpo ilegible: MP reintenta.
+      wh.fail(e);
+      return retryLater();
     }
-    const pay = (await payRes.json()) as {
-      status?: string;
-      external_reference?: string;
-      transaction_amount?: number;
-    };
+    if (!read.pay) {
+      wh.fail(`MP /v1/payments respondió ${read.status}`);
+      // 5xx / 429: reintentar. 4xx (pago inexistente, credencial): no sirve.
+      return isRetryableMpStatus(read.status) ? retryLater() : ok();
+    }
+    const pay = read.pay;
 
     // Antifraude #1: el pago tiene que referenciar ESTE intent.
     if (pay.external_reference !== intentId) return ok();
@@ -373,11 +475,17 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
       }
     }
 
-    await admin
+    // Idempotente: .neq("status","approved") no pisa un cobro ya acreditado,
+    // así que reintentar después de un 503 es seguro.
+    const { error: updErr } = await admin
       .from("mp_payment_intents")
       .update({ status, mp_payment_id: String(paymentId) })
       .eq("id", intentId)
       .neq("status", "approved");
+    if (updErr) {
+      wh.fail(updErr);
+      return retryLater();
+    }
 
     wh.done();
     return ok();

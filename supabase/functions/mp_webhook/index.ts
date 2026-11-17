@@ -2,7 +2,9 @@
 // Edge Function: mp_webhook — recibe notificaciones de Mercado Pago (público,
 // sin JWT). Identifica el intent por ?intent=<id>, consulta el pago real en MP
 // con el Access Token del tenant (no confía en el body) y actualiza el estado.
-// Siempre responde 200 para que MP no reintente en loop.
+// Responde 200 salvo una falla transitoria (MP caído / lento / 5xx / 429 o
+// error de base): ahí responde 503 para que MP reintente (PAY-27, ADR-188).
+// Un 4xx de MP o un aviso que no es nuestro siguen en 200 (no hay loop).
 //
 // Desde ADR-032 cubre sólo los pagos de Checkout Pro (link). Las orders de la
 // Orders API (QR dinámico y Point) llegan por mp_orders_webhook (topic order).

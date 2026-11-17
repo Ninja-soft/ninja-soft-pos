@@ -32,9 +32,12 @@ export const ORDER_INTENT_COLUMNS =
 export async function fetchOrder(
   token: string,
   orderId: string,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<{ ok: true; order: MpOrder } | { ok: false; status: number; detail: string }> {
+  // PAY-27: `signal` opcional para que el webhook corte la lectura (timeout).
   const r = await fetch(`${MP_API}/v1/orders/${encodeURIComponent(orderId)}`, {
     headers: mpHeaders(token),
+    signal: opts.signal,
   });
   if (!r.ok) return { ok: false, status: r.status, detail: (await r.text()).slice(0, 300) };
   return { ok: true, order: (await r.json()) as MpOrder };

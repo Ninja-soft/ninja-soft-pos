@@ -157,6 +157,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **Un pago aprobado en Mercado Pago ya no queda sin acreditar si MP falla al avisar (PAY-27 · ADR-188).** Cuando el webhook no podía consultar el pago o la order en Mercado Pago (red caída, MP lento, error 5xx o 429) o fallaba la base, respondía 200 y MP no reintentaba: el cobro quedaba pendiente hasta que el barrido lo vencía. Ahora `mp_webhook` y `mp_orders_webhook` responden 503 en esos casos y MP vuelve a avisar; reintentar es seguro porque la acreditación es idempotente (un pago se acredita una sola vez). Un 4xx de MP (pago inexistente, credencial inválida) sigue en 200 porque reintentar no lo arregla. Cada lectura a MP tiene un tiempo máximo de 8 s, y `mp_orders_webhook` lee la order antes de responder (sólo la escritura local sigue en segundo plano). Sin cambios de base.
+
 - **Seguridad: `search_path` fijo en todas las funciones (SEC-16).** Las 25 funciones que lo tenían mutable (advisor `function_search_path_mutable`) pasan a `public, pg_temp`. El lint de CI ya no tolera ninguna. Migración `20270121100000_sec16_search_path`.
 
 - **Seguridad: helpers que recibían el negocio por parámetro (SEC-14).** Un usuario podía consultar el plan, los límites, la política de PIN o la sucursal por defecto de otro negocio. Seis helpers dejan de ser ejecutables desde la sesión del usuario; `tenant_has_feature_for` y `stock_default_store` (las usan policies y funciones del panel) siguen disponibles, pero si un usuario las llama directo por la API preguntando por un negocio que no es el suyo responden "no" / vacío (el catálogo público, las policies y el panel no cambian). Las Edge Functions y los procesos del servidor no cambian. Migración `20270120100300_sec14_tenant_helpers_guard`.

@@ -10,8 +10,11 @@
 //     ambiente con que se creó el intent).
 //   * Se acredita sólo processed + pago processed + monto exacto +
 //     external_reference = intent. Idempotente (transiciones desde pending).
-//   * Responde 200 enseguida (MP corta a los 22 s y reintenta): el trabajo
-//     corre en segundo plano con EdgeRuntime.waitUntil cuando está disponible.
+//   * MP corta la notificación a los 22 s y la reintenta. PAY-27 (ADR-188):
+//     la lectura de la order en MP es sincrónica con timeout de 8 s; si falla
+//     de forma transitoria (red, timeout, 5xx, 429, base) responde 503 y MP
+//     reintenta. Sólo applyOrderToIntent (escrituras locales) corre en
+//     segundo plano con EdgeRuntime.waitUntil cuando está disponible.
 //
 // OPS-23: la lógica vive en _shared/mpWebhookHandlers.ts (handleMpOrdersWebhook,
 // testeada con Vitest); acá sólo se arman las dependencias reales.

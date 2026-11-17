@@ -6810,3 +6810,25 @@ ADR-098 documentó que, si la red se corta después de que el servidor grabó la
 ### Verificación
 
 Unit: `tests/unit/saleIdempotency.test.ts`. Integración (CI, base local): `tests/integration/rls-sale-idempotency.test.ts`. Casos: misma clave dos veces y en paralelo (una venta, un movimiento de stock y uno de caja, mismo resultado con `replayed`), misma clave con otro pago (`sale_request_mismatch` con el número), sin clave (dos ventas), otro negocio (no choca), venta offline con la clave de una online que entró (`synced`, sin duplicar ni marcar offline) o con otros datos (`needs_review`), y venta con envío reintentada sin volver a guardar la dirección ni auditar el `ship_to`. También que los helpers no se ejecutan desde el cliente. `grants.expected.json` con la firma nueva y los helpers.
+
+## ADR-188: Webhooks de Mercado Pago responden 503 ante fallas transitorias (PAY-27)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · sin migración · **Hito:** F1.5 / PAY
+
+### Contexto
+
+`mp_webhook` y `mp_orders_webhook` respondían 200 aunque no hubieran podido leer el pago / la order en Mercado Pago (fetch rechazado, timeout, 5xx) o grabar el intent. MP sólo reintenta lo que no recibe 2xx, así que un pago aprobado podía quedar `pending` y `payment_intents_expire_sweep` lo vencía. `mp_orders_webhook` además leía la order en segundo plano (`EdgeRuntime.waitUntil`) porque MP corta la notificación a los **22 s** (cabecera de `mp_orders_webhook/index.ts`): la falla ya no podía cambiar la respuesta.
+
+### Decisión
+
+1. **503 `{ok:false, retry:true}` (con `Retry-After: 60`)** si la lectura a MP rechaza o vence, si MP responde **5xx o 429**, o si falla la base (leer el intent o el `update`). Reintentar es seguro: el `update` de `mp_webhook` lleva `.neq("status","approved")` y `applyOrderToIntent` sólo transiciona desde `pending`; el pago se acredita una sola vez.
+2. **4xx de MP (400, 401, 403, 404) sigue en 200** con `wh.fail`: pago inexistente o credencial inválida no se arreglan reintentando y MP insistiría en vano. También siguen en 200 el intent / order desconocido, otro topic, sin credencial, `external_reference` ajeno y `amount_mismatch` (no se acredita).
+3. **Timeout de 8 s** (`MP_READ_TIMEOUT_MS`) en cada lectura a MP con `AbortController` (respuesta y cuerpo), más una carrera contra el mismo plazo por si una dependencia ignora el signal. `fetchOrder` acepta un `signal` opcional (los otros llamadores no cambian).
+4. **`mp_orders_webhook`, opción (a):** la búsqueda del intent, la credencial y la lectura de la order pasan a ser sincrónicas (8 s + consultas a la base, muy por debajo de 22 s); sólo `applyOrderToIntent` queda en segundo plano. Se descartó (b), mantener todo en segundo plano con una marca propia de reintento: necesita tabla / columna y un barrido nuevo para lo que MP ya hace.
+5. **Registro:** `withWebhookLog` ya marca `error` todo status ≥ 500 y no deduplica por `x-request-id` (`webhook_events` sólo tiene PK `uuid`): cada reintento queda como fila propia y se procesa.
+
+### Pendiente
+
+- Una falla de `applyOrderToIntent` en segundo plano sigue sin reintento de MP (queda `error` en `webhook_events`; la cubren el polling del POS y `pending_charges_sync`).
+- Una excepción no prevista (p. ej. la credencial que lanza) sigue en el `catch` general con 200. Las lecturas de disputas (ADR-064) no tienen timeout propio.
+- Validación de `x-signature` en estos webhooks: SEC-60.

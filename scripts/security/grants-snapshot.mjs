@@ -56,7 +56,7 @@ const PRIVS = [["s", "SELECT"], ["i", "INSERT"], ["u", "UPDATE"], ["d", "DELETE"
 export function diffSnapshots(expected, actual) {
   const out = [];
   for (const [kind, key, fields] of [
-    ["tables", "name", ["kind", "rls", "policies", "anon", "authenticated"]],
+    ["tables", "name", ["kind", "rls", "policies", "anon", "authenticated", "columns"]],
     ["functions", "sig", ["secdef", "anon", "authenticated", "config"]],
   ]) {
     const e = new Map((expected[kind] ?? []).map((x) => [x[key], x]));
@@ -68,7 +68,7 @@ export function diffSnapshots(expected, actual) {
         continue;
       }
       for (const f of fields) {
-        if (ex[f] === ac[f]) continue;
+        if (JSON.stringify(ex[f] ?? null) === JSON.stringify(ac[f] ?? null)) continue;
         // Privilegios de tabla ("siud"): una línea por privilegio que cambia.
         if (kind === "tables" && (f === "anon" || f === "authenticated")) {
           for (const [l, priv] of PRIVS) {

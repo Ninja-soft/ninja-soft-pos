@@ -563,6 +563,17 @@ Documentación detallada por tabla en `supabase/policies/<tabla>.md`.
 
 ---
 
+### 6.1 Grants del Data API (ADR-184)
+
+Desde SEC-07 los privilegios de `anon`, `authenticated` y `service_role` son **explícitos** (sin `auto_expose_new_tables`). Toda tabla o vista nueva lleva en su migración:
+
+- `grant select, insert, update, delete on table public.<t> to authenticated;` (o lo que necesite; RLS decide las filas).
+- A `anon`, como mucho `select` y sólo si un flujo público la lee directo. **anon nunca escribe por el Data API**: lo público va por RPC o Edge.
+- Sin policies → sin grants (sólo RPC/service_role).
+- Funciones nuevas: `grant execute … to authenticated` explícito (los defaults ya no se lo dan a anon).
+
+`grants.expected.json` se actualiza en el mismo PR y `tests/integration/grants-parity.test.ts` (estricto en CI) falla si la base no coincide.
+
 ## 7. Datos snapshot en `sale_items`
 
 Las columnas `product_name` y `sku` se copian al crear el item porque el producto puede cambiar después. La venta debe ser **inmutable en su contenido** una vez completada.

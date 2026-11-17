@@ -99,6 +99,7 @@ describe.skipIf(!enabled)("grants · paridad local contra el estado esperado", (
 describe.skipIf(enabled || !process.env.CI)("grants · paridad salteada en CI", () => {
   it("avisa que no hubo control de paridad", () => {
     console.warn(`[grants-parity] SALTEADO en CI: DB_URL=${DB_URL ? "sí" : "no"} local=${isLocal} psql=${hasPsql}`);
-    expect(enabled).toBe(false);
+    // En modo estricto, no correr la paridad en CI es un error.
+    expect(strict, "GRANTS_PARITY_STRICT=1 pero no hay DB_URL local o psql").toBe(false);
   });
 });

@@ -95,4 +95,6 @@ jobs:
           export SUPABASE_TEST_URL="$API_URL"
           export SUPABASE_TEST_ANON_KEY="$ANON_KEY"
           export SUPABASE_TEST_SERVICE_KEY="$SERVICE_ROLE_KEY"
+          # SEC-07: grants explícitos → la paridad con grants.expected.json es estricta.
+          export GRANTS_PARITY_STRICT=1
           pnpm test:rls

@@ -31,6 +31,18 @@ select jsonb_build_object(
       'kind', r.relkind,
       'rls', r.relrowsecurity,
       'policies', (select count(*) from pg_policies pp where pp.schemaname = 'public' and pp.tablename = r.relname),
+      -- Grants explícitos por columna (pg_attribute.attacl): un revoke a nivel
+      -- tabla también los borra, así que la migración los vuelve a otorgar.
+      'columns', coalesce((
+        select jsonb_object_agg(g.grantee || ' ' || lower(g.priv), g.cols order by g.grantee, g.priv)
+          from (
+            select x.grantee::regrole::text as grantee, x.privilege_type as priv,
+                   jsonb_agg(a.attname order by a.attname collate "C") as cols
+              from pg_attribute a, aclexplode(a.attacl) x
+             where a.attrelid = r.oid and a.attnum > 0 and not a.attisdropped and a.attacl is not null
+               and x.grantee in ('anon'::regrole, 'authenticated'::regrole)
+             group by 1, 2
+          ) g), '{}'::jsonb),
       'anon', (case when has_table_privilege('anon', r.oid, 'SELECT') then 's' else '' end)
            || (case when has_table_privilege('anon', r.oid, 'INSERT') then 'i' else '' end)
            || (case when has_table_privilege('anon', r.oid, 'UPDATE') then 'u' else '' end)

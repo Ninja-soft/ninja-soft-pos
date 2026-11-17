@@ -696,7 +696,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_delivery_order_item_guard_qty()"
     },
@@ -717,7 +717,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_dining_item_sent(p_printed_at timestamp with time zone, p_kds_status text)"
     },
@@ -1102,7 +1102,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_kds_sla_valid(p jsonb)"
     },
@@ -1907,14 +1907,14 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_alloc(p jsonb, p_rem numeric[], p_pid text[], p_cat text[], p_brand text[], p_qty numeric[], p_elig boolean[])"
     },
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_applies(p jsonb, p_ctx jsonb, p_pid text[], p_cat text[], p_brand text[], p_tot numeric[], p_elig boolean[])"
     },
@@ -1928,21 +1928,21 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_card_key(p text)"
     },
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_distribute(p_d numeric, p_w numeric[])"
     },
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_eval_core(p_promos jsonb, p_lines jsonb, p_ctx jsonb)"
     },
@@ -1970,14 +1970,14 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_in_scope(p jsonb, p_pid text, p_cat text, p_brand text)"
     },
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_payments_ok(p jsonb, p_ctx jsonb)"
     },
@@ -1991,7 +1991,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_promo_txt_arr(j jsonb)"
     },
@@ -2460,7 +2460,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_table_order_item_guard_qty()"
     },
@@ -2481,7 +2481,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "_table_orders_stamp_closed()"
     },
@@ -5064,7 +5064,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "cheque_transition_ok(p_kind text, p_from text, p_to text)"
     },
@@ -5225,7 +5225,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "cuit_is_valid(p text)"
     },
@@ -9950,7 +9950,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "product_basis_cost(p_basis text, p_last numeric, p_avg numeric, p_repl numeric)"
     },
@@ -10083,7 +10083,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "purchase_avg_after_outflow(p_stock_before numeric, p_avg numeric, p_qty numeric, p_unit_cost numeric)"
     },
@@ -10111,7 +10111,7 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "purchase_line_net(p_qty numeric, p_cost numeric, p_discounts numeric[])"
     },
@@ -10237,21 +10237,21 @@
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "purchase_unit_net(p_cost numeric, p_discounts numeric[], p_global numeric)"
     },
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "purchase_weighted_avg(p_stock_before numeric, p_avg_before numeric, p_qty numeric, p_unit_cost numeric)"
     },
     {
       "anon": true,
       "authenticated": true,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "purchase_withholdings_total(p_wh jsonb)"
     },
@@ -12925,7 +12925,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_goods_receipts_voided_guard()"
     },
@@ -13177,7 +13177,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_product_lots_defaults()"
     },
@@ -13506,7 +13506,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_suppliers_normalize()"
     },
@@ -13576,7 +13576,7 @@
     {
       "anon": false,
       "authenticated": false,
-      "config": "",
+      "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_treasury_accounts_normalize()"
     },

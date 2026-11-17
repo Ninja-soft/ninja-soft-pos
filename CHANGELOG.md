@@ -131,6 +131,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **Seguridad: `search_path` fijo en todas las funciones (SEC-16).** Las 25 funciones que lo tenían mutable (advisor `function_search_path_mutable`) pasan a `public, pg_temp`. El lint de CI ya no tolera ninguna. Migración `20270121100000_sec16_search_path`.
+
 - **Seguridad: helpers que recibían el negocio por parámetro (SEC-14).** Un usuario podía consultar el plan, los límites, la política de PIN o la sucursal por defecto de otro negocio. Seis helpers dejan de ser ejecutables desde la sesión del usuario; `tenant_has_feature_for` y `stock_default_store` (las usan policies y funciones del panel) siguen disponibles, pero si un usuario las llama directo por la API preguntando por un negocio que no es el suyo responden "no" / vacío (el catálogo público, las policies y el panel no cambian). Las Edge Functions y los procesos del servidor no cambian. Migración `20270120100300_sec14_tenant_helpers_guard`.
 
 - **Seguridad: las funciones de trigger no se ejecutan por el Data API (SEC-12).** Se revoca EXECUTE a `public`, `anon` y `authenticated` sobre las 225 funciones de trigger de `public` (66 eran ejecutables por anon, 22 de ellas SECURITY DEFINER). Los triggers siguen corriendo igual: Postgres no chequea ese permiso al dispararlos. Migración `20270120100200_sec12_revoke_trigger_fns`.

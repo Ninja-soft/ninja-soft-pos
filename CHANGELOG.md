@@ -592,6 +592,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Security
 
+- **Firma de los webhooks de cobros de Mercado Pago (SEC-60 · ADR-189).** `mp_webhook` (Checkout Pro y avisos de contracargos / reclamos) y `mp_orders_webhook` (QR dinámico y Point) verifican `x-signature` con la clave secreta de webhooks de la app de NinjaSoft (`platform_secrets.mercadopago.webhook_secret`, la misma de `mp_billing_webhook`) según el flag global `system_settings.mp_webhook_signature_mode`: `off`, `report` (inicial: si la firma no coincide, falta el `ts` o no hay secreto, queda una nota `signature_*` en Salud de webhooks y el cobro se procesa igual) o `enforce` (firma inválida, sin `ts`, ausente o vencida → 401 sin escribir; los negocios con Access Token manual, sin secreto guardado, siguen como en `report`). Si el flag no se puede leer (o tarda más de 2 s) vale `report`; si falla la lectura del secreto, en `enforce` responde 503 para que MP reintente. En `enforce` la firma se verifica antes de refrescar el token OAuth del negocio. La defensa de fondo no cambia: se re-lee el pago / la order en MP con el token del negocio. Migración `20270125100000_sec60_mp_webhook_signature` (sólo inserta la fila en `report`).
 - **Funciones de trigger fuera del RPC público.** Se revocó `EXECUTE` (anon/authenticated/public) en `payment_account_charge` y `products_auto_sku` (funciones de trigger que el linter de Supabase exponía como RPC `SECURITY DEFINER`). Los triggers siguen funcionando; ya no se pueden invocar vía `/rest/v1/rpc`.
 
 ### Fixed

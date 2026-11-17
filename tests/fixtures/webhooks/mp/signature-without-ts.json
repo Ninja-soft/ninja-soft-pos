@@ -1,5 +1,5 @@
 {
-  "description": "Aviso de pago con x-signature sin la parte ts (sólo v1): parseMpSignature lo da por inválido. mp_webhook no mira el header.",
+  "description": "Aviso de pago con x-signature sin la parte ts (sólo v1): parseMpSignature lo da por inválido. SEC-60: signature_no_ts (report registra y procesa; enforce 401).",
   "intent": { "id": "e1f3a5b7-9c0d-4e2f-8a4b-6c8d0e2f4a44", "amount": 12000 },
   "request": {
     "method": "POST",

@@ -14,6 +14,9 @@
 // handler sigue trabajando en segundo plano (wh.defer), el registro espera a
 // que termine.
 // Las GET/HEAD/OPTIONS (páginas de retorno del navegador) no se registran.
+// SEC-60: wh.note(texto) deja un aviso en la columna `error` SIN marcar la
+// fila como error (p. ej. `signature_invalid` en modo report): el estado sigue
+// saliendo del resultado real.
 // Las funciones puras (resolveWebhookStatus, buildWebhookEvent) se testean en
 // tests/unit/webhookLog.test.ts.
 // =============================================================================
@@ -40,6 +43,11 @@ export interface WebhookCtx {
   done(): void;
   /** Hubo un error aunque la respuesta sea 200 (p. ej. catch que responde ok). */
   fail(err: unknown): void;
+  /**
+   * SEC-60: aviso que queda en la columna `error` pero no cambia el estado
+   * (ok / ignored / error). Sin datos sensibles: sólo un código corto.
+   */
+  note(text: string): void;
   /**
    * Trabajo que sigue en segundo plano después de responder: el registro
    * espera a que termine (si falla, queda 'error').
@@ -93,8 +101,12 @@ export function buildWebhookEvent(input: {
   durationMs: number;
   tenantId: string | null;
   payloadRef: string | number | null;
+  /** SEC-60: aviso que se guarda junto al error sin cambiar el estado. */
+  note?: string | null;
 }): WebhookEventRow {
-  const error = errorText(input.error);
+  const realError = errorText(input.error);
+  const note = errorText(input.note ?? null);
+  const error = note && realError ? errorText(`${note} | ${realError}`) : (realError ?? note);
   const ref = input.payloadRef == null ? null : String(input.payloadRef).trim();
   const tenant = input.tenantId && UUID_RE.test(input.tenantId) ? input.tenantId : null;
   return {
@@ -104,7 +116,7 @@ export function buildWebhookEvent(input: {
     status: resolveWebhookStatus({
       httpStatus: input.httpStatus,
       processed: input.processed,
-      failed: error != null,
+      failed: realError != null,
     }),
     http_status: input.httpStatus,
     error,
@@ -169,6 +181,7 @@ export function withWebhookLog(
     let ref: string | number | null = null;
     let processed = false;
     let failure: unknown = null;
+    let note: string | null = null;
     const deferred: Promise<unknown>[] = [];
     const wh: WebhookCtx = {
       tenant(id) {
@@ -182,6 +195,9 @@ export function withWebhookLog(
       },
       fail(err) {
         failure = err ?? "error";
+      },
+      note(text) {
+        if (text) note = note ? `${note},${text}` : text;
       },
       defer(work) {
         deferred.push(work);
@@ -205,6 +221,7 @@ export function withWebhookLog(
           durationMs: performance.now() - t0,
           tenantId,
           payloadRef: ref,
+          note,
         });
         await logWebhook(row);
       };

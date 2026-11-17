@@ -105,6 +105,13 @@ if (!can(user, 'sales:create')) {
 }
 ```
 
+**Membresía del negocio de la sesión (SEC-27).** Las Edges que corren con `service_role` y toman el negocio de `app_metadata.current_tenant_id` no confían en el claim: validan que el usuario sea miembro activo de ese negocio (`tenant_users.status = 'active'`) y que su cuenta no esté baneada en Auth (`banned_until` futuro en el `User` de `getUser`) ni suspendida (`users.suspended_at`). Para eso está `requireTenantMember` (`supabase/functions/_shared/tenantAuth.ts`): devuelve `{ user, tenantId, role, admin, userClient }` o la `Response` lista (401 `unauthorized`, 400 `no_tenant`, 403 `forbidden`, con el `json`/CORS de la Edge vía `respond`). Opción `roles` (p. ej. sólo dueño y encargado). No tiene bypass de staff: un acceso de staff a otro negocio se diseña aparte, con `internal_scope()` y el MFA de SEC-23. Si la Edge valida el body antes que la membresía, se usa en dos pasos (`authenticateTenantUser` y después `requireTenantMember(session)`) para no cambiar el orden de los errores. Las alternativas aceptadas son un RPC guard (`*_edge_guard`, `*_access_check`, `_mp_refund_claim`, `is_tenant_manager`) o la consulta a `tenant_users`; `tests/unit/edgeMembership.test.ts` lo vigila, con allowlist motivada (`geo_guard`, `routing_guard`, `arca_padron_guard`, `internal_create_tenant`); el test analiza el AST de TypeScript, así que strings y comentarios no cuentan como guard.
+
+Deuda para SEC-27b:
+- `mp_create_qr` lanza la lectura de la credencial de Mercado Pago (con refresh OAuth) y del plan en el mismo `Promise.all` que la membresía (latencia, ADR-048): un no-miembro recibe 403 igual, pero esas lecturas con service_role ya corrieron. Se deja así a propósito; revisar si conviene validar antes sin perder la ronda única.
+- `catalog_purchase_checkout` toma el negocio del body (`b.tenant_id ?? meta.current_tenant_id`) en la rama de staff y opera con service_role: verificar que su guard (staff con MFA, o dueño activo) cubra todos los caminos.
+- Detección automática de Edges que usan service_role con un `tenant_id` del body (hoy el test sólo mira el claim `current_tenant_id`).
+
 ## 5. Validación de input
 
 - **Todo input externo se valida con Zod.** Sin excepciones.

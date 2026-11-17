@@ -1269,7 +1269,8 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
   - [x] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
   - [x] `current_tenant_id()` valida la membresía activa (o staff en `internal_scope()`) y todas las policies la llaman como initplan `(select current_tenant_id())`; `ensure_current_tenant()` corrige un negocio activo inválido (ADR-083, raíz de S-07).
-  - [ ] Pendiente: medir con `EXPLAIN` en producción, helper `tenantScoped()`, validar la membresía también en las Edge Functions que leen el claim y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
+  - [x] Membresía también en las Edge Functions que leen el claim: helper `requireTenantMember` (`supabase/functions/_shared/tenantAuth.ts` + lógica pura `tenantMember.ts`: miembro activo de `tenant_users` y usuario sin ban de Auth ni `suspended_at`, mismas respuestas 401 / 400 / 403) en `tiendita_copy_image` (copiaba con service_role sin chequear) y en `talo`, `ualabis`, `viumi`, `dlocalgo`, `getnet`, `gocuotas`, `mobbex_create_qr`, `mp_create_qr`, `mp_point` y `mp_cupon`; `tests/unit/edgeMembership.test.ts` falla si una Edge lee el claim sin helper, RPC guard o consulta a `tenant_users` (allowlist con motivo). *(SEC-27, 2026-11-17; el resto del chequeo inline pasa al helper en SEC-27b.)*
+  - [ ] Pendiente: medir con `EXPLAIN` en producción, helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
 
 - [~] **H119: Más acciones bajo PIN (parcial: cambio de precio y cajón hechos, ADR-056 y ADR-063).** · *BASE `pin_supervisor`. Requiere H116.*
   - [x] Cambio de precio en la línea con precio resuelto en el servidor: `create_sale` valida el precio y el cambio manual pide PIN de `cambio_precio` (`20261019100000_precio_servidor`, ADR-056). *(Auditoría 2026-11-05.)*
@@ -1910,7 +1911,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F14** | 8/68 | 41 | 19 | 12% | 42% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
-| **F17** | 98/130 | 18 | 14 | 75% | 82% |
+| **F17** | 99/131 | 18 | 14 | 76% | 82% |
 | **F18** | 42/114 | 55 | 17 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
@@ -1919,7 +1920,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **F24** | 36/135 | 11 | 88 | 27% | 31% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 715/1343 | 324 | 304 | 53% | 65% |
+| **Total** | 716/1344 | 324 | 304 | 53% | 65% |
 <!-- roadmap-progress:end -->
 
 ---

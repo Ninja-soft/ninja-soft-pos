@@ -21,7 +21,6 @@
 // Credencial: payment_secrets provider 'gocuotas' { api_key } (set_payment_secret).
 // Ambiente: tenant_payment_methods.sandbox (sandbox.gocuotas.com vs www).
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { buildCheckoutUrl, parseCheckoutResponse } from "../_shared/gocuotas.ts";
 import {
   INTENT_COLS,
@@ -32,6 +31,7 @@ import {
   type IntentRow,
 } from "../_shared/gocuotas_server.ts";
 import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
+import { authenticateTenantUser, requireTenantMember } from "../_shared/tenantAuth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -49,21 +49,10 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-    auth: { persistSession: false },
-  });
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
-  if (error || !user) return json({ error: "unauthorized" }, 401);
-  const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
-    ?.current_tenant_id;
-  if (!tenantId) return json({ error: "no_tenant" }, 400);
+  // SEC-27: getUser + claim current_tenant_id (401 / 400 no_tenant).
+  const session = await authenticateTenantUser(req, { respond: json });
+  if (session instanceof Response) return session;
 
   let b: Record<string, unknown>;
   try {
@@ -73,16 +62,10 @@ Deno.serve(async (req: Request) => {
   }
   const action = String(b.action ?? "");
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!mem) return json({ error: "forbidden" }, 403);
+  // Miembro activo (y no suspendido) del tenant del JWT (SEC-27): 403 si no.
+  const member = await requireTenantMember(session, { respond: json });
+  if (member instanceof Response) return member;
+  const { user, tenantId, admin } = member;
 
   // ADR-057: al crear, la API Key de la sucursal del POS (si tiene); sobre un
   // intent, la misma con la que se creó.

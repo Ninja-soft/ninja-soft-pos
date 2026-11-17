@@ -10,6 +10,9 @@
 //   pending, salvo approved, que se registra aunque el intent se haya cerrado
 //   localmente (un cobro real nunca debe quedar invisible a la conciliación).
 // * Acreditaciones y montos que no cierran dejan rastro en audit_logs.
+// * PAY-27: applyOrderToIntent con `{ strict: true }` (sólo mp_orders_webhook)
+//   lanza si falla la escritura del estado, para responder 503 y que MP
+//   reintente. Sin la opción ignora el error como siempre (el polling vuelve).
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders } from "./mpAuth.ts";
@@ -32,20 +35,47 @@ export const ORDER_INTENT_COLUMNS =
 export async function fetchOrder(
   token: string,
   orderId: string,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<{ ok: true; order: MpOrder } | { ok: false; status: number; detail: string }> {
+  // PAY-27: `signal` opcional para que el webhook corte la lectura (timeout).
   const r = await fetch(`${MP_API}/v1/orders/${encodeURIComponent(orderId)}`, {
     headers: mpHeaders(token),
+    signal: opts.signal,
   });
   if (!r.ok) return { ok: false, status: r.status, detail: (await r.text()).slice(0, 300) };
   return { ok: true, order: (await r.json()) as MpOrder };
 }
 
-/** Aplica el estado de la order al intent local. Devuelve el resultado resuelto. */
+/** Falla de la escritura del estado en modo estricto (PAY-27). */
+export class IntentWriteError extends Error {
+  constructor(cause: unknown) {
+    super(`mp_payment_intents update: ${(cause as { message?: string } | null)?.message ?? String(cause)}`);
+    this.name = "IntentWriteError";
+  }
+}
+
+/** Auditoría que no se pudo grabar: no se lanza (ver applyOrderToIntent). */
+function auditFailed(error: unknown, intent: string, action: string): void {
+  if (!error) return;
+  console.error("[mp_orders] audit_logs no se pudo grabar", {
+    intent,
+    action,
+    error: String((error as { message?: string }).message ?? error).slice(0, 200),
+  });
+}
+
+/**
+ * Aplica el estado de la order al intent local. Devuelve el resultado resuelto.
+ * `strict` (PAY-27): si falla el update del estado lanza IntentWriteError. Un
+ * error de la auditoría (después del update) sólo se loguea: el intent ya
+ * cambió y un reintento sale por idempotencia sin volver a auditar.
+ */
 export async function applyOrderToIntent(
   admin: SupabaseClient,
   row: OrderIntentRow,
   order: MpOrder,
   actor: { userId: string | null; source: "poll" | "webhook" },
+  opts: { strict?: boolean } = {},
 ): Promise<ResolvedOrder> {
   const res = resolveOrder(order, { intentId: row.id, expectedAmount: Number(row.amount) });
 
@@ -58,14 +88,15 @@ export async function applyOrderToIntent(
   }
 
   if (res.status === "approved") {
-    const { data: upd } = await admin
+    const { data: upd, error: updErr } = await admin
       .from("mp_payment_intents")
       .update({ status: "approved", mp_payment_id: res.paymentId })
       .eq("id", row.id)
       .neq("status", "approved")
       .select("id");
+    if (updErr && opts.strict) throw new IntentWriteError(updErr);
     if ((upd ?? []).length > 0) {
-      await admin.from("audit_logs").insert({
+      const { error: auditErr } = await admin.from("audit_logs").insert({
         tenant_id: row.tenant_id,
         actor_user_id: actor.userId,
         entity_type: "mp_payment_intents",
@@ -81,23 +112,25 @@ export async function applyOrderToIntent(
           previous_status: row.status,
         },
       });
+      if (opts.strict) auditFailed(auditErr, row.id, "mp_order_approved");
     }
     return res;
   }
 
   if (res.status !== "pending") {
-    const { data: upd } = await admin
+    const { data: upd, error: updErr } = await admin
       .from("mp_payment_intents")
       .update({ status: res.status, mp_payment_id: res.paymentId ?? row.mp_payment_id })
       .eq("id", row.id)
       .eq("status", "pending")
       .select("id");
+    if (updErr && opts.strict) throw new IntentWriteError(updErr);
     if ((upd ?? []).length > 0 && res.reason === "amount_mismatch") {
       console.error("[mp_orders] amount_mismatch, NO se acredita", {
         intent: row.id,
         order: order.id,
       });
-      await admin.from("audit_logs").insert({
+      const { error: auditErr } = await admin.from("audit_logs").insert({
         tenant_id: row.tenant_id,
         actor_user_id: actor.userId,
         entity_type: "mp_payment_intents",
@@ -112,6 +145,7 @@ export async function applyOrderToIntent(
           source: actor.source,
         },
       });
+      if (opts.strict) auditFailed(auditErr, row.id, "mp_order_amount_mismatch");
     }
   }
   return res;

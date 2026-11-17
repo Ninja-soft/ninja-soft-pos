@@ -12,6 +12,10 @@
 //   * loadProviderSecret / saveProviderSecret / updateSecretRow: acceso con
 //     service_role. Compatibles con una base SIN la migración 20261020100000
 //     (sin columnas id / store_id): caen a la consulta de siempre.
+//   * PAY-27: `{ strict: true }` (sólo los webhooks de Mercado Pago) hace que
+//     un error de base LANCE en vez de devolver null, para distinguir "no hay
+//     credencial" (null → 200) de "la base falló" (lanza → 503 y MP reintenta).
+//     Sin la opción, el comportamiento es el de siempre.
 //
 // Las funciones puras no usan Deno: las importa Vitest.
 // =============================================================================
@@ -67,6 +71,21 @@ function toLoaded(row: SecretRow | null): LoadedSecret | null {
   };
 }
 
+/** Error de PostgREST por columna inexistente (base sin la migración). */
+function isMissingColumn(err: unknown, column: string): boolean {
+  const e = (err ?? {}) as { code?: string; message?: string };
+  return e.code === "42703" || String(e.message ?? "").includes(column);
+}
+
+/** Error de base en modo estricto (PAY-27): el webhook lo convierte en 503. */
+export class SecretLoadError extends Error {
+  constructor(what: string, cause: unknown) {
+    const detail = (cause as { message?: string } | null)?.message ?? String(cause);
+    super(`${what}: ${detail}`);
+    this.name = "SecretLoadError";
+  }
+}
+
 /**
  * Credencial de un proveedor para un negocio.
  * - `scopeStoreId` definido (incluso null): alcance exacto registrado en el
@@ -77,7 +96,7 @@ export async function loadProviderSecret(
   admin: Admin,
   tenantId: string,
   providerKey: string,
-  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+  opts: { storeId?: string | null; scopeStoreId?: string | null; strict?: boolean } = {},
 ): Promise<LoadedSecret | null> {
   const exact = opts.scopeStoreId !== undefined;
   const wanted = exact ? opts.scopeStoreId : opts.storeId;
@@ -94,6 +113,9 @@ export async function loadProviderSecret(
     const rows = (data ?? []) as SecretRow[];
     return toLoaded(exact ? exactScopeRow(rows, branch) : pickSecretRow(rows, branch));
   }
+  // Estricto: sólo se cae a la consulta vieja si falta la columna; cualquier
+  // otro error (base caída, timeout) lanza.
+  if (opts.strict && !isMissingColumn(error, "store_id")) throw new SecretLoadError("payment_secrets", error);
 
   // Base sin la migración: una fila por (negocio, proveedor).
   const legacy = await admin
@@ -102,6 +124,7 @@ export async function loadProviderSecret(
     .eq("tenant_id", tenantId)
     .eq("provider_key", providerKey)
     .maybeSingle();
+  if (legacy.error && opts.strict) throw new SecretLoadError("payment_secrets", legacy.error);
   if (legacy.error || !legacy.data) return null;
   return { secrets: (legacy.data.secrets ?? {}) as Record<string, unknown>, scopeStoreId: null, rowId: null };
 }
@@ -131,15 +154,18 @@ export async function saveProviderSecret(
   return { error: legacy.error ?? null };
 }
 
-/** Reescribe los secretos de la fila usada (p. ej. refresh de un token). */
+/**
+ * Reescribe los secretos de la fila usada (p. ej. refresh de un token).
+ * Devuelve el error de la base (PAY-27); los llamadores viejos lo ignoran.
+ */
 export async function updateSecretRow(
   admin: Admin,
   ref: { rowId: string | null; tenantId: string; providerKey: string; storeId: string | null },
   secrets: Record<string, unknown>,
-): Promise<void> {
+): Promise<{ error: unknown }> {
   if (ref.rowId) {
-    await admin.from("payment_secrets").update({ secrets }).eq("id", ref.rowId);
-    return;
+    const { error } = await admin.from("payment_secrets").update({ secrets }).eq("id", ref.rowId);
+    return { error: error ?? null };
   }
   let q = admin
     .from("payment_secrets")
@@ -147,7 +173,8 @@ export async function updateSecretRow(
     .eq("tenant_id", ref.tenantId)
     .eq("provider_key", ref.providerKey);
   if (ref.storeId) q = q.eq("store_id", ref.storeId);
-  await q;
+  const { error } = await q;
+  return { error: error ?? null };
 }
 
 /** Borra la credencial de un alcance (null = la del negocio). */
@@ -197,13 +224,25 @@ export async function insertIntentWithScope<T = unknown>(
   return await admin.from("mp_payment_intents").insert(row).select(select).single();
 }
 
-/** secret_store_id de un intent (null si no tiene o la columna no existe). */
-export async function intentSecretScope(admin: Admin, intentId: string): Promise<string | null> {
+/**
+ * secret_store_id de un intent (null si no tiene o la columna no existe).
+ * `{ strict: true }` (PAY-27): un error de base que no sea la columna
+ * inexistente lanza, en vez de caer a la credencial del negocio (que podría
+ * no ser la del cobro).
+ */
+export async function intentSecretScope(
+  admin: Admin,
+  intentId: string,
+  opts: { strict?: boolean } = {},
+): Promise<string | null> {
   const { data, error } = await admin
     .from("mp_payment_intents")
     .select("secret_store_id")
     .eq("id", intentId)
     .maybeSingle();
+  if (error && opts.strict && !isMissingColumn(error, "secret_store_id")) {
+    throw new SecretLoadError("mp_payment_intents.secret_store_id", error);
+  }
   if (error || !data) return null;
   return (data as { secret_store_id?: string | null }).secret_store_id ?? null;
 }

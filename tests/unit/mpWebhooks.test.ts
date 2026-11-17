@@ -4,13 +4,15 @@
 // dependencias reales.
 //
 // Las dependencias de la Edge (tenantMpCredential, intentSecretScope,
-// fetchOrder, applyOrderToIntent, runInBackground) son las REALES: se cargan
+// fetchOrder, applyOrderToIntent) son las REALES: se cargan
 // con import() dinámico porque mpAuth.ts y mpIntents.ts importan el tipo
 // SupabaseClient desde esm.sh y tsc no resuelve URLs (en runtime ese import de
 // tipo no existe). Sólo se falsean la base y la red (fetch).
 //
 // Los casos marcados `// DIFIERE DE LA TARJETA:` documentan el comportamiento
-// actual cuando no coincide con lo que pedía OPS-23 (se decide aparte).
+// actual cuando no coincide con lo que pedía OPS-23 (se decide aparte). Los de
+// timeout / 5xx ya se resolvieron en PAY-27 (ADR-188): 503 para que MP
+// reintente. Quedan los de firma (SEC-60).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   handleMpOrdersWebhook,
@@ -36,7 +38,6 @@ const SHARED = "../../supabase/functions/_shared/";
 type AnyFn = (...args: never[]) => unknown;
 let real: {
   tenantMpCredential: AnyFn;
-  runInBackground: AnyFn;
   intentSecretScope: AnyFn;
   fetchOrder: AnyFn;
   applyOrderToIntent: AnyFn;
@@ -53,8 +54,25 @@ const TOKEN = "APP_USR-1234567890-111111-abcdef0123456789abcdef0123456789-123456
 type Row = Record<string, unknown>;
 type Filter = (r: Row) => boolean;
 type Write = { table: string; op: "update" | "insert"; values: Row; affected: number };
+/** Falla inyectada: la operación `op` sobre `table` devuelve error (saltea las primeras `skip`, falla `times`). */
+type Fault = { table: string; op: "select" | "update" | "insert"; message: string; skip?: number; times?: number };
 
-function createFakeDb(seed: Record<string, Row[]>) {
+function createFakeDb(
+  seed: Record<string, Row[]>,
+  opts: { failUpdate?: string; failSelect?: string; faults?: Fault[] } = {},
+) {
+  const faults = (opts.faults ?? []).map((f) => ({ ...f, seen: 0, failed: 0 }));
+  const fault = (table: string, op: Fault["op"]): string | null => {
+    for (const f of faults) {
+      if (f.table !== table || f.op !== op) continue;
+      f.seen++;
+      if (f.seen <= (f.skip ?? 0)) continue;
+      if (f.times != null && f.failed >= f.times) continue;
+      f.failed++;
+      return f.message;
+    }
+    return null;
+  };
   const tables: { mp_payment_intents: Row[]; payment_secrets: Row[]; audit_logs: Row[]; [table: string]: Row[] } = {
     mp_payment_intents: [],
     payment_secrets: [],
@@ -71,13 +89,17 @@ function createFakeDb(seed: Record<string, Row[]>) {
       let values: Row = {};
       let limitN: number | null = null;
 
-      const run = (): { data: unknown; error: null } => {
+      const run = (): { data: unknown; error: unknown } => {
+        const injected = fault(table, op);
+        if (injected) return { data: null, error: { message: injected } };
         if (op === "insert") {
           const list = Array.isArray(values) ? (values as Row[]) : [values];
           for (const v of list) rows.push({ ...v });
           writes.push({ table, op, values, affected: list.length });
           return { data: null, error: null };
         }
+        if (op === "update" && opts.failUpdate) return { data: null, error: { message: opts.failUpdate } };
+        if (op === "select" && opts.failSelect) return { data: null, error: { message: opts.failSelect } };
         let hit = rows.filter((r) => filters.every((f) => f(r)));
         if (op === "update") {
           for (const r of hit) Object.assign(r, values);
@@ -120,11 +142,12 @@ function createFakeDb(seed: Record<string, Row[]>) {
         },
         maybeSingle() {
           const res = run();
+          if (res.error) return Promise.resolve({ data: null, error: res.error });
           const list = res.data as Row[];
           return Promise.resolve({ data: list[0] ?? null, error: null });
         },
         then<T1 = unknown, T2 = never>(
-          ok?: ((v: { data: unknown; error: null }) => T1 | PromiseLike<T1>) | null,
+          ok?: ((v: { data: unknown; error: unknown }) => T1 | PromiseLike<T1>) | null,
           ko?: ((e: unknown) => T2 | PromiseLike<T2>) | null,
         ) {
           return Promise.resolve().then(run).then(ok, ko);
@@ -155,6 +178,21 @@ function createFakeMp(routes: Record<string, MpRoute>) {
     });
   });
   return { fetchMp, calls };
+}
+
+/** fetch colgado: sólo termina cuando el AbortController del handler lo corta. */
+function createHangingFetch() {
+  const signals: AbortSignal[] = [];
+  const fetchMp = vi.fn(
+    (_url: string, init?: { signal?: AbortSignal }) =>
+      new Promise<Response>((_, reject) => {
+        const signal = init?.signal;
+        if (!signal) return; // sin signal quedaría colgado para siempre
+        signals.push(signal);
+        signal.addEventListener("abort", () => reject(signal.reason));
+      }),
+  );
+  return { fetchMp, signals };
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +266,22 @@ const SECRETS: Row = {
   secrets: { access_token: TOKEN, via: "manual" },
 };
 
-function paymentDeps(db: WebhookDb, fetchMp: MpWebhookDeps["fetchMp"], log = { error: vi.fn() }) {
+const PLATFORM: Row = { key: "mercadopago", secrets: { client_id: "cid", client_secret: "csecret" } };
+
+/** Credencial OAuth; `expiresInMs` negativo = token ya vencido. */
+function oauthSecrets(expiresInMs: number): Row {
+  return {
+    ...SECRETS,
+    secrets: {
+      access_token: TOKEN,
+      via: "oauth",
+      refresh_token: "TG-refresh",
+      expires_at: new Date(Date.now() + expiresInMs).toISOString(),
+    },
+  };
+}
+
+function paymentDeps(db: WebhookDb, fetchMp: MpWebhookDeps["fetchMp"], log = { error: vi.fn() }, timeoutMs?: number) {
   const deps: MpWebhookDeps = {
     db: vi.fn(() => db),
     credential: real.tenantMpCredential as unknown as MpWebhookDeps["credential"],
@@ -242,11 +295,12 @@ function paymentDeps(db: WebhookDb, fetchMp: MpWebhookDeps["fetchMp"], log = { e
       save: vi.fn(async () => ({})),
     },
     log,
+    timeoutMs,
   };
   return deps;
 }
 
-function ordersDeps(db: WebhookDb, log = { error: vi.fn() }) {
+function ordersDeps(db: WebhookDb, log = { error: vi.fn() }, timeoutMs?: number) {
   const deps: MpOrdersWebhookDeps = {
     db: vi.fn(() => db),
     intentColumns: real.ORDER_INTENT_COLUMNS,
@@ -254,8 +308,8 @@ function ordersDeps(db: WebhookDb, log = { error: vi.fn() }) {
     secretScope: real.intentSecretScope as unknown as MpOrdersWebhookDeps["secretScope"],
     fetchOrder: real.fetchOrder as unknown as MpOrdersWebhookDeps["fetchOrder"],
     applyOrder: real.applyOrderToIntent as unknown as MpOrdersWebhookDeps["applyOrder"],
-    runInBackground: real.runInBackground as unknown as MpOrdersWebhookDeps["runInBackground"],
     log,
+    timeoutMs,
   };
   return deps;
 }
@@ -266,7 +320,6 @@ beforeEach(async () => {
   const mpIntents = await import(/* @vite-ignore */ `${SHARED}mpIntents.ts`);
   real = {
     tenantMpCredential: mpAuth.tenantMpCredential,
-    runInBackground: mpAuth.runInBackground,
     intentSecretScope: paymentSecrets.intentSecretScope,
     fetchOrder: mpIntents.fetchOrder,
     applyOrderToIntent: mpIntents.applyOrderToIntent,
@@ -285,6 +338,7 @@ async function bodyOf(res: Response) {
 }
 
 const OK_200 = { status: 200, type: "application/json", body: { ok: true } };
+const RETRY_503 = { status: 503, type: "application/json", body: { ok: false, retry: true } };
 
 // ===========================================================================
 // mp_webhook: pagos de Checkout Pro (?intent)
@@ -378,7 +432,7 @@ describe("mp_webhook (handleMpWebhook)", () => {
     expect(state).toMatchObject({ tenant: null, done: false, failures: [] });
   });
 
-  it("timeout / error de red con MP (fetchMp rechaza): responde 200 y lo registra como error", async () => {
+  it("timeout / error de red con MP (fetchMp rechaza): 503 para que MP reintente, registrado como error", async () => {
     const { db, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
     const timeout = new DOMException("The operation was aborted due to timeout", "TimeoutError");
     const mp = createFakeMp({ [payPath]: { reject: timeout } });
@@ -386,24 +440,106 @@ describe("mp_webhook (handleMpWebhook)", () => {
 
     const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
 
-    // DIFIERE DE LA TARJETA: la tarjeta pide 500 para que MP reintente. Hoy el
-    // catch general responde 200 {ok:true} (MP no reintenta) y sólo queda
-    // 'error' en webhook_events vía wh.fail.
-    expect(await bodyOf(res)).toEqual(OK_200);
+    // PAY-27: antes respondía 200 y MP no reintentaba (pago aprobado sin acreditar).
+    expect(await bodyOf(res)).toEqual(RETRY_503);
     expect(state.failures).toEqual([timeout]);
+    expect(state.done).toBe(false);
     expect(writes).toEqual([]);
   });
 
-  it("MP responde 5xx en /v1/payments: 200, wh.fail con el status y sin escribir", async () => {
+  it("MP colgado: el AbortController corta la lectura al timeout y responde 503", async () => {
     const { db, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
-    const mp = createFakeMp({ [payPath]: { status: 503, body: { message: "unavailable" } } });
+    const mp = createHangingFetch();
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(
+      toRequest("mp_webhook", paymentApproved.request),
+      wh,
+      paymentDeps(db, mp.fetchMp as unknown as MpWebhookDeps["fetchMp"], undefined, 20),
+    );
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(mp.signals).toHaveLength(1);
+    expect(mp.signals[0]?.aborted).toBe(true);
+    expect(state.failures).toHaveLength(1);
+    expect(state.failures[0]).toMatchObject({ name: "TimeoutError" });
+    expect(writes).toEqual([]);
+  });
+
+  it.each([500, 502, 503, 429])("MP responde %i en /v1/payments: 503, wh.fail con el status y sin escribir", async (status) => {
+    const { db, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
+    const mp = createFakeMp({ [payPath]: { status, body: { message: "unavailable" } } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([`MP /v1/payments respondió ${status}`]);
+    expect(writes).toEqual([]);
+  });
+
+  it.each([404, 401, 403, 400])("MP responde %i en /v1/payments: 200 (reintentar no sirve), wh.fail y sin escribir", async (status) => {
+    const { db, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
+    const mp = createFakeMp({ [payPath]: { status, body: { message: "nope" } } });
     const { wh, state } = createWh();
 
     const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
 
     expect(await bodyOf(res)).toEqual(OK_200);
-    expect(state.failures).toEqual(["MP /v1/payments respondió 503"]);
+    expect(state.failures).toEqual([`MP /v1/payments respondió ${status}`]);
     expect(writes).toEqual([]);
+  });
+
+  it("error de la base al acreditar (update falla): 503 y no marca done", async () => {
+    const { db, tables } = createFakeDb(
+      { mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] },
+      { failUpdate: "connection reset" },
+    );
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([{ message: "connection reset" }]);
+    expect(state.done).toBe(false);
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "pending" });
+  });
+
+  it("error de la base al leer el intent: 503 (no es un intent desconocido) sin llamar a MP", async () => {
+    const { db, writes } = createFakeDb(
+      { mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] },
+      { failSelect: "connection reset" },
+    );
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([{ message: "connection reset" }]);
+    expect(mp.calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("reintento después de un 503 que luego tiene éxito: acredita una sola vez", async () => {
+    const { db, tables, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
+    const routes: Record<string, MpRoute> = { [payPath]: { status: 502, body: { message: "bad gateway" } } };
+    const mp = createFakeMp(routes);
+
+    const statuses: number[] = [];
+    const deliver = async () => {
+      const { wh } = createWh();
+      statuses.push((await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp))).status);
+    };
+    await deliver(); // MP caído: 503
+    routes[payPath] = { body: paymentApproved.mpResponse };
+    await deliver(); // reintento de MP: acredita
+    await deliver(); // reentrega tardía: no vuelve a acreditar
+
+    expect(statuses).toEqual([503, 200, 200]);
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved", mp_payment_id: "91234567890" });
+    expect(writes.map((w) => w.affected)).toEqual([1, 0]);
   });
 
   it("firma inválida: no se valida x-signature, el aviso se procesa igual", async () => {
@@ -462,6 +598,148 @@ describe("mp_webhook (handleMpWebhook)", () => {
     expect(writes).toEqual([]);
   });
 
+  it("error de la base al leer la credencial: 503 (no es 'sin credencial') sin llamar a MP", async () => {
+    const { db, writes } = createFakeDb(
+      { mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] },
+      { faults: [{ table: "payment_secrets", op: "select", message: "connection reset" }] },
+    );
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(String(state.failures[0])).toContain("connection reset");
+    expect(mp.calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("error de la base al leer el alcance (intentSecretScope): 503, no cae a la credencial del negocio", async () => {
+    const { db, writes } = createFakeDb(
+      { mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] },
+      // 1er select de mp_payment_intents = el intent; el 2º = secret_store_id.
+      { faults: [{ table: "mp_payment_intents", op: "select", message: "statement timeout", skip: 1, times: 1 }] },
+    );
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(String(state.failures[0])).toContain("statement timeout");
+    expect(mp.calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("refresh OAuth que rechaza con el token vencido: 503 sin llamar a /v1/payments", async () => {
+    const { db, writes } = createFakeDb({
+      mp_payment_intents: [paymentIntentRow(intent)],
+      payment_secrets: [oauthSecrets(-60_000)],
+      platform_secrets: [PLATFORM],
+    });
+    const oauthFetch = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    vi.stubGlobal("fetch", oauthFetch);
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(oauthFetch).toHaveBeenCalledTimes(1);
+    expect(state.failures).toHaveLength(1);
+    expect(mp.calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it("refresh OAuth no-OK con el token vencido: 503; con el token todavía vigente usa el token y acredita", async () => {
+    const statuses: number[] = [];
+    for (const expiresIn of [-60_000, 120_000]) {
+      const { db, tables } = createFakeDb({
+        mp_payment_intents: [paymentIntentRow(intent)],
+        payment_secrets: [oauthSecrets(expiresIn)],
+        platform_secrets: [PLATFORM],
+      });
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 })));
+      const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+      const { wh } = createWh();
+      const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+      statuses.push(res.status);
+      expect(tables.mp_payment_intents[0]?.status).toBe(expiresIn < 0 ? "pending" : "approved");
+    }
+    expect(statuses).toEqual([503, 200]);
+  });
+
+  it("refresh OAuth OK pero falla guardar el token: lo loguea y acredita igual con el token nuevo", async () => {
+    const { db, tables } = createFakeDb(
+      {
+        mp_payment_intents: [paymentIntentRow(intent)],
+        payment_secrets: [oauthSecrets(-60_000)],
+        platform_secrets: [PLATFORM],
+      },
+      { faults: [{ table: "payment_secrets", op: "update", message: "connection reset" }] },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ access_token: "APP_USR-nuevo", refresh_token: "TG-2", expires_in: 3600 }))),
+    );
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const { wh } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
+
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(mp.calls[0]?.auth).toBe("Bearer APP_USR-nuevo");
+    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("mp_oauth_refresh_save_failed"));
+  });
+
+  it("MP responde 401 con credencial OAuth: 503 (puede ser token vencido); con token manual: 200", async () => {
+    const statuses: number[] = [];
+    for (const secrets of [oauthSecrets(24 * 3600_000), SECRETS]) {
+      const { db, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [secrets] });
+      const mp = createFakeMp({ [payPath]: { status: 401, body: { message: "invalid_token" } } });
+      const { wh, state } = createWh();
+      statuses.push((await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp))).status);
+      expect(state.failures).toEqual(["MP /v1/payments respondió 401"]);
+      expect(writes).toEqual([]);
+    }
+    expect(statuses).toEqual([503, 200]);
+  });
+
+  it("cadena de credencial colgada: 503 al tope y la cadena sigue viva en wh.defer", async () => {
+    const { db } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const deps = paymentDeps(db, mp.fetchMp);
+    deps.credential = vi.fn(() => new Promise<never>(() => {}));
+    deps.credentialTimeoutMs = 20;
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, deps);
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures[0]).toMatchObject({ name: "TimeoutError" });
+    expect(state.deferred).toHaveLength(1);
+    expect(mp.calls).toEqual([]);
+  });
+
+  it("error no previsto (catch general): 503 con wh.fail", async () => {
+    const { db } = createFakeDb({});
+    const mp = createFakeMp({});
+    const deps = paymentDeps(db, mp.fetchMp);
+    const boom = new Error("boom");
+    deps.db = vi.fn(() => {
+      throw boom;
+    });
+    const { wh, state } = createWh();
+
+    const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, deps);
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([boom]);
+  });
+
   it("aviso sin ?intent o de otro topic: 200 sin abrir la base", async () => {
     const { db } = createFakeDb({});
     const mp = createFakeMp({});
@@ -515,7 +793,8 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
       after_data: expect.objectContaining({ source: "webhook", previous_status: "pending", amount: 1500 }),
     });
     expect(state).toMatchObject({ tenant: TENANT, ref: orderProcessed.intent.mp_order_id, done: true, failures: [] });
-    expect(state.deferred).toHaveLength(1);
+    // PAY-27: todo sincrónico, nada queda en segundo plano.
+    expect(state.deferred).toEqual([]);
   });
 
   it("reentrega de order processed ya acreditada: no vuelve a leer MP ni a auditar", async () => {
@@ -591,20 +870,99 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
     expect(state).toMatchObject({ tenant: null, done: false, failures: [] });
   });
 
-  it("timeout / error de red con MP al leer la order: 200 y el trabajo diferido queda rechazado", async () => {
+  it("timeout / error de red con MP al leer la order: 503 sincrónico, sin trabajo diferido", async () => {
     const timeout = new DOMException("The operation was aborted due to timeout", "TimeoutError");
     const { db, writes } = setup(orderProcessed, { reject: timeout });
     const { wh, state } = createWh();
 
     const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(db));
 
-    // DIFIERE DE LA TARJETA: la tarjeta pide 500 para que MP reintente. Hoy
-    // responde 200 {ok:true}; runInBackground se traga el error y
-    // withWebhookLog lo registra como 'error' por el wh.defer rechazado.
-    expect(await bodyOf(res)).toEqual(OK_200);
-    await expect(state.deferred[0]).rejects.toBe(timeout);
+    // PAY-27: la lectura de la order ya no va en segundo plano; si falla, MP reintenta.
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([timeout]);
+    expect(state.deferred).toEqual([]);
     expect(state.done).toBe(false);
     expect(writes).toEqual([]);
+  });
+
+  it("MP colgado al leer la order: el AbortController corta al timeout y responde 503", async () => {
+    const { db, writes } = setup(orderProcessed, { body: orderProcessed.mpResponse });
+    const hanging = createHangingFetch();
+    vi.stubGlobal("fetch", hanging.fetchMp);
+    const { wh, state } = createWh();
+
+    const res = await handleMpOrdersWebhook(
+      toRequest("mp_orders_webhook", orderProcessed.request),
+      wh,
+      ordersDeps(db, undefined, 20),
+    );
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(hanging.signals).toHaveLength(1);
+    expect(hanging.signals[0]?.aborted).toBe(true);
+    expect(state.failures[0]).toMatchObject({ name: "TimeoutError" });
+    expect(state.deferred).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  it.each([500, 503, 429])("MP responde %i al leer la order: 503, log + wh.fail, sin escribir", async (status) => {
+    const { db, writes } = setup(orderProcessed, { status, body: { message: "unavailable" } });
+    const log = { error: vi.fn() };
+    const { wh, state } = createWh();
+
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(db, log));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(log.error).toHaveBeenCalledWith("[mp_orders_webhook] no se pudo leer la order", {
+      orderId: orderProcessed.intent.mp_order_id,
+      status,
+    });
+    expect(state.failures).toEqual([`no se pudo leer la order (${status})`]);
+    expect(writes).toEqual([]);
+  });
+
+  it("error de la base al buscar el intent de la order: 503 sin llamar a MP", async () => {
+    const fake = createFakeDb(
+      { mp_payment_intents: [orderIntentRow(orderProcessed.intent)], payment_secrets: [SECRETS] },
+      { failSelect: "connection reset" },
+    );
+    const mp = createFakeMp({});
+    vi.stubGlobal("fetch", mp.fetchMp);
+    const { wh, state } = createWh();
+
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([{ message: "connection reset" }]);
+    expect(mp.calls).toEqual([]);
+  });
+
+  it("reintento de la order después de un 503 que luego tiene éxito: acredita y audita una sola vez", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent)],
+      payment_secrets: [SECRETS],
+      audit_logs: [],
+    });
+    const path = `/v1/orders/${orderProcessed.intent.mp_order_id}`;
+    const routes: Record<string, MpRoute> = { [path]: { status: 500, body: { message: "internal" } } };
+    const mp = createFakeMp(routes);
+    vi.stubGlobal("fetch", mp.fetchMp);
+
+    const statuses: number[] = [];
+    const deliver = async () => {
+      const { wh } = createWh();
+      statuses.push((await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db))).status);
+    };
+    await deliver();
+    routes[path] = { body: orderProcessed.mpResponse };
+    await deliver();
+    await deliver();
+
+    expect(statuses).toEqual([503, 200, 200]);
+    expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(fake.tables.audit_logs).toHaveLength(1);
+    expect(fake.writes.filter((w) => w.table === "mp_payment_intents").map((w) => w.affected)).toEqual([1]);
+    expect(mp.calls).toHaveLength(2);
   });
 
   it("MP responde 404 al leer la order: log + wh.fail, sin escribir", async () => {
@@ -621,6 +979,81 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
     });
     expect(state.failures).toEqual(["no se pudo leer la order (404)"]);
     expect(writes).toEqual([]);
+  });
+
+  it("falla la escritura del estado en applyOrder: 503 sin auditar; el reintento acredita y audita una sola vez", async () => {
+    const fake = createFakeDb(
+      { mp_payment_intents: [orderIntentRow(orderProcessed.intent)], payment_secrets: [SECRETS], audit_logs: [] },
+      { faults: [{ table: "mp_payment_intents", op: "update", message: "deadlock detected", times: 1 }] },
+    );
+    const mp = createFakeMp({ [`/v1/orders/${orderProcessed.intent.mp_order_id}`]: { body: orderProcessed.mpResponse } });
+    vi.stubGlobal("fetch", mp.fetchMp);
+
+    const results: { status: number; failures: unknown[] }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { wh, state } = createWh();
+      const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db));
+      results.push({ status: res.status, failures: state.failures });
+      if (i === 0) expect(fake.tables.audit_logs).toEqual([]);
+    }
+
+    expect(results.map((r) => r.status)).toEqual([503, 200, 200]);
+    expect(String(results[0]?.failures[0])).toContain("deadlock detected");
+    expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(fake.tables.audit_logs).toHaveLength(1);
+    expect(mp.calls).toHaveLength(2);
+  });
+
+  it("error de la base al leer la credencial o el alcance de una order: 503 sin llamar a MP", async () => {
+    const cases: Fault[] = [
+      { table: "payment_secrets", op: "select", message: "connection reset" },
+      { table: "mp_payment_intents", op: "select", message: "statement timeout", skip: 1, times: 1 },
+    ];
+    for (const f of cases) {
+      const fake = createFakeDb(
+        { mp_payment_intents: [orderIntentRow(orderProcessed.intent)], payment_secrets: [SECRETS] },
+        { faults: [f] },
+      );
+      const mp = createFakeMp({});
+      vi.stubGlobal("fetch", mp.fetchMp);
+      const { wh, state } = createWh();
+
+      const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db));
+
+      expect(await bodyOf(res)).toEqual(RETRY_503);
+      expect(String(state.failures[0])).toContain(f.message);
+      expect(mp.calls).toEqual([]);
+      expect(fake.writes).toEqual([]);
+    }
+  });
+
+  it("MP responde 401 al leer la order con credencial OAuth: 503", async () => {
+    const fake = createFakeDb({
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent)],
+      payment_secrets: [oauthSecrets(24 * 3600_000)],
+    });
+    const mp = createFakeMp({ [`/v1/orders/${orderProcessed.intent.mp_order_id}`]: { status: 401, body: {} } });
+    vi.stubGlobal("fetch", mp.fetchMp);
+    const { wh, state } = createWh();
+
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, ordersDeps(fake.db));
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual(["no se pudo leer la order (401)"]);
+  });
+
+  it("error no previsto en una order (catch general): 503 con wh.fail", async () => {
+    const deps = ordersDeps(createFakeDb({}).db);
+    const boom = new Error("boom");
+    deps.db = vi.fn(() => {
+      throw boom;
+    });
+    const { wh, state } = createWh();
+
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", orderProcessed.request), wh, deps);
+
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(state.failures).toEqual([boom]);
   });
 
   it("firma inválida o sin ts en una order: tampoco se valida", async () => {

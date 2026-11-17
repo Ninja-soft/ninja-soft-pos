@@ -6810,3 +6810,29 @@ ADR-098 documentó que, si la red se corta después de que el servidor grabó la
 ### Verificación
 
 Unit: `tests/unit/saleIdempotency.test.ts`. Integración (CI, base local): `tests/integration/rls-sale-idempotency.test.ts`. Casos: misma clave dos veces y en paralelo (una venta, un movimiento de stock y uno de caja, mismo resultado con `replayed`), misma clave con otro pago (`sale_request_mismatch` con el número), sin clave (dos ventas), otro negocio (no choca), venta offline con la clave de una online que entró (`synced`, sin duplicar ni marcar offline) o con otros datos (`needs_review`), y venta con envío reintentada sin volver a guardar la dirección ni auditar el `ship_to`. También que los helpers no se ejecutan desde el cliente. `grants.expected.json` con la firma nueva y los helpers.
+
+## ADR-188: Webhooks de Mercado Pago responden 503 ante fallas transitorias (PAY-27)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · sin migración · **Hito:** F1.5 / PAY
+
+### Contexto
+
+`mp_webhook` y `mp_orders_webhook` respondían 200 aunque no hubieran podido leer el pago / la order en Mercado Pago (fetch rechazado, timeout, 5xx), leer la credencial o grabar el intent. MP sólo reintenta lo que no recibe 2xx, así que un pago aprobado podía quedar `pending` y `payment_intents_expire_sweep` lo vencía. `mp_orders_webhook` además leía y aplicaba la order en segundo plano (`EdgeRuntime.waitUntil`) porque MP corta la notificación a los **22 s** (cabecera de `mp_orders_webhook/index.ts`): la falla ya no podía cambiar la respuesta.
+
+### Decisión
+
+Principio: **ante cualquier duda de que el pago pudo quedar sin acreditar, 503** `{ok:false, retry:true}` (con `Retry-After: 60`). Los reintentos de MP son finitos y la acreditación es idempotente (`.neq("status","approved")` en `mp_webhook`; `applyOrderToIntent` sólo transiciona desde `pending` y el reintento de una order ya acreditada sale antes de auditar).
+
+1. **503:** lectura a MP que rechaza o vence; MP **5xx o 429**; **401 con credencial OAuth** (puede ser un token vencido que el refresh arregla); error de base al leer el intent, el alcance (`intentSecretScope`), la credencial (`payment_secrets`, `platform_secrets`) o al escribir el estado; refresh OAuth fallido (rechazo, timeout o no-OK) **con el token ya vencido**; tope de la credencial vencido; y cualquier excepción no prevista (el `catch` general pasó de 200 a 503, con `wh.fail`).
+2. **200 (no se reintenta):** 4xx definitivo de MP (400, 403, 404 y 401 con token manual / de prueba, que reintentar no arregla); intent u order desconocidos, otro topic, sin `?intent`; sin credencial (no hay fila: distinto de "la base falló"); `external_reference` ajeno y `amount_mismatch` (no se acredita). Todos quedan con `wh.fail` cuando corresponde.
+3. **Modos estrictos opcionales** (sólo los usan estos dos webhooks; las demás Edges no cambian): `loadProviderSecret(..., { strict })` e `intentSecretScope(admin, id, { strict })` lanzan `SecretLoadError` ante error de base (salvo columna inexistente: base sin la migración); `tenantMpCredential(..., { strict, refreshTimeoutMs })` además lanza `MpRefreshError` si el refresh no sale y el token ya venció (si todavía está vigente, < 5 min, se usa) y devuelve `oauth` (aditivo); `applyOrderToIntent(..., { strict })` lanza `IntentWriteError` si falla el update del estado. `updateSecretRow` devuelve `{ error }` (antes `void`; los llamadores viejos lo ignoran).
+4. **Token rotado que no se pudo guardar:** se loguea siempre (`mp_oauth_refresh_save_failed`) pero **no** se lanza ni en modo estricto. MP ya entregó un access_token nuevo (y rotó el refresh_token): usarlo acredita este pago. Un 503 haría que el reintento refresque con el refresh_token viejo y el pago nunca se acreditaría por webhook.
+5. **Presupuesto dentro de 22 s:** cadena de credencial (alcance + secreto + refresh) con tope de **6 s** (`MP_CREDENTIAL_TIMEOUT_MS`) y el POST `/oauth/token` con `AbortSignal.timeout(5 s)`; lectura del pago / order con **8 s** (`MP_READ_TIMEOUT_MS`, `AbortController` sobre respuesta y cuerpo, más una carrera por si una dependencia ignora el signal). Peor caso ~14 s más consultas cortas a la base. Si vence el tope de la credencial con un refresh en curso, la cadena **no** se aborta: va a `wh.defer`, que la mantiene viva (el registro de `withWebhookLog` corre con `EdgeRuntime.waitUntil` y la espera) hasta guardar el token.
+6. **`mp_orders_webhook`, opción (a), todo sincrónico:** credencial, lectura de la order y `applyOrderToIntent` (update + auditoría, consultas cortas) antes de responder; `runInBackground` ya no se usa. Si la auditoría falla después del update, sólo se loguea: el reintento saldría por "ya acreditado" y no la escribiría igual. Se descartó (b), segundo plano con una marca propia de reintento: necesita tabla / columna y un barrido nuevo para lo que MP ya hace.
+7. **Registro:** `withWebhookLog` marca `error` todo status ≥ 500 y no deduplica por `x-request-id` (`webhook_events` sólo tiene PK `uuid`): cada reintento queda como fila propia y se procesa.
+
+### Pendiente
+
+- Las lecturas de disputas (ADR-064) no tienen timeout propio ni modo estricto (cada negocio va en su propio `try`).
+- Las consultas a la base no tienen timeout propio (dependen del de PostgREST).
+- Validación de `x-signature` en estos webhooks: SEC-60.

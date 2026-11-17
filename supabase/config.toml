@@ -147,3 +147,8 @@ verify_jwt = false
 # -----------------------------------------------------------------------------
 [functions.catalog_sync]
 verify_jwt = true
+
+# internal_impersonate (H11c, SEC-26): sólo staff interno con su JWT. Valida
+# getUser() + is_internal adentro, pero el gateway también tiene que exigir JWT.
+[functions.internal_impersonate]
+verify_jwt = true

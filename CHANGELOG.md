@@ -117,6 +117,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **Seguridad: `internal_impersonate` exige JWT en el gateway (SEC-26).** La Edge de "acceder como el negocio" estaba desplegada con `verify_jwt = false` aunque no es pública (validaba la sesión adentro). Se redesplegó con `verify_jwt = true` y quedó declarada en `supabase/config.toml` para que un deploy futuro no la vuelva a abrir. Sin token, el gateway responde 401; el staff la sigue usando igual.
+
 - **Seguridad: 6 RPCs autenticadas cerradas para anon (SEC-11).** `open_cash_shift`, `empty_my_catalog`, `add_table_order_item`, `fire_table_order_course`, `set_table_order_item_course` y `validate_coupon` se podían invocar sin sesión (fallaban adentro, pero quedaban expuestas). Se revoca EXECUTE a `public` y `anon` y se deja explícito el de `authenticated`; nada cambia para el usuario logueado. Migración `20270119100100_sec11_revoke_anon_rpcs`.
 - **Seguridad: helpers internos de contabilidad cerrados al Data API (SEC-10).** `acc_sync_nubceo_ledger` y `acc_sync_treasury_opening` (SECURITY DEFINER, reciben el negocio por parámetro sin validar membresía) se podían ejecutar como `anon` y `authenticated`, lo que permitía postear o desarmar asientos de otro negocio. Se revoca EXECUTE a `public`, `anon` y `authenticated`; las sigue usando sólo `acc_sync` como owner, así que el asiento de saldo inicial de Tesorería y el de NubCeo se generan igual. Migración `20270119100000_sec10_revoke_acc_sync_helpers`, ya aplicada en producción el 2026-11-16 (versión `20261117005447`).
 

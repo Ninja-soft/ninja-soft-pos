@@ -92,6 +92,23 @@ Post-deploy (§11.2): healthcheck profundo + smoke de piloto en el tenant QA
 - Se aplican a mano con el MCP de Supabase (`apply_migration`, nombre = nombre del archivo sin `.sql`) o con `supabase db push --linked` (si hay huecos, `--include-all`). El MCP guarda la hora de aplicación como versión: `deploy-check` empareja por versión **o por nombre**.
 - Antes de aplicar: `node --env-file=.env.local scripts/deploy-check.mjs --remote` (o `--applied=<archivo>` con la salida de `list_migrations`) imprime **la última aplicada y todas las pendientes en orden**, marca huecos (`M3`) y sentencias destructivas (`W1`). Ver §11.
 
+### 4.2.1 Historial de migraciones
+
+`supabase_migrations.schema_migrations` de prod se llenó con el MCP: guarda la hora de aplicación como versión, así que ninguna versión coincide con un archivo del repo, y las migraciones aplicadas por SQL directo después del 14-06-2026 no tienen fila. **Hasta hacer el repair (SEC-02) está prohibido `supabase db push`**: reaplicaría todo.
+
+`scripts/migration-repair-plan.mjs` arma el plan para dejar el historial igual al repo (el repo es la fuente de verdad: toda fila remota sin archivo queda `reverted` y todo archivo con evidencia en el historial queda `applied`). Los archivos **sin ninguna fila remota** quedan fuera del plan salvo con `--include-unverified`: marcarlos `applied` sin que estén en la base haría que `db push` los saltee para siempre, así que antes se verifica su contenido en la base (SEC-02). No toca la base:
+
+```bash
+# applied.json = salida de list_migrations (MCP) o "version nombre" por línea
+node scripts/migration-repair-plan.mjs --applied=applied.json --out=repair/
+# después de verificar los archivos de repair/repair-unverified.txt contra la base:
+node scripts/migration-repair-plan.mjs --applied=applied.json --include-unverified --backup=schema_migrations_bak_AAAAMMDD --out=repair/
+```
+
+- Cruza cada fila remota con un archivo **por nombre** (sacando el prefijo `\d{14}_` que tienen algunos nombres), con una tabla de fusiones conocidas (`delivery_orders` ⇐ `delivery_orders_p1..p4`, `service_packs` ⇐ `service_packs_*`, segundas partes como `product_modifiers_create_sale`) y las huérfanas `verify_*_file(s)_parse`. Sale con código 1 si queda alguna fila remota desconocida: hay que mirarla antes del repair.
+- Escribe `repair-reverted.txt`, `repair-applied.txt`, `repair-unverified.txt`, `repair-commands.sh` (`supabase migration repair` en tandas de 50, con `set -euo pipefail`) y `repair.sql`: una transacción que primero copia la tabla a `--backup` (la columna `statements` de las filas viejas es la única copia de algunas migraciones que nunca se commitearon, ADR-098), borra, inserta con un insert común (una colisión aborta todo) y controla el conteo final.
+- Lista también 3 filas remotas extra sin archivo propio (`onboarding_status_v2`, `owner_subscription`, `gate_payment_methods`): no bloquean, pero hay que mirar su `statements` en el backup.
+
 ### 4.3 Edge Functions
 
 ```bash

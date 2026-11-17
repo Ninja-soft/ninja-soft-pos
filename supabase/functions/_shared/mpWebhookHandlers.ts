@@ -26,11 +26,14 @@
 //     (AbortController). Todo el trabajo es sincrónico (sin segundo plano).
 // SEC-60 (ADR-189): `x-signature` se verifica según el modo global
 // system_settings.mp_webhook_signature_mode (off | report | enforce, default
-// report; _shared/mpWebhookSignature.ts). La verificación va DESPUÉS de leer
-// el intent y la credencial (para saber si el cobro es de la app de
-// plataforma, OAuth) y ANTES de leer MP o escribir el estado: en enforce una
-// firma mala responde 401 sin escribir nada. La defensa de fondo sigue siendo
-// re-leer el pago / order en MP con el token del negocio.
+// report; _shared/mpWebhookSignature.ts). El modo se lee en paralelo con el
+// intent (tope 2 s, cache 60 s). En enforce la firma se verifica ANTES de
+// pedir la credencial (que puede refrescar el token OAuth y escribir
+// payment_secrets): sólo se lee `via` de la fila del alcance, sin refresh.
+// En report / off va después de la credencial (orden de siempre). Siempre
+// antes de leer MP o escribir el estado: en enforce una firma mala responde
+// 401 sin escribir nada. La defensa de fondo sigue siendo re-leer el pago /
+// order en MP con el token del negocio.
 // =============================================================================
 import { amountsMatch, type MpEnv, type MpOrder, parseOrderNotification } from "./mpOrders.ts";
 import {
@@ -43,7 +46,13 @@ import {
   webhookTopicKind,
 } from "./paymentDisputes.ts";
 import { readJsonLimited } from "./requestGuard.ts";
-import { decideMpSignature, readMpSignatureMode, readPlatformWebhookSecret } from "./mpWebhookSignature.ts";
+import {
+  decideMpSignature,
+  type MpSignatureMode,
+  readMpSignatureMode,
+  readPlatformWebhookSecret,
+} from "./mpWebhookSignature.ts";
+import { loadProviderSecret } from "./paymentSecrets.ts";
 import type { WebhookCtx } from "./webhookLog.ts";
 
 // ---------------------------------------------------------------------------
@@ -182,26 +191,36 @@ const invalidSignature = () =>
     headers: { "Content-Type": "application/json" },
   });
 
+type GateResult = "continue" | "reject" | "retry";
+
 /**
- * SEC-60: verifica `x-signature` según el modo global. `platformApp`: el aviso
+ * SEC-60: verifica `x-signature` con el modo ya leído. `platformApp`: el aviso
  * lo firma la app de NinjaSoft (credencial OAuth o aviso de la app); si no,
- * no hay secreto guardado y nunca se corta. El motivo queda en webhook_events
- * con wh.note (sin datos sensibles). Cualquier excepción acá sigue de largo
- * (nunca corta un cobro por un error de la verificación).
+ * no hay secreto guardado y nunca se corta. Error al leer el secreto: en
+ * enforce "retry" (503, MP reintenta), en report nota y sigue. El motivo
+ * queda en webhook_events con wh.note (sin datos sensibles). Una excepción
+ * de la verificación sigue de largo (nunca corta un cobro por eso).
  */
 async function signatureGate(
   admin: WebhookDb,
   req: Request,
   wh: WebhookCtx,
-  opts: { dataId: string | null; platformApp: boolean; nowMs?: () => number },
-): Promise<"continue" | "reject"> {
+  opts: { mode: MpSignatureMode; dataId: string | null; platformApp: boolean; nowMs?: () => number },
+): Promise<GateResult> {
+  if (opts.mode === "off") return "continue";
   try {
     const now = opts.nowMs?.() ?? Date.now();
-    const mode = await readMpSignatureMode(admin, now);
-    if (mode === "off") return "continue";
-    const secret = opts.platformApp ? await readPlatformWebhookSecret(admin, now) : null;
+    let secret: string | null = null;
+    if (opts.platformApp) {
+      const got = await readPlatformWebhookSecret(admin, now);
+      if (got.kind === "error") {
+        wh.note("signature_secret_error");
+        return opts.mode === "enforce" ? "retry" : "continue";
+      }
+      if (got.kind === "ok") secret = got.secret;
+    }
     const decision = await decideMpSignature({
-      mode,
+      mode: opts.mode,
       secret,
       signature: req.headers.get("x-signature"),
       requestId: req.headers.get("x-request-id"),
@@ -214,6 +233,43 @@ async function signatureGate(
     wh.note("signature_check_failed");
     return "continue";
   }
+}
+
+/**
+ * SEC-60, sólo enforce: ¿el cobro es de la app de plataforma (OAuth)? Lee el
+ * alcance del intent y la fila de payment_secrets SIN refrescar el token (no
+ * escribe nada), con el mismo tope que la credencial. Lanza ante error de
+ * base o tope vencido (→ 503). Misma regla que tenantMpCredential: OAuth sólo
+ * en producción con access_token.
+ */
+async function enforcePlatformApp(
+  admin: WebhookDb,
+  deps: { secretScope: SecretScopeFn; credentialTimeoutMs?: number },
+  tenantId: string,
+  env: MpEnv,
+  intentId: string,
+): Promise<boolean> {
+  const ms = deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DeadlineError("La credencial de Mercado Pago", ms)), ms);
+  });
+  const work = (async () => {
+    const scopeStoreId = await deps.secretScope(admin, intentId, { strict: true });
+    const loaded = await loadProviderSecret(admin, tenantId, "mercadopago", { scopeStoreId, strict: true });
+    const sec = (loaded?.secrets ?? {}) as { via?: unknown; access_token?: unknown };
+    return env === "prod" && sec.via === "oauth" && typeof sec.access_token === "string" && sec.access_token !== "";
+  })();
+  try {
+    return await Promise.race([work, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** SEC-60: modo de la firma, leído en paralelo con el intent (nunca lanza). */
+function startModeRead(admin: WebhookDb, nowMs?: () => number): Promise<MpSignatureMode> {
+  return readMpSignatureMode(admin, nowMs?.() ?? Date.now()).catch(() => "report" as const);
 }
 
 /** 5xx o 429 de MP: reintentar más tarde puede funcionar. */
@@ -328,6 +384,7 @@ async function readOrder(
   deps: MpOrdersWebhookDeps,
 ): Promise<OrderStep> {
   const admin = deps.db();
+  const modeP = startModeRead(admin, deps.nowMs);
 
   const { data: rowRaw, error: rowErr } = await admin
     .from("mp_payment_intents")
@@ -343,18 +400,31 @@ async function readOrder(
   wh.tenant(row.tenant_id);
   if (row.status === "approved") return { kind: "skip" }; // ya acreditado: idempotente.
 
+  // SEC-60: en enforce, firma antes de la credencial (sin refresh OAuth).
+  const mode = await modeP;
+  const env = row.mp_env ?? "prod";
+  if (mode === "enforce") {
+    let platformApp: boolean;
+    try {
+      platformApp = await enforcePlatformApp(admin, deps, row.tenant_id, env, row.id);
+    } catch (e) {
+      wh.fail(e);
+      return { kind: "retry" };
+    }
+    const gate = await signatureGate(admin, req, wh, { mode, dataId: sigDataId, platformApp, nowMs: deps.nowMs });
+    if (gate === "reject") return { kind: "reject" };
+    if (gate === "retry") return { kind: "retry" };
+  }
+
   // ADR-057: la credencial (negocio o sucursal) con la que se creó el cobro.
-  const credStep = await webhookCredential(admin, deps, wh, row.tenant_id, row.mp_env ?? "prod", row.id);
+  const credStep = await webhookCredential(admin, deps, wh, row.tenant_id, env, row.id);
   if (credStep.kind === "retry") return { kind: "retry" };
   if (credStep.kind === "none") return { kind: "skip" };
   const cred = credStep.cred;
-  // SEC-60: firma antes de leer MP y de escribir el estado.
-  const gate = await signatureGate(admin, req, wh, {
-    dataId: sigDataId,
-    platformApp: cred.oauth === true,
-    nowMs: deps.nowMs,
-  });
-  if (gate === "reject") return { kind: "reject" };
+  // SEC-60: report / off, después de la credencial y antes de leer MP (no corta).
+  if (mode !== "enforce") {
+    await signatureGate(admin, req, wh, { mode, dataId: sigDataId, platformApp: cred.oauth === true, nowMs: deps.nowMs });
+  }
   let got: Awaited<ReturnType<MpOrdersWebhookDeps["fetchOrder"]>>;
   try {
     got = await withMpTimeout(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, (signal) =>
@@ -533,11 +603,13 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
         const admin = deps.db();
         // SEC-60: aviso de la app de NinjaSoft (platform_secrets.webhook_secret).
         const gate = await signatureGate(admin, req, wh, {
+          mode: await startModeRead(admin, deps.nowMs),
           dataId: queryDataId || paymentId,
           platformApp: true,
           nowMs: deps.nowMs,
         });
         if (gate === "reject") return invalidSignature();
+        if (gate === "retry") return retryLater();
         await handleDisputeNotice(admin, deps, disputeKind, paymentId, mpUserId, hintPaymentId);
         wh.done();
       }
@@ -549,6 +621,7 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     if (!paymentId) return ok();
 
     const admin = deps.db();
+    const modeP = startModeRead(admin, deps.nowMs);
 
     const { data: intentRaw, error: intentErr } = await admin
       .from("mp_payment_intents")
@@ -563,28 +636,36 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     if (!intent) return ok();
     wh.tenant(intent.tenant_id);
 
+    const env = (intent.mp_env ?? "prod") as MpEnv;
+    const sigDataId = queryDataId || paymentId;
+
+    // SEC-60: en enforce, firma antes de la credencial (sin refresh OAuth).
+    const mode = await modeP;
+    if (mode === "enforce") {
+      let platformApp: boolean;
+      try {
+        platformApp = await enforcePlatformApp(admin, deps, intent.tenant_id, env, intentId);
+      } catch (e) {
+        wh.fail(e);
+        return retryLater();
+      }
+      const gate = await signatureGate(admin, req, wh, { mode, dataId: sigDataId, platformApp, nowMs: deps.nowMs });
+      if (gate === "reject") return invalidSignature();
+      if (gate === "retry") return retryLater();
+    }
+
     // ADR-057: verifica con la misma credencial (negocio o sucursal) con la
     // que se creó el cobro.
-    const credStep = await webhookCredential(
-      admin,
-      deps,
-      wh,
-      intent.tenant_id,
-      (intent.mp_env ?? "prod") as MpEnv,
-      intentId,
-    );
+    const credStep = await webhookCredential(admin, deps, wh, intent.tenant_id, env, intentId);
     if (credStep.kind === "retry") return retryLater();
     if (credStep.kind === "none") return ok();
     const cred = credStep.cred;
     const accessToken = cred.token;
 
-    // SEC-60: firma antes de leer MP y de escribir el estado.
-    const gate = await signatureGate(admin, req, wh, {
-      dataId: queryDataId || paymentId,
-      platformApp: cred.oauth === true,
-      nowMs: deps.nowMs,
-    });
-    if (gate === "reject") return invalidSignature();
+    // SEC-60: report / off, después de la credencial y antes de leer MP (no corta).
+    if (mode !== "enforce") {
+      await signatureGate(admin, req, wh, { mode, dataId: sigDataId, platformApp: cred.oauth === true, nowMs: deps.nowMs });
+    }
 
     type MpPayment = { status?: string; external_reference?: string; transaction_amount?: number };
     let read: { status: number; pay: MpPayment | null };

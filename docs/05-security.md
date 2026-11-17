@@ -123,8 +123,9 @@ Los webhooks públicos de cobros de Mercado Pago no confían en el cuerpo: `mp_w
 | `enforce` | procesa | **401** `invalid_signature`, sin leer MP ni escribir | procesa + `signature_missing_secret` |
 
 - **Secreto:** la clave secreta de webhooks de la app de NinjaSoft (`platform_secrets.mercadopago.webhook_secret`, la de `mp_billing_webhook`). Se usa cuando la credencial del cobro es OAuth (app de plataforma) y para los avisos de contracargos / reclamos de la app. Un negocio con Access Token manual usa su propia app y no guardamos su secreto: nunca se le corta.
-- La nota (`wh.note`) no cambia el estado de la fila (`ok` / `ignored` / `error`) ni guarda datos sensibles. El modo y el secreto se cachean 60 s en el isolate; una excepción de la verificación sigue de largo (`signature_check_failed`).
-- La firma se verifica después de leer el intent y la credencial (para saber si es OAuth) y antes de leer MP o escribir el estado. La única escritura posible antes es el refresh OAuth del token del negocio cuando está por vencer (no depende del contenido del aviso).
+- La nota (`wh.note`) no cambia el estado de la fila (`ok` / `ignored` / `error`) ni guarda datos sensibles. El modo y el secreto se leen con tope de 2 s y se cachean 60 s en el isolate (lo fallido no se cachea); una excepción de la verificación sigue de largo (`signature_check_failed`).
+- Error al leer el secreto (≠ secreto ausente): en `enforce` 503 sin escribir (MP reintenta); en `report` nota `signature_secret_error` y sigue.
+- En `enforce` la firma se verifica antes de pedir la credencial (sin refresh OAuth: sólo se lee `via` de `payment_secrets`); en `report` / `off`, después. Siempre antes de leer MP o escribir el estado.
 - Pasar a `enforce` es una decisión humana después de revisar `webhook_events` (ver ADR-189).
 
 ## 5. Validación de input

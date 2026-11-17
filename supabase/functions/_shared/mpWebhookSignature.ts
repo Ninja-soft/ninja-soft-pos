@@ -9,7 +9,10 @@
 //   * enforce → firma inválida, sin ts, ausente o vencida → 401 sin escribir.
 //               Si no hay secreto para ese aviso se sigue como en report.
 // Sin fila, valor desconocido o lectura fallida → report (nunca enforce por
-// error). El modo se cachea 60 s en el isolate.
+// error). El modo se cachea 60 s en el isolate. Cada lectura (modo, secreto)
+// tiene un tope de 2 s: si vence, modo report / secreto "error", sin cachear.
+// Un error al leer el secreto NO es "sin secreto": en enforce se responde 503
+// (MP reintenta) y en report queda la nota signature_secret_error.
 //
 // Qué secreto firma: MP firma con la "clave secreta" de webhooks de la
 // APLICACIÓN dueña de la notificación. Para cobros creados con un token OAuth
@@ -31,6 +34,8 @@ export const MP_SIGNATURE_DEFAULT_MODE: MpSignatureMode = "report";
 export const MP_SIGNATURE_CACHE_MS = 60_000;
 /** Ventana anti-replay de verifyMpSignature (default de mpSignature.ts). */
 export const MP_SIGNATURE_TOLERANCE_SEC = 600;
+/** Tope de cada lectura de la base (modo, secreto). */
+export const MP_SIGNATURE_READ_TIMEOUT_MS = 2000;
 
 export type MpSignatureReason =
   | "signature_missing_secret"
@@ -38,7 +43,11 @@ export type MpSignatureReason =
   | "signature_no_ts"
   | "signature_invalid"
   | "signature_expired"
+  | "signature_secret_error"
   | "signature_check_failed";
+
+/** Secreto de la app de plataforma: cargado, no cargado o lectura fallida. */
+export type PlatformWebhookSecret = { kind: "ok"; secret: string } | { kind: "absent" } | { kind: "error" };
 
 export type MpSignatureDecision =
   | { action: "continue"; reason: MpSignatureReason | null }
@@ -58,7 +67,20 @@ export function parseSignatureMode(value: unknown): MpSignatureMode {
 }
 
 let modeCache: { mode: MpSignatureMode; at: number } | null = null;
-let secretCache: { secret: string | null; at: number } | null = null;
+let secretCache: { value: PlatformWebhookSecret; at: number } | null = null;
+
+/** Corre la lectura con tope: si vence, rechaza (el timer se limpia siempre). */
+async function withReadTimeout<T>(work: PromiseLike<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`lectura sin respuesta en ${ms} ms`)), ms);
+  });
+  try {
+    return await Promise.race([Promise.resolve(work), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Para los tests: vacía el cache del isolate. */
 export function resetMpSignatureCache(): void {
@@ -66,15 +88,18 @@ export function resetMpSignatureCache(): void {
   secretCache = null;
 }
 
-/** Modo global (cache 60 s). Una lectura fallida da report y no se cachea. */
-export async function readMpSignatureMode(db: ReadDb, nowMs: number = Date.now()): Promise<MpSignatureMode> {
+/** Modo global (cache 60 s). Una lectura fallida o colgada (> 2 s) da report y no se cachea. */
+export async function readMpSignatureMode(
+  db: ReadDb,
+  nowMs: number = Date.now(),
+  timeoutMs: number = MP_SIGNATURE_READ_TIMEOUT_MS,
+): Promise<MpSignatureMode> {
   if (modeCache && nowMs - modeCache.at < MP_SIGNATURE_CACHE_MS) return modeCache.mode;
   try {
-    const { data, error } = await db
-      .from("system_settings")
-      .select("value")
-      .eq("key", MP_SIGNATURE_MODE_KEY)
-      .maybeSingle();
+    const { data, error } = await withReadTimeout(
+      db.from("system_settings").select("value").eq("key", MP_SIGNATURE_MODE_KEY).maybeSingle(),
+      timeoutMs,
+    );
     if (error) return MP_SIGNATURE_DEFAULT_MODE;
     const mode = parseSignatureMode((data as { value?: unknown } | null)?.value);
     modeCache = { mode, at: nowMs };
@@ -85,24 +110,29 @@ export async function readMpSignatureMode(db: ReadDb, nowMs: number = Date.now()
 }
 
 /**
- * Clave secreta de webhooks de la app de plataforma (cache 60 s). null si no
- * está cargada o la lectura falla (cuenta como "sin secreto": no se corta).
+ * Clave secreta de webhooks de la app de plataforma (cache 60 s). `absent` si
+ * no está cargada; `error` si la lectura falla o tarda más de 2 s (no se
+ * cachea: es distinto de "sin secreto").
  */
-export async function readPlatformWebhookSecret(db: ReadDb, nowMs: number = Date.now()): Promise<string | null> {
-  if (secretCache && nowMs - secretCache.at < MP_SIGNATURE_CACHE_MS) return secretCache.secret;
+export async function readPlatformWebhookSecret(
+  db: ReadDb,
+  nowMs: number = Date.now(),
+  timeoutMs: number = MP_SIGNATURE_READ_TIMEOUT_MS,
+): Promise<PlatformWebhookSecret> {
+  if (secretCache && nowMs - secretCache.at < MP_SIGNATURE_CACHE_MS) return secretCache.value;
   try {
-    const { data, error } = await db
-      .from("platform_secrets")
-      .select("secrets")
-      .eq("key", "mercadopago")
-      .maybeSingle();
-    if (error) return null;
+    const { data, error } = await withReadTimeout(
+      db.from("platform_secrets").select("secrets").eq("key", "mercadopago").maybeSingle(),
+      timeoutMs,
+    );
+    if (error) return { kind: "error" };
     const raw = (data as { secrets?: { webhook_secret?: unknown } } | null)?.secrets?.webhook_secret;
-    const secret = typeof raw === "string" && raw.trim() ? raw.trim() : null;
-    secretCache = { secret, at: nowMs };
-    return secret;
+    const value: PlatformWebhookSecret =
+      typeof raw === "string" && raw.trim() ? { kind: "ok", secret: raw.trim() } : { kind: "absent" };
+    secretCache = { value, at: nowMs };
+    return value;
   } catch {
-    return null;
+    return { kind: "error" };
   }
 }
 

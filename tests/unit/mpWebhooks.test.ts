@@ -26,6 +26,7 @@ import { signMpWebhook } from "@/supabase/functions/_shared/mpSignature";
 import {
   MP_SIGNATURE_CACHE_MS,
   readMpSignatureMode,
+  readPlatformWebhookSecret,
   resetMpSignatureCache,
 } from "@/supabase/functions/_shared/mpWebhookSignature";
 import orderProcessed from "@/tests/fixtures/webhooks/mp/order-processed.json";
@@ -689,6 +690,78 @@ describe("mp_webhook (handleMpWebhook)", () => {
     expect(await readMpSignatureMode(db, MP_SIGNATURE_CACHE_MS + 2)).toBe("off");
   });
 
+  it("lecturas del modo y del secreto colgadas: cortan al tope, modo report / secreto error, sin cachear", async () => {
+    let hang = true;
+    const { db } = createFakeDb({ system_settings: [modeRow("enforce")], platform_secrets: [PLATFORM_SIGNED] });
+    const slow = {
+      from(table: string) {
+        const q = db.from(table);
+        return {
+          select: (c: string) => ({
+            eq: (k: string, v: unknown) => ({
+              maybeSingle: () => (hang ? new Promise<never>(() => {}) : q.select(c).eq(k, v).maybeSingle()),
+            }),
+          }),
+        };
+      },
+    } as unknown as WebhookDb;
+
+    const t0 = Date.now();
+    expect(await readMpSignatureMode(slow, 0, 20)).toBe("report");
+    expect(await readPlatformWebhookSecret(slow, 0, 20)).toEqual({ kind: "error" });
+    expect(Date.now() - t0).toBeLessThan(1000);
+    hang = false;
+    expect(await readMpSignatureMode(slow, 1, 20)).toBe("enforce"); // el timeout no quedó cacheado
+    expect(await readPlatformWebhookSecret(slow, 1, 20)).toEqual({ kind: "ok", secret: WEBHOOK_SECRET });
+  });
+
+  it("error al leer el secreto (≠ sin secreto): enforce → 503 sin escribir; report → nota y acredita", async () => {
+    const faults: Fault[] = [{ table: "platform_secrets", op: "select", message: "db down" }];
+    const enf = await runSigned({ mode: "enforce", signature: INVALID_SIG, faults });
+    expect(await bodyOf(enf.res)).toEqual(RETRY_503);
+    expect(enf.writes).toEqual([]);
+    expect(enf.mp.calls).toEqual([]);
+    expect(enf.state.notes).toEqual(["signature_secret_error"]);
+
+    resetMpSignatureCache();
+    const rep = await runSigned({ mode: "report", signature: INVALID_SIG, faults });
+    expect(await bodyOf(rep.res)).toEqual(OK_200);
+    expect(rep.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(rep.state.notes).toEqual(["signature_secret_error"]);
+  });
+
+  it("enforce verifica la firma ANTES de la credencial: token OAuth vencido + firma inválida → 401 sin refresh", async () => {
+    const refresh = vi.fn(
+      async () => new Response(JSON.stringify({ access_token: "APP_USR-nuevo", refresh_token: "TG-2", expires_in: 3600 })),
+    );
+    vi.stubGlobal("fetch", refresh);
+    const bad = await runSigned({ mode: "enforce", signature: INVALID_SIG, secrets: oauthSecrets(-60_000) });
+    expect(await bodyOf(bad.res)).toEqual({ status: 401, type: "application/json", body: { error: "invalid_signature" } });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(bad.writes).toEqual([]); // ni el refresh de payment_secrets
+    expect(bad.tables.payment_secrets[0]).toMatchObject({ secrets: expect.objectContaining({ refresh_token: "TG-refresh" }) });
+
+    // Con firma válida recién ahí se pide la credencial (y refresca).
+    resetMpSignatureCache();
+    const good = await runSigned({ mode: "enforce", signature: await validSig(), secrets: oauthSecrets(-60_000) });
+    expect(await bodyOf(good.res)).toEqual(OK_200);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(good.mp.calls[0]?.auth).toBe("Bearer APP_USR-nuevo");
+    expect(good.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+  });
+
+  it("enforce: error de base al leer la credencial para decidir la firma → 503 sin escribir", async () => {
+    const { res, writes, mp, state } = await runSigned({
+      mode: "enforce",
+      signature: INVALID_SIG,
+      faults: [{ table: "payment_secrets", op: "select", message: "db down" }],
+    });
+    expect(await bodyOf(res)).toEqual(RETRY_503);
+    expect(writes).toEqual([]);
+    expect(mp.calls).toEqual([]);
+    expect(state.failures).toHaveLength(1);
+  });
+
   it("aviso de contracargo (app de plataforma): enforce con firma inválida → 401 sin procesar; report sigue", async () => {
     const delivery = {
       method: "POST",
@@ -1248,6 +1321,17 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
     expect(await bodyOf(good.res)).toEqual(OK_200);
     expect(good.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
     expect(good.state.notes).toEqual([]);
+  });
+
+  it("order en enforce: firma inválida con token OAuth vencido → 401 sin refresh ni lectura de MP", async () => {
+    const { res, mp, writes } = await runOrderSigned({
+      mode: "enforce",
+      signature: ORDER_INVALID_SIG,
+      secrets: oauthSecrets(-60_000),
+    });
+    expect(await bodyOf(res)).toEqual({ status: 401, type: "application/json", body: { error: "invalid_signature" } });
+    expect(mp.calls).toEqual([]); // ni /oauth/token ni /v1/orders
+    expect(writes).toEqual([]);
   });
 
   it("order en enforce sin secreto (token manual): procesa y registra; en off no mira la firma", async () => {

@@ -6861,17 +6861,26 @@ No está verificado contra tráfico real que MP firme las `notification_url` por
 
 ### Decisión
 
-1. **Flag global** `system_settings.mp_webhook_signature_mode` (jsonb string): `off` | `report` | `enforce`. La migración inserta la fila en `report`. Sin fila, valor desconocido o lectura fallida → `report` (nunca `enforce` por error). Las Edges lo leen con service_role por PK (`_shared/mpWebhookSignature.ts`, `readMpSignatureMode`), cache de **60 s** en el isolate; la lectura fallida no se cachea. Sin funciones nuevas ni cambios de grants (SEC-23 ya sacó las escrituras de `system_settings` al Data API).
-2. **Secreto:** `platform_secrets.mercadopago.webhook_secret` (cache 60 s) cuando la credencial del cobro es OAuth (`tenantMpCredential` devuelve `oauth`) o el aviso es de la app (contracargos / reclamos). Con token manual, o con la app sin `webhook_secret`, el aviso no tiene secreto: `signature_missing_secret`.
+1. **Flag global** `system_settings.mp_webhook_signature_mode` (jsonb string): `off` | `report` | `enforce`. La migración inserta la fila en `report`. Sin fila, valor desconocido o lectura fallida → `report` (nunca `enforce` por error). Las Edges lo leen con service_role por PK (`_shared/mpWebhookSignature.ts`, `readMpSignatureMode`), en paralelo con la lectura del intent, con tope de **2 s** y cache de **60 s** en el isolate; la lectura fallida o vencida da `report` y no se cachea (en `report` / `off` el webhook nunca espera más de ese tope por esto). Sin funciones nuevas ni cambios de grants (SEC-23 ya sacó las escrituras de `system_settings` al Data API).
+2. **Secreto:** `platform_secrets.mercadopago.webhook_secret` (cache 60 s) cuando la credencial del cobro es OAuth (`tenantMpCredential` devuelve `oauth`) o el aviso es de la app (contracargos / reclamos). Con token manual, o con la app sin `webhook_secret`, el aviso no tiene secreto: `signature_missing_secret`. La lectura del secreto también tiene tope de 2 s; un **error** al leerlo (falla de base o tope) no es "sin secreto": en `enforce` responde **503** (MP reintenta, sin escribir) y en `report` deja la nota `signature_secret_error` y sigue. No se cachea.
 3. **Modos** (`decideMpSignature`):
    - `off`: no se mira la firma.
    - `report`: se verifica; motivo `signature_missing_secret`, `signature_missing` (sin header), `signature_no_ts`, `signature_invalid` o `signature_expired` queda en `webhook_events.error` vía `wh.note` y se procesa como siempre.
    - `enforce`: firma ausente, sin `ts`, inválida o vencida → **401** `{error:"invalid_signature"}` sin leer MP ni escribir el estado. Sin secreto → como `report` (no se corta a quien no tiene secreto).
 4. **Anti-replay:** la ventana de `verifyMpSignature` (10 min, `ts` en ms o en s), la misma que `mp_billing_webhook`; vale en `report` (sólo nota) y en `enforce`.
-5. **Dónde:** después de leer el intent y la credencial (hace falta saber si es OAuth) y antes de leer MP y de escribir. Lo único que puede escribir antes es el refresh OAuth del token del negocio cuando está por vencer, que no depende del contenido del aviso. En los avisos de disputas, antes de `handleDisputeNotice`. El `data.id` del manifest sale de la query (`data.id`) y, si no vino, del cuerpo.
+5. **Dónde:** siempre antes de leer MP y de escribir el estado. En **`enforce`**, ANTES de `webhookCredential` (que puede refrescar el token OAuth y escribir `payment_secrets`): para decidir si es de la app de plataforma se lee sólo el alcance del intent y la fila de `payment_secrets` (`via = 'oauth'` con `access_token`, en producción) sin refresh, con el tope de la credencial; un error de base ahí → 503. Con la firma OK recién se pide la credencial. En `report` / `off` va después de la credencial (el orden de siempre, no corta nada). En los avisos de disputas, antes de `handleDisputeNotice`. El `data.id` del manifest sale de la query (`data.id`) y, si no vino, del cuerpo.
 6. **`wh.note`** (nuevo en `WebhookCtx`): escribe el motivo en la columna `error` sin cambiar el estado de la fila (`ok` / `ignored` / `error` siguen saliendo del resultado real; con un error real se guarda `nota | error`). Sin datos sensibles: sólo el código. Una excepción de la verificación se anota `signature_check_failed` y sigue (nunca corta un cobro).
 
 ### Plan de despliegue (decisión humana)
+
+Precondiciones para pasar a `enforce`:
+
+- (a) Confirmar en `report` que **todos** los tipos de aviso que llegan (pagos con `?intent`, orders, contracargos, reclamos) traen `x-signature` y `data.id` en la query (el manifest usa el `data.id` de la query; si falta, se usa el del cuerpo y la firma puede no coincidir). Si aparece `signature_missing` (o `signature_invalid` / `signature_no_ts`) en avisos de negocios OAuth, **NO** pasar a `enforce`.
+- (b) Rotar `webhook_secret` en la app de MP y en Panel interno tarda hasta **60 s por isolate** en tomar efecto (cache): durante esa ventana, en `enforce`, los avisos firmados con la clave nueva pueden recibir 401 (MP los reintenta). Rotar primero en `report`, o aceptar esa ventana.
+- (c) Los negocios con **Access Token manual** quedan sin verificación de firma aun en `enforce` (no guardamos el secreto de su app): su defensa sigue siendo la re-lectura del pago / la order en MP con su token (`external_reference` + monto).
+
+Pasos:
+
 
 1. Aplicar la migración y desplegar `mp_webhook` y `mp_orders_webhook` → quedan en `report`.
 2. Confirmar que `platform_secrets.mercadopago.webhook_secret` está cargado (Panel interno › Pagos de plataforma) con la clave de la app de NinjaSoft ("Tus integraciones" › Webhooks › Clave secreta).
@@ -6889,4 +6898,4 @@ No está verificado contra tráfico real que MP firme las `notification_url` por
 
 ### Verificación
 
-`tests/unit/mpWebhooks.test.ts` (los casos `DIFIERE DE LA TARJETA` de firma pasan a: report procesa y registra; enforce 401 sin leer MP ni escribir — inválida, sin ts, sin header, vencida —; enforce con firma válida en ms y s acredita; enforce sin secreto — token manual o app sin `webhook_secret` — procesa y registra; off procesa sin nota; modo ilegible / desconocido → report; cache de 60 s; aviso de contracargo en enforce → 401 sin procesar; lo mismo para orders) y `tests/unit/webhookLog.test.ts` (`wh.note` no cambia el estado).
+`tests/unit/mpWebhooks.test.ts` (los casos `DIFIERE DE LA TARJETA` de firma pasan a: report procesa y registra; enforce 401 sin leer MP ni escribir — inválida, sin ts, sin header, vencida —; enforce con firma válida en ms y s acredita; enforce sin secreto — token manual o app sin `webhook_secret` — procesa y registra; off procesa sin nota; modo ilegible / desconocido → report; cache de 60 s; aviso de contracargo en enforce → 401 sin procesar; lecturas del modo y del secreto colgadas → report / error al tope de 2 s sin cachear; error al leer el secreto → 503 en enforce y nota en report; enforce con token OAuth vencido y firma inválida → 401 sin refresh ni escrituras; lo mismo para orders) y `tests/unit/webhookLog.test.ts` (`wh.note` no cambia el estado).

@@ -20,6 +20,7 @@ import {
   parseInviteMemberInput,
   type StaffLevel,
 } from "../_shared/tenantMembers.ts";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -68,6 +69,9 @@ Deno.serve(async (req: Request) => {
 
   const meta = (user.app_metadata ?? {}) as { is_internal?: boolean; internal_level?: string };
   if (!meta.is_internal) return json({ error: "forbidden" }, 403);
+  // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+  const mfa = await staffMfaRejection(userClient, authHeader);
+  if (mfa) return json({ error: mfa }, 403);
   const lv = meta.internal_level;
   const level: StaffLevel =
     lv === "super_admin" || lv === "admin" || lv === "support" ? lv : "admin";

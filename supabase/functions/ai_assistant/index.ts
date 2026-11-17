@@ -58,6 +58,7 @@
 // conversation_id } la da de baja lógica (sólo si es del usuario).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import {
   AGG_OPS,
   FILTER_OPS,
@@ -1206,9 +1207,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_json" }, 400);
     }
     const wantsIntro = body.intro === true;
-    const isInternal = Boolean(
-      (user.app_metadata as { is_internal?: boolean } | null)?.is_internal,
-    );
+    // MFA del staff (SEC-23): con el flag prendido, el staff aal1 se trata como
+    // un usuario común (camino del dueño), igual que is_internal() en la base.
+    const isInternal =
+      Boolean((user.app_metadata as { is_internal?: boolean } | null)?.is_internal) &&
+      (await staffMfaRejection(userClient, req.headers.get("Authorization"))) === null;
 
     // ── Modo TEST (solo staff interno) ───────────────────────────────────────
     // Saltea TODO el guard (tenant/addon/cuota) y simplemente pinguea al

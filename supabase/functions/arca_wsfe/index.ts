@@ -30,6 +30,7 @@
 // Deploy: verify_jwt = true (el cron manda el anon key como Bearer).
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import { endpointsFor, EXPECTED_ISSUER_CN, type ArcaEnv } from "../_shared/arca/config.ts";
 import { createWsfeClient, loginCms, type FetchLike } from "../_shared/arca/client.ts";
 import { buildTra, classifyWsaaFault, ticketUsable } from "../_shared/arca/wsaa.ts";
@@ -694,6 +695,9 @@ Deno.serve(async (req: Request) => {
 
   if (action.startsWith("platform_")) {
     if (!(user.app_metadata as { is_internal?: boolean } | null)?.is_internal) return json({ error: "forbidden" }, 403);
+    // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+    const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+    if (mfa) return json({ error: mfa }, 403);
     if (!masterKey()) return json({ error: "server_not_configured" }, 500);
     return await platformAction(admin, user.id, action, body);
   }

@@ -26,6 +26,7 @@ import {
   validateMpCredential,
   type MpCredentialField,
 } from "../_shared/mpCredentials.ts";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import { validateMlAppField, type MlAppField, type MlPlatformSecrets } from "../_shared/mercadolibre/config.ts";
 import { mlAppStats, mlAppStatusExtras, testMlApp } from "./mlApp.ts";
 
@@ -117,6 +118,9 @@ Deno.serve(async (req: Request) => {
     (user.app_metadata as { is_internal?: boolean } | null)?.is_internal,
   );
   if (!isInternal) return json({ error: "forbidden" }, 403);
+  // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+  const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+  if (mfa) return json({ error: mfa }, 403);
 
   let b: Record<string, unknown>;
   try {

@@ -17,6 +17,20 @@ beforeAll(async () => {
 
 const snap = (tables: T[]): Snap => ({ tables, functions: [] });
 
+/** Cambios de grants de tabla posteriores a SEC-07, con la migración que los hace. */
+const POST_SEC07_TABLE_GRANTS: Record<
+  string,
+  { migration: string; sql: string; sec07: Pick<T, "anon" | "authenticated">; now: Pick<T, "anon" | "authenticated"> }
+> = {
+  // SEC-23 (ADR-186): el flag internal_mfa_required vive acá; nadie escribe por el Data API.
+  system_settings: {
+    migration: "20270122100000_sec23_internal_mfa.sql",
+    sql: "revoke insert, update, delete on table public.system_settings from authenticated;",
+    sec07: { anon: "s", authenticated: "siud" },
+    now: { anon: "s", authenticated: "s" },
+  },
+};
+
 describe("grants-migration", () => {
   it("objetivo: anon sin escritura y tablas sin policy sin grants; vistas intactas", () => {
     const out = mod.toTarget(
@@ -51,7 +65,20 @@ describe("grants-migration", () => {
   });
 
   it("la migración commiteada coincide con grants.expected.json (regenerar si cambia)", () => {
-    const expected = JSON.parse(fs.readFileSync(path.join(ROOT, "supabase", "security", "grants.expected.json"), "utf8")) as Snap;
+    const current = JSON.parse(fs.readFileSync(path.join(ROOT, "supabase", "security", "grants.expected.json"), "utf8")) as Snap;
+    // La migración de SEC-07 ya está aplicada (inmutable): se compara contra el
+    // objetivo de ese momento, deshaciendo los cambios de grants de tabla que
+    // hicieron migraciones posteriores. Cada uno tiene que existir de verdad.
+    const expected: Snap = {
+      ...current,
+      tables: current.tables.map((t) => {
+        const later = POST_SEC07_TABLE_GRANTS[t.name];
+        if (!later) return t;
+        expect({ anon: t.anon, authenticated: t.authenticated }, `${t.name} (${later.migration})`).toEqual(later.now);
+        expect(fs.readFileSync(path.join(ROOT, "supabase", "migrations", later.migration), "utf8")).toContain(later.sql);
+        return { ...t, ...later.sec07 };
+      }),
+    };
     const file = fs.readdirSync(path.join(ROOT, "supabase", "migrations")).find((f) => f.endsWith("_explicit_data_api_grants.sql"));
     expect(file).toBeDefined();
     const committed = fs.readFileSync(path.join(ROOT, "supabase", "migrations", file!), "utf8").replace(/\r\n/g, "\n");

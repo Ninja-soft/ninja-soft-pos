@@ -4,6 +4,12 @@ import type { Database } from "@/types/database";
 import { IDLE_COOKIE, isIdleExpired } from "@/lib/auth/idle";
 import { homePath } from "@/lib/auth/redirect";
 import { isDevelopersPath } from "@/lib/api-publica/paths";
+import {
+  hasVerifiedTotp,
+  internalMfaRedirect,
+  isInternalMfaGuardedPath,
+  readInternalMfaFlag,
+} from "@/lib/auth/internalMfa";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -97,6 +103,37 @@ export async function updateSession(request: NextRequest) {
     // Rutas del panel interno van al login dedicado.
     url.pathname = pathname.startsWith("/internal") ? "/login-internal" : "/login";
     return NextResponse.redirect(url);
+  }
+
+  // MFA del staff (SEC-23, ADR-186). Sólo staff en /internal o /login/mfa, y
+  // sólo con el flag global prendido (lectura cacheada): con el flag apagado
+  // no cambia nada. La barrera real es is_internal() en la base.
+  if (
+    user &&
+    (user.app_metadata as { is_internal?: boolean } | null)?.is_internal === true &&
+    isInternalMfaGuardedPath(pathname)
+  ) {
+    const flagOn = await readInternalMfaFlag(async () => {
+      const { data, error } = await supabase.rpc("internal_mfa_required");
+      return error || typeof data !== "boolean" ? null : data;
+    });
+    if (flagOn) {
+      // Lee el claim `aal` del token de la cookie (ya validado por getUser).
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const target = internalMfaRedirect({
+        isInternal: true,
+        flagOn,
+        currentLevel: aal?.currentLevel ?? null,
+        hasVerifiedFactor: hasVerifiedTotp(user.factors),
+        pathname,
+      });
+      if (target) {
+        const r = NextResponse.redirect(new URL(target, request.url));
+        // Conserva las cookies de sesión refrescadas en `response`.
+        response.cookies.getAll().forEach((c) => r.cookies.set(c));
+        return r;
+      }
+    }
   }
 
   // Con sesión en /login-internal → si es interno va al panel, si no al dashboard.

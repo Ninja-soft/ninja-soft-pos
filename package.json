@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:rls": "vitest run tests/integration",
+    "security:snapshot": "node scripts/security/grants-snapshot.mjs",
     "test:smoke": "playwright test tests/e2e/smoke-piloto.spec.ts --no-deps",
     "deploy:check": "node scripts/deploy-check.mjs",
     "format": "prettier --write .",

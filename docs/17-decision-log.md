@@ -6687,3 +6687,24 @@ ADR-041 integró Directo infiriendo la API del plugin de WooCommerce (API Key, S
 - `supabase migration repair` con el CLI: no hay token del CLI vinculado en el entorno del agente; el resultado es el mismo y no es transaccional.
 - Registrar todo sin verificar los 278 archivos: si uno no estaba aplicado, `db push` lo saltearía para siempre.
 
+## ADR-184: Grants explícitos del Data API y fin de `auto_expose_new_tables` (SEC-07)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · migración `20270120100000_explicit_data_api_grants` (se aplica en prod en SEC-08) · **Reemplaza:** PR #311
+
+### Contexto
+
+Los default privileges de `public` daban todo a `anon` sobre cada tabla nueva: anon podía INSERT en 163 tablas y UPDATE en 160 (RLS filtraba las filas, pero la superficie era enorme). El PR #311 resolvía la baja de `auto_expose_new_tables` con un grant masivo que reabría 45 tablas cerradas a propósito. La foto de prod (SEC-06) permite generar los grants exactos.
+
+### Decisión
+
+1. `scripts/security/grants-migration.mjs` genera la migración desde `supabase/security/grants.expected.json`: por tabla y vista, `revoke all` a anon y authenticated, `grant` exacto y los grants **por columna** de nuevo (un revoke de tabla los borra: `api_clients`, `dispatches`, `sale_orders` y `users` dependen de ellos). Sin `grant … on all tables` a anon ni authenticated.
+2. Estado objetivo: anon sin INSERT/UPDATE/DELETE en ninguna tabla (conserva su SELECT en 245; RLS decide las filas; ningún flujo escribe como anon por el Data API). Las 42 tablas con RLS y sin policies quedan sin grants. service_role con todo. authenticated igual que prod, menos TRUNCATE/REFERENCES/TRIGGER.
+3. `is_tenant_owner()` / `is_tenant_manager()` sin anon (drift: en prod ya estaban revocadas fuera del repo).
+4. Default privileges de `postgres` en `public`: anon sin escritura sobre tablas, sin uso de secuencias y sin EXECUTE en funciones nuevas (parte de SEC-09).
+5. Se saca `auto_expose_new_tables` de `supabase/config.toml` y `grants-parity` pasa a estricto en CI.
+
+### Alternativas descartadas
+
+- Aplicar el PR #311: reabría tablas cerradas.
+- Revocar con `revoke … on all tables` y volver a otorgar con `on all tables`: no preserva las tablas cerradas ni los grants por columna.
+

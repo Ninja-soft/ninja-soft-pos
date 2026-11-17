@@ -192,6 +192,58 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
   // Aislamiento de lectura
   // ---------------------------------------------------------------------------
 
+  it("SEC-14: los helpers con p_tenant no filtran datos de otro negocio", async () => {
+    const denied = await ctx.ownerA.rpc("tenant_limit_for" as never, { p_tenant: ctx.tenantB, p_key: "users" } as never);
+    expect(denied.error?.message).toMatch(/permission denied/);
+    // tenant_has_feature_for queda ejecutable (la evalúan policies) pero con guard:
+    // 'pos' es BASE (is_basic) → true para el propio negocio, false para el ajeno.
+    const own = await ctx.ownerA.rpc("tenant_has_feature_for" as never, { p_tenant: ctx.tenantA, p_key: "pos" } as never);
+    expect(own.error).toBeNull();
+    expect(own.data).toBe(true);
+    const other = await ctx.ownerA.rpc("tenant_has_feature_for" as never, { p_tenant: ctx.tenantB, p_key: "pos" } as never);
+    expect(other.error).toBeNull();
+    expect(other.data).toBe(false);
+    const store = await ctx.ownerA.rpc("stock_default_store" as never, { p_tenant: ctx.tenantB } as never);
+    expect(store.data ?? null).toBeNull();
+    // service_role (Edges) sigue viendo cualquier negocio.
+    const svc = await ctx.admin.rpc("tenant_has_feature_for" as never, { p_tenant: ctx.tenantB, p_key: "pos" } as never);
+    expect(svc.data).toBe(true);
+  });
+
+  it("SEC-12: los triggers siguen corriendo aunque sus funciones no se ejecuten por el Data API", async () => {
+    // customers_fill_store_alta / role_write_guard corren al insertar como owner.
+    const { data, error } = await ctx.ownerA
+      .from("customers")
+      .insert({ tenant_id: ctx.tenantA, name: `Trigger ${STAMP}` } as never)
+      .select("id, created_at")
+      .single();
+    expect(error).toBeNull();
+    expect(data).toBeTruthy();
+  });
+
+  it("SEC-07: anon no escribe por el Data API y authenticated no lee las tablas cerradas", async () => {
+    const anon = createClient(URL_!, ANON!, { auth: { persistSession: false } });
+    const writes: Array<[string, Record<string, unknown>]> = [
+      ["sales", { tenant_id: ctx.tenantA, total: 1 }],
+      ["products", { tenant_id: ctx.tenantA, name: "x", price: 1 }],
+      ["audit_logs", { tenant_id: ctx.tenantA, entity_type: "x", action: "x" }],
+    ];
+    for (const [t, row] of writes) {
+      const { error } = await anon.from(t).insert(row as never);
+      expect(error?.message, t).toMatch(/permission denied/);
+    }
+    for (const t of ["api_clients", "billing_records", "dispatches", "sale_orders"]) {
+      // select("*"): algunas tienen SELECT por columna (sin las columnas sensibles).
+      const { error } = await ctx.ownerA.from(t).select("*").limit(1);
+      expect(error?.message, t).toMatch(/permission denied/);
+    }
+    // Las columnas otorgadas se siguen leyendo (el revoke de tabla no las borró).
+    for (const t of ["api_clients", "dispatches", "sale_orders"]) {
+      const { error } = await ctx.ownerA.from(t).select("id, tenant_id").limit(1);
+      expect(error, t).toBeNull();
+    }
+  });
+
   it("SEC-11: anon no ejecuta las RPCs autenticadas del grupo C", async () => {
     const anon = createClient(URL_!, ANON!, { auth: { persistSession: false } });
     const zero = "00000000-0000-0000-0000-000000000000";

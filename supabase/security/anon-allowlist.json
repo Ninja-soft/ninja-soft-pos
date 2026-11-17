@@ -1,0 +1,24 @@
+{
+  "_doc": "Funciones SECURITY DEFINER de `public` que anon puede ejecutar A PROPÓSITO (SEC-13). Cualquier otra SECURITY DEFINER ejecutable por anon es un error: el lint de SEC-15 falla. Detalle de qué valida cada una en docs/05-security.md §14.",
+  "functions": [
+    { "sig": "ai_public_config()", "group": "landing", "reason": "Config pública del asistente (proveedor/modelo visibles en la landing); sin datos de negocios." },
+    { "sig": "api_token_issue(p_client_id text, p_client_secret text, p_scope text)", "group": "api_publica", "reason": "OAuth client_credentials de la API pública (/api/v1/oauth/token): canjea client_id + secret por un token de corta vida." },
+    { "sig": "api_v1_customers_list(p_token text, p_limit integer, p_after_updated timestamp with time zone, p_after_id uuid, p_updated_since timestamp with time zone, p_external_id text, p_include_deleted boolean)", "group": "api_publica", "reason": "GET /api/v1/customers; autentica por token y scope." },
+    { "sig": "api_v1_customers_upsert(p_token text, p_items jsonb, p_idempotency_key text)", "group": "api_publica", "reason": "POST /api/v1/customers/batch; token + scope customers:write." },
+    { "sig": "api_v1_prices_update(p_token text, p_items jsonb, p_idempotency_key text)", "group": "api_publica", "reason": "POST /api/v1/prices/batch; token + scope." },
+    { "sig": "api_v1_products_list(p_token text, p_limit integer, p_after_updated timestamp with time zone, p_after_id uuid, p_updated_since timestamp with time zone, p_sku text, p_include_deleted boolean, p_include text[], p_ids uuid[])", "group": "api_publica", "reason": "GET /api/v1/products; token + scope." },
+    { "sig": "api_v1_products_upsert(p_token text, p_items jsonb, p_idempotency_key text)", "group": "api_publica", "reason": "POST /api/v1/products/batch; token + scope products:write." },
+    { "sig": "api_v1_sales_list(p_token text, p_from timestamp with time zone, p_to timestamp with time zone, p_store_id uuid, p_limit integer, p_after_created timestamp with time zone, p_after_id uuid)", "group": "api_publica", "reason": "GET /api/v1/sales; token + scope." },
+    { "sig": "api_v1_stock_adjust(p_token text, p_items jsonb, p_idempotency_key text)", "group": "api_publica", "reason": "POST /api/v1/stock/adjustments; token + scope." },
+    { "sig": "api_v1_stock_list(p_token text, p_store_id uuid, p_skus text[], p_limit integer, p_after_id uuid)", "group": "api_publica", "reason": "GET /api/v1/stock; token + scope." },
+    { "sig": "api_v1_stores_list(p_token text)", "group": "api_publica", "reason": "GET /api/v1/stores; token + scope." },
+    { "sig": "current_tenant_id()", "group": "rls", "reason": "La evalúan las policies `to public` cuando anon lee una tabla; devuelve null sin sesión. Revocarla haría que anon reciba error en vez de vacío." },
+    { "sig": "public_catalog(p_slug text)", "group": "catalogo", "reason": "Catálogo público del negocio (/c/[slug]) si lo publicó." },
+    { "sig": "public_catalog_order_create(p_slug text, p_order jsonb)", "group": "catalogo", "reason": "Pedido desde el catálogo público; precios del servidor y rate limit por IP y negocio." },
+    { "sig": "public_catalog_order_status(p_token text)", "group": "catalogo", "reason": "Estado del pedido público por token secreto." },
+    { "sig": "public_plans()", "group": "landing", "reason": "Planes y precios públicos de la landing." },
+    { "sig": "public_product_sheet(p_slug text, p_product uuid)", "group": "catalogo", "reason": "Ficha pública de un producto del catálogo publicado." },
+    { "sig": "quote_public_get(p_token text)", "group": "presupuesto", "reason": "Presupuesto público (/p/...) por token secreto." },
+    { "sig": "quote_public_respond(p_token text, p_accept boolean, p_name text, p_comment text)", "group": "presupuesto", "reason": "El cliente acepta o rechaza el presupuesto por token." }
+  ]
+}

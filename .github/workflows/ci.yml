@@ -102,3 +102,71 @@ jobs:
           # SEC-07: grants explícitos → la paridad con grants.expected.json es estricta.
           export GRANTS_PARITY_STRICT=1
           pnpm test:rls
+
+  # Smoke E2E (OPS-15): build de producción + Playwright en "modo smoke" (sin
+  # sesión: páginas públicas, /rest/v1 respondido vacío desde el navegador,
+  # falla ante errores de consola). No requerido hasta OPS-04.
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Mismos dummy que `quality`: el smoke no habla con un Supabase real.
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      APP_ENV: preview
+      BASE_URL: http://localhost:3005
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      # --with-deps instala las librerías del sistema aunque el browser venga del cache.
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm build
+
+      - name: Start app
+        run: |
+          pnpm start -p 3005 > next-start.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3005/api/health > /dev/null; then
+              echo "app lista (${i}s)"; exit 0
+            fi
+            sleep 1
+          done
+          echo "la app no respondió /api/health en 60 s"; cat next-start.log; exit 1
+
+      - name: E2E smoke
+        run: pnpm test:e2e --project=chrome
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+            next-start.log
+          retention-days: 7

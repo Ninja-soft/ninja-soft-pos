@@ -13,13 +13,17 @@
 // mismo withWebhookLog. El comportamiento es el de antes de la extracción
 // (mismos códigos, cuerpos, orden de validaciones, escrituras y logs), salvo
 // PAY-27 (ADR-188):
-//   * Si no se pudo leer el pago / la order en MP por una falla transitoria
-//     (fetch rechaza, timeout, 5xx o 429) o falla la base, se responde 503
-//     {ok:false, retry:true} para que MP reintente. Reintentar es seguro: la
-//     acreditación es idempotente (sólo transiciona desde pending).
-//   * Un 4xx de MP (404 pago inexistente, 401/403 credencial) sigue en 200:
-//     reintentar no lo arregla. Queda como error en webhook_events (wh.fail).
-//   * Toda lectura a MP tiene timeout (MP_READ_TIMEOUT_MS, AbortController).
+//   * Ante cualquier duda de que el pago pudo quedar sin acreditar se responde
+//     503 {ok:false, retry:true} para que MP reintente: lectura a MP que
+//     rechaza / vence / 5xx / 429, 401 con credencial OAuth (token vencido),
+//     error de base (intent, credencial, alcance, escritura del estado),
+//     refresh OAuth fallido con el token vencido, o excepción no prevista.
+//     Reintentar es seguro: la acreditación es idempotente.
+//   * Un 4xx de MP que reintentar no arregla (404 pago inexistente, 400, 403,
+//     401 con token estático) sigue en 200. Queda como error (wh.fail).
+//   * Credencial y alcance en modo estricto (`strict: true`) con tope total
+//     MP_CREDENTIAL_TIMEOUT_MS; lectura a MP con MP_READ_TIMEOUT_MS
+//     (AbortController). Todo el trabajo es sincrónico (sin segundo plano).
 // =============================================================================
 import { amountsMatch, type MpEnv, type MpOrder, parseOrderNotification } from "./mpOrders.ts";
 import {
@@ -55,18 +59,19 @@ export interface WebhookDb {
   from(table: string): WebhookQuery;
 }
 
-export type MpCredential = { token: string } | null;
+/** `oauth`: credencial conectada por OAuth (un 401 puede ser token vencido). */
+export type MpCredential = { token: string; oauth?: boolean } | null;
 
 /** tenantMpCredential (_shared/mpAuth.ts). */
 export type CredentialFn = (
   db: WebhookDb,
   tenantId: string,
   env: MpEnv,
-  opts: { scopeStoreId: string | null },
+  opts: { scopeStoreId: string | null; strict?: boolean; refreshTimeoutMs?: number },
 ) => Promise<MpCredential>;
 
-/** intentSecretScope (_shared/paymentSecrets.ts). */
-export type SecretScopeFn = (db: WebhookDb, intentId: string) => Promise<string | null>;
+/** intentSecretScope (_shared/paymentSecrets.ts); `strict` lanza ante error de base. */
+export type SecretScopeFn = (db: WebhookDb, intentId: string, opts?: { strict?: boolean }) => Promise<string | null>;
 
 export type WebhookLogger = { error(message: string, data?: unknown): void };
 
@@ -91,18 +96,19 @@ export interface MpOrdersWebhookDeps {
     orderId: string,
     opts?: { signal?: AbortSignal },
   ) => Promise<{ ok: true; order: MpOrder } | { ok: false; status: number; detail: string }>;
-  /** applyOrderToIntent (_shared/mpIntents.ts) con actor webhook. */
+  /** applyOrderToIntent (_shared/mpIntents.ts) con actor webhook; `strict` lanza si falla la escritura. */
   applyOrder: (
     db: WebhookDb,
     row: OrdersIntentRow,
     order: MpOrder,
     actor: { userId: null; source: "webhook" },
+    opts: { strict: true },
   ) => Promise<unknown>;
-  /** runInBackground (_shared/mpAuth.ts). */
-  runInBackground: (work: Promise<unknown>) => Promise<unknown> | null;
   log: WebhookLogger;
   /** Timeout de la lectura a MP (default MP_READ_TIMEOUT_MS; los tests lo bajan). */
   timeoutMs?: number;
+  /** Tope de la cadena de credencial (default MP_CREDENTIAL_TIMEOUT_MS). */
+  credentialTimeoutMs?: number;
 }
 
 export interface MpDisputesPort {
@@ -125,6 +131,8 @@ export interface MpWebhookDeps {
   log: WebhookLogger;
   /** Timeout de la lectura a MP (default MP_READ_TIMEOUT_MS; los tests lo bajan). */
   timeoutMs?: number;
+  /** Tope de la cadena de credencial (default MP_CREDENTIAL_TIMEOUT_MS). */
+  credentialTimeoutMs?: number;
 }
 
 const ok = () =>
@@ -145,11 +153,15 @@ const retryLater = () =>
   });
 
 /**
- * Timeout de cada lectura a MP. MP corta la notificación a los 22 s y la
- * reintenta (cabecera de mp_orders_webhook/index.ts): 8 s de lectura más las
- * consultas a la base dejan margen de sobra para responder dentro del límite.
+ * Presupuesto: MP corta la notificación a los 22 s y la reintenta (cabecera de
+ * mp_orders_webhook/index.ts). Credencial (alcance + secreto + refresh OAuth)
+ * hasta 6 s, lectura del pago / order hasta 8 s, y el resto son consultas
+ * cortas a la base: ~14 s en el peor caso.
  */
 export const MP_READ_TIMEOUT_MS = 8000;
+export const MP_CREDENTIAL_TIMEOUT_MS = 6000;
+/** Timeout del POST /oauth/token dentro del tope de la credencial. */
+const MP_REFRESH_TIMEOUT_MS = 5000;
 
 /** 5xx o 429 de MP: reintentar más tarde puede funcionar. */
 export function isRetryableMpStatus(status: number): boolean {
@@ -161,12 +173,18 @@ export function isRetryableMpStatus(status: number): boolean {
  * carrera contra el mismo plazo, así una dependencia que ignore el signal
  * tampoco deja la Edge colgada.
  */
+class DeadlineError extends DOMException {
+  constructor(what: string, ms: number) {
+    super(`${what} no respondió en ${ms} ms`, "TimeoutError");
+  }
+}
+
 async function withMpTimeout<T>(ms: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ctrl = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      const err = new DOMException(`Mercado Pago no respondió en ${ms} ms`, "TimeoutError");
+      const err = new DeadlineError("Mercado Pago", ms);
       ctrl.abort(err);
       reject(err);
     }, ms);
@@ -176,6 +194,61 @@ async function withMpTimeout<T>(ms: number, work: (signal: AbortSignal) => Promi
   } finally {
     clearTimeout(timer);
   }
+}
+
+type CredentialStep = { kind: "cred"; cred: NonNullable<MpCredential> } | { kind: "none" } | { kind: "retry" };
+
+/**
+ * Alcance del intent + credencial en modo estricto, con tope total. Un error
+ * de base o un refresh OAuth fallido con el token vencido lanzan → retry.
+ * Si vence el tope con un refresh en curso, la cadena NO se aborta: se pasa a
+ * wh.defer, que la mantiene viva (EdgeRuntime.waitUntil del registro) hasta
+ * que termine de guardar el token nuevo.
+ */
+async function webhookCredential(
+  admin: WebhookDb,
+  deps: { credential: CredentialFn; secretScope: SecretScopeFn; credentialTimeoutMs?: number },
+  wh: WebhookCtx,
+  tenantId: string,
+  env: MpEnv,
+  intentId: string,
+): Promise<CredentialStep> {
+  const ms = deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS;
+  const chain = (async () => {
+    const scopeStoreId = await deps.secretScope(admin, intentId, { strict: true });
+    return deps.credential(admin, tenantId, env, {
+      scopeStoreId,
+      strict: true,
+      refreshTimeoutMs: Math.min(MP_REFRESH_TIMEOUT_MS, ms),
+    });
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      reject(new DeadlineError("La credencial de Mercado Pago", ms));
+    }, ms);
+  });
+  try {
+    const cred = await Promise.race([chain, expired]);
+    if (!cred) {
+      wh.fail("sin credencial de Mercado Pago");
+      return { kind: "none" };
+    }
+    return { kind: "cred", cred };
+  } catch (e) {
+    if (timedOut) wh.defer(chain.catch(() => null));
+    wh.fail(e);
+    return { kind: "retry" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Respuesta de error de MP que conviene reintentar (5xx, 429, 401 con OAuth). */
+function shouldRetryMpStatus(status: number, cred: NonNullable<MpCredential>): boolean {
+  return isRetryableMpStatus(status) || (status === 401 && cred.oauth === true);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,10 +261,10 @@ type OrderStep =
   | { kind: "apply"; admin: WebhookDb; row: OrdersIntentRow; order: MpOrder };
 
 /**
- * Parte sincrónica (PAY-27, opción a): busca el intent y RE-LEE la order en
- * MP con timeout antes de responder, así una falla transitoria vuelve como
- * 503 y MP reintenta. Sólo applyOrder (escrituras locales) queda en segundo
- * plano.
+ * PAY-27 (opción a): busca el intent y RE-LEE la order en MP con timeout
+ * antes de responder, así una falla transitoria vuelve como 503 y MP
+ * reintenta. Después handleMpOrdersWebhook aplica la order, también
+ * sincrónico.
  */
 async function readOrder(orderId: string, wh: WebhookCtx, deps: MpOrdersWebhookDeps): Promise<OrderStep> {
   const admin = deps.db();
@@ -211,13 +284,10 @@ async function readOrder(orderId: string, wh: WebhookCtx, deps: MpOrdersWebhookD
   if (row.status === "approved") return { kind: "skip" }; // ya acreditado: idempotente.
 
   // ADR-057: la credencial (negocio o sucursal) con la que se creó el cobro.
-  const cred = await deps.credential(admin, row.tenant_id, row.mp_env ?? "prod", {
-    scopeStoreId: await deps.secretScope(admin, row.id),
-  });
-  if (!cred) {
-    wh.fail("sin credencial de Mercado Pago");
-    return { kind: "skip" };
-  }
+  const credStep = await webhookCredential(admin, deps, wh, row.tenant_id, row.mp_env ?? "prod", row.id);
+  if (credStep.kind === "retry") return { kind: "retry" };
+  if (credStep.kind === "none") return { kind: "skip" };
+  const cred = credStep.cred;
   let got: Awaited<ReturnType<MpOrdersWebhookDeps["fetchOrder"]>>;
   try {
     got = await withMpTimeout(deps.timeoutMs ?? MP_READ_TIMEOUT_MS, (signal) =>
@@ -234,7 +304,7 @@ async function readOrder(orderId: string, wh: WebhookCtx, deps: MpOrdersWebhookD
       status: got.status,
     });
     wh.fail(`no se pudo leer la order (${got.status})`);
-    return isRetryableMpStatus(got.status) ? { kind: "retry" } : { kind: "skip" };
+    return shouldRetryMpStatus(got.status, cred) ? { kind: "retry" } : { kind: "skip" };
   }
   return { kind: "apply", admin, row, order: got.order };
 }
@@ -262,17 +332,16 @@ export async function handleMpOrdersWebhook(
     if (step.kind === "retry") return retryLater();
     if (step.kind === "skip") return ok();
 
-    const work = (async () => {
-      await deps.applyOrder(step.admin, step.row, step.order, { userId: null, source: "webhook" });
-      wh.done();
-    })();
-    wh.defer(work);
-    const pending = deps.runInBackground(work);
-    if (pending) await pending;
+    // Sincrónico: si la escritura del estado falla, 503 y MP reintenta. La
+    // auditoría va después del update; si falla sólo se loguea (el reintento
+    // sale por "ya acreditado" y no la duplica).
+    await deps.applyOrder(step.admin, step.row, step.order, { userId: null, source: "webhook" }, { strict: true });
+    wh.done();
     return ok();
   } catch (e) {
+    // Error no previsto: ante la duda, que MP reintente (idempotente).
     wh.fail(e);
-    return ok();
+    return retryLater();
   }
 }
 
@@ -417,16 +486,17 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
 
     // ADR-057: verifica con la misma credencial (negocio o sucursal) con la
     // que se creó el cobro.
-    const cred = await deps.credential(
+    const credStep = await webhookCredential(
       admin,
+      deps,
+      wh,
       intent.tenant_id,
       (intent.mp_env ?? "prod") as MpEnv,
-      { scopeStoreId: await deps.secretScope(admin, intentId) },
+      intentId,
     );
-    if (!cred) {
-      wh.fail("sin credencial de Mercado Pago");
-      return ok();
-    }
+    if (credStep.kind === "retry") return retryLater();
+    if (credStep.kind === "none") return ok();
+    const cred = credStep.cred;
     const accessToken = cred.token;
 
     type MpPayment = { status?: string; external_reference?: string; transaction_amount?: number };
@@ -448,8 +518,9 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     }
     if (!read.pay) {
       wh.fail(`MP /v1/payments respondió ${read.status}`);
-      // 5xx / 429: reintentar. 4xx (pago inexistente, credencial): no sirve.
-      return isRetryableMpStatus(read.status) ? retryLater() : ok();
+      // 5xx / 429 / 401 con OAuth: reintentar. Otros 4xx (pago inexistente,
+      // token estático inválido): no sirve.
+      return shouldRetryMpStatus(read.status, cred) ? retryLater() : ok();
     }
     const pay = read.pay;
 
@@ -490,7 +561,8 @@ export async function handleMpWebhook(req: Request, wh: WebhookCtx, deps: MpWebh
     wh.done();
     return ok();
   } catch (e) {
+    // Error no previsto: ante la duda, que MP reintente (idempotente).
     wh.fail(e);
-    return ok();
+    return retryLater();
   }
 }

@@ -2,9 +2,10 @@
 // Edge Function: mp_webhook — recibe notificaciones de Mercado Pago (público,
 // sin JWT). Identifica el intent por ?intent=<id>, consulta el pago real en MP
 // con el Access Token del tenant (no confía en el body) y actualiza el estado.
-// Responde 200 salvo una falla transitoria (MP caído / lento / 5xx / 429 o
-// error de base): ahí responde 503 para que MP reintente (PAY-27, ADR-188).
-// Un 4xx de MP o un aviso que no es nuestro siguen en 200 (no hay loop).
+// Responde 200 salvo que el pago pueda haber quedado sin acreditar (MP caído
+// / lento / 5xx / 429, 401 con OAuth, error de base o de credencial, error no
+// previsto): ahí responde 503 para que MP reintente (PAY-27, ADR-188). Un 4xx
+// definitivo de MP o un aviso que no es nuestro siguen en 200.
 //
 // Desde ADR-032 cubre sólo los pagos de Checkout Pro (link). Las orders de la
 // Orders API (QR dinámico y Point) llegan por mp_orders_webhook (topic order).
@@ -35,7 +36,7 @@ Deno.serve(withWebhookLog("mercadopago", "mp_webhook", (req: Request, wh) =>
       return createClient(url, serviceKey, { auth: { persistSession: false } }) as unknown as WebhookDb;
     },
     credential: (db, tenantId, env, opts) => tenantMpCredential(db as unknown as SupabaseClient, tenantId, env, opts),
-    secretScope: (db, intentId) => intentSecretScope(db, intentId),
+    secretScope: (db, intentId, opts) => intentSecretScope(db, intentId, opts),
     fetchMp: (url, init) => fetch(url, init),
     disputes: {
       enabled: disputesEnabled,

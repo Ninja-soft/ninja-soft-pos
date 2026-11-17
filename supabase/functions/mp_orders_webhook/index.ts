@@ -11,16 +11,16 @@
 //   * Se acredita sólo processed + pago processed + monto exacto +
 //     external_reference = intent. Idempotente (transiciones desde pending).
 //   * MP corta la notificación a los 22 s y la reintenta. PAY-27 (ADR-188):
-//     la lectura de la order en MP es sincrónica con timeout de 8 s; si falla
-//     de forma transitoria (red, timeout, 5xx, 429, base) responde 503 y MP
-//     reintenta. Sólo applyOrderToIntent (escrituras locales) corre en
-//     segundo plano con EdgeRuntime.waitUntil cuando está disponible.
+//     todo es sincrónico: credencial (tope 6 s), lectura de la order (8 s) y
+//     applyOrderToIntent. Si algo falla de forma transitoria (red, timeout,
+//     5xx, 429, 401 con OAuth, base, escritura del estado) responde 503 y MP
+//     reintenta; la acreditación es idempotente.
 //
 // OPS-23: la lógica vive en _shared/mpWebhookHandlers.ts (handleMpOrdersWebhook,
 // testeada con Vitest); acá sólo se arman las dependencias reales.
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
-import { runInBackground, tenantMpCredential } from "../_shared/mpAuth.ts";
+import { tenantMpCredential } from "../_shared/mpAuth.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 import { applyOrderToIntent, fetchOrder, ORDER_INTENT_COLUMNS, type OrderIntentRow } from "../_shared/mpIntents.ts";
 import { handleMpOrdersWebhook, type WebhookDb } from "../_shared/mpWebhookHandlers.ts";
@@ -37,9 +37,8 @@ Deno.serve(withWebhookLog("mercadopago_orders", "mp_orders_webhook", (req: Reque
     },
     intentColumns: ORDER_INTENT_COLUMNS,
     credential: (db, tenantId, env, opts) => tenantMpCredential(sb(db), tenantId, env, opts),
-    secretScope: (db, intentId) => intentSecretScope(db, intentId),
+    secretScope: (db, intentId, opts) => intentSecretScope(db, intentId, opts),
     fetchOrder,
-    applyOrder: (db, row, order, actor) => applyOrderToIntent(sb(db), row as OrderIntentRow, order, actor),
-    runInBackground,
+    applyOrder: (db, row, order, actor, opts) => applyOrderToIntent(sb(db), row as OrderIntentRow, order, actor, opts),
     log: { error: (message, data) => console.error(message, data) },
   })));

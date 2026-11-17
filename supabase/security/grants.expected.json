@@ -8976,14 +8976,14 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "pin_action_modes(p_tenant uuid, p_action text)"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "pin_action_required(p_tenant uuid, p_action text, p_amount numeric)"
@@ -9879,7 +9879,7 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "price_pro_enabled(p_tenant uuid)"
@@ -11706,7 +11706,7 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "stock_store_count(p_tenant uuid)"
@@ -11748,7 +11748,7 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "subscription_blocked(p_tenant uuid)"
@@ -12245,7 +12245,7 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "tenant_limit_for(p_tenant uuid, p_key text)"

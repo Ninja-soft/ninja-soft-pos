@@ -192,6 +192,24 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
   // Aislamiento de lectura
   // ---------------------------------------------------------------------------
 
+  it("SEC-14: los helpers con p_tenant no filtran datos de otro negocio", async () => {
+    const denied = await ctx.ownerA.rpc("tenant_limit_for" as never, { p_tenant: ctx.tenantB, p_key: "users" } as never);
+    expect(denied.error?.message).toMatch(/permission denied/);
+    // tenant_has_feature_for queda ejecutable (la evalúan policies) pero con guard:
+    // 'pos' es BASE (is_basic) → true para el propio negocio, false para el ajeno.
+    const own = await ctx.ownerA.rpc("tenant_has_feature_for" as never, { p_tenant: ctx.tenantA, p_key: "pos" } as never);
+    expect(own.error).toBeNull();
+    expect(own.data).toBe(true);
+    const other = await ctx.ownerA.rpc("tenant_has_feature_for" as never, { p_tenant: ctx.tenantB, p_key: "pos" } as never);
+    expect(other.error).toBeNull();
+    expect(other.data).toBe(false);
+    const store = await ctx.ownerA.rpc("stock_default_store" as never, { p_tenant: ctx.tenantB } as never);
+    expect(store.data ?? null).toBeNull();
+    // service_role (Edges) sigue viendo cualquier negocio.
+    const svc = await ctx.admin.rpc("tenant_has_feature_for" as never, { p_tenant: ctx.tenantB, p_key: "pos" } as never);
+    expect(svc.data).toBe(true);
+  });
+
   it("SEC-12: los triggers siguen corriendo aunque sus funciones no se ejecuten por el Data API", async () => {
     // customers_fill_store_alta / role_write_guard corren al insertar como owner.
     const { data, error } = await ctx.ownerA

@@ -1,17 +1,11 @@
 import { z } from "zod";
 import { isValidCuit } from "@/modules/customers/schemas";
+import { passwordSchema } from "@/modules/auth/password";
 
 // Esquemas del wizard de registro (Fase A). El paso 1 ("Tu cuenta") valida
 // credenciales + negocio + datos fiscales/código opcionales; el paso 2
 // ("Tu negocio") aporta el rubro. Se validan por separado para poder avanzar
 // de paso sin tener todo el formulario completo.
-
-const passwordSchema = z
-  .string()
-  .min(10, "Mínimo 10 caracteres")
-  .regex(/[A-Z]/, "Al menos una mayúscula")
-  .regex(/[a-z]/, "Al menos una minúscula")
-  .regex(/[0-9]/, "Al menos un número");
 
 export const IVA_CONDITIONS = [
   "monotributo",

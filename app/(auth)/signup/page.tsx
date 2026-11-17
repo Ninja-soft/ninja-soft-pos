@@ -20,6 +20,8 @@ import {
 } from "@/modules/auth/pendingSignup";
 import { VERTICAL_LABELS } from "@/lib/verticals/config";
 import { salesContactHref } from "@/lib/support/contact";
+import { passwordErrorMessage } from "@/lib/auth/passwordErrors";
+import { PASSWORD_HINT } from "@/modules/auth/password";
 import {
   SignupAccountSchema,
   SignupBusinessSchema,
@@ -520,7 +522,14 @@ function SignupWizard() {
         });
         if (error) {
           const m = error.message.toLowerCase();
-          if (m.includes("already") || m.includes("registered")) {
+          const weak = passwordErrorMessage(error);
+          if (weak) {
+            // Contraseña rechazada por Supabase Auth (p. ej. filtrada): se
+            // marca en el campo y se vuelve al paso de la cuenta.
+            accountForm.setError("password", { message: weak });
+            setStep(1);
+            toast({ title: "Elegí otra contraseña", description: weak, variant: "error" });
+          } else if (m.includes("already") || m.includes("registered")) {
             toast({
               title: "Ese email ya tiene cuenta",
               description: "Iniciá sesión para continuar.",
@@ -727,7 +736,7 @@ function SignupWizard() {
                 <PasswordInput
                   label="Contraseña"
                   autoComplete="new-password"
-                  hint="Mínimo 10 caracteres, con mayúscula, minúscula y número."
+                  hint={PASSWORD_HINT}
                   error={accountErrors.password?.message}
                   {...accountForm.register("password")}
                 />

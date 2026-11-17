@@ -694,8 +694,8 @@
       "sig": "_delivery_event_insert(p_r delivery_routes, p jsonb, p_type text, p_stop uuid, p_distance integer)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "_delivery_order_item_guard_qty()"
@@ -2458,8 +2458,8 @@
       "sig": "_supplier_credit_apply(p_tenant uuid, p_supplier uuid, p_items jsonb, p_payment uuid, p_notes text)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "_table_order_item_guard_qty()"
@@ -2479,8 +2479,8 @@
       "sig": "_table_orders_split_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "_table_orders_stamp_closed()"
@@ -2878,15 +2878,15 @@
       "sig": "acc_effective_date(p_tenant uuid, p_date date)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "acc_entries_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "acc_entry_balance_check()"
@@ -2976,8 +2976,8 @@
       "sig": "acc_lines_equal(p_entry uuid, p_lines jsonb)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "acc_lines_guard()"
@@ -3025,8 +3025,8 @@
       "sig": "acc_period_reopen(p_period date, p_reason text)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "acc_periods_guard()"
@@ -4544,22 +4544,22 @@
       "sig": "audit_log_search(p_from timestamp with time zone, p_to timestamp with time zone, p_actor uuid, p_store uuid, p_action text, p_entity text, p_q text, p_limit integer, p_offset integer)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "audit_logs_before_insert_hash()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "audit_logs_fill_store()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "audit_logs_guard_immutable()"
@@ -4579,8 +4579,8 @@
       "sig": "audit_retention_run(p_tenant uuid, p_dry_run boolean)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "audit_tombstones_guard()"
@@ -5188,15 +5188,15 @@
       "sig": "config_override_set(p_scope text, p_scope_id uuid, p_domain text, p_domain_key text, p_patch jsonb, p_clear text[])"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "config_overrides_hardware_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "config_overrides_transfer_guard()"
@@ -5314,15 +5314,15 @@
       "sig": "customer_pack_credits(p_customer_id uuid, p_only_available boolean)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "customers_fill_store_alta()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "customers_store_alta_guard()"
@@ -8842,8 +8842,8 @@
       "sig": "payment_method_plan_key(p_method text)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "payment_plans_store_guard()"
@@ -8863,15 +8863,15 @@
       "sig": "payment_secret_scopes()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "payment_secrets_store_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "payment_terminals_rules()"
@@ -9031,8 +9031,8 @@
       "sig": "platform_addons_daily()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "platform_allocations_guard()"
@@ -9164,8 +9164,8 @@
       "sig": "platform_cents(p numeric)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "platform_charges_guard()"
@@ -9332,8 +9332,8 @@
       "sig": "platform_is_collector(p_user uuid)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "platform_ledger_immutable()"
@@ -9451,8 +9451,8 @@
       "sig": "platform_notice_recipients(p_tenant uuid)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "platform_payments_guard()"
@@ -9675,8 +9675,8 @@
       "sig": "pos_sale_create_fulfilled(p_sale jsonb, p_plan jsonb)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "pos_settings_hardware_guard()"
@@ -9941,8 +9941,8 @@
       "sig": "printer_mark_test(p_printer_id uuid, p_ok boolean)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "printers_rules()"
@@ -11131,8 +11131,8 @@
       "sig": "set_table_waiter(p_table_id uuid, p_waiter_user_id uuid)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=\"\"",
       "secdef": false,
       "sig": "set_updated_at()"
@@ -11292,8 +11292,8 @@
       "sig": "split_table_order(p_order_id uuid, p_lines jsonb, p_label text)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "staff_adjustments_guard()"
@@ -11383,8 +11383,8 @@
       "sig": "staff_grant_access(p_tenant uuid, p_user uuid)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "staff_immutable()"
@@ -11418,15 +11418,15 @@
       "sig": "staff_my_member_ids()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "staff_no_delete()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "staff_payments_guard()"
@@ -11474,8 +11474,8 @@
       "sig": "staff_revoke_access(p_tenant uuid, p_user uuid)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "staff_runs_guard()"
@@ -11523,8 +11523,8 @@
       "sig": "staff_unliquidated_items(p_period date)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "staff_validity_guard()"
@@ -11733,8 +11733,8 @@
       "sig": "store_template_save(p_name text, p_from_store uuid, p_parts text[], p_description text)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "stores_check_group()"
@@ -12286,8 +12286,8 @@
       "sig": "tours_for_me()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "tpm_mp_refunds_guard()"
@@ -12300,15 +12300,15 @@
       "sig": "transfer_accounts_auto_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "transfer_accounts_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "transfer_accounts_next_default()"
@@ -12510,8 +12510,8 @@
       "sig": "treasury_can_write()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "treasury_doc_trg()"
@@ -12615,8 +12615,8 @@
       "sig": "treasury_settlement_dest(p_tenant uuid, p_provider text, p_store uuid, p_date date)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "treasury_source_trg()"
@@ -12665,7 +12665,7 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_agenda_waitlist_guard()"
@@ -12679,42 +12679,42 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_assert_branding_feature()"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_assert_invoice_style_feature()"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_assert_payment_method_feature()"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_assert_pos_layout_feature()"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_assert_price_lists_feature()"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_assert_tenant_feature()"
@@ -12727,8 +12727,8 @@
       "sig": "trg_billing_records_to_ledger()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_brands_normalize_name()"
@@ -12748,22 +12748,22 @@
       "sig": "trg_cam_receipt_void()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_cash_movements_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_cash_movements_treasury_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_cash_registers_treasury()"
@@ -12783,22 +12783,22 @@
       "sig": "trg_cash_shift_opening_suggested()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_cash_shifts_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_cash_shifts_zero_close()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_cash_z_closures_review_guard()"
@@ -12832,8 +12832,8 @@
       "sig": "trg_customers_credit_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_customers_fiscal()"
@@ -12923,15 +12923,15 @@
       "sig": "trg_dispatches_scan_gate()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "trg_goods_receipts_voided_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_help_article_feedback_fill()"
@@ -13000,15 +13000,15 @@
       "sig": "trg_ml_warehouse_stock()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_onboarding_nudge_event()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_onboarding_tour_event()"
@@ -13028,15 +13028,15 @@
       "sig": "trg_payments_assert_method()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_payments_branch_method()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_payments_card_voucher()"
@@ -13063,29 +13063,29 @@
       "sig": "trg_payments_reconcile_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_payments_terminal_tx()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_payments_terminal_tx_link()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_payments_transfer_account()"
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_permission_cache_reset()"
@@ -13119,8 +13119,8 @@
       "sig": "trg_platform_payments_mode_switch()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "trg_platform_payments_mp_amount_sync()"
@@ -13175,8 +13175,8 @@
       "sig": "trg_product_barcodes_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "trg_product_lots_defaults()"
@@ -13274,7 +13274,7 @@
     },
     {
       "anon": false,
-      "authenticated": true,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_role_write_guard()"
@@ -13315,8 +13315,8 @@
       "sig": "trg_sale_return_items_dispatches()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_sale_returns_supervisor()"
@@ -13364,8 +13364,8 @@
       "sig": "trg_sales_non_fiscal_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_sales_supervisor()"
@@ -13385,8 +13385,8 @@
       "sig": "trg_sales_void_dispatches()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_set_past_due_since()"
@@ -13504,8 +13504,8 @@
       "sig": "trg_supplier_tax_profiles_check()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "trg_suppliers_normalize()"
@@ -13532,8 +13532,8 @@
       "sig": "trg_tax_padron_profiles_check()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_tax_regimes_check()"
@@ -13553,8 +13553,8 @@
       "sig": "trg_tax_suffered_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_tax_withholdings_guard()"
@@ -13567,22 +13567,22 @@
       "sig": "trg_tenant_branding_fiscal_verify()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_treasury_accounts_guard()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "",
       "secdef": false,
       "sig": "trg_treasury_accounts_normalize()"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "trg_treasury_movements_account_guard()"
@@ -13903,8 +13903,8 @@
       "sig": "webhook_health(p_hours integer)"
     },
     {
-      "anon": true,
-      "authenticated": true,
+      "anon": false,
+      "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": false,
       "sig": "write_audit_log()"

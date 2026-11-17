@@ -54,3 +54,6 @@ jobs:
             echo ""
             echo "Si falla, revisar el changelog del CLI antes de subir la versión fijada en ci.yml."
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.start.outcome }}" != "success" ] || [ "${{ steps.rls.outcome }}" != "success" ]; then
+            echo "::warning title=Supabase CLI canary::latest rompe la suite RLS; no subir la versión fijada en ci.yml"
+          fi

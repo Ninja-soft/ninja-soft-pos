@@ -66,6 +66,7 @@
 // =============================================================================
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { execFileSync, spawn } from "node:child_process";
 
 const URL_ = process.env.SUPABASE_TEST_URL;
 const ANON = process.env.SUPABASE_TEST_ANON_KEY;
@@ -73,6 +74,36 @@ const SERVICE = process.env.SUPABASE_TEST_SERVICE_KEY;
 // Crea negocios, ventas y devoluciones: sólo contra un Supabase local.
 const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(URL_ ?? "");
 const enabled = Boolean(URL_ && ANON && SERVICE && isLocal);
+
+// Caso 8g (SEC-61): dos conexiones a la base con psql (DB_URL de
+// `supabase status -o env`, mismo patrón que security-lint). Sin DB_URL local
+// o sin psql, ese caso se salta.
+const DB_URL = process.env.DB_URL;
+const dbLocal = (() => {
+  try {
+    return ["127.0.0.1", "localhost", "host.docker.internal"].includes(
+      new URL(DB_URL ?? "").hostname,
+    );
+  } catch {
+    return false;
+  }
+})();
+const hasPsql = (() => {
+  try {
+    execFileSync("psql", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const psqlEnabled = Boolean(DB_URL && dbLocal && hasPsql);
+const PSQL_ARGS = ["-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"];
+const psql = (sql: string) =>
+  execFileSync("psql", [DB_URL!, ...PSQL_ARGS], {
+    encoding: "utf8",
+    input: sql,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 
 const STAMP = `ops22-${Math.random().toString(36).slice(2, 8)}`;
 const PASSWORD = "Rls-test-1234!";
@@ -1025,4 +1056,83 @@ describe.skipIf(!enabled)("OPS-22 · flujo de devoluciones", () => {
     expect(r.error?.message).toMatch(/invalid_total/);
     expect(await returnsOf(sold)).toHaveLength(0);
   });
+
+  // Regresión real de la carrera (8b no la reproduce: return_sale_v2 toma el
+  // lock de negocio antes del trigger y las dos devoluciones se serializan).
+  // Conexión A toma el token FOR UPDATE, espera y lo marca consumido. Mientras
+  // tanto la conexión B (cajero, token en el header) llama require_supervisor.
+  // Código pre-SEC-61: el subselect de B elige el token (A todavía no
+  // commiteó), el UPDATE espera el lock de A y, al re-chequear la fila, sólo
+  // re-evalúa `t.id = …` → lo consume OTRA vez y devuelve el supervisor (con
+  // su auditoría). Ahora: 'skip locked' lo saltea (y el WHERE externo exige
+  // consumed_at is null) → 'supervisor_token_invalid'.
+  it.skipIf(!psqlEnabled)(
+    "8g. un token tomado y consumido por otra conexión no se vuelve a consumir (psql)",
+    async () => {
+      const token = await mint(PRICES.yerba);
+      const marker = `sec61-hold-${STAMP}`;
+      const a = spawn("psql", [DB_URL!, ...PSQL_ARGS], {
+        stdio: ["pipe", "ignore", "pipe"],
+      });
+      let aErr = "";
+      a.stderr.on("data", (d) => (aErr += String(d)));
+      const aDone = new Promise<number | null>((res) => a.on("exit", res));
+      a.stdin.end(`begin;
+select id from public.supervisor_auth_tokens where id = '${token}' for update;
+select pg_sleep(4), '${marker}';
+update public.supervisor_auth_tokens set consumed_at = now() where id = '${token}';
+commit;
+`);
+      // Esperar a que A tenga el lock (está en el pg_sleep).
+      let holding = false;
+      for (let i = 0; i < 50 && !holding; i++) {
+        holding =
+          psql(`select count(*) from pg_stat_activity
+                 where pid <> pg_backend_pid() and wait_event = 'PgSleep'
+                   and query like '%${marker}%';`).trim() !== "0";
+        if (!holding) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(holding, "la conexión A no llegó a tomar el token").toBe(true);
+
+      const claims = JSON.stringify({
+        sub: ctx.cashierId,
+        role: "authenticated",
+        app_metadata: { current_tenant_id: ctx.tenant },
+      });
+      const headers = JSON.stringify({ "x-ninja-supervisor-token": token });
+      let bOut = "";
+      let bErr = "";
+      try {
+        bOut = psql(`begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '${claims}', true);
+select set_config('request.headers', '${headers}', true);
+select public.require_supervisor('sale_return', ${PRICES.yerba}, null);
+commit;
+`);
+      } catch (e) {
+        bErr = String((e as { stderr?: unknown }).stderr ?? e);
+      }
+      expect(await aDone, aErr).toBe(0);
+      expect(bErr, `require_supervisor pasó con un token tomado: ${bOut}`).toMatch(
+        /supervisor_token_invalid/,
+      );
+
+      // Consumido una sola vez (por A) y sin auditoría de uso.
+      const tok = await tokenRow(token);
+      expect(tok.consumed_at).not.toBeNull();
+      expect(tok.consumed_ref).toBeNull();
+      const { data: used } = await ctx.admin
+        .from("audit_logs")
+        .select("after_data")
+        .eq("tenant_id", ctx.tenant)
+        .eq("action", "supervisor_override_used");
+      expect(
+        ((used ?? []) as unknown as { after_data: Row }[]).filter(
+          (u) => u.after_data.token_id === token,
+        ),
+      ).toHaveLength(0);
+    },
+    30_000,
+  );
 });

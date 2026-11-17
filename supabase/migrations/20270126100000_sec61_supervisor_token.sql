@@ -23,8 +23,11 @@
 --    (tenant, acción, solicitante, no consumido, no vencido, monto). Si otra
 --    transacción lo consumió primero, el re-chequeo descarta la fila, el UPDATE
 --    no afecta filas y sale por el mismo camino de siempre:
---    'supervisor_token_invalid' (42501). Contrato, firma, grants y search_path
---    iguales a prod.
+--    'supervisor_token_invalid' (42501). Además el subselect toma el token con
+--    'for update skip locked': si otra transacción tiene tomado el más viejo,
+--    se usa el siguiente token válido del header en vez de esperar y fallar
+--    (si no queda otro, 'supervisor_token_invalid' sin esperar). Contrato,
+--    firma, grants y search_path iguales a prod.
 --
 -- 2) Fragmentación de devoluciones (ADR-190, reversible).
 --    Cada devolución se comparaba sola contra el umbral: N devoluciones de
@@ -37,8 +40,9 @@
 --    centavos). El front (withSupervisor en modules/sales/api.ts) ya pide el
 --    PIN con el total de la venta, que es >= ese monto: sin cambios de front.
 --    Un advisory lock por venta serializa dos devoluciones concurrentes de la
---    misma venta para que la segunda vea a la primera (return_sale_v2 ya toma
---    uno por negocio para el correlativo; el legado y el INSERT directo no).
+--    misma venta para que la segunda vea a la primera (return_sale_v2 y el
+--    legado return_sale ya toman uno por negocio para el correlativo,
+--    20261013120000:897; el INSERT directo en sale_returns no).
 --
 -- 3) total < 0 → 'invalid_total' (antes se ignoraba en silencio).
 -- =============================================================================
@@ -68,7 +72,8 @@ begin
   -- SEC-61: las condiciones de validez van también en el WHERE externo. El
   -- subselect corre una sola vez; si otra transacción consume el mismo token
   -- antes, el re-chequeo de la fila bloqueada las vuelve a evaluar y la
-  -- descarta (0 filas → supervisor_token_invalid).
+  -- descarta (0 filas → supervisor_token_invalid). 'skip locked': un token
+  -- tomado por otra transacción se saltea y se usa el siguiente del header.
   update supervisor_auth_tokens t
      set consumed_at = now(), consumed_ref = p_ref
    where t.id = (
@@ -81,7 +86,8 @@ begin
               and c.expires_at > now()
               and (p_amount is null or coalesce(c.amount, 0) + 0.001 >= p_amount)
             order by c.created_at
-            limit 1)
+            limit 1
+              for update skip locked)
      and t.tenant_id = v_tenant
      and t.action = p_action
      and t.requested_by = auth.uid()

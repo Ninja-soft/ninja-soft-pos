@@ -40,7 +40,7 @@ En la columna "Cuerpo", "sí" significa que la Edge lee el cuerpo con `readJsonL
 | `ml_oauth_callback` | ruta `/api/ml/oauth/callback` de Next | state (64 hex, `DELETE … RETURNING`, vence a los 15 min) + PKCE | sí | no | el state se consume al leerlo | `ml_account_upsert` (tokens en `ml_tokens`), `audit_logs` | bajo | SEC-32 |
 | `ml_webhook` | Mercado Libre (no firma) | app_id (`application_id` de la app, `user_id` conectado, `resource` con el patrón del tópico) | sí (16 KB) | sí (600/min) | `ml_notification_ingest` por `_id` | sólo encola; el worker lee con el token del vendedor | un aviso falso con datos válidos sólo agrega una lectura | — |
 | `mobbex_webhook` | Mobbex, `?intent=<id>` | reconsulta (operación con `api_key` + `access_token`; `reference` = intent; `requestedTotal`) | sí | no | corta si está `approved`; `approved` usa `neq approved` y el resto `eq pending` | estado del intent | el `?intent` no se valida como uuid antes de consultar (la base lo rechaza) | SEC-32 |
-| `modo_webhook` | MODO, `?intent=<id>` | reconsulta best-effort (`external_intention_id` = intent obligatorio; contrato de MODO "VALIDAR MODO") | sí | no | corta si está `approved`; `neq approved` | estado del intent | **sin re-consulta aplica `rejected` / `cancelled` / `expired` del cuerpo sin verificar**: quien conozca el uuid del intent puede cancelar un cobro pendiente. **No hay `state` de un solo uso** (la tarjeta lo decía) | SEC-32; verificar negativos: sin tarea (proponer) |
+| `modo_webhook` | MODO, `?intent=<id>` | reconsulta (`external_intention_id` = intent obligatorio; sólo se aplica el estado que devuelve MODO, `approved` con monto; contrato de MODO "VALIDAR MODO") | sí (en `_shared/modoWebhookHandler.ts`) | no | corta si está `approved`; `neq approved` | estado del intent | resuelto en SEC-63: si la re-consulta falla responde 503 sin escribir (MODO reintenta) y sin credenciales del negocio 200 sin escribir; nunca aplica el estado del cuerpo. Mientras el contrato de MODO no se confirme, un cobro sólo cambia de estado por el webhook si la re-consulta funciona. **No hay `state` de un solo uso** (la tarjeta lo decía) | SEC-32, SEC-63 |
 | `mp_billing_webhook` | MP (suscripciones de NinjaSoft) | hmac **condicional** (sólo si `platform_secrets.mercadopago.webhook_secret` está cargado) + reconsulta con el token de la plataforma | sí | no | `claim_mp_webhook_event` por evento (`authpay:{id}`) | `subscriptions`, `billing_records`, `notifications`, `system_emails`, `audit_logs` | sin el secreto cargado no se exige firma | SEC-32 |
 | `mp_oauth_callback` | front, tras el redirect de MP | state (`mp_oauth_states`, creado por `mp_oauth_start`) + canje del `code` | sí | no | el state se borra al final | `payment_secrets` (tokens), `tenant_payment_methods`, `audit_logs` | el state se lee con SELECT y se borra al final (no atómico); `mp_oauth_states` no tiene vencimiento | SEC-32; TTL del state: sin tarea (proponer) |
 | `mp_orders_webhook` | MP Orders API (QR dinámico y Point) | hmac (`x-signature`, modo `report` por `system_settings.mp_webhook_signature_mode`, SEC-60) + reconsulta (processed + monto exacto + `external_reference`) | sí (en `_shared/mpWebhookHandlers.ts`) | no | transiciones desde `pending`; 503 ante fallas transitorias (PAY-27) | estado del intent (`applyOrderToIntent`) | en `report` una firma inválida sólo se anota | SEC-60 (pasar a `enforce`), SEC-32 |
@@ -56,7 +56,7 @@ En la columna "Cuerpo", "sí" significa que la Edge lee el cuerpo con `readJsonL
 
 ### Diferencias con lo que decía la tarjeta
 
-- **`modo_webhook` no usa un `state` de un solo uso.** Exige `external_intention_id` = intent y hace una re-consulta best-effort. Sin re-consulta aplica los estados negativos del cuerpo.
+- **`modo_webhook` no usa un `state` de un solo uso.** Exige `external_intention_id` = intent y re-consulta a MODO. Sin re-consulta aplicaba los estados negativos del cuerpo; desde SEC-63 no aplica nada (503 si la consulta falla).
 - **El HMAC de `mp_billing_webhook` es condicional:** depende de que `webhook_secret` esté cargado en `platform_secrets`.
 - **`createIpLimiter` está en 5 Edges:** `delivery_channel_webhook`, `getnet_checkout`, `ml_webhook`, `payway_checkout` y `send_password_recovery`. `mp_token_broker` no tiene límite por IP; sólo una allowlist opcional.
 - **El resto se confirmó tal como lo describía la tarjeta:**
@@ -99,7 +99,6 @@ La lógica de estas Edges vive sólo en su `index.ts` y no tiene parser en `_sha
 | Edge | Qué habría que extraer |
 |---|---|
 | `catalog_purchase_webhook` | Decisión de acreditar: `external_reference`, monto ±0,01, duplicado. |
-| `modo_webhook` | `readModo` / `mapStatus` y la regla "sin re-consulta no aprueba". |
 | `mp_oauth_callback` | Validación y consumo del `state`, alcance de sucursal. |
 | `ml_oauth_callback` | Consumo y vencimiento del `state`. |
 | `mp_token_broker` | Formato de la clave, hash, `allowed_ips`. |
@@ -116,9 +115,10 @@ La lógica de estas Edges vive sólo en su `index.ts` y no tiene parser en `_sha
 2. **`getnet_checkout` / `payway_checkout`: card testing con el link del cobro** (media).
    - El uuid del intent es la única credencial. El límite es de 120/min por IP y por isolate, y no hay tope de intentos por intent.
    - Remediación: tope de intentos fallidos por intent en la base y límite por IP persistente (SEC-32).
-3. **`modo_webhook`: estados negativos sin verificar** (media).
+3. **`modo_webhook`: estados negativos sin verificar** (media) — **resuelto en SEC-63**.
    - Si la re-consulta no es posible, un cuerpo con el `external_intention_id` correcto puede pasar a `rejected` / `cancelled` / `expired` un cobro pendiente. No acredita, pero corta el cobro.
    - Remediación: no aplicar estados del cuerpo sin re-consulta, o confirmar el contrato de MODO.
+   - SEC-63: el handler (`_shared/modoWebhookHandler.ts`, `tests/unit/modoWebhook.test.ts`) sólo aplica el estado de la re-consulta; si falla responde 503 sin escribir.
 4. **Webhooks sin firma (Talo, Ualá Bis, Viumi, GO Cuotas, Getnet, Mobbex, Nave, Payway, Directo, Clover con token estático)** (media).
    - No pueden acreditar con un cuerpo falso (re-consulta), pero cada aviso dispara una consulta saliente con la credencial del negocio (y un token, en Talo). Sin límite por IP, se puede amplificar contra la API del proveedor y gastar su rate limit.
    - Remediación: SEC-29 (token HMAC en la URL de Ualá / Talo / Viumi) y SEC-32 (límite por IP).

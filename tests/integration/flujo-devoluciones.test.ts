@@ -51,11 +51,12 @@
 //     fiscal_documents origin='sale' no cancelado/rechazado de la venta, crea
 //     la NC (origin='return', assoc_document_id = factura) y luego le copia el
 //     total. No se llama a ARCA: el worker es otro proceso.
-//
-// BUG encontrado (caso 7, it.fails): trg_sale_returns_supervisor corre BEFORE
-// INSERT con new.total = 0 (return_sale_v2 inserta la cabecera en 0 y la
-// completa después), así que una política 'sale_return' con umbral > 0 nunca
-// pide PIN en el servidor.
+//   * PIN (SEC-59, 20270124100000): trg_sale_returns_supervisor corre BEFORE
+//     INSERT y BEFORE UPDATE OF total. La cabecera entra con total 0 (no
+//     evalúa) y la política 'sale_return' se evalúa una sola vez cuando el
+//     UPDATE fija el total real: 'supervisor_required:sale_return' sin token,
+//     'supervisor_token_invalid' con un token de monto menor. Antes del arreglo
+//     sólo corría en el INSERT (total 0) y con umbral > 0 nunca pedía PIN.
 // =============================================================================
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -75,7 +76,8 @@ const PASSWORD = "Rls-test-1234!";
 // ---------------------------------------------------------------------------
 const OPENING = 5_000;
 const OPENING_2 = 2_000;
-const PRICES = { yerba: 1000, galletitas: 1500 } as const;
+// chicle: devolución por debajo del umbral de PIN (caso 7d).
+const PRICES = { yerba: 1000, galletitas: 1500, chicle: 200 } as const;
 type Prod = keyof typeof PRICES;
 const PIN_THRESHOLD = 500;
 
@@ -100,8 +102,10 @@ type Sold = {
 type Ctx = {
   admin: SupabaseClient;
   owner: SupabaseClient;
+  ownerId: string;
   cashier: SupabaseClient;
   cashierId: string;
+  cashierEmail: string;
   viewer: SupabaseClient;
   otherCashier: SupabaseClient;
   tenant: string;
@@ -309,8 +313,10 @@ describe.skipIf(!enabled)("OPS-22 · flujo de devoluciones", () => {
       "cashier",
     );
     ctx.owner = owner.client;
+    ctx.ownerId = owner.id;
     ctx.cashier = cashier.client;
     ctx.cashierId = cashier.id;
+    ctx.cashierEmail = `caj-${STAMP}@test.local`;
     ctx.viewer = viewer.client;
     ctx.otherCashier = other.client;
     ctx.userIds.push(owner.id, cashier.id, viewer.id, other.id);
@@ -750,20 +756,99 @@ describe.skipIf(!enabled)("OPS-22 · flujo de devoluciones", () => {
     });
   });
 
-  // BUG: trg_sale_returns_supervisor (20261017120000_propiedad_caja) corre
-  // BEFORE INSERT en sale_returns y lee new.total, pero return_sale_v2 inserta
-  // la cabecera con total 0 y lo completa con un UPDATE al final. Con umbral
-  // > 0 la política 'sale_return' nunca exige PIN en el servidor: el cajero
-  // devuelve $1.000 sin supervisor. Cuando se arregle, este caso pasa y
-  // it.fails se pone rojo: cambiarlo a it().
-  it.fails(
-    "7b. BUG: una devolución de $1.000 sin PIN de supervisor se rechaza",
-    async () => {
-      const sold = ctx.sales.parcial!;
-      const before = await snapshot(sold, ctx.shift2);
-      const r = await giveBack(ctx.cashier, sold, 1);
-      expect(r.error?.message).toMatch(/supervisor_required:sale_return/);
-      expect(await snapshot(sold, ctx.shift2)).toEqual(before);
-    },
-  );
+  // SEC-59: antes el trigger corría sólo en el INSERT (total 0) y con umbral
+  // > 0 nunca pedía PIN. Ahora se evalúa cuando el UPDATE fija el total real.
+  it("7b. una devolución de $1.000 sin PIN de supervisor se rechaza sin efectos", async () => {
+    const sold = ctx.sales.parcial!;
+    const before = await snapshot(sold, ctx.shift2);
+    const r = await giveBack(ctx.cashier, sold, 1);
+    expect(r.error?.message).toMatch(/supervisor_required:sale_return/);
+    expect(await snapshot(sold, ctx.shift2)).toEqual(before);
+  });
+
+  it("7c. con un token de supervisor la devolución pasa; un token de monto menor no alcanza", async () => {
+    const sold = ctx.sales.parcial!;
+    const mint = async (amount: number) => {
+      const { data, error } = await ctx.admin
+        .from("supervisor_auth_tokens")
+        .insert({
+          tenant_id: ctx.tenant,
+          action: "sale_return",
+          supervisor_id: ctx.ownerId,
+          requested_by: ctx.cashierId,
+          reason: "Devolución autorizada",
+          amount,
+          expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+        } as never)
+        .select("id")
+        .single();
+      if (error || !data) throw error ?? new Error("token");
+      return (data as unknown as { id: string }).id;
+    };
+    const withToken = async (token: string) => {
+      const client = createClient(URL_!, ANON!, {
+        auth: { persistSession: false },
+        global: { headers: { "x-ninja-supervisor-token": token } },
+      });
+      const { error } = await client.auth.signInWithPassword({
+        email: ctx.cashierEmail,
+        password: PASSWORD,
+      });
+      if (error) throw error;
+      return client;
+    };
+
+    // El token queda atado al monto: uno de $500 no cubre $1.000.
+    const before = await snapshot(sold, ctx.shift2);
+    const low = await giveBack(await withToken(await mint(PIN_THRESHOLD)), sold, 1);
+    expect(low.error?.message).toMatch(/supervisor_token_invalid/);
+    expect(await snapshot(sold, ctx.shift2)).toEqual(before);
+
+    const token = await mint(PRICES.yerba);
+    const r = await giveBack(await withToken(token), sold, 1);
+    expect(r.error).toBeNull();
+    const ret = (r.data as Row).return_id as string;
+    expect(Number((r.data as Row).total)).toBe(PRICES.yerba);
+    const after = await snapshot(sold, ctx.shift2);
+    expect(after).toMatchObject({
+      stock: before.stock + 1,
+      returned: before.returned + 1,
+      returns: before.returns + 1,
+      cash: before.cash - PRICES.yerba,
+    });
+
+    // Se consumió una sola vez, con la venta de referencia, y quedó auditado.
+    const [tok] = await rowsOf("supervisor_auth_tokens", "id", token);
+    expect(tok!.consumed_at).not.toBeNull();
+    expect(tok!.consumed_ref).toBe(sold.id);
+    const { data: used } = await ctx.admin
+      .from("audit_logs")
+      .select("after_data")
+      .eq("tenant_id", ctx.tenant)
+      .eq("action", "supervisor_override_used");
+    const mine = ((used ?? []) as unknown as { after_data: Row }[]).filter(
+      (u) => u.after_data.token_id === token,
+    );
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.after_data).toMatchObject({
+      pin_action: "sale_return",
+      ref_id: sold.id,
+    });
+    expect(Number(mine[0]!.after_data.amount)).toBe(PRICES.yerba);
+    const [row] = await rowsOf("sale_returns", "id", ret);
+    expect(Number(row!.total)).toBe(PRICES.yerba);
+  });
+
+  it("7d. una devolución por debajo del umbral no pide PIN", async () => {
+    const sold = await sell("bajo-umbral", "chicle", 1);
+    const before = await snapshot(sold, ctx.shift2);
+    const r = await giveBack(ctx.cashier, sold, 1);
+    expect(r.error).toBeNull();
+    expect(Number((r.data as Row).total)).toBe(PRICES.chicle);
+    expect(await snapshot(sold, ctx.shift2)).toMatchObject({
+      returned: before.returned + 1,
+      returns: before.returns + 1,
+      cash: before.cash - PRICES.chicle,
+    });
+  });
 });

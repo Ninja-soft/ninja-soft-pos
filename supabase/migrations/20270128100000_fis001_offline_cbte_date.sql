@@ -7,18 +7,30 @@
 -- del comprobante con created_at, así la factura de una venta de ayer salía
 -- con fecha de hoy.
 --
---   A) arca_snapshot: copia EXACTA de la definición de producción (igual a la
---      de 20261114100000_servicios_profesionales.sql, sin drift) + la clave
---      'offline_sold_at' en el objeto 'sale'. Mismos grants, search_path y
+--   A) arca_snapshot: la definición de producción (igual a la de
+--      20261114100000_servicios_profesionales.sql, sin drift) + la clave
+--      'offline_sold_at' en el objeto 'sale' + 'last_fch' ampliado (abajo). Mismos grants, search_path y
 --      SECURITY DEFINER. El worker usa offline_sold_at ?? created_at y
 --      pickCbteDate la sigue acotando a la ventana de ARCA (hoy-5 bienes,
 --      hoy-10 servicios) y al último autorizado.
+--      Además 'last_fch' (cota inferior de la fecha) cuenta, aparte de los
+--      aprobados, los comprobantes de la misma serie (ambiente + PV + tipo) que
+--      ya tienen número asignado y esperan resultado (pendiente tras un
+--      reintento con keep_number, enviando o requiere_accion): ARCA pudo haber
+--      autorizado ese número con esa fecha, y con fechas de venta offline más
+--      viejas el siguiente comprobante podía salir con una fecha anterior y
+--      ser rechazado. El propio comprobante no cuenta.
 --   B) arca_log_event(p_doc, p): evento informativo en fiscal_document_events
 --      cuando la fecha del comprobante no es la de la venta ('fecha_ajustada',
 --      outcome 'ok', error_code = motivo, error_msg = fecha original y usada).
---      Idempotente: un reintento no duplica el mismo evento. Sólo service_role.
+--      Idempotente (advisory lock de transacción + chequeo): un reintento no
+--      duplica el mismo evento. Sólo service_role.
 --      Aditiva: si la Edge llega antes que la migración, el worker ignora el
 --      error del evento y emite igual (nunca requires_action por la fecha).
+--
+-- La emisión por CAEA (arca_caea_issue) sigue con la fecha del día
+-- (_arca_today(), vigencia de la quincena): el evento sólo se registra cuando
+-- el comprobante sale por CAE. Pendiente: fecha real también por CAEA.
 --
 -- libro_iva_data no cambia: ya filtra y ordena por fiscal_documents.cbte_fch
 -- del comprobante aprobado, no por la fecha de la venta.
@@ -80,9 +92,13 @@ begin
       'cbte_tipo', v_assoc.cbte_tipo, 'pto_vta', v_assoc.pto_vta, 'cbte_nro', v_assoc.cbte_nro,
       'cbte_fch', v_assoc.cbte_fch, 'imp_total', v_assoc.imp_total) end,
     'emitter', jsonb_build_object('cuit', v_tax ->> 'cuit', 'iva_condition', v_tax ->> 'iva_condition'),
+    -- FIS-001: también los de la serie con número asignado que esperan resultado.
     'last_fch', (select max(o.cbte_fch) from fiscal_documents o
                   where o.tenant_id = v_doc.tenant_id and o.environment = v_doc.environment
-                    and o.pto_vta = v_doc.pto_vta and o.cbte_tipo = v_doc.cbte_tipo and o.status = 'aprobado'),
+                    and o.pto_vta = v_doc.pto_vta and o.cbte_tipo = v_doc.cbte_tipo
+                    and (o.status = 'aprobado'
+                         or (o.id <> v_doc.id and o.cbte_nro is not null
+                             and o.status in ('pendiente', 'enviando', 'requiere_accion')))),
     'settings', (select jsonb_build_object('max_attempts', s.max_attempts, 'auth_mode', s.auth_mode,
                                             'caea_enabled', s.caea_enabled, 'caea_pto_vta', s.caea_pto_vta,
                                             'caea_timeout_seconds', s.caea_timeout_seconds)
@@ -114,7 +130,10 @@ begin
   if not found then
     return false;
   end if;
-  -- Un reintento del mismo comprobante con la misma fecha no duplica el evento.
+  -- Un reintento del mismo comprobante con la misma fecha no duplica el evento
+  -- (lock de transacción por documento + acción + motivo: dos llamadas
+  -- concurrentes no pasan las dos el chequeo).
+  perform pg_advisory_xact_lock(hashtext(v_doc.id::text || '|' || v_action || '|' || coalesce(v_code, '')));
   if exists (select 1 from fiscal_document_events e
               where e.document_id = v_doc.id and e.action = v_action
                 and e.error_code is not distinct from v_code

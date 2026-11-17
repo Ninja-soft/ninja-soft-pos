@@ -187,7 +187,9 @@ export function dateAdjustment(
 export function detalleFor(s: Snapshot, p: Plan, nro: number, fch: string, cuitEmisor: string | null): CbteDetalle {
   const serv = p.concepto !== 1;
   // ADR-116: período y vencimiento de la venta (antes iba siempre fch).
-  const sd = serv ? serviceDates(s.sale, fch) : null;
+  // FIS-001: si la fecha del comprobante no es la de la venta (acotada a la
+  // ventana de ARCA o al último autorizado), el período no empieza después.
+  const sd = serv ? serviceDates(s.sale, fch, fch !== p.saleYmd) : null;
   return {
     ...p.breakdown,
     Concepto: p.concepto,
@@ -405,7 +407,12 @@ export async function processDocument(deps: WorkerDeps, id: string, recovering =
   }
   if (uk) return await result("requiere_accion", u.parsed.errors[0]?.code ?? "600", joinMsgs(u.parsed.errors));
   const nro = (u.parsed.nro ?? 0) + 1;
-  const lastFch = isoToYmd(snap.last_fch);
+  // Cota inferior: último de la serie (aprobado o con número esperando
+  // resultado, arca_snapshot) y, en una NC, la fecha del comprobante asociado
+  // (FIS-001): la NC nunca puede ser anterior a la factura que acredita.
+  const assocFch = snap.assoc ? isoToYmd(snap.assoc.cbte_fch) : null;
+  const seriesFch = isoToYmd(snap.last_fch);
+  const lastFch = seriesFch && assocFch ? (seriesFch > assocFch ? seriesFch : assocFch) : (seriesFch ?? assocFch);
   const fch = pickCbteDate(plan.saleYmd, arDate(now), lastFch, plan.concepto);
   const det = detalleFor(snap, plan, nro, fch, auth.cuit);
 
@@ -420,17 +427,6 @@ export async function processDocument(deps: WorkerDeps, id: string, recovering =
     imp_total: plan.breakdown.ImpTotal,
     request_xml: requestPreview,
   });
-  // FIS-001: la fecha se movió (p. ej. venta offline fuera de la ventana de
-  // ARCA): se emite igual con la fecha permitida y queda el evento. Un error
-  // del evento nunca frena la factura.
-  const adjusted = doc.origin === "sale" ? dateAdjustment(plan.saleYmd, fch, arDate(now), lastFch, plan.concepto) : null;
-  if (adjusted) {
-    try {
-      await deps.db.logEvent(id, adjusted);
-    } catch {
-      // informativo: se ignora
-    }
-  }
   const r = await ws.solicitar(auth, pv, tipo, det);
   const io = { request_xml: r.requestXml, response_xml: r.responseXml, duration_ms: r.ms };
   if (r.transport || !r.parsed) {
@@ -443,7 +439,21 @@ export async function processDocument(deps: WorkerDeps, id: string, recovering =
   const p = r.parsed;
   const extra = { observations: p.observaciones, events: p.events, ...io };
   if (p.resultado === "A" && p.cae) {
-    return await approve({ nro, fch: p.cbteFch ?? fch, cae: p.cae, caeVto: p.caeVto ?? "", cuit: auth.cuit }, extra, "aprobado");
+    const used = p.cbteFch ?? fch;
+    const out = await approve({ nro, fch: used, cae: p.cae, caeVto: p.caeVto ?? "", cuit: auth.cuit }, extra, "aprobado");
+    // FIS-001: la fecha se movió (p. ej. venta offline fuera de la ventana de
+    // ARCA): salió igual con la fecha permitida y queda el evento con la fecha
+    // aprobada. Sólo por CAE: por CAEA la fecha es la de emisión
+    // (arca_caea_issue). Un error del evento nunca afecta la factura.
+    const adjusted = doc.origin === "sale" ? dateAdjustment(plan.saleYmd, used, arDate(now), lastFch, plan.concepto) : null;
+    if (adjusted) {
+      try {
+        await deps.db.logEvent(id, adjusted);
+      } catch {
+        // informativo: se ignora
+      }
+    }
+    return out;
   }
   const kind = classifyWsfeErrors(p.errors);
   if (kind === "numbering") {

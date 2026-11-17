@@ -6666,3 +6666,24 @@ ADR-041 integró Directo infiriendo la API del plugin de WooCommerce (API Key, S
 
 - Subir ECharts 6 y zod 4 en este PR: dos saltos mayores con API rota (opciones de ECharts, `z.string().email()`/errores de zod) para riesgos ya mitigados.
 - Sacar `dompurify` de las dependencias: `jspdf` la usa en `html()`; se deja fijada y parcheada.
+
+## ADR-183: Historial de migraciones de prod = repo (repair del 2026-11-17)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada y aplicada en prod (SEC-02) · **Hito:** OPS / F1.5
+
+### Contexto
+
+`supabase_migrations.schema_migrations` de prod tenía 200 filas cargadas por el MCP `apply_migration`, con la hora de aplicación como versión: ninguna coincidía con un archivo del repo. Las 278 migraciones aplicadas por SQL directo desde el 14-06-2026 no tenían fila. `supabase db push` hubiera intentado reaplicar las 466, y `deploy-check --applied` no servía para saber qué faltaba.
+
+### Decisión
+
+1. **El repo es la fuente de verdad del historial.** Se corrió el plan de `scripts/migration-repair-plan.mjs` (SEC-01) en una transacción: copia de la tabla a `supabase_migrations.schema_migrations_bak_20261117` (200 filas con su `statements`, que es la única copia de algunas migraciones viejas), borrado de las 200 versiones del MCP, alta de las 466 versiones del repo (`statements` = null) y control de conteo final. Resultado: 466 filas, `deploy-check --applied` sin pendientes ni M3/M4, y la misma cantidad de tablas en `public` (447) antes y después.
+2. **Antes de registrar los 278 archivos sin fila se verificó su contenido en la base**, con un script de sólo lectura: 4178 objetos (funciones, tablas, columnas, índices, policies, triggers, crons) de 224 archivos, sin faltantes reales (20 falsos positivos del parser revisados uno por uno: policies de `storage.objects` y triggers creados en bucles). Los 54 archivos restantes son altas de features, proveedores de pago, grants y datos: las 57 features y los 4 proveedores que insertan existen.
+3. **Regla nueva:** después de un `apply_migration` se renombra la fila que deja el MCP a la versión del archivo (`docs/13-deployment.md` §4.2.1). El protocolo de la cola autónoma lo incorpora.
+4. Se corrió por SQL (Management API, en una transacción) y no por `apply_migration`, porque este último agrega su propia fila al historial y rompía el control de conteo.
+
+### Alternativas descartadas
+
+- `supabase migration repair` con el CLI: no hay token del CLI vinculado en el entorno del agente; el resultado es el mismo y no es transaccional.
+- Registrar todo sin verificar los 278 archivos: si uno no estaba aplicado, `db push` lo saltearía para siempre.
+

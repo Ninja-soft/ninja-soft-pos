@@ -1,0 +1,59 @@
+name: CI CLI canary
+
+# Corre la suite RLS con el Supabase CLI `latest` para enterarse antes de que
+# un release rompa el CI (en ci.yml la versión está fijada, SEC-03).
+# No bloquea nada: el resultado queda en el resumen de la corrida.
+on:
+  schedule:
+    - cron: "0 9 * * 1" # lunes 06:00 ART
+  workflow_dispatch:
+
+jobs:
+  rls-latest:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Start Supabase local (aplica migraciones)
+        id: start
+        run: supabase start
+
+      - name: RLS / aislamiento multi-tenant
+        id: rls
+        run: |
+          eval "$(supabase status -o env | sed 's/^/export /')"
+          export SUPABASE_TEST_URL="$API_URL"
+          export SUPABASE_TEST_ANON_KEY="$ANON_KEY"
+          export SUPABASE_TEST_SERVICE_KEY="$SERVICE_ROLE_KEY"
+          pnpm test:rls
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "## Supabase CLI canary"
+            echo ""
+            echo "- CLI: \`$(supabase --version 2>/dev/null || echo desconocida)\`"
+            echo "- supabase start: ${{ steps.start.outcome }}"
+            echo "- test:rls: ${{ steps.rls.outcome }}"
+            echo ""
+            echo "Si falla, revisar el changelog del CLI antes de subir la versión fijada en ci.yml."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.start.outcome }}" != "success" ] || [ "${{ steps.rls.outcome }}" != "success" ]; then
+            echo "::warning title=Supabase CLI canary::latest rompe la suite RLS; no subir la versión fijada en ci.yml"
+          fi

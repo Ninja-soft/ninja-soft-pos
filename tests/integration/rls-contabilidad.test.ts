@@ -241,6 +241,21 @@ describe.skipIf(!enabled)("contabilidad · RLS, gating y asientos", () => {
     expect(g.error?.message).toMatch(/feature_not_in_plan: contabilidad/);
   });
 
+  it("SEC-10: los helpers acc_sync_* con p_tenant no se ejecutan desde el Data API", async () => {
+    const anon = createClient(URL_!, ANON!, { auth: { persistSession: false } });
+    const zero = "00000000-0000-0000-0000-000000000000";
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["acc_sync_treasury_opening", { p_tenant: ctx.tenantB, p_id: zero, p_refresh: true }],
+      ["acc_sync_nubceo_ledger", { p_tenant: ctx.tenantB, p_id: zero }],
+    ];
+    for (const [fn, args] of calls) {
+      for (const client of [ctx.owner, anon]) {
+        const { error } = await rpc(client, fn, args);
+        expect(error?.message, fn).toMatch(/permission denied/);
+      }
+    }
+  });
+
   it("sin políticas PERMISSIVE con is_internal() (ADR-052)", async () => {
     const { data, error } = await rpc(ctx.admin, "rls_internal_scope_leaks", {});
     expect(error).toBeNull();

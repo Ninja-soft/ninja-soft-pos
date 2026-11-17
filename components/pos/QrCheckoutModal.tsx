@@ -765,7 +765,7 @@ export function QrCheckoutModal({
       const over = provider === "talo" ? taloOverpaidNote((status as TaloStatus).overpaid) : null;
       if (over) toast({ title: over.title, description: over.text, variant: "info" });
       fireApproved((status as { amount?: number }).amount);
-    } else if (status.status === "rejected" || status.status === "cancelled") {
+    } else if (status.status === "rejected" || status.status === "cancelled" || status.status === "expired") {
       setPhase("rejected");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

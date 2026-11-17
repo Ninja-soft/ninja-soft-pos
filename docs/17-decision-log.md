@@ -6646,3 +6646,44 @@ ADR-041 integró Directo infiriendo la API del plugin de WooCommerce (API Key, S
 - Sin migración. Orden de deploy: Edges `directo`, `directo_webhook`, `set_payment_secret`, `pending_charges_sync` y después el front. Los negocios con credencial vieja tienen que volver a cargar usuario, contraseña y Policy Product de la API 2.0 (las de la API vieja no sirven en estos hosts).
 - Inferido, a confirmar con Directo en QA: duración del token (se usa `exp` del JWT o 30 minutos), el HTTP de un login inválido, que `maximumRate` sea la cantidad máxima de cuotas (así se muestra), cancelación o devolución de órdenes (el documento no las describe; la baja es local).
 - Tests: `tests/unit/directo.test.ts` (login, 403 con re-login único, timeout, cuerpos, estados, webhook con fetch simulado, fullName, sexTypeId, compatibilidad de secretos).
+
+## ADR-182: Dependencias de runtime vulnerables: parches menores ya, ECharts 6 y zod 4 diferidos con mitigación (OPS-46)
+
+**Fecha:** 2026-11-16 · **Estado:** aceptada (decidido por agente, revisar) · **Hito:** OPS / seguridad
+
+### Contexto
+
+`pnpm audit --prod` marcaba una crítica en `dompurify` (SAFE_FOR_TEMPLATES bypass, ≤3.4.16), XSS en `echarts` < 6.1.0 (GHSA-fgmj-fm8m-jvvx), DoS de memoria en `zod` ≤ 4.6.5 (GHSA-mrhx-c7xc-m3w5) y `uuid` 8 transitivo de `exceljs`. Las críticas de `next` las cubre OPS-45.
+
+### Decisión
+
+1. **DOMPurify 3.4.18** (dependencia directa) y override `^3.4.18` para la copia opcional de `jspdf`. El código de la app ya no lo usa: el modo HTML de tickets se retiró en comprobantes v2 (#423, ADR-119).
+2. **Overrides** `uuid ^11.1.1` (última con build CJS; `exceljs` hace `require('uuid')`) y `form-data ^4.0.6`.
+3. **ECharts queda en 5.5.1.** El CVE sólo afecta el tooltip por defecto de la serie `lines`, que la app no registra (`echarts-core.ts` registra Bar, Line, Pie, Heatmap y Treemap; `account/EChart.tsx`, Bar y Pie). Los tooltips de `components/charts/builders.ts`, `mrrMovementChart` y `fxChartOption` usan formatters propios que escapan con `esc()`; los que usan el tooltip por defecto (`clientes/cuentas`, `OwnerLive`) quedan cubiertos por el escape propio de ECharts 5 para nombres y cabecera (`tooltipMarkup`), que la serie `lines` es la única que se saltea. `tests/unit/echarts-xss.test.ts` cubre el escape de ranking, dona y barras apiladas y avisa si alguien registra `LinesChart`. El salto a 6.x es una tarea P2 aparte, junto con cubrir el resto de los builders y validar el color en `dot()`.
+4. **zod queda en 3.x.** Los arrays de la API pública tienen `.max(MAX_BATCH)` y hay tope de bytes del cuerpo (`lib/api-publica/http.ts`); `client-error` no tiene arrays. La migración a zod 4 es una tarea P2 aparte.
+
+### Alternativas descartadas
+
+- Subir ECharts 6 y zod 4 en este PR: dos saltos mayores con API rota (opciones de ECharts, `z.string().email()`/errores de zod) para riesgos ya mitigados.
+- Sacar `dompurify` de las dependencias: `jspdf` la usa en `html()`; se deja fijada y parcheada.
+
+## ADR-183: Historial de migraciones de prod = repo (repair del 2026-11-17)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada y aplicada en prod (SEC-02) · **Hito:** OPS / F1.5
+
+### Contexto
+
+`supabase_migrations.schema_migrations` de prod tenía 200 filas cargadas por el MCP `apply_migration`, con la hora de aplicación como versión: ninguna coincidía con un archivo del repo. Las 278 migraciones aplicadas por SQL directo desde el 14-06-2026 no tenían fila. `supabase db push` hubiera intentado reaplicar las 466, y `deploy-check --applied` no servía para saber qué faltaba.
+
+### Decisión
+
+1. **El repo es la fuente de verdad del historial.** Se corrió el plan de `scripts/migration-repair-plan.mjs` (SEC-01) en una transacción: copia de la tabla a `supabase_migrations.schema_migrations_bak_20261117` (200 filas con su `statements`, que es la única copia de algunas migraciones viejas), borrado de las 200 versiones del MCP, alta de las 466 versiones del repo (`statements` = null) y control de conteo final. Resultado: 466 filas, `deploy-check --applied` sin pendientes ni M3/M4, y la misma cantidad de tablas en `public` (447) antes y después.
+2. **Antes de registrar los 278 archivos sin fila se verificó su contenido en la base**, con un script de sólo lectura: 4178 objetos (funciones, tablas, columnas, índices, policies, triggers, crons) de 224 archivos, sin faltantes reales (20 falsos positivos del parser revisados uno por uno: policies de `storage.objects` y triggers creados en bucles). Los 54 archivos restantes son altas de features, proveedores de pago, grants y datos: las 57 features y los 4 proveedores que insertan existen.
+3. **Regla nueva:** después de un `apply_migration` se renombra la fila que deja el MCP a la versión del archivo (`docs/13-deployment.md` §4.2.1). El protocolo de la cola autónoma lo incorpora.
+4. Se corrió por SQL (Management API, en una transacción) y no por `apply_migration`, porque este último agrega su propia fila al historial y rompía el control de conteo.
+
+### Alternativas descartadas
+
+- `supabase migration repair` con el CLI: no hay token del CLI vinculado en el entorno del agente; el resultado es el mismo y no es transaccional.
+- Registrar todo sin verificar los 278 archivos: si uno no estaba aplicado, `db push` lo saltearía para siempre.
+

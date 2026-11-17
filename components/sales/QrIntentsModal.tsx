@@ -46,6 +46,9 @@ const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
   approved: "Aprobado",
   rejected: "Rechazado",
+  cancelled: "Cancelado",
+  // PAY-01: el barrido horario vence los pendientes de más de 72 h.
+  expired: "Vencido",
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -215,6 +218,7 @@ export function QrIntentsModal({
           <option value="approved">Aprobados</option>
           <option value="pending">Pendientes</option>
           <option value="rejected">Rechazados</option>
+          <option value="expired">Vencidos</option>
         </select>
         <Button
           variant="secondary"

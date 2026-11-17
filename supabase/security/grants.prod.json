@@ -13914,6 +13914,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_accounts",
       "policies": 2,
@@ -13922,6 +13923,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_cost_centers",
       "policies": 2,
@@ -13930,6 +13932,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_entries",
       "policies": 2,
@@ -13938,6 +13941,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_entry_lines",
       "policies": 2,
@@ -13946,6 +13950,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_issues",
       "policies": 2,
@@ -13954,6 +13959,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "acc_journal_lines",
       "policies": 0,
@@ -13962,6 +13968,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_mappings",
       "policies": 2,
@@ -13970,6 +13977,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_periods",
       "policies": 2,
@@ -13978,6 +13986,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "acc_settings",
       "policies": 2,
@@ -13986,6 +13995,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "account_collection_items",
       "policies": 2,
@@ -13994,6 +14004,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "account_override_tokens",
       "policies": 0,
@@ -14002,6 +14013,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "account_supervisor_pins",
       "policies": 0,
@@ -14010,6 +14022,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "agenda_demo_rows",
       "policies": 1,
@@ -14018,6 +14031,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "agenda_resources",
       "policies": 3,
@@ -14026,6 +14040,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "agenda_waitlist",
       "policies": 4,
@@ -14034,6 +14049,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ai_conversations",
       "policies": 1,
@@ -14042,6 +14058,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ai_image_generations",
       "policies": 1,
@@ -14050,6 +14067,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "ai_image_settings",
       "policies": 3,
@@ -14058,6 +14076,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ai_messages",
       "policies": 1,
@@ -14066,6 +14085,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "ai_usage",
       "policies": 1,
@@ -14074,6 +14094,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "alert_events",
       "policies": 1,
@@ -14082,6 +14103,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "alert_rules",
       "policies": 1,
@@ -14090,6 +14112,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "alert_seen",
       "policies": 1,
@@ -14098,6 +14121,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "api_access_tokens",
       "policies": 0,
@@ -14106,6 +14130,26 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {
+        "authenticated select": [
+          "client_id",
+          "created_at",
+          "created_by",
+          "environment",
+          "id",
+          "last_used_at",
+          "name",
+          "rate_limit_per_min",
+          "revoke_reason",
+          "revoked_at",
+          "revoked_by",
+          "rotated_at",
+          "scopes",
+          "secret_hint",
+          "tenant_id",
+          "updated_at"
+        ]
+      },
       "kind": "r",
       "name": "api_clients",
       "policies": 1,
@@ -14114,6 +14158,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "api_idempotency_keys",
       "policies": 0,
@@ -14122,6 +14167,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "api_rate_windows",
       "policies": 0,
@@ -14130,6 +14176,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "appointment_deposits",
       "policies": 2,
@@ -14138,6 +14185,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "appointments",
       "policies": 3,
@@ -14146,6 +14194,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "arca_caea",
       "policies": 1,
@@ -14154,6 +14203,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "arca_caea_series",
       "policies": 1,
@@ -14162,6 +14212,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "arca_certificates",
       "policies": 0,
@@ -14170,6 +14221,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "arca_padron_cache",
       "policies": 0,
@@ -14178,6 +14230,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "arca_padron_config",
       "policies": 0,
@@ -14186,6 +14239,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "arca_padron_lookups",
       "policies": 1,
@@ -14194,6 +14248,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "arca_platform",
       "policies": 0,
@@ -14202,6 +14257,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "arca_platform_tickets",
       "policies": 0,
@@ -14210,6 +14266,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "arca_settings",
       "policies": 1,
@@ -14218,6 +14275,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "arca_tickets",
       "policies": 0,
@@ -14226,6 +14284,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "audit_chain_heads",
       "policies": 0,
@@ -14234,6 +14293,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "audit_fiscal_rules",
       "policies": 1,
@@ -14242,6 +14302,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "audit_log_tombstones",
       "policies": 0,
@@ -14250,6 +14311,7 @@
     {
       "anon": "si",
       "authenticated": "si",
+      "columns": {},
       "kind": "r",
       "name": "audit_logs",
       "policies": 3,
@@ -14258,6 +14320,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "audit_retention_policy",
       "policies": 1,
@@ -14266,6 +14329,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "bank_statement_imports",
       "policies": 1,
@@ -14274,6 +14338,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "bank_statement_lines",
       "policies": 1,
@@ -14282,6 +14347,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "billing_records",
       "policies": 2,
@@ -14290,6 +14356,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "brands",
       "policies": 1,
@@ -14298,6 +14365,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "business_profiles",
       "policies": 1,
@@ -14306,6 +14374,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "cash_drawer_events",
       "policies": 1,
@@ -14314,6 +14383,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "cash_movements",
       "policies": 2,
@@ -14322,6 +14392,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "cash_registers",
       "policies": 3,
@@ -14330,6 +14401,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "cash_shifts",
       "policies": 2,
@@ -14338,6 +14410,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "cash_z_closures",
       "policies": 3,
@@ -14346,6 +14419,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "cashier_profiles",
       "policies": 1,
@@ -14354,6 +14428,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "catalog_items",
       "policies": 1,
@@ -14362,6 +14437,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "catalog_offers",
       "policies": 1,
@@ -14370,6 +14446,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "catalog_order_attempts",
       "policies": 0,
@@ -14378,6 +14455,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "catalog_payment_intents",
       "policies": 1,
@@ -14386,6 +14464,7 @@
     {
       "anon": "siud",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "catalog_products",
       "policies": 1,
@@ -14394,6 +14473,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "catalog_stats_cache",
       "policies": 1,
@@ -14402,6 +14482,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "catalog_store_map",
       "policies": 4,
@@ -14410,6 +14491,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "catalog_stores",
       "policies": 4,
@@ -14418,6 +14500,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "catalog_sync_config",
       "policies": 1,
@@ -14426,6 +14509,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "catalog_sync_runs",
       "policies": 1,
@@ -14434,6 +14518,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "catalogs",
       "policies": 4,
@@ -14442,6 +14527,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "categories",
       "policies": 1,
@@ -14450,6 +14536,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "cheques",
       "policies": 1,
@@ -14458,6 +14545,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "commercial_change_requests",
       "policies": 1,
@@ -14466,6 +14554,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "commercial_governance",
       "policies": 1,
@@ -14474,6 +14563,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "config_overrides",
       "policies": 1,
@@ -14482,6 +14572,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "coupon_redemptions",
       "policies": 2,
@@ -14490,6 +14581,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "coupons",
       "policies": 2,
@@ -14498,6 +14590,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "customer_account_allocations",
       "policies": 1,
@@ -14506,6 +14599,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "customer_account_movements",
       "policies": 2,
@@ -14514,6 +14608,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "customer_addresses",
       "policies": 2,
@@ -14522,6 +14617,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "customer_attachments",
       "policies": 2,
@@ -14530,6 +14626,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "customer_groups",
       "policies": 4,
@@ -14538,6 +14635,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "customer_notes",
       "policies": 2,
@@ -14546,6 +14644,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "customer_pack_credits",
       "policies": 2,
@@ -14554,6 +14653,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "customers",
       "policies": 2,
@@ -14562,6 +14662,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "cycle_count_lines",
       "policies": 2,
@@ -14570,6 +14671,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "cycle_count_policy",
       "policies": 1,
@@ -14578,6 +14680,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "cycle_counts",
       "policies": 2,
@@ -14586,6 +14689,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_connections",
       "policies": 1,
@@ -14594,6 +14698,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_events",
       "policies": 1,
@@ -14602,6 +14707,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_external_items",
       "policies": 1,
@@ -14610,6 +14716,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_orders",
       "policies": 1,
@@ -14618,6 +14725,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_outbox",
       "policies": 1,
@@ -14626,6 +14734,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_product_map",
       "policies": 1,
@@ -14634,6 +14743,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_providers",
       "policies": 1,
@@ -14642,6 +14752,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_secrets",
       "policies": 0,
@@ -14650,6 +14761,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_settlements",
       "policies": 1,
@@ -14658,6 +14770,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "delivery_channel_sim_orders",
       "policies": 0,
@@ -14666,6 +14779,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_events",
       "policies": 1,
@@ -14674,6 +14788,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "delivery_order_items",
       "policies": 3,
@@ -14682,6 +14797,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "delivery_order_voids",
       "policies": 1,
@@ -14690,6 +14806,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "delivery_orders",
       "policies": 2,
@@ -14698,6 +14815,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "delivery_routes",
       "policies": 1,
@@ -14706,6 +14824,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "delivery_zones",
       "policies": 2,
@@ -14714,6 +14833,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "dining_areas",
       "policies": 1,
@@ -14722,6 +14842,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "dining_reservations",
       "policies": 2,
@@ -14730,6 +14851,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "dining_tables",
       "policies": 1,
@@ -14738,6 +14860,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "dining_waitlist",
       "policies": 3,
@@ -14746,6 +14869,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "dining_waitlist_notices",
       "policies": 1,
@@ -14754,6 +14878,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "dispatch_damages",
       "policies": 2,
@@ -14762,6 +14887,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "dispatch_item_checks",
       "policies": 2,
@@ -14770,6 +14896,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "dispatch_items",
       "policies": 2,
@@ -14778,6 +14905,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "dispatch_scan_log",
       "policies": 2,
@@ -14786,6 +14914,68 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {
+        "authenticated select": [
+          "address_id",
+          "arrived_at",
+          "arrived_by",
+          "awaiting_transfer_id",
+          "cancel_reason",
+          "cancelled_at",
+          "cancelled_by",
+          "created_at",
+          "created_by",
+          "customer_name",
+          "deleted_at",
+          "delivered_at",
+          "delivered_by",
+          "delivered_to",
+          "delivery_attempts",
+          "delivery_result",
+          "delivery_type",
+          "failed_attempts",
+          "fulfillment_id",
+          "fulfillment_store_id",
+          "has_pickup_code",
+          "id",
+          "issue_open",
+          "issue_summary",
+          "last_failure_at",
+          "last_failure_reason",
+          "notes",
+          "number",
+          "override_reason",
+          "parent_dispatch_id",
+          "part",
+          "parts_total",
+          "pickup_name",
+          "prepared_at",
+          "prepared_by",
+          "ready_at",
+          "ready_by",
+          "route_id",
+          "route_stop_id",
+          "sale_id",
+          "sale_order_id",
+          "sale_store_id",
+          "scan_alerts",
+          "sent_at",
+          "sent_by",
+          "ship_address",
+          "ship_to",
+          "shipment_id",
+          "shipment_status",
+          "shipped_at",
+          "shipped_by",
+          "status",
+          "stock_arrived_at",
+          "stock_returned_at",
+          "store_id",
+          "tenant_id",
+          "tracking",
+          "updated_at"
+        ]
+      },
       "kind": "r",
       "name": "dispatches",
       "policies": 2,
@@ -14794,6 +14984,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "dlocalgo_refunds",
       "policies": 1,
@@ -14802,6 +14993,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "driver_profiles",
       "policies": 1,
@@ -14810,6 +15002,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "dunning_events",
       "policies": 1,
@@ -14818,6 +15011,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "email_addon_settings",
       "policies": 0,
@@ -14826,6 +15020,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "email_addon_tiers",
       "policies": 0,
@@ -14834,6 +15029,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "email_addon_usage",
       "policies": 0,
@@ -14842,6 +15038,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "email_providers",
       "policies": 0,
@@ -14850,6 +15047,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "email_templates",
       "policies": 4,
@@ -14858,6 +15056,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "feature_flags",
       "policies": 1,
@@ -14866,6 +15065,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "features",
       "policies": 3,
@@ -14874,6 +15074,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "fiscal_document_events",
       "policies": 1,
@@ -14882,6 +15083,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "fiscal_documents",
       "policies": 1,
@@ -14890,6 +15092,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "fx_rates",
       "policies": 3,
@@ -14898,6 +15101,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "geo_providers",
       "policies": 0,
@@ -14906,6 +15110,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "geo_usage",
       "policies": 0,
@@ -14914,6 +15119,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "geocode_cache",
       "policies": 0,
@@ -14922,6 +15128,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "goods_receipt_items",
       "policies": 1,
@@ -14930,6 +15137,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "goods_receipts",
       "policies": 1,
@@ -14938,6 +15146,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "help_article_feedback",
       "policies": 3,
@@ -14946,6 +15155,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "iibb_activities",
       "policies": 4,
@@ -14954,6 +15164,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "iibb_activity_templates",
       "policies": 1,
@@ -14962,6 +15173,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "iibb_cm_coefficients",
       "policies": 4,
@@ -14970,6 +15182,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "iibb_liquidations",
       "policies": 2,
@@ -14978,6 +15191,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "impersonation_sessions",
       "policies": 1,
@@ -14986,6 +15200,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "invite_codes",
       "policies": 1,
@@ -14994,6 +15209,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "label_templates",
       "policies": 3,
@@ -15002,6 +15218,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "logistics_origins",
       "policies": 1,
@@ -15010,6 +15227,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "logistics_settings",
       "policies": 1,
@@ -15018,6 +15236,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "lot_allocations",
       "policies": 1,
@@ -15026,6 +15245,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "lot_sales",
       "policies": 0,
@@ -15034,6 +15254,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "margin_alert_settings",
       "policies": 1,
@@ -15042,6 +15263,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "menu_windows",
       "policies": 2,
@@ -15050,6 +15272,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "menus",
       "policies": 2,
@@ -15058,6 +15281,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_accounts",
       "policies": 1,
@@ -15066,6 +15290,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_billing_settings",
       "policies": 1,
@@ -15074,6 +15299,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_board_cards",
       "policies": 1,
@@ -15082,6 +15308,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_board_stages",
       "policies": 1,
@@ -15090,6 +15317,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_category_memory",
       "policies": 1,
@@ -15098,6 +15326,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_claim_reasons",
       "policies": 1,
@@ -15106,6 +15335,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_claims",
       "policies": 1,
@@ -15114,6 +15344,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_fiscal_uploads",
       "policies": 1,
@@ -15122,6 +15353,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_full_costs",
       "policies": 1,
@@ -15130,6 +15362,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_full_inbound_items",
       "policies": 1,
@@ -15138,6 +15371,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_full_inbounds",
       "policies": 1,
@@ -15146,6 +15380,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_full_inventory",
       "policies": 1,
@@ -15154,6 +15389,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_full_stock_ops",
       "policies": 1,
@@ -15162,6 +15398,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_gestor_settings",
       "policies": 1,
@@ -15170,6 +15407,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_invoice_plans",
       "policies": 1,
@@ -15178,6 +15416,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_item_links",
       "policies": 1,
@@ -15186,6 +15425,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_items",
       "policies": 1,
@@ -15194,6 +15434,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_listing_rules",
       "policies": 1,
@@ -15202,6 +15443,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_location_map",
       "policies": 1,
@@ -15210,6 +15452,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_notifications",
       "policies": 1,
@@ -15218,6 +15461,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "ml_oauth_states",
       "policies": 0,
@@ -15226,6 +15470,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_orders",
       "policies": 1,
@@ -15234,6 +15479,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_perception_charges",
       "policies": 1,
@@ -15242,6 +15488,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_product_listing_prices",
       "policies": 1,
@@ -15250,6 +15497,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_questions",
       "policies": 1,
@@ -15258,6 +15506,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "ml_rate_buckets",
       "policies": 0,
@@ -15266,6 +15515,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_reply_templates",
       "policies": 1,
@@ -15274,6 +15524,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_reputation_snapshots",
       "policies": 1,
@@ -15282,6 +15533,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_shipments",
       "policies": 1,
@@ -15290,6 +15542,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ml_sync_jobs",
       "policies": 1,
@@ -15298,6 +15551,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "ml_tokens",
       "policies": 0,
@@ -15306,6 +15560,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "mp_oauth_states",
       "policies": 0,
@@ -15314,6 +15569,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "mp_payment_intents",
       "policies": 1,
@@ -15322,6 +15578,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "mp_refunds",
       "policies": 2,
@@ -15330,6 +15587,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "mp_token_broker_keys",
       "policies": 0,
@@ -15338,6 +15596,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "mp_webhook_events",
       "policies": 0,
@@ -15346,6 +15605,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "notification_reads",
       "policies": 3,
@@ -15354,6 +15614,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "notifications",
       "policies": 3,
@@ -15362,6 +15623,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_account_map",
       "policies": 1,
@@ -15370,6 +15632,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_credentials",
       "policies": 0,
@@ -15378,6 +15641,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_ledger_entries",
       "policies": 1,
@@ -15386,6 +15650,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_ledger_headers",
       "policies": 1,
@@ -15394,6 +15659,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_runs",
       "policies": 1,
@@ -15402,6 +15668,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_settings",
       "policies": 1,
@@ -15410,6 +15677,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "nubceo_sync",
       "policies": 1,
@@ -15418,6 +15686,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "offline_sales",
       "policies": 3,
@@ -15426,6 +15695,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_assignments",
       "policies": 1,
@@ -15434,6 +15704,7 @@
     {
       "anon": "si",
       "authenticated": "si",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_nudge_events",
       "policies": 2,
@@ -15442,6 +15713,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_nudge_settings",
       "policies": 1,
@@ -15450,6 +15722,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_nudges",
       "policies": 1,
@@ -15458,6 +15731,7 @@
     {
       "anon": "si",
       "authenticated": "si",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_tour_events",
       "policies": 2,
@@ -15466,6 +15740,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_tour_versions",
       "policies": 1,
@@ -15474,6 +15749,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "onboarding_tours",
       "policies": 1,
@@ -15482,6 +15758,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "paused_sale_payments",
       "policies": 1,
@@ -15490,6 +15767,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "paused_sales",
       "policies": 2,
@@ -15498,6 +15776,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_disputes",
       "policies": 2,
@@ -15506,6 +15785,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_fee_rules",
       "policies": 3,
@@ -15514,6 +15794,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_plans",
       "policies": 7,
@@ -15522,6 +15803,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_provider_snapshots",
       "policies": 2,
@@ -15530,6 +15812,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_providers",
       "policies": 1,
@@ -15538,6 +15821,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "payment_secrets",
       "policies": 0,
@@ -15546,6 +15830,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_terminals",
       "policies": 3,
@@ -15554,6 +15839,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payment_terms",
       "policies": 3,
@@ -15562,6 +15848,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "payment_voucher_edits",
       "policies": 1,
@@ -15570,6 +15857,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "payments",
       "policies": 2,
@@ -15578,6 +15866,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "pending_charge_events",
       "policies": 1,
@@ -15586,6 +15875,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "pending_charges",
       "policies": 2,
@@ -15594,6 +15884,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "permission_capabilities",
       "policies": 1,
@@ -15602,6 +15893,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "permission_role_capabilities",
       "policies": 1,
@@ -15610,6 +15902,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "permission_roles",
       "policies": 1,
@@ -15618,6 +15911,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "permission_user_overrides",
       "policies": 1,
@@ -15626,6 +15920,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "plan_addons",
       "policies": 3,
@@ -15634,6 +15929,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "plans",
       "policies": 1,
@@ -15642,6 +15938,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_allocations",
       "policies": 1,
@@ -15650,6 +15947,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_bank_accounts",
       "policies": 1,
@@ -15658,6 +15956,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_billing_caps",
       "policies": 1,
@@ -15666,6 +15965,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_billing_mode_changes",
       "policies": 2,
@@ -15674,6 +15974,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_billing_notices",
       "policies": 1,
@@ -15682,6 +15983,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_billing_settings",
       "policies": 1,
@@ -15690,6 +15992,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_charge_lines",
       "policies": 2,
@@ -15698,6 +16001,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_charges",
       "policies": 2,
@@ -15706,6 +16010,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_collection_notes",
       "policies": 1,
@@ -15714,6 +16019,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_collection_status",
       "policies": 1,
@@ -15722,6 +16028,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_dunning_events",
       "policies": 1,
@@ -15730,6 +16037,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_dunning_ladders",
       "policies": 1,
@@ -15738,6 +16046,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_dunning_steps",
       "policies": 1,
@@ -15746,6 +16055,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_fiscal_lookups",
       "policies": 1,
@@ -15754,6 +16064,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_fiscal_pending",
       "policies": 1,
@@ -15762,6 +16073,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_fx_rates",
       "policies": 1,
@@ -15770,6 +16082,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_fx_runs",
       "policies": 1,
@@ -15778,6 +16091,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_holidays",
       "policies": 1,
@@ -15786,6 +16100,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_ingest_log",
       "policies": 1,
@@ -15794,6 +16109,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_interest_accruals",
       "policies": 1,
@@ -15802,6 +16118,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_interest_pauses",
       "policies": 1,
@@ -15810,6 +16127,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_interest_policies",
       "policies": 1,
@@ -15818,6 +16136,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_interest_policy_plans",
       "policies": 1,
@@ -15826,6 +16145,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_interest_waivers",
       "policies": 1,
@@ -15834,6 +16154,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_issuer_profile",
       "policies": 1,
@@ -15842,6 +16163,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_ledger",
       "policies": 1,
@@ -15850,6 +16172,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_mp_payments_seen",
       "policies": 1,
@@ -15858,6 +16181,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_mp_recon_runs",
       "policies": 1,
@@ -15866,6 +16190,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "platform_mrr_daily",
       "policies": 0,
@@ -15874,6 +16199,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "platform_mrr_snapshots",
       "policies": 0,
@@ -15882,6 +16208,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_payments",
       "policies": 1,
@@ -15890,6 +16217,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_plan_changes",
       "policies": 1,
@@ -15898,6 +16226,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_promises",
       "policies": 1,
@@ -15906,6 +16235,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_recon_diffs",
       "policies": 1,
@@ -15914,6 +16244,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "platform_secrets",
       "policies": 0,
@@ -15922,6 +16253,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "platform_settings",
       "policies": 2,
@@ -15930,6 +16262,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_staff_permissions",
       "policies": 1,
@@ -15938,6 +16271,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "platform_transfer_reports",
       "policies": 2,
@@ -15946,6 +16280,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "pos_settings",
       "policies": 4,
@@ -15954,6 +16289,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "price_bulk_batches",
       "policies": 1,
@@ -15962,6 +16298,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "price_bulk_lines",
       "policies": 1,
@@ -15970,6 +16307,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "price_fx_rules",
       "policies": 1,
@@ -15978,6 +16316,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "price_index_values",
       "policies": 3,
@@ -15986,6 +16325,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "price_label_queue",
       "policies": 1,
@@ -15994,6 +16334,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "price_list_assignments",
       "policies": 4,
@@ -16002,6 +16343,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "price_list_breaks",
       "policies": 4,
@@ -16010,6 +16352,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "price_list_items",
       "policies": 4,
@@ -16018,6 +16361,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "price_lists",
       "policies": 4,
@@ -16026,6 +16370,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "price_schedules",
       "policies": 1,
@@ -16034,6 +16379,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "price_settings",
       "policies": 1,
@@ -16042,6 +16388,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "printers",
       "policies": 3,
@@ -16050,6 +16397,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_barcodes",
       "policies": 3,
@@ -16058,6 +16406,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_cost_history",
       "policies": 1,
@@ -16066,6 +16415,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_images",
       "policies": 4,
@@ -16074,6 +16424,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_kit_components",
       "policies": 1,
@@ -16082,6 +16433,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_lots",
       "policies": 1,
@@ -16090,6 +16442,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_menus",
       "policies": 2,
@@ -16098,6 +16451,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_modifier_groups",
       "policies": 1,
@@ -16106,6 +16460,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_modifier_options",
       "policies": 1,
@@ -16114,6 +16469,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_packages",
       "policies": 3,
@@ -16122,6 +16478,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "product_price_history",
       "policies": 1,
@@ -16130,6 +16487,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_recipes",
       "policies": 1,
@@ -16138,6 +16496,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_sale_units",
       "policies": 3,
@@ -16146,6 +16505,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_serials",
       "policies": 1,
@@ -16154,6 +16514,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_stock",
       "policies": 1,
@@ -16162,6 +16523,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "product_variants",
       "policies": 4,
@@ -16170,6 +16532,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "products",
       "policies": 1,
@@ -16178,6 +16541,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "professionals",
       "policies": 1,
@@ -16186,6 +16550,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "promotions",
       "policies": 4,
@@ -16194,6 +16559,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "purchase_events",
       "policies": 1,
@@ -16202,6 +16568,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "purchase_invoice_inbox",
       "policies": 1,
@@ -16210,6 +16577,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "purchase_order_items",
       "policies": 1,
@@ -16218,6 +16586,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "purchase_orders",
       "policies": 1,
@@ -16226,6 +16595,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "purchase_return_items",
       "policies": 1,
@@ -16234,6 +16604,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "purchase_returns",
       "policies": 1,
@@ -16242,6 +16613,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "purchase_settings",
       "policies": 1,
@@ -16250,6 +16622,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "quote_emails",
       "policies": 1,
@@ -16258,6 +16631,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "quote_items",
       "policies": 1,
@@ -16266,6 +16640,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "quote_revisions",
       "policies": 1,
@@ -16274,6 +16649,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "quote_settings",
       "policies": 3,
@@ -16282,6 +16658,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "quotes",
       "policies": 2,
@@ -16290,6 +16667,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "register_hardware",
       "policies": 1,
@@ -16298,6 +16676,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "register_heartbeats",
       "policies": 1,
@@ -16306,6 +16685,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "remito_items",
       "policies": 2,
@@ -16314,6 +16694,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "remito_points",
       "policies": 1,
@@ -16322,6 +16703,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "remitos",
       "policies": 2,
@@ -16330,6 +16712,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "return_reasons",
       "policies": 4,
@@ -16338,6 +16721,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "risk_flags",
       "policies": 2,
@@ -16346,6 +16730,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "risk_settings",
       "policies": 1,
@@ -16354,6 +16739,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_alerts",
       "policies": 1,
@@ -16362,6 +16748,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_plans",
       "policies": 1,
@@ -16370,6 +16757,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_positions",
       "policies": 1,
@@ -16378,6 +16766,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_positions_last",
       "policies": 1,
@@ -16386,6 +16775,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_stop_dispatches",
       "policies": 1,
@@ -16394,6 +16784,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_stops",
       "policies": 1,
@@ -16402,6 +16793,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "route_tracking_settings",
       "policies": 1,
@@ -16410,6 +16802,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "sale_fiscal_intents",
       "policies": 2,
@@ -16418,6 +16811,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "sale_items",
       "policies": 2,
@@ -16426,6 +16820,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "sale_letter_overrides",
       "policies": 2,
@@ -16434,6 +16829,49 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {
+        "authenticated select": [
+          "cancel_reason",
+          "cancelled_at",
+          "cancelled_by",
+          "cart",
+          "cashier_user_id",
+          "checkout",
+          "created_at",
+          "created_by",
+          "customer_email",
+          "customer_id",
+          "customer_name",
+          "customer_phone",
+          "deleted_at",
+          "delivery_type",
+          "expired_at",
+          "fulfillment_store_id",
+          "id",
+          "item_count",
+          "notes",
+          "number",
+          "paid_at",
+          "payment_preference",
+          "pickup_name",
+          "reservation_id",
+          "reservation_released_at",
+          "reserved_until",
+          "sale_id",
+          "seller_name",
+          "seller_professional_id",
+          "seller_user_id",
+          "ship_address",
+          "source",
+          "status",
+          "store_id",
+          "taken_at",
+          "taken_by",
+          "tenant_id",
+          "total",
+          "updated_at"
+        ]
+      },
       "kind": "r",
       "name": "sale_orders",
       "policies": 2,
@@ -16442,6 +16880,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "sale_promotions",
       "policies": 2,
@@ -16450,6 +16889,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "sale_return_items",
       "policies": 2,
@@ -16458,6 +16898,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "sale_returns",
       "policies": 3,
@@ -16466,6 +16907,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "sale_tax_lines",
       "policies": 1,
@@ -16474,6 +16916,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "sales",
       "policies": 2,
@@ -16482,6 +16925,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "school_courses",
       "policies": 0,
@@ -16490,6 +16934,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "school_progress",
       "policies": 1,
@@ -16498,6 +16943,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "security_settings",
       "policies": 1,
@@ -16506,6 +16952,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "serial_warranty_claims",
       "policies": 2,
@@ -16514,6 +16961,7 @@
     {
       "anon": "siu",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "service_clarifications",
       "policies": 3,
@@ -16522,6 +16970,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "service_packs",
       "policies": 1,
@@ -16530,6 +16979,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "service_types",
       "policies": 3,
@@ -16538,6 +16988,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "settlement_imports",
       "policies": 2,
@@ -16546,6 +16997,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "settlement_lines",
       "policies": 2,
@@ -16554,6 +17006,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "settlement_sync_state",
       "policies": 2,
@@ -16562,6 +17015,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "shipment_events",
       "policies": 1,
@@ -16570,6 +17024,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "shipments",
       "policies": 1,
@@ -16578,6 +17033,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "shipping_connections",
       "policies": 1,
@@ -16586,6 +17042,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "shipping_jobs",
       "policies": 1,
@@ -16594,6 +17051,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "shipping_providers",
       "policies": 1,
@@ -16602,6 +17060,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "shipping_secrets",
       "policies": 0,
@@ -16610,6 +17069,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_adjustments",
       "policies": 1,
@@ -16618,6 +17078,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_bank_accounts",
       "policies": 1,
@@ -16626,6 +17087,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "staff_branch_assignments",
       "policies": 1,
@@ -16634,6 +17096,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_client_rules",
       "policies": 1,
@@ -16642,6 +17105,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_expense_exemptions",
       "policies": 1,
@@ -16650,6 +17114,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_expense_period_amounts",
       "policies": 1,
@@ -16658,6 +17123,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_expense_splits",
       "policies": 1,
@@ -16666,6 +17132,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_expenses",
       "policies": 1,
@@ -16674,6 +17141,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_fx_rates",
       "policies": 1,
@@ -16682,6 +17150,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_members",
       "policies": 1,
@@ -16690,6 +17159,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_mp_lookups",
       "policies": 1,
@@ -16698,6 +17168,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_payout_items",
       "policies": 1,
@@ -16706,6 +17177,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_payout_lines",
       "policies": 1,
@@ -16714,6 +17186,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_payout_payments",
       "policies": 1,
@@ -16722,6 +17195,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_payout_runs",
       "policies": 1,
@@ -16730,6 +17204,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_payout_settings",
       "policies": 1,
@@ -16738,6 +17213,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "staff_shares",
       "policies": 1,
@@ -16746,6 +17222,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "staff_status_events",
       "policies": 1,
@@ -16754,6 +17231,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "stock_adjustment_policy",
       "policies": 1,
@@ -16762,6 +17240,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "stock_adjustments",
       "policies": 2,
@@ -16770,6 +17249,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_movements",
       "policies": 1,
@@ -16778,6 +17258,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_reservation_items",
       "policies": 2,
@@ -16786,6 +17267,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_reservations",
       "policies": 2,
@@ -16794,6 +17276,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_transfer_events",
       "policies": 2,
@@ -16802,6 +17285,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_transfer_items",
       "policies": 2,
@@ -16810,6 +17294,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_transfer_settings",
       "policies": 3,
@@ -16818,6 +17303,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stock_transfers",
       "policies": 2,
@@ -16826,6 +17312,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "store_credit_movements",
       "policies": 3,
@@ -16834,6 +17321,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "store_credit_vouchers",
       "policies": 3,
@@ -16842,6 +17330,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "store_groups",
       "policies": 3,
@@ -16850,6 +17339,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "store_templates",
       "policies": 1,
@@ -16858,6 +17348,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "stores",
       "policies": 3,
@@ -16866,6 +17357,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "subscription_addons",
       "policies": 3,
@@ -16874,6 +17366,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "subscriptions",
       "policies": 1,
@@ -16882,6 +17375,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "supervisor_auth_tokens",
       "policies": 0,
@@ -16890,6 +17384,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "supervisor_one_time_pins",
       "policies": 0,
@@ -16898,6 +17393,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "supervisor_pin_guard",
       "policies": 0,
@@ -16906,6 +17402,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "supervisor_pin_methods",
       "policies": 0,
@@ -16914,6 +17411,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "supplier_account_adjustments",
       "policies": 1,
@@ -16922,6 +17420,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "supplier_account_entries",
       "policies": 0,
@@ -16930,6 +17429,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "supplier_balances",
       "policies": 0,
@@ -16938,6 +17438,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "supplier_credit_applications",
       "policies": 1,
@@ -16946,6 +17447,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "supplier_credit_open",
       "policies": 0,
@@ -16954,6 +17456,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "supplier_invoice_lines",
       "policies": 1,
@@ -16962,6 +17465,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "supplier_invoice_open",
       "policies": 0,
@@ -16970,6 +17474,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "supplier_invoices",
       "policies": 1,
@@ -16978,6 +17483,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "supplier_payment_allocations",
       "policies": 1,
@@ -16986,6 +17492,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "supplier_payment_lines",
       "policies": 1,
@@ -16994,6 +17501,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "supplier_payments",
       "policies": 1,
@@ -17002,6 +17510,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "supplier_price_list_imports",
       "policies": 1,
@@ -17010,6 +17519,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "supplier_products",
       "policies": 3,
@@ -17018,6 +17528,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "supplier_tax_profiles",
       "policies": 3,
@@ -17026,6 +17537,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "suppliers",
       "policies": 3,
@@ -17034,6 +17546,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "system_email_config",
       "policies": 1,
@@ -17042,6 +17555,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "system_email_smtp",
       "policies": 0,
@@ -17050,6 +17564,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "system_email_templates",
       "policies": 1,
@@ -17058,6 +17573,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "system_emails",
       "policies": 1,
@@ -17066,6 +17582,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "system_settings",
       "policies": 1,
@@ -17074,6 +17591,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "table_order_items",
       "policies": 3,
@@ -17082,6 +17600,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "table_order_voids",
       "policies": 1,
@@ -17090,6 +17609,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "table_orders",
       "policies": 1,
@@ -17098,6 +17618,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "talo_refunds",
       "policies": 1,
@@ -17106,6 +17627,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_custom_values",
       "policies": 2,
@@ -17114,6 +17636,7 @@
     {
       "anon": "siu",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "tax_exemptions",
       "policies": 3,
@@ -17122,6 +17645,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_iva_rates",
       "policies": 1,
@@ -17130,6 +17654,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_jurisdictions",
       "policies": 1,
@@ -17138,6 +17663,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_padron_entries",
       "policies": 1,
@@ -17146,6 +17672,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_padron_imports",
       "policies": 1,
@@ -17154,6 +17681,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "tax_padron_profiles",
       "policies": 4,
@@ -17162,6 +17690,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_parameters",
       "policies": 1,
@@ -17170,6 +17699,7 @@
     {
       "anon": "siu",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "tax_regimes",
       "policies": 3,
@@ -17178,6 +17708,7 @@
     {
       "anon": "",
       "authenticated": "siu",
+      "columns": {},
       "kind": "r",
       "name": "tax_ret_concept_settings",
       "policies": 3,
@@ -17186,6 +17717,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_ret_concepts",
       "policies": 1,
@@ -17194,6 +17726,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_ret_scales",
       "policies": 1,
@@ -17202,6 +17735,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_settings",
       "policies": 1,
@@ -17210,6 +17744,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "tax_suffered",
       "policies": 0,
@@ -17218,6 +17753,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_suffered_entries",
       "policies": 2,
@@ -17226,6 +17762,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tax_withholdings",
       "policies": 2,
@@ -17234,6 +17771,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tenant_billing_profiles",
       "policies": 1,
@@ -17242,6 +17780,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tenant_billing_terms",
       "policies": 2,
@@ -17250,6 +17789,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_branding",
       "policies": 4,
@@ -17258,6 +17798,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "tenant_business_profiles",
       "policies": 1,
@@ -17266,6 +17807,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_catalog_purchases",
       "policies": 4,
@@ -17274,6 +17816,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_discounts",
       "policies": 3,
@@ -17282,6 +17825,7 @@
     {
       "anon": "",
       "authenticated": "",
+      "columns": {},
       "kind": "r",
       "name": "tenant_email_smtp",
       "policies": 0,
@@ -17290,6 +17834,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_feature_flags",
       "policies": 1,
@@ -17298,6 +17843,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_notes",
       "policies": 3,
@@ -17306,6 +17852,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_payment_methods",
       "policies": 4,
@@ -17314,6 +17861,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenant_users",
       "policies": 1,
@@ -17322,6 +17870,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "tenants",
       "policies": 1,
@@ -17330,6 +17879,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "terminal_transactions",
       "policies": 1,
@@ -17338,6 +17888,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "ticket_templates",
       "policies": 4,
@@ -17346,6 +17897,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "transfer_accounts",
       "policies": 3,
@@ -17354,6 +17906,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "transfer_watches",
       "policies": 1,
@@ -17362,6 +17915,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "treasury_account_transfer_accounts",
       "policies": 1,
@@ -17370,6 +17924,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "treasury_accounts",
       "policies": 3,
@@ -17378,6 +17933,7 @@
     {
       "anon": "",
       "authenticated": "siud",
+      "columns": {},
       "kind": "v",
       "name": "treasury_balances",
       "policies": 0,
@@ -17386,6 +17942,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "treasury_movements",
       "policies": 1,
@@ -17394,6 +17951,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "ualabis_refunds",
       "policies": 1,
@@ -17402,6 +17960,14 @@
     {
       "anon": "siud",
       "authenticated": "sid",
+      "columns": {
+        "authenticated update": [
+          "avatar_url",
+          "full_name",
+          "locale",
+          "settings"
+        ]
+      },
       "kind": "r",
       "name": "users",
       "policies": 2,
@@ -17410,6 +17976,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "vehicle_photos",
       "policies": 1,
@@ -17418,6 +17985,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "vehicles",
       "policies": 1,
@@ -17426,6 +17994,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "warehouse_move_items",
       "policies": 2,
@@ -17434,6 +18003,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "warehouse_moves",
       "policies": 2,
@@ -17442,6 +18012,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "warehouse_stock",
       "policies": 1,
@@ -17450,6 +18021,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "warehouse_store_links",
       "policies": 1,
@@ -17458,6 +18030,7 @@
     {
       "anon": "siud",
       "authenticated": "siud",
+      "columns": {},
       "kind": "r",
       "name": "warehouses",
       "policies": 1,
@@ -17466,6 +18039,7 @@
     {
       "anon": "",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "warranty_plan_scopes",
       "policies": 1,
@@ -17474,6 +18048,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "warranty_plans",
       "policies": 1,
@@ -17482,6 +18057,7 @@
     {
       "anon": "s",
       "authenticated": "s",
+      "columns": {},
       "kind": "r",
       "name": "webhook_events",
       "policies": 1,

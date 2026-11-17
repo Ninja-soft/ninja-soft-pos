@@ -1,9 +1,12 @@
 // @vitest-environment node
 // Cola fiscal (ADR-072): cada caso del worker con una base falsa y un ARCA
 // falso que responde fixtures. Nunca se llama a ARCA.
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createWsfeClient, type FetchLike } from "@/supabase/functions/_shared/arca/client";
 import {
+  dateAdjustment,
   detalleFor,
   informCaeaDocument,
   planDocument,
@@ -105,6 +108,7 @@ function harness(s: Snapshot, routes: Record<string, Route | Route[]>, auth: Aut
       },
       setQr: async (_id, url) => void log.push({ fn: "setQr", p: { url } }),
       informResult: async (_id, p) => void log.push({ fn: "informResult", p }),
+      logEvent: async (_id, p) => void log.push({ fn: "logEvent", p }),
     },
   };
   return { deps, log, calls: arca.calls };
@@ -414,5 +418,153 @@ describe("servicios (ADR-116)", () => {
     const p = planDocument(s);
     if (!p.ok) throw new Error("plan");
     expect(detalleFor(s, p.plan, 12, "20261013", null)).toMatchObject({ Concepto: 1, FchServDesde: null, FchVtoPago: null });
+  });
+});
+
+describe("venta offline: fecha del comprobante (FIS-001)", () => {
+  // NOW = 2026-10-13 13:00Z → hoy en Argentina 2026-10-13. La venta se
+  // sincroniza hoy (created_at) pero se hizo antes (offline_sold_at).
+  const offline = (soldAt: string, extra: Partial<Snapshot> = {}) => {
+    const s = snap({}, extra);
+    s.sale = { ...s.sale, created_at: "2026-10-13T12:30:00Z", offline_sold_at: soldAt };
+    return s;
+  };
+  // ARCA devuelve en la respuesta la CbteFch que se le pidió.
+  const ok = (fch: string) => ({ FECompUltimoAutorizado: F.ULTIMO(11), FECAESolicitar: F.CAE_APROBADO(12, undefined, undefined, fch) });
+
+  it("venta offline de ayer sincronizada hoy: el comprobante sale con la fecha de ayer, sin evento", async () => {
+    const h = harness(offline("2026-10-12T22:15:00Z"), ok("20261012"));
+    expect((await processDocument(h.deps, "doc-1")).outcome).toBe("aprobado");
+    expect(last(h.log, "markSending")).toMatchObject({ cbte_fch: "2026-10-12" });
+    expect(h.calls[1]?.body).toContain("<ar:CbteFch>20261012</ar:CbteFch>");
+    expect(h.log.some((x) => x.fn === "logEvent")).toBe(false);
+  });
+
+  it("usa la fecha argentina de offline_sold_at (00:30 AR del 12 = 03:30Z)", () => {
+    const r = planDocument(offline("2026-10-12T03:30:00Z"));
+    expect(r.ok && r.plan.saleYmd).toBe("20261012");
+  });
+
+  it("venta offline de hace 8 días: fecha mínima de la ventana (hoy-5) y evento fecha_ajustada", async () => {
+    const h = harness(offline("2026-10-05T15:00:00Z"), ok("20261008"));
+    expect((await processDocument(h.deps, "doc-1")).outcome).toBe("aprobado");
+    expect(last(h.log, "markSending")).toMatchObject({ cbte_fch: "2026-10-08" });
+    expect(h.calls[1]?.body).toContain("<ar:CbteFch>20261008</ar:CbteFch>");
+    const ev = last(h.log, "logEvent");
+    expect(ev).toMatchObject({ action: "fecha_ajustada", error_code: "ventana_arca" });
+    expect(String(ev?.error_msg)).toContain("Venta del 2026-10-05; comprobante con fecha 2026-10-08");
+    // El evento se registra con la fecha ya aprobada y nunca deja el comprobante en requiere_accion.
+    expect(h.log.findIndex((x) => x.fn === "applyResult")).toBeLessThan(h.log.findIndex((x) => x.fn === "logEvent"));
+    expect(last(h.log, "applyResult")).toMatchObject({ outcome: "aprobado", cbte_fch: "2026-10-08" });
+  });
+
+  it("servicios: la ventana es de 10 días (hoy-10)", async () => {
+    const h = harness(offline("2026-09-30T15:00:00Z", { has_services: true, has_goods: false }), ok("20261003"));
+    await processDocument(h.deps, "doc-1");
+    expect(last(h.log, "markSending")).toMatchObject({ cbte_fch: "2026-10-03" });
+    expect(last(h.log, "logEvent")).toMatchObject({ error_code: "ventana_arca" });
+    expect(String(last(h.log, "logEvent")?.error_msg)).toContain("10 días");
+  });
+
+  it("último autorizado posterior a la venta: manda la fecha del último autorizado", async () => {
+    const h = harness(offline("2026-10-11T15:00:00Z", { last_fch: "2026-10-12" }), ok("20261012"));
+    await processDocument(h.deps, "doc-1");
+    expect(last(h.log, "markSending")).toMatchObject({ cbte_fch: "2026-10-12" });
+    expect(last(h.log, "logEvent")).toMatchObject({ action: "fecha_ajustada", error_code: "ultimo_autorizado" });
+    expect(String(last(h.log, "logEvent")?.error_msg)).toContain("(2026-10-12)");
+  });
+
+  it("si el evento falla, la factura sale igual", async () => {
+    const h = harness(offline("2026-10-05T15:00:00Z"), ok("20261008"));
+    h.deps.db.logEvent = async () => {
+      throw new Error("arca_log_event: function does not exist");
+    };
+    expect((await processDocument(h.deps, "doc-1")).outcome).toBe("aprobado");
+    expect(last(h.log, "applyResult")).toMatchObject({ outcome: "aprobado" });
+  });
+
+  it("sin offline_sold_at: created_at, como antes", () => {
+    const r = planDocument(snap());
+    expect(r.ok && r.plan.saleYmd).toBe("20261013");
+  });
+
+  it("la NC de una devolución no toma la fecha offline de la venta ni registra evento", async () => {
+    const s = offline("2026-10-05T15:00:00Z", { return_total: 60.5, assoc: { cbte_tipo: 6, pto_vta: 3, cbte_nro: 12, cbte_fch: "2026-10-08", imp_total: 121 } });
+    s.document = { ...s.document, origin: "return", cbte_tipo: 8, imp_total: 60.5 };
+    const r = planDocument(s);
+    expect(r.ok && r.plan.saleYmd).toBe("20261013");
+    const h = harness(s, { FECompUltimoAutorizado: F.ULTIMO(4, 3, 8), FECAESolicitar: F.CAE_APROBADO(5) });
+    await processDocument(h.deps, "doc-1");
+    expect(h.log.some((x) => x.fn === "logEvent")).toBe(false);
+  });
+
+  it("dateAdjustment: null si no se movió; fecha futura", () => {
+    expect(dateAdjustment("20261013", "20261013", "20261013", null, 1)).toBeNull();
+    expect(dateAdjustment("20261014", "20261013", "20261013", null, 1)).toMatchObject({ error_code: "fecha_futura" });
+  });
+
+  it("si cae a CAEA no registra fecha_ajustada (por CAEA la fecha es la de emisión)", async () => {
+    const s = offline("2026-10-05T15:00:00Z", { settings: { caea_enabled: true, caea_pto_vta: 90, caea_timeout_seconds: 5 } });
+    const h = harness(s, { FECompUltimoAutorizado: F.ULTIMO(11), FECAESolicitar: F.CAE_TRANSITORIO }, undefined, {
+      caea: "31423456789012", caea_id: "c1", pto_vta: 90, cbte_nro: 7, cbte_fch: "2026-10-13", fch_vig_hasta: "2026-10-15",
+    });
+    expect((await processDocument(h.deps, "doc-1")).outcome).toBe("caea");
+    expect(h.log.some((x) => x.fn === "logEvent")).toBe(false);
+  });
+
+  it("si ARCA no aprueba, no hay evento (se registra con la fecha aprobada)", async () => {
+    const h = harness(offline("2026-10-05T15:00:00Z"), { FECompUltimoAutorizado: F.ULTIMO(11), FECAESolicitar: F.CAE_TRANSITORIO });
+    expect((await processDocument(h.deps, "doc-1")).outcome).toBe("reintentar");
+    expect(h.log.some((x) => x.fn === "logEvent")).toBe(false);
+  });
+
+  it("NC: nunca antes de la fecha del comprobante asociado", async () => {
+    const nc = (lastFch: string | null) => {
+      const s = snap(
+        { origin: "return", cbte_tipo: 8, imp_total: 60.5 },
+        { return_total: 60.5, last_fch: lastFch, assoc: { cbte_tipo: 6, pto_vta: 3, cbte_nro: 12, cbte_fch: "2026-10-12", imp_total: 121 } },
+      );
+      s.sale = { ...s.sale, created_at: "2026-10-10T15:00:00Z" };
+      return s;
+    };
+    const h = harness(nc(null), { FECompUltimoAutorizado: F.ULTIMO(4, 3, 8), FECAESolicitar: F.CAE_APROBADO(5) });
+    await processDocument(h.deps, "doc-1");
+    expect(last(h.log, "markSending")).toMatchObject({ cbte_fch: "2026-10-12" });
+    // La serie de NC va más adelante que la factura asociada: manda la serie.
+    const h2 = harness(nc("2026-10-13"), { FECompUltimoAutorizado: F.ULTIMO(4, 3, 8), FECAESolicitar: F.CAE_APROBADO(5) });
+    await processDocument(h2.deps, "doc-1");
+    expect(last(h2.log, "markSending")).toMatchObject({ cbte_fch: "2026-10-13" });
+  });
+
+  it("servicios con offline_sold_at en el futuro: fecha de hoy y el período no empieza después", async () => {
+    const s = offline("2026-10-20T15:00:00Z", { has_services: true, has_goods: false });
+    s.sale = { ...s.sale, service_from: "2026-10-20", payment_due: "2026-10-30" };
+    const h = harness(s, { FECompUltimoAutorizado: F.ULTIMO(11), FECAESolicitar: F.CAE_APROBADO(12) });
+    await processDocument(h.deps, "doc-1");
+    const body = h.calls.find((c) => c.op === "FECAESolicitar")?.body ?? "";
+    expect(body).toContain("<ar:CbteFch>20261013</ar:CbteFch>");
+    expect(body).toContain("<ar:FchServDesde>20261013</ar:FchServDesde>");
+    expect(body).toContain("<ar:FchServHasta>20261013</ar:FchServHasta>");
+    expect(body).toContain("<ar:FchVtoPago>20261030</ar:FchVtoPago>");
+    expect(last(h.log, "logEvent")).toMatchObject({ error_code: "fecha_futura" });
+    // Sin fecha acotada, un servicio a futuro conserva su período (ADR-116).
+    expect(serviceDates({ service_from: "2026-10-20" }, "20261013").desde).toBe("20261020");
+    expect(serviceDates({ service_from: "2026-10-20", service_to: "2026-10-25" }, "20261013", true)).toEqual({
+      desde: "20261013",
+      hasta: "20261025",
+      vto: "20261013",
+    });
+  });
+
+  it("migración: last_fch cuenta los de la serie con número esperando resultado (no sólo aprobados)", () => {
+    const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20270128100000_fis001_offline_cbte_date.sql"), "utf8");
+    const ws = (x: string) => x.replace(/\s+/g, " ");
+    expect(ws(sql)).toContain(
+      ws(`and (o.status = 'aprobado'
+                         or (o.id <> v_doc.id and o.cbte_nro is not null
+                             and o.status in ('pendiente', 'enviando', 'requiere_accion'))))`),
+    );
+    expect(sql).toContain("'offline_sold_at', v_sale.offline_sold_at");
+    expect(sql).toMatch(/perform pg_advisory_xact_lock\(hashtext\(v_doc\.id::text[^;]*\);\s*if exists/);
   });
 });

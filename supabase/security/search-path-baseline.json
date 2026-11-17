@@ -1,30 +1,4 @@
 {
-  "_doc": "Funciones de public con search_path mutable (proconfig null) conocidas al 2026-11-17. SEC-16 las corrige y vacía esta lista; el chequeo (3) de security-lint falla ante cualquier función mutable que no esté acá.",
-  "functions": [
-    "_delivery_order_item_guard_qty()",
-    "_dining_item_sent(p_printed_at timestamp with time zone, p_kds_status text)",
-    "_kds_sla_valid(p jsonb)",
-    "_promo_alloc(p jsonb, p_rem numeric[], p_pid text[], p_cat text[], p_brand text[], p_qty numeric[], p_elig boolean[])",
-    "_promo_applies(p jsonb, p_ctx jsonb, p_pid text[], p_cat text[], p_brand text[], p_tot numeric[], p_elig boolean[])",
-    "_promo_card_key(p text)",
-    "_promo_distribute(p_d numeric, p_w numeric[])",
-    "_promo_eval_core(p_promos jsonb, p_lines jsonb, p_ctx jsonb)",
-    "_promo_in_scope(p jsonb, p_pid text, p_cat text, p_brand text)",
-    "_promo_payments_ok(p jsonb, p_ctx jsonb)",
-    "_promo_txt_arr(j jsonb)",
-    "_table_order_item_guard_qty()",
-    "_table_orders_stamp_closed()",
-    "cheque_transition_ok(p_kind text, p_from text, p_to text)",
-    "cuit_is_valid(p text)",
-    "product_basis_cost(p_basis text, p_last numeric, p_avg numeric, p_repl numeric)",
-    "purchase_avg_after_outflow(p_stock_before numeric, p_avg numeric, p_qty numeric, p_unit_cost numeric)",
-    "purchase_line_net(p_qty numeric, p_cost numeric, p_discounts numeric[])",
-    "purchase_unit_net(p_cost numeric, p_discounts numeric[], p_global numeric)",
-    "purchase_weighted_avg(p_stock_before numeric, p_avg_before numeric, p_qty numeric, p_unit_cost numeric)",
-    "purchase_withholdings_total(p_wh jsonb)",
-    "trg_goods_receipts_voided_guard()",
-    "trg_product_lots_defaults()",
-    "trg_suppliers_normalize()",
-    "trg_treasury_accounts_normalize()"
-  ]
+  "_doc": "Funciones de public con search_path mutable toleradas. Vacía desde SEC-16 (2026-11-17): el chequeo (3) de security-lint falla ante cualquiera.",
+  "functions": []
 }

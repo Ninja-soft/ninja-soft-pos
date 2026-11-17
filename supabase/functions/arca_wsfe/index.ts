@@ -265,6 +265,8 @@ function makeDeps(admin: SupabaseClient, tenantId: string, s: Settings, emitter:
       caeaIssue: async (id, p) => (await rpc("arca_caea_issue", { p_doc: id, p })) as never,
       setQr: async (id, url) => void (await rpc("arca_set_qr", { p_doc: id, p_url: url })),
       informResult: async (id, p) => void (await rpc("arca_caea_inform_result", { p_doc: id, p })),
+      // FIS-001: evento informativo (fecha_ajustada). El worker ignora su error.
+      logEvent: async (id, p) => void (await rpc("arca_log_event", { p_doc: id, p })),
     },
   };
 }

@@ -164,8 +164,8 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] ARCA caído no bloquea la venta. *(ARCA caído: cola y contingencia CAEA; sin internet en el POS depende de la venta offline del POS)*
   - [x] Se emite ticket provisorio (`OFF-XXXXXXXX`, no válido como factura) y la venta queda en una cola local (IndexedDB) con `client_sale_id` idempotente, asociada a usuario y turno.
   - [x] Se emite comprobante interno/provisorio y la factura queda en cola fiscal. *(ticket "Comprobante pendiente de autorización ARCA")*
-  - [~] Al reconectar, el POS sincroniza solo (`sync_offline_sale`, wrapper de `create_sale`, idempotente): precio cambiado se respeta y se audita, stock negativo se permite y se marca, lo inválido queda en **Ventas offline** para el dueño. *La venta sincronizada entra a la cola fiscal por el trigger `arca_sales_enqueue` (ADR-072). Falta usar `sales.offline_sold_at` como fecha del comprobante y reimprimir el ticket con CAE.*
-  - [~] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante. *Sincronización (`sync_offline_sale`, ADR-077) y CAE por la cola fiscal (`arca_sales_enqueue`, ADR-072) integrados; falta la fecha real del comprobante (`offline_sold_at`) y actualizar el ticket ya impreso.*
+  - [x] Al reconectar, el POS sincroniza solo (`sync_offline_sale`, wrapper de `create_sale`, idempotente): precio cambiado se respeta y se audita, stock negativo se permite y se marca, lo inválido queda en **Ventas offline** para el dueño. *La venta sincronizada entra a la cola fiscal por el trigger `arca_sales_enqueue` (ADR-072) y el comprobante lleva la fecha real de la venta (`sales.offline_sold_at`, acotada a la ventana de ARCA con evento `fecha_ajustada`; FIS-001, migración `20270128100000_fis001_offline_cbte_date`, `tests/unit/arcaWorker.test.ts`). Reimprimir el ticket con CAE sigue en el ítem de abajo.*
+  - [~] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante. *Sincronización (`sync_offline_sale`, ADR-077) y CAE por la cola fiscal (`arca_sales_enqueue`, ADR-072) integrados; fecha real del comprobante (`offline_sold_at`) hecha en FIS-001; falta actualizar el ticket ya impreso.*
   - [x] El POS muestra estado fiscal claro: `pendiente`, `enviando`, `aprobado`, `rechazado`, `requiere acción`. *(detalle de la venta, ticket e indicador de contingencia)*
 - [x] Numeración de comprobantes por punto de venta. *(caja o sucursal; serie CAEA propia)*
 - [x] **Contingencia CAEA** (pedido del dueño): CAEA por quincena, emisión al instante si ARCA falla de forma cierta, informe posterior y sin movimiento. *(ADR-072, `feat/arca-wsfe`)*
@@ -174,7 +174,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [ ] 100 comprobantes consecutivos en homologación sin error de integración.
 - [~] Recuperación automática si AFIP devuelve error transitorio. *Código: reintentos con backoff, clasificación de errores y dead-letter (ADR-072, `tests/unit/arcaWorker.test.ts`); falta validarlo contra ARCA con certificado real.*
 - [~] El cashier nunca ve un error de AFIP que lo bloquee — la venta se completa, la factura se reintenta en segundo plano. *Código: la factura se encola por trigger después de la venta (`arca_sales_enqueue`, ADR-072) y nunca la bloquea; falta validarlo en producción.*
-- [~] Una venta offline queda registrada localmente, se sincroniza al volver la conexión y termina con CAE o error fiscal accionable. *(Registro local y sincronización hechos, ADR-077; la venta sincronizada se encola en ARCA, ADR-072. Falta la fecha real del comprobante.)*
+- [x] Una venta offline queda registrada localmente, se sincroniza al volver la conexión y termina con CAE o error fiscal accionable. *(Registro local y sincronización hechos, ADR-077; la venta sincronizada se encola en ARCA, ADR-072, con la fecha real de la venta como fecha del comprobante dentro de la ventana de ARCA, FIS-001: `arca_snapshot` + `offline_sold_at`, `tests/unit/arcaWorker.test.ts` › "venta offline".)*
 - [x] El cambio de homologación a producción solo se habilita después de certificados válidos, numeración verificada y prueba exitosa. *Hecho: `_arca_checklist` (datos fiscales, certificado, homologación aprobada, prueba de conexión en producción, puntos de venta) y `arca_set_environment` rechaza con `checklist_incomplete` (ADR-072).*
 
 ---
@@ -1897,7 +1897,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F0** | 8/10 | 2 | 0 | 80% | 90% |
 | **F1.5** | 13/17 | 3 | 1 | 76% | 85% |
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
-| **F3** | 21/29 | 7 | 1 | 72% | 84% |
+| **F3** | 23/29 | 5 | 1 | 79% | 88% |
 | **F4** | 13/29 | 10 | 6 | 45% | 62% |
 | **F5** | 38/70 | 12 | 20 | 54% | 63% |
 | **F6** | 58/63 | 3 | 2 | 92% | 94% |
@@ -1920,7 +1920,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **F24** | 36/135 | 11 | 88 | 27% | 31% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 716/1344 | 324 | 304 | 53% | 65% |
+| **Total** | 718/1344 | 322 | 304 | 53% | 65% |
 <!-- roadmap-progress:end -->
 
 ---

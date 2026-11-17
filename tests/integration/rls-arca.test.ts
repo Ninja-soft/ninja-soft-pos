@@ -209,6 +209,25 @@ describe.skipIf(!enabled)("facturación ARCA · RLS, gating, cola y contingencia
     expect(again.data).toEqual([]);
     const caj = await rpc(ctx.cashier.client, "arca_claim", { p_tenant: ctx.tenant });
     expect(caj.error).not.toBeNull();
+    // FIS-001: la foto trae el momento real de la venta offline.
+    const soldAt = "2026-10-12T22:15:00+00:00";
+    await ctx.admin.from("sales").update({ offline_sold_at: soldAt } as never).eq("id", ctx.saleId);
+    const snap = await rpc(ctx.admin, "arca_snapshot", { p_doc: ctx.docId });
+    expect(new Date(String((snap.data as { sale: { offline_sold_at: string } }).sale.offline_sold_at)).toISOString()).toBe(
+      new Date(soldAt).toISOString(),
+    );
+    // FIS-001: evento fecha_ajustada, idempotente y sólo para service_role.
+    const evP = { action: "fecha_ajustada", error_code: "ventana_arca", error_msg: "Venta del 2026-10-05; comprobante con fecha 2026-10-08." };
+    expect((await rpc(ctx.admin, "arca_log_event", { p_doc: ctx.docId, p: evP })).data).toBe(true);
+    expect((await rpc(ctx.admin, "arca_log_event", { p_doc: ctx.docId, p: evP })).data).toBe(false);
+    expect((await rpc(ctx.admin, "arca_log_event", { p_doc: ctx.docId, p: { ...evP, action: "FECAESolicitar" } })).error).not.toBeNull();
+    expect((await rpc(ctx.owner.client, "arca_log_event", { p_doc: ctx.docId, p: evP })).error).not.toBeNull();
+    const { data: evs } = await ctx.owner.client
+      .from("fiscal_document_events" as never)
+      .select("action, outcome, error_code")
+      .eq("document_id", ctx.docId)
+      .eq("action", "fecha_ajustada");
+    expect(evs).toEqual([{ action: "fecha_ajustada", outcome: "ok", error_code: "ventana_arca" }]);
     await rpc(ctx.admin, "arca_mark_sending", { p_doc: ctx.docId, p: { cbte_nro: 12, cbte_fch: "2026-10-13", concepto: 1, doc_tipo: 99, doc_nro: "0" } });
     const ok = await rpc(ctx.admin, "arca_apply_result", {
       p_doc: ctx.docId,
@@ -234,6 +253,37 @@ describe.skipIf(!enabled)("facturación ARCA · RLS, gating, cola y contingencia
     expect(retry.data).toMatchObject({ status: "pendiente" });
     const cajRetry = await rpc(ctx.cashier.client, "arca_document_retry", { p_id: (nc as { id: string }).id });
     expect(cajRetry.error?.message).toMatch(/forbidden/);
+  });
+
+  it("FIS-001: last_fch cuenta los de la serie con número esperando resultado", async () => {
+    const sale = async () => {
+      const r = await rpc(ctx.cashier.client, "create_sale", {
+        p_items: [{ product_id: ctx.productId, quantity: 1, unit_price: 121, discount: 0 }],
+        p_payments: [{ method: "cash", amount: 121 }],
+      });
+      expect(r.error).toBeNull();
+      const { data } = await ctx.admin.from("fiscal_documents").select("id").eq("sale_id", (r.data as { sale_id: string }).sale_id).single();
+      return (data as { id: string }).id;
+    };
+    const lastFch = async (id: string) =>
+      (((await rpc(ctx.admin, "arca_snapshot", { p_doc: id })).data as { last_fch: string | null }).last_fch);
+    const a = await sale();
+    const b = await sale();
+    // La factura B aprobada del test anterior es del 2026-10-13.
+    expect(await lastFch(b)).toBe("2026-10-13");
+    // A sale con número y fecha posteriores; el pedido de CAE queda incierto
+    // (reintentar con keep_number → pendiente con número).
+    await rpc(ctx.admin, "arca_claim", { p_tenant: ctx.tenant, p_ids: [a] });
+    await rpc(ctx.admin, "arca_mark_sending", { p_doc: a, p: { cbte_nro: 50, cbte_fch: "2026-10-20", concepto: 1, doc_tipo: 99, doc_nro: "0" } });
+    const res = await rpc(ctx.admin, "arca_apply_result", { p_doc: a, p: { outcome: "reintentar", error_code: "sin_respuesta", error_msg: "timeout", keep_number: true } });
+    expect(res.data).toMatchObject({ status: "pendiente" });
+    expect(await lastFch(b)).toBe("2026-10-20");
+    // El propio comprobante no se acota con su número anterior.
+    expect(await lastFch(a)).toBe("2026-10-13");
+    // Cancelado ya no cuenta.
+    await ctx.admin.from("fiscal_documents").update({ status: "cancelado" } as never).eq("id", a);
+    expect(await lastFch(b)).toBe("2026-10-13");
+    await ctx.admin.from("fiscal_documents").update({ status: "cancelado" } as never).eq("id", b);
   });
 
   it("producción bloqueada sin checklist; contingencia CAEA con punto de venta exclusivo", async () => {

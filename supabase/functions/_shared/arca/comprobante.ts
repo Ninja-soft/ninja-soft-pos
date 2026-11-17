@@ -104,8 +104,13 @@ function addDaysYmd(ymd: string, days: number): string {
 export function serviceDates(
   sale: { service_from?: string | null; service_to?: string | null; payment_due?: string | null },
   cbteFch: string,
+  /** FIS-001: la fecha del comprobante no es la de la venta (quedó acotada). */
+  dateAdjusted = false,
 ): { desde: string; hasta: string; vto: string } {
-  const desde = isoToYmd(sale.service_from) ?? cbteFch;
+  let desde = isoToYmd(sale.service_from) ?? cbteFch;
+  // Con la fecha acotada (p. ej. venta offline con reloj adelantado), el
+  // período no puede empezar después del comprobante.
+  if (dateAdjusted && desde > cbteFch) desde = cbteFch;
   let hasta = isoToYmd(sale.service_to) ?? (desde > cbteFch ? desde : cbteFch);
   if (hasta < desde) hasta = desde;
   let vto = isoToYmd(sale.payment_due) ?? cbteFch;
@@ -118,6 +123,11 @@ export function serviceDates(
  * que acepta ARCA (hasta 5 días antes para productos y 10 para servicios) o
  * sea anterior al último autorizado de la serie (la numeración tiene que ir
  * con fechas no decrecientes). Nunca en el futuro.
+ *
+ * Fuente de la ventana: ADR-072 (docs/17-decision-log.md, punto 3), sin cita
+ * del manual del desarrollador de WSFE (no está en el repo). Que el borde sea
+ * inclusivo (hoy-5 y hoy-10 aceptados) queda a confirmar en homologación
+ * (FIS-018).
  */
 export function pickCbteDate(
   saleDate: string,

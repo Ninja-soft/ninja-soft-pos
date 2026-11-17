@@ -214,3 +214,15 @@ git worktree list
 ```
 
 Para el uso de worktrees con agentes, ver `agent-workflow.md`.
+
+## Funciones y tablas nuevas en migraciones (SEC-15)
+
+El job `rls` de CI corre `tests/integration/security-lint.test.ts` y `grants-parity.test.ts`. Una migración que crea objetos tiene que traer sus permisos:
+
+- **Función nueva:** `set search_path = public, pg_temp` y `revoke execute on function public.<fn>(<args>) from public, anon;` + `grant execute … to authenticated;` si la usa el front. El EXECUTE de PUBLIC es un default global de Postgres: sin el revoke, anon la ejecuta.
+- **Función de trigger:** `revoke execute … from public, anon, authenticated;`.
+- **SECURITY DEFINER que recibe `p_tenant`:** validar adentro (`current_tenant_id()`, `is_internal()`, un `*_assert*`) o no darle EXECUTE a authenticated.
+- **Pública a propósito (anon):** sumarla a `supabase/security/anon-allowlist.json` con su motivo y documentarla en `docs/05-security.md` §14.
+- **Tabla nueva:** grants explícitos (`docs/04-database.md` §6.1) y actualizar `supabase/security/grants.expected.json` en el mismo PR.
+
+Si el lint falla, el mensaje trae la firma exacta y el `revoke`/`alter` listo para pegar en una migración nueva. Ante un falso positivo del chequeo de `p_tenant`, se suma a `supabase/security/tenant-param-allowlist.json` con motivo; el chequeo no se desactiva.

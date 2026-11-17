@@ -114,15 +114,19 @@ select concat_ws('|',
   has_table_privilege('anon', 'public._sec09_probe', 'INSERT'),
   has_table_privilege('anon', 'public._sec09_probe', 'UPDATE'),
   has_table_privilege('anon', 'public._sec09_probe', 'DELETE'),
+  has_table_privilege('anon', 'public._sec09_probe', 'TRUNCATE'),
+  has_table_privilege('anon', 'public._sec09_probe', 'REFERENCES'),
+  has_table_privilege('anon', 'public._sec09_probe', 'TRIGGER'),
   has_sequence_privilege('anon', pg_get_serial_sequence('public._sec09_probe', 'id'), 'USAGE'),
   has_function_privilege('anon', 'public._sec09_probe_fn()', 'EXECUTE'));
 rollback;`;
-    const out = execFileSync("psql", [DB_URL!, "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql], { encoding: "utf8" })
+    const out = execFileSync("psql", [DB_URL!, "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"], { encoding: "utf8", input: sql })
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => /^[tf](\|[tf])+$/.test(l));
-    // anon: nada (SELECT, INSERT, UPDATE, DELETE, USAGE de la secuencia, EXECUTE).
-    expect(out).toEqual(["f|f|f|f|f|f"]);
+    // anon: nada (tabla: SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER; USAGE de la secuencia; EXECUTE).
+    // Por stdin (-f -): con -c psql sólo devuelve el resultado de la última sentencia.
+    expect(out).toEqual(["f|f|f|f|f|f|f|f|f"]);
   });
 });
 

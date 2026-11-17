@@ -17,6 +17,7 @@ import {
   impersonationExpiresAt,
   parseImpersonationMinutes,
 } from "../_shared/impersonation.ts";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 
 function randomHex(bytes: number): string {
   const a = new Uint8Array(bytes);
@@ -68,6 +69,9 @@ Deno.serve(async (req: Request) => {
   if (!meta.is_internal) return json({ error: "forbidden" }, 403);
   if (meta.internal_level === "support")
     return json({ error: "forbidden_support_level" }, 403);
+  // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+  const mfa = await staffMfaRejection(userClient, authHeader);
+  if (mfa) return json({ error: mfa }, 403);
 
   let body: { tenant_id?: string; reason?: string; duration_minutes?: unknown };
   try {

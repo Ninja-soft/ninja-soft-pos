@@ -13,6 +13,7 @@
 // service_role sólo vive acá (nunca en el front).
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import { parseCreateTenantInput } from "../_shared/tenantAdmin.ts";
 
 const cors = {
@@ -94,6 +95,9 @@ Deno.serve(async (req: Request) => {
 
   const meta = (user.app_metadata ?? {}) as { is_internal?: boolean; internal_level?: string };
   if (!meta.is_internal) return json({ error: "forbidden" }, 403);
+  // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+  const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+  if (mfa) return json({ error: mfa }, 403);
   if (meta.internal_level === "support") return json({ error: "forbidden_support_level" }, 403);
 
   let raw: unknown;

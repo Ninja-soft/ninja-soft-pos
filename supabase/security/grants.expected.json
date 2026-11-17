@@ -6704,6 +6704,20 @@
       "authenticated": true,
       "config": "search_path=public, pg_temp",
       "secdef": true,
+      "sig": "internal_mfa_required()"
+    },
+    {
+      "anon": false,
+      "authenticated": true,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
+      "sig": "internal_mfa_reset(p_user_id uuid, p_motivo text)"
+    },
+    {
+      "anon": false,
+      "authenticated": true,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
       "sig": "internal_my_billing_access()"
     },
     {
@@ -17581,7 +17595,7 @@
     },
     {
       "anon": "s",
-      "authenticated": "siud",
+      "authenticated": "s",
       "columns": {},
       "kind": "r",
       "name": "system_settings",

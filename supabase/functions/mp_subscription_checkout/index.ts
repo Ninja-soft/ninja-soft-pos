@@ -29,6 +29,7 @@
 // subscriptions.mp_amount_synced y el preapproval como 'pending'.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import { debitStartDate } from "../_shared/billing/mpAmount.ts";
 
 const cors = {
@@ -82,7 +83,11 @@ Deno.serve(async (req: Request) => {
     internal_level?: string;
     current_tenant_id?: string;
   };
-  const isInternal = meta.is_internal === true;
+  // MFA del staff (SEC-23): con el flag prendido, el staff aal1 se trata como
+  // un usuario común (camino del dueño), igual que is_internal() en la base.
+  const isInternal =
+    meta.is_internal === true &&
+    (await staffMfaRejection(userClient, req.headers.get("Authorization"))) === null;
 
   let b: Record<string, unknown>;
   try {

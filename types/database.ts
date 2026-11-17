@@ -3875,6 +3875,11 @@ export type Database = {
           internal_level: string
         }[]
       }
+      internal_mfa_required: { Args: never; Returns: boolean }
+      internal_mfa_reset: {
+        Args: { p_motivo: string; p_user_id: string }
+        Returns: Json
+      }
       internal_notify: {
         Args: {
           p_action_label?: string

@@ -1,7 +1,11 @@
 // @vitest-environment node
 // Healthcheck (F1.5 · ADR-098).
 import { describe, expect, it, vi } from "vitest";
-import { baseReport, deepChecks } from "@/lib/health";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { APP_VERSION, baseReport, deepChecks } from "@/lib/health";
+
+const PKG_VERSION = (JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as { version: string }).version;
 
 describe("healthcheck", () => {
   it("liveness con env y commit corto, sin secretos", () => {
@@ -12,12 +16,19 @@ describe("healthcheck", () => {
     expect(r).toEqual({
       status: "ok",
       service: "ninja-soft-pos",
-      version: "0.1.0",
+      version: PKG_VERSION,
       env: "production",
       commit: "abcdef1",
       time: "2026-10-13T00:00:00.000Z",
     });
     expect(JSON.stringify(r)).not.toContain("secreto");
+  });
+
+  it("version sale de package.json, no de npm_package_version (OPS-53)", () => {
+    expect(APP_VERSION).toBe(PKG_VERSION);
+    expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(baseReport({ npm_package_version: "9.9.9" }).version).toBe(PKG_VERSION);
+    expect(baseReport({}).version).toBe(PKG_VERSION);
   });
 
   it("deep: prueba Auth y la base con la anon key", async () => {

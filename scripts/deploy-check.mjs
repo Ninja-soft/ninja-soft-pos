@@ -404,7 +404,7 @@ function gitBase(root, base) {
   return { baseFiles, changes };
 }
 
-function apiAuth(flag) {
+export function apiAuth(flag) {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const ref = process.env.SUPABASE_PROJECT_REF;
   if (!token || !ref) throw new Error(`${flag} necesita SUPABASE_ACCESS_TOKEN y SUPABASE_PROJECT_REF`);

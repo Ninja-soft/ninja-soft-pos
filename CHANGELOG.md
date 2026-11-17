@@ -116,6 +116,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Docs: hitos del MVP con su estado real (OPS-12).** Las 47 casillas de `docs/01-mvp.md` §6 quedan revisadas: 43 hechas con la ruta o el test que lo prueba, 2 parciales (corrida del checklist de QA, monitoreo) y 2 pendientes enlazadas a su tarea (prueba de carga, backups verificados).
+
 - **Docs: estados de despliegue reconciliados en decision-log y specs (OPS-11 · ADR-185).** Las líneas de estado de 104 ADR y las frases de estado de las specs de cobranza, tesorería, logística, base de datos y venta offline reflejan producción; el método de verificación queda en ADR-185.
 
 - **Docs: roadmap F16–F24 y TX al día con producción (OPS-09).** 28 notas de "" / "" corregidas tras verificar migraciones (SEC-02) y Edge Functions (`nubceo_sync`, `platform_mp_reconcile`, `geo`, `routing`) en prod. Con OPS-07 y OPS-08, el roadmap completo ya no tiene estados de deploy desactualizados.

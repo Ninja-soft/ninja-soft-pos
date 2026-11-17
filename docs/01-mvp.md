@@ -230,15 +230,15 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** dejar el proyecto caminando con base sólida.
 
-- [ ] Repositorio creado, ramas configuradas, conventions documentadas.
-- [ ] Next.js + TypeScript + Tailwind funcionando.
-- [ ] Supabase proyecto creado, variables en Vercel.
-- [ ] Esquema base: `tenants`, `users`, `tenant_users`, `roles`, `permissions`, `subscriptions`, `audit_logs`, `feature_flags`, `tenant_feature_flags`.
-- [ ] RLS activa en todas las tablas base.
-- [ ] Auth funcionando con login, registro restringido, recuperación de password.
-- [ ] App shell con tema `ninja-dark` y `ninja-light`.
-- [ ] Componentes base: Button, Input, Card, Modal, Toast, Dropdown.
-- [ ] `docs/` y `.claude/` poblados con la documentación inicial.
+- [x] Repositorio creado, ramas configuradas, conventions documentadas. *(`docs/workflows/git-workflow.md`)*
+- [x] Next.js + TypeScript + Tailwind funcionando. *(`package.json`, `tailwind.config.ts`)*
+- [x] Supabase proyecto creado, variables en Vercel. *(`docs/13-deployment.md`)*
+- [x] Esquema base: `tenants`, `users`, `tenant_users`, `roles`, `permissions`, `subscriptions`, `audit_logs`, `feature_flags`, `tenant_feature_flags`. *(`supabase/migrations/20260530120100_identity_tenants_users.sql`, `supabase/migrations/20260530120300_audit_logs.sql`, `supabase/migrations/20260608120000_feature_gating.sql`; los roles viven en `tenant_users.role` y los permisos granulares en ADR-138)*
+- [x] RLS activa en todas las tablas base. *(`supabase/migrations/20260530120400_rls_and_audit_triggers.sql`, `tests/integration/rls.test.ts`)*
+- [x] Auth funcionando con login, registro restringido, recuperación de password. *(`app/(auth)/login`, `app/(auth)/recover`, `app/(auth)/reset-password`)*
+- [x] App shell con tema `ninja-dark` y `ninja-light`. *(`lib/theme`)*
+- [x] Componentes base: Button, Input, Card, Modal, Toast, Dropdown. *(`components/ui/Button.tsx`, `Input.tsx`, `Card.tsx`, `Modal.tsx`, `Toast.tsx`, `Dropdown.tsx`)*
+- [x] `docs/` y `.claude/` poblados con la documentación inicial. *(`docs/README.md`, `.claude/agents/README.md`)*
 
 **Demo:** un usuario se loguea, ve el shell vacío con el tema NinjaSoft, navega entre páginas sin errores.
 
@@ -246,13 +246,13 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** gestionar el catálogo del negocio.
 
-- [ ] CRUD de productos con todos los campos.
-- [ ] Categorías de 1 nivel.
-- [ ] Búsqueda por nombre, SKU, código de barras.
-- [ ] Ajuste de stock con motivo.
-- [ ] Historial de movimientos por producto.
-- [ ] Tabla `products`, `categories`, `stock_movements` con RLS.
-- [ ] Edge Function para ajuste atómico de stock.
+- [x] CRUD de productos con todos los campos. *(`modules/products`, `app/(app)/productos`)*
+- [x] Categorías de 1 nivel. *(`supabase/migrations/20260530130000_catalog_products.sql`)*
+- [x] Búsqueda por nombre, SKU, código de barras. *(`modules/products`, `tests/unit/posShortcuts.test.ts`)*
+- [x] Ajuste de stock con motivo. *(`supabase/migrations/20260530140000_fn_adjust_stock.sql`)*
+- [x] Historial de movimientos por producto. *(`app/(app)/inventario`, `modules/stock`)*
+- [x] Tabla `products`, `categories`, `stock_movements` con RLS. *(`supabase/migrations/20260530130000_catalog_products.sql`, `tests/integration/rls.test.ts`)*
+- [x] Edge Function para ajuste atómico de stock. *(es una RPC transaccional, no una Edge: `supabase/migrations/20260530140000_fn_adjust_stock.sql`)*
 
 **Demo:** un dueño carga 50 productos en 3 categorías, ajusta stock por compra y por merma, ve el historial.
 
@@ -260,13 +260,13 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** vender de verdad.
 
-- [ ] Pantalla POS con búsqueda rápida, atajos de teclado.
-- [ ] Carrito con descuentos por línea y global.
-- [ ] Selección de medio de pago.
-- [ ] Generación de ticket no fiscal (HTML imprimible).
-- [ ] Anulación con motivo y permiso.
-- [ ] Tablas `sales`, `sale_items`, `payments`.
-- [ ] Edge Function para crear venta atómica (resta stock + crea venta + crea pagos + escribe audit log en una sola transacción).
+- [x] Pantalla POS con búsqueda rápida, atajos de teclado. *(`app/(app)/pos`, `tests/unit/posShortcuts.test.ts`)*
+- [x] Carrito con descuentos por línea y global. *(`modules/pos`)*
+- [x] Selección de medio de pago. *(`modules/pos`, `components/pos/PosModals.tsx`)*
+- [x] Generación de ticket no fiscal (HTML imprimible). *(`tests/unit/ticketPostSale.test.ts`)*
+- [x] Anulación con motivo y permiso. *(`supabase/migrations/20260530170000_fn_void_sale.sql`)*
+- [x] Tablas `sales`, `sale_items`, `payments`. *(`supabase/migrations/20260530160000_fn_pos_caja.sql`)*
+- [x] Edge Function para crear venta atómica (resta stock + crea venta + crea pagos + escribe audit log en una sola transacción). *(es la RPC `create_sale` (una sola transacción), no una Edge: `tests/integration/perf-f4-create-sale.test.ts`, `tests/integration/rls.test.ts`)*
 
 **Demo:** un cajero hace 20 ventas variadas, anula una, imprime el ticket y todo queda registrado correctamente.
 
@@ -274,13 +274,13 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** controlar el dinero.
 
-- [ ] Apertura de caja con monto inicial.
-- [ ] Movimientos manuales (ingresos/egresos con motivo).
-- [ ] Arqueo intermedio.
-- [ ] Cierre de caja con diferencia.
-- [ ] Reporte Z exportable.
-- [ ] Tabla `cash_shifts`, `cash_movements`.
-- [ ] Bloqueo de venta sin caja abierta.
+- [x] Apertura de caja con monto inicial. *(`supabase/migrations/20260530160000_fn_pos_caja.sql`, `app/(app)/caja`)*
+- [x] Movimientos manuales (ingresos/egresos con motivo). *(`tests/unit/cash.test.ts`)*
+- [x] Arqueo intermedio. *(`tests/unit/cashCloseControls.test.ts`)*
+- [x] Cierre de caja con diferencia. *(`tests/unit/cashCloseControls.test.ts`)*
+- [x] Reporte Z exportable. *(`supabase/migrations/20260531110000_cash_z_closures.sql`, `tests/unit/zNumbers.test.ts`)*
+- [x] Tabla `cash_shifts`, `cash_movements`. *(`supabase/migrations/20260530160000_fn_pos_caja.sql`)*
+- [x] Bloqueo de venta sin caja abierta. *(`create_sale` exige turno abierto: `supabase/migrations/20260530160000_fn_pos_caja.sql`, `tests/unit/cashOwnership.test.ts`)*
 
 **Demo:** un encargado abre caja con $5.000, vende, registra un egreso de $2.000, cierra y exporta el Z.
 
@@ -288,11 +288,11 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** información para decidir.
 
-- [ ] CRUD de clientes con validación CUIT/DNI.
-- [ ] Histórico de compras por cliente.
-- [ ] Dashboard del cliente con métricas clave.
-- [ ] Reportes: ventas por día/rango, por medio de pago, por categoría, por cajero.
-- [ ] Exportación CSV en todos los reportes.
+- [x] CRUD de clientes con validación CUIT/DNI. *(`modules/customers`, `tests/unit/cuit.test.ts`)*
+- [x] Histórico de compras por cliente. *(`app/(app)/clientes` (ficha 360, ADR-169))*
+- [x] Dashboard del cliente con métricas clave. *(`app/(app)/dashboard`)*
+- [x] Reportes: ventas por día/rango, por medio de pago, por categoría, por cajero. *(`app/(app)/reportes`, `supabase/migrations/20260530190000_fn_sales_report.sql`)*
+- [x] Exportación CSV en todos los reportes. *(se exporta a Excel (no CSV) desde cada reporte: `app/(app)/reportes`)*
 
 **Demo:** un dueño ve qué vendió esta semana, qué medio de pago más usaron, qué categoría rinde más y exporta a Excel.
 
@@ -300,12 +300,12 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** operar el SaaS.
 
-- [ ] Alta de tenants desde el panel interno.
-- [ ] Asignación y cambio de plan.
-- [ ] Estado de suscripción y transiciones.
-- [ ] Activación de feature flags por tenant.
-- [ ] Vista de actividad por tenant (MRR, usuarios, ventas).
-- [ ] Auditoría de acciones administrativas.
+- [x] Alta de tenants desde el panel interno. *(`app/internal/tenants`)*
+- [x] Asignación y cambio de plan. *(`app/internal/planes`)*
+- [x] Estado de suscripción y transiciones. *(`app/internal/cobranza`)*
+- [x] Activación de feature flags por tenant. *(`supabase/migrations/20260608120000_feature_gating.sql`, `app/internal/tenants`)*
+- [x] Vista de actividad por tenant (MRR, usuarios, ventas). *(`supabase/migrations/20260604140000_internal_tenant_health.sql`)*
+- [x] Auditoría de acciones administrativas. *(`app/internal/audit`)*
 
 **Demo:** un admin NinjaSoft crea un tenant nuevo, le activa AFIP por feature flag, ve cuánto vende y suspende otro tenant por falta de pago.
 
@@ -313,12 +313,12 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 
 **Objetivo:** salir a piloto real.
 
-- [ ] Testing manual completo siguiendo `docs/18-qa-checklist.md`.
-- [ ] Pruebas de carga básicas (1.000 productos, 10.000 ventas/mes simuladas).
-- [ ] Backups automáticos verificados.
-- [ ] Monitoreo configurado (errores, performance, uptime).
-- [ ] Documentación de soporte para el equipo NinjaSoft.
-- [ ] Onboarding documentado para clientes piloto.
+- [~] Testing manual completo siguiendo `docs/18-qa-checklist.md`. *(existe `docs/18-qa-checklist.md`; falta registrar una corrida completa (OPS-15/OPS-18 la automatizan))*
+- [ ] Pruebas de carga básicas (1.000 productos, 10.000 ventas/mes simuladas). *(OPS-43 (prueba de carga, 3 sucursales))*
+- [ ] Backups automáticos verificados. *(OPS-29 (simulacro de backup en CI) y OPS-30 (restore real))*
+- [~] Monitoreo configurado (errores, performance, uptime). *(healthcheck `/api/health`; faltan monitores externos (OPS-31), incidentes (OPS-35) y Sentry (OPS-39))*
+- [x] Documentación de soporte para el equipo NinjaSoft. *(runbooks en `app/internal/runbooks`, centro de ayuda `lib/help/content.ts`)*
+- [x] Onboarding documentado para clientes piloto. *(`docs/28-school-onboarding.md`, `app/onboarding`)*
 
 **Demo:** primer cliente real opera un día completo y cierra caja sin asistencia.
 

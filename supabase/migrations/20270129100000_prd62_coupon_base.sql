@@ -831,7 +831,7 @@ begin
     -- Porcentaje y tope sobre la base del carrito (recargo y garantía se cobran
     -- enteros, como en el POS). El tope sobre v_subtotal queda como piso del total.
     v_coupon_disc := case when v_coupon.discount_type = 'percent'
-                          then v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100
+                          then round(v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100, 2)  -- redondeo a centavos como el POS
                           else coalesce(v_coupon.discount_value, 0) end;
     v_coupon_disc := least(
       greatest(v_coupon_disc, 0),

@@ -158,6 +158,6 @@ describe("create_sale vigente · promos con precio libre, seña, reserva y cupó
   it("el cupón se calcula sobre la misma base que el POS (sólo el carrito, PRD-62)", () => {
     const coupon = B.slice(at("v_coupon_disc := case when v_coupon.discount_type = 'percent'"), at("v_total_pre :="));
     expect(coupon).not.toContain(ws("then v_subtotal * coalesce(v_coupon.discount_value, 0) / 100"));
-    expect(coupon).toContain(ws("then v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100"));
+    expect(coupon).toContain(ws("then round(v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100, 2)"));
   });
 });

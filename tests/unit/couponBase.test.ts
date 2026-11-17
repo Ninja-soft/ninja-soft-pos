@@ -87,7 +87,7 @@ describe(`migración ${FILE}`, () => {
   it("el cupón (porcentaje, mínimo y tope) usa la base del carrito", () => {
     const coupon = B.slice(at("select * into v_coupon from coupons"), at("v_total_pre :="));
     expect(coupon).not.toContain(ws("then v_subtotal * coalesce(v_coupon.discount_value, 0) / 100"));
-    expect(coupon).toContain(ws("then v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100"));
+    expect(coupon).toContain(ws("then round(v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100, 2)"));
     expect(coupon).toContain(ws("if v_coupon_base < coalesce(v_coupon.min_amount, 0) then raise exception 'coupon_min_amount';"));
     expect(coupon).toContain(ws("greatest(v_coupon_base - coalesce(p_discount_total, 0) - v_promo_disc, 0),"));
     // El tope de F9 · H54 sobre v_subtotal sigue (piso del total).
@@ -95,7 +95,7 @@ describe(`migración ${FILE}`, () => {
     // La base se arma antes del mínimo y del cálculo.
     expect(at("v_coupon_base := greatest(v_coupon_base, 0);")).toBeLessThan(at("if v_coupon_base < coalesce(v_coupon.min_amount, 0)"));
     expect(at("if v_coupon_base < coalesce(v_coupon.min_amount, 0)")).toBeLessThan(
-      at("then v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100"),
+      at("then round(v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100, 2)"),
     );
   });
 

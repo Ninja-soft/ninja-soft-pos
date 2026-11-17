@@ -460,7 +460,7 @@ describe("mp_webhook (handleMpWebhook)", () => {
 
     expect(await bodyOf(res)).toEqual(RETRY_503);
     expect(mp.signals).toHaveLength(1);
-    expect(mp.signals[0].aborted).toBe(true);
+    expect(mp.signals[0]?.aborted).toBe(true);
     expect(state.failures).toHaveLength(1);
     expect(state.failures[0]).toMatchObject({ name: "TimeoutError" });
     expect(writes).toEqual([]);
@@ -666,7 +666,7 @@ describe("mp_webhook (handleMpWebhook)", () => {
       const { wh } = createWh();
       const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
       statuses.push(res.status);
-      expect(tables.mp_payment_intents[0].status).toBe(expiresIn < 0 ? "pending" : "approved");
+      expect(tables.mp_payment_intents[0]?.status).toBe(expiresIn < 0 ? "pending" : "approved");
     }
     expect(statuses).toEqual([503, 200]);
   });
@@ -690,7 +690,7 @@ describe("mp_webhook (handleMpWebhook)", () => {
     const res = await handleMpWebhook(toRequest("mp_webhook", paymentApproved.request), wh, paymentDeps(db, mp.fetchMp));
 
     expect(await bodyOf(res)).toEqual(OK_200);
-    expect(mp.calls[0].auth).toBe("Bearer APP_USR-nuevo");
+    expect(mp.calls[0]?.auth).toBe("Bearer APP_USR-nuevo");
     expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining("mp_oauth_refresh_save_failed"));
   });
@@ -899,7 +899,7 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
 
     expect(await bodyOf(res)).toEqual(RETRY_503);
     expect(hanging.signals).toHaveLength(1);
-    expect(hanging.signals[0].aborted).toBe(true);
+    expect(hanging.signals[0]?.aborted).toBe(true);
     expect(state.failures[0]).toMatchObject({ name: "TimeoutError" });
     expect(state.deferred).toEqual([]);
     expect(writes).toEqual([]);
@@ -998,7 +998,7 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
     }
 
     expect(results.map((r) => r.status)).toEqual([503, 200, 200]);
-    expect(String(results[0].failures[0])).toContain("deadlock detected");
+    expect(String(results[0]?.failures[0])).toContain("deadlock detected");
     expect(fake.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
     expect(fake.tables.audit_logs).toHaveLength(1);
     expect(mp.calls).toHaveLength(2);

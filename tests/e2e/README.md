@@ -41,6 +41,16 @@ NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 NEXT_PUBLIC_SUPABASE_ANON_KEY=du
 pnpm test:e2e
 ```
 
+## CI (`e2e-smoke`, OPS-15)
+
+El job `e2e-smoke` de `.github/workflows/ci.yml` corre el **modo smoke** en cada
+PR: `pnpm build` (env dummy de `quality`, heap de 6 GB), `pnpm start -p 3005`,
+espera `/api/health` y `pnpm test:e2e --project=chrome` con el Chromium de
+Playwright (cacheado en `~/.cache/ms-playwright` por versión). Sin tokens: los
+specs con sesión se saltean. Si falla sube `playwright-report/`, `test-results/`
+y el log de `next start` como artifact. Todavía no es check requerido (OPS-04).
+Ojo: cualquier `console.error` o excepción en una página pública lo hace fallar.
+
 ## Tenant QA
 
 Los flujos **crean y anulan datos reales** en el tenant de la sesión, por eso

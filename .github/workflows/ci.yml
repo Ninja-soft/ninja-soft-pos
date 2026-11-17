@@ -36,6 +36,10 @@ jobs:
         run: pnpm lint
 
       - name: Typecheck
+        # tsc del proyecto entero supera el heap por defecto de Node 20 (~2 GB)
+        # en el runner: sin esto muere por OOM (SEC-03, 2026-11-16).
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm typecheck
 
       # Orden y nombres de migraciones, migraciones aplicadas sin tocar y lista
@@ -70,9 +74,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Versión fijada (SEC-03): con `latest` cualquier release rompe la suite
+      # de golpe. v3.0.0 (2026-11-02) ya no acepta `inbucket` en config.toml.
+      # 2.122.0 es la del último CI verde de main (2026-10-27). Se libera
+      # después de SEC-07 (grants explícitos, sin auto_expose_new_tables);
+      # mientras tanto, ci-cli-canary.yml prueba `latest` cada semana.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.122.0
 
       - name: Install
         run: pnpm install --frozen-lockfile

@@ -4352,6 +4352,13 @@
       "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
+      "sig": "arca_log_event(p_doc uuid, p jsonb)"
+    },
+    {
+      "anon": false,
+      "authenticated": false,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
       "sig": "arca_mark_sending(p_doc uuid, p jsonb)"
     },
     {

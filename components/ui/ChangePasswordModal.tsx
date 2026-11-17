@@ -9,6 +9,8 @@ import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthProvider } from "@/modules/auth/hooks";
 import { appOrigin } from "@/lib/site";
+import { PASSWORD_HINT, validatePassword } from "@/modules/auth/password";
+import { authPasswordErrorMessage } from "@/lib/auth/passwordErrors";
 
 export function ChangePasswordModal({
   open,
@@ -26,14 +28,6 @@ export function ChangePasswordModal({
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function validatePassword(value: string) {
-    if (value.length < 10) return "Mínimo 10 caracteres.";
-    if (!/[A-Z]/.test(value)) return "Debe incluir al menos una mayúscula.";
-    if (!/[a-z]/.test(value)) return "Debe incluir al menos una minúscula.";
-    if (!/[0-9]/.test(value)) return "Debe incluir al menos un número.";
-    return null;
-  }
 
   async function submit() {
     setError(null);
@@ -75,7 +69,7 @@ export function ChangePasswordModal({
     const { error: err } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(authPasswordErrorMessage(err));
       return;
     }
 
@@ -179,7 +173,7 @@ export function ChangePasswordModal({
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          hint="Mínimo 10 caracteres, una mayúscula, una minúscula y un número."
+          hint={PASSWORD_HINT}
         />
         <Input
           label="Repetir contraseña"

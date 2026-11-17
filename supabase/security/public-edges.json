@@ -1,0 +1,222 @@
+{
+  "_doc": "Edge Functions públicas (verify_jwt = false) y cómo se defiende cada una (SEC-28). Tiene que coincidir con PUBLIC_FUNCTIONS de scripts/deploy-check.mjs y con supabase/config.toml: tests/unit/publicEdgesRegistry.test.ts falla si falta una o sobra otra. Detalle por Edge en docs/security-reviews/2026-11-edges-publicas.md. auth: hmac = firma verificada con un secreto; reconsulta = el cuerpo es sólo una pista y se re-lee el recurso en el proveedor con la credencial del negocio o de la plataforma; state = state de OAuth de un solo uso; api_key = clave propia (hash SHA-256); link_token = el uuid del cobro del link público es la credencial; static_token = header con un secreto fijo compartido; app_id = application_id de la app + cuenta conectada (sin firma); rate_limit_email = límite por email en la base. ipLimit = createIpLimiter en la Edge. bodyLimit = readJsonLimited / readTextLimited (en la Edge o en su handler de _shared). unitTest = test unitario con cuerpos maliciosos (null = la lógica vive sólo en index.ts).",
+  "authKinds": ["hmac", "reconsulta", "state", "api_key", "link_token", "static_token", "app_id", "rate_limit_email"],
+  "functions": [
+    {
+      "name": "catalog_purchase_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": null,
+      "tasks": ["SEC-32"],
+      "notes": "MP (cuenta de plataforma) avisa la compra de un catálogo. Re-lee /v1/payments/{id} con el token de plataforma; exige external_reference = intent y monto ±0,01; finalize_catalog_purchase idempotente. Sin firma x-signature aunque la plataforma ya tiene webhook_secret; el payment_id del cuerpo va al path de MP sin validar formato; sin withWebhookLog."
+    },
+    {
+      "name": "clover_webhook",
+      "auth": ["static_token", "reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "Clover (webhook por app). X-Clover-Auth = CLOVER_WEBHOOK_AUTH (safeEqual) y re-consulta de hasta 20 intents pendientes por merchant. El POST { verificationCode } no se autentica: sólo se loguea."
+    },
+    {
+      "name": "delivery_channel_webhook",
+      "auth": ["hmac"],
+      "ipLimit": true,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": [],
+      "notes": "PedidosYa, Rappi, Uber Eats, MP Delivery y el simulador, ?c=<conexión>. Firma por adaptador (simulador y Rappi HMAC con ventana de 300 s; PedidosYa, Uber Eats y MP Delivery rechazan todo hasta confirmar el contrato). Ingesta idempotente por conexión + id del evento (delivery_channel_ingest_event)."
+    },
+    {
+      "name": "directo_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "Directo, ?intent=<uuid>. Re-consulta get_by_notification/{id}; acredita sólo Success + merchantOrderId del intent. El monto no se exige (crédito: capital_differs se marca, ADR-181)."
+    },
+    {
+      "name": "dlocalgo_webhook",
+      "auth": ["hmac", "reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "dLocal Go, ?intent= o ?refund=. Authorization V2-HMAC-SHA256 con la Secret Key del negocio sobre api_key + cuerpo crudo; después re-consulta y exige PAID + order_id + ARS + monto exacto. Sin ventana anti-replay (la firma no lleva timestamp), mitigado por la idempotencia."
+    },
+    {
+      "name": "getnet_checkout",
+      "auth": ["link_token"],
+      "ipLimit": true,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": [],
+      "notes": "Página pública /pagar/[intent]?p=getnet. El uuid del intent (con init_point del checkout propio) es la credencial; el monto lo recalcula el servidor; payment_id reservado antes de cobrar. La tarjeta pasa por la Edge: `pay` apagado sin GETNET_CHECKOUT_API_PCI_ATTESTED. Límite 120/min por IP y por isolate."
+    },
+    {
+      "name": "getnet_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "Getnet, ?intent=<uuid> o sin intent (Web Checkout, busca por preference_id del cuerpo). Re-lee la orden con el token del negocio y exige monto exacto."
+    },
+    {
+      "name": "gocuotas_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "GO Cuotas (sin firma documentada), ?intent=<uuid>. Re-consulta con la API Key; exige order_reference_id = intent y monto exacto en centavos."
+    },
+    {
+      "name": "ml_oauth_callback",
+      "auth": ["state"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": null,
+      "tasks": ["SEC-32"],
+      "notes": "Ruta /api/ml/oauth/callback de Next. state de 64 hex borrado al leerlo (DELETE … RETURNING), vence a los 15 min, PKCE con code_verifier guardado."
+    },
+    {
+      "name": "ml_webhook",
+      "auth": ["app_id"],
+      "ipLimit": true,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": [],
+      "notes": "Mercado Libre (no firma). application_id de la app, user_id de una cuenta conectada y resource con el patrón del tópico; sólo encola (ml_notification_ingest, idempotente por _id). El worker lee el estado real con el token del vendedor. Cuerpo 16 KB; 600/min por IP."
+    },
+    {
+      "name": "mobbex_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "Mobbex, ?intent=<id>. Re-consulta la operación con api_key + access_token del negocio; exige reference = intent y monto (requestedTotal). El intent del query no se valida como uuid antes de la consulta (la base lo rechaza)."
+    },
+    {
+      "name": "modo_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": null,
+      "tasks": ["SEC-32"],
+      "notes": "MODO, ?intent=<id>. external_intention_id = intent obligatorio; re-consulta best-effort (contrato de MODO sin confirmar). Sin re-consulta posible NUNCA aprueba, pero sí aplica rejected/cancelled/expired del cuerpo sin verificar. No usa state de un solo uso."
+    },
+    {
+      "name": "mp_billing_webhook",
+      "auth": ["hmac", "reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "MP (suscripciones de NinjaSoft). x-signature exigida sólo si platform_secrets.mercadopago.webhook_secret está cargado (si falta, sólo re-consulta). Re-lee preapproval / authorized_payment con el token de plataforma; claim_mp_webhook_event idempotente por evento."
+    },
+    {
+      "name": "mp_oauth_callback",
+      "auth": ["state"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": null,
+      "tasks": ["SEC-32"],
+      "notes": "Front tras el redirect de MP. state de mp_oauth_states (creado por mp_oauth_start) + canje del code. El state se lee con SELECT y se borra al final (no atómico) y la tabla no tiene vencimiento."
+    },
+    {
+      "name": "mp_orders_webhook",
+      "auth": ["hmac", "reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "MP Orders API (QR dinámico y Point). x-signature con system_settings.mp_webhook_signature_mode (hoy report: anota y sigue). Re-lee la order con el token del negocio; processed + monto exacto + external_reference. 503 ante fallas transitorias (PAY-27). Handler en _shared/mpWebhookHandlers.ts (tests/unit/mpWebhooks.test.ts)."
+    },
+    {
+      "name": "mp_token_broker",
+      "auth": ["api_key"],
+      "ipLimit": false,
+      "bodyLimit": false,
+      "unitTest": null,
+      "tasks": ["SEC-32"],
+      "notes": "Otro sistema del mismo negocio (servidor a servidor). x-api-key nsmp_… comparada por SHA-256 en mp_token_broker_keys, revocable, allowed_ips opcional (primer x-forwarded-for). No lee el cuerpo. Devuelve el access token de MP de producción; audita cada entrega."
+    },
+    {
+      "name": "mp_webhook",
+      "auth": ["hmac", "reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "MP Checkout Pro (?intent=) y contracargos / reclamos. x-signature en modo report (SEC-60); re-consulta el pago con el token del negocio; 503 ante fallas transitorias (PAY-27). Handler en _shared/mpWebhookHandlers.ts (tests/unit/mpWebhooks.test.ts)."
+    },
+    {
+      "name": "nave_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "Nave. external_payment_id (uuid) ubica el intent; payment_check_url sólo si es un host Nave del ambiente (anti-SSRF), si no se arma desde la base confiable; APPROVED + correlación + monto exacto. 5xx ante fallas transitorias."
+    },
+    {
+      "name": "payway_checkout",
+      "auth": ["link_token"],
+      "ipLimit": true,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": [],
+      "notes": "Página pública /pagar/[intent]. El uuid del intent es la credencial; el PAN va del navegador a Payway (token de un solo uso); monto recalculado en el servidor en centavos. Límite 120/min por IP y por isolate."
+    },
+    {
+      "name": "payway_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-32"],
+      "notes": "Legado (el checkout propio aprueba en forma sincrónica). ?i=<12 hex> contra intents payway pendientes de 48 h (ambiguo = no acredita); re-consulta con la apikey privada: approved + monto exacto + site_transaction_id."
+    },
+    {
+      "name": "send_password_recovery",
+      "auth": ["rate_limit_email"],
+      "ipLimit": true,
+      "bodyLimit": true,
+      "unitTest": null,
+      "tasks": [],
+      "notes": "Login sin sesión. Responde siempre ok (anti-enumeración); 3 envíos por email cada 15 min (system_emails) y 10 por IP cada 10 min. El origen del link se elige del cuerpo contra una allowlist que incluye ninja-soft-pos-*.vercel.app y localhost."
+    },
+    {
+      "name": "talo_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-29", "SEC-32"],
+      "notes": "Talo (sin firma; X-Talo-Signature está 'próximamente'). paymentId del cuerpo = el guardado en el intent; re-consulta GET /payments/{id}; SUCCESS u OVERPAID + external_id + precio del intent."
+    },
+    {
+      "name": "ualabis_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-29", "SEC-32"],
+      "notes": "Ualá Bis (sin firma), ?intent= o ?refund=. uuid de la orden = el del intent; re-consulta GET /orders/{uuid}; PROCESSED/APPROVED + external_reference + monto en pesos."
+    },
+    {
+      "name": "viumi_webhook",
+      "auth": ["reconsulta"],
+      "ipLimit": false,
+      "bodyLimit": true,
+      "unitTest": "tests/unit/publicEdgesMalicious.test.ts",
+      "tasks": ["SEC-29", "SEC-32"],
+      "notes": "Viumi (sin firma documentada), ?intent=<uuid>. uuid de la orden = el del intent; re-consulta GET /api/v2/orders/{uuid}; pago aprobado + monto exacto en centavos."
+    }
+  ]
+}

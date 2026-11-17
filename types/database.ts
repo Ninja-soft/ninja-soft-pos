@@ -3828,6 +3828,7 @@ export type Database = {
       }
       create_sale: {
         Args: {
+          p_client_request_id?: string
           p_customer_id?: string
           p_discount_total?: number
           p_items: Json

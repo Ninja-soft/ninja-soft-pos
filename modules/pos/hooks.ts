@@ -281,6 +281,8 @@ export function usePosMutations() {
         service?: SaleServiceInput | null;
         // ADR-136: reparto de entregas (otra sucursal, depósito, retiro, envío).
         fulfillment?: PlanPayload | null;
+        // SEC-43 (ADR-187): clave de idempotencia del cobro.
+        clientRequestId?: string | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -294,6 +296,7 @@ export function usePosMutations() {
           vars.couponId,
           vars.service,
           vars.fulfillment,
+          vars.clientRequestId,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

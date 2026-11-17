@@ -36,12 +36,24 @@
 //   Imprime el PLAN: migraciones pendientes en orden (todas las >= a la última
 //   aplicada) y sus avisos.
 //
+//   --advisors           Management API (mismos secrets): GET
+//                        /v1/projects/{ref}/advisors/security (los lints de
+//                        Splinter: {lints: [{name, title, level, metadata}]})
+//   A1  un lint vigilado supera su umbral de scripts/security-baseline.json
+//       (severidad del baseline: hoy error para SECURITY DEFINER ejecutables
+//       por anon y search_path mutable)
+//   A2  SECURITY DEFINER ejecutable por anon que no está en
+//       supabase/security/anon-allowlist.json (error)
+//   A3  lint de nivel ERROR que el baseline no vigila (aviso)
+//
 // Uso:
 //   node scripts/deploy-check.mjs                       # estático
 //   node scripts/deploy-check.mjs --base=origin/main    # + orden contra la rama base
 //   node scripts/deploy-check.mjs --applied=applied.txt # + plan de migraciones
 //   node --env-file=.env.local scripts/deploy-check.mjs --remote
+//   node --env-file=.env.local scripts/deploy-check.mjs --remote --advisors
 //   node scripts/deploy-check.mjs --json
+//   (CI nocturno: .github/workflows/drift.yml)
 //
 // Sale con 1 si hay errores (los avisos no cortan). La lógica es pura y se
 // exporta para los tests (tests/unit/deployCheck.test.ts).
@@ -289,6 +301,72 @@ export function checkDeployed(deployed, dirs, expected = PUBLIC_FUNCTIONS) {
   return findings;
 }
 
+/**
+ * Normaliza la respuesta de GET /v1/projects/{ref}/advisors/security:
+ * `{ lints: [{ name, title, level: "ERROR"|"WARN"|"INFO", facing, categories,
+ * description, detail, remediation, metadata: { schema, name, type }, cache_key }] }`.
+ * Acepta también el array suelto. Devuelve los lints y el conteo por `name`.
+ */
+export function parseAdvisors(json) {
+  const arr = Array.isArray(json) ? json : Array.isArray(json?.lints) ? json.lints : null;
+  if (!arr) throw new Error("respuesta de advisors sin `lints`");
+  const lints = arr
+    .filter((l) => l && typeof l.name === "string")
+    .map((l) => ({
+      name: l.name,
+      title: l.title ?? l.name,
+      level: String(l.level ?? "").toUpperCase(),
+      object: l.metadata?.name ? `${l.metadata.schema ? `${l.metadata.schema}.` : ""}${l.metadata.name}` : null,
+      fn: l.metadata?.type === "function" ? (l.metadata?.name ?? null) : null,
+    }));
+  const counts = {};
+  for (const l of lints) counts[l.name] = (counts[l.name] ?? 0) + 1;
+  return { lints, counts };
+}
+
+/**
+ * Compara los lints con el baseline versionado (scripts/security-baseline.json):
+ * `{ advisors: { <lint name>: { max, severity? } } }`. `allowlist` = nombres de
+ * las funciones de supabase/security/anon-allowlist.json (sin firma).
+ */
+export function checkAdvisors(parsed, baseline, allowlist = null) {
+  const findings = [];
+  const rules = baseline?.advisors ?? {};
+  for (const [name, rule] of Object.entries(rules)) {
+    const n = parsed.counts[name] ?? 0;
+    if (n > rule.max) {
+      const objs = parsed.lints.filter((l) => l.name === name && l.object).map((l) => l.object);
+      findings.push({
+        code: "A1",
+        severity: rule.severity ?? "error",
+        object: name,
+        detail: `${n} > umbral ${rule.max}${objs.length ? `: ${objs.slice(0, 30).join(", ")}${objs.length > 30 ? ", …" : ""}` : ""}`,
+      });
+    }
+  }
+  if (allowlist) {
+    const allowed = new Set(allowlist);
+    for (const l of parsed.lints) {
+      if (l.name === "anon_security_definer_function_executable" && l.fn && !allowed.has(l.fn)) {
+        findings.push({ code: "A2", severity: "error", object: l.object ?? l.fn, detail: "SECURITY DEFINER ejecutable por anon fuera de anon-allowlist.json" });
+      }
+    }
+  }
+  const unwatched = new Map();
+  for (const l of parsed.lints) {
+    if (l.level === "ERROR" && !(l.name in rules)) unwatched.set(l.name, (unwatched.get(l.name) ?? 0) + 1);
+  }
+  for (const [name, n] of unwatched) {
+    findings.push({ code: "A3", severity: "warn", object: name, detail: `${n} lint(s) de nivel ERROR sin umbral en security-baseline.json` });
+  }
+  return findings;
+}
+
+/** Nombres (sin firma) de supabase/security/anon-allowlist.json. */
+export function allowlistNames(json) {
+  return (json?.functions ?? []).map((f) => String(f.sig ?? f.name ?? "").replace(/\(.*$/, "").trim()).filter(Boolean);
+}
+
 // ---------------------------------------------------------------------------
 // IO
 // ---------------------------------------------------------------------------
@@ -326,11 +404,15 @@ function gitBase(root, base) {
   return { baseFiles, changes };
 }
 
-async function remote() {
+function apiAuth(flag) {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   const ref = process.env.SUPABASE_PROJECT_REF;
-  if (!token || !ref) throw new Error("--remote necesita SUPABASE_ACCESS_TOKEN y SUPABASE_PROJECT_REF");
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  if (!token || !ref) throw new Error(`${flag} necesita SUPABASE_ACCESS_TOKEN y SUPABASE_PROJECT_REF`);
+  return { ref, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } };
+}
+
+async function remote() {
+  const { ref, headers } = apiAuth("--remote");
   const q = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
     method: "POST",
     headers,
@@ -342,6 +424,13 @@ async function remote() {
   if (!f.ok) throw new Error(`Management API (functions) ${f.status}`);
   const deployed = (await f.json()).map((x) => ({ slug: x.slug, verify_jwt: x.verify_jwt }));
   return { applied, deployed };
+}
+
+async function remoteAdvisors() {
+  const { ref, headers } = apiAuth("--advisors");
+  const r = await fetch(`https://api.supabase.com/v1/projects/${ref}/advisors/security`, { headers });
+  if (!r.ok) throw new Error(`Management API (advisors) ${r.status}`);
+  return parseAdvisors(await r.json());
 }
 
 export async function run(argv, root) {
@@ -363,6 +452,15 @@ export async function run(argv, root) {
     applied = r.applied;
     findings.push(...checkDeployed(r.deployed, repo.dirs));
   }
+  let advisors = null;
+  if (args.includes("--advisors")) {
+    const parsed = await remoteAdvisors();
+    const baseline = JSON.parse(fs.readFileSync(path.join(root, "scripts", "security-baseline.json"), "utf8"));
+    const allowPath = path.join(root, "supabase", "security", "anon-allowlist.json");
+    const allow = fs.existsSync(allowPath) ? allowlistNames(JSON.parse(fs.readFileSync(allowPath, "utf8"))) : null;
+    advisors = parsed.counts;
+    findings.push(...checkAdvisors(parsed, baseline, allow));
+  }
   if (applied) {
     plan = planMigrations(list, applied, (f) => fs.readFileSync(path.join(repo.migDir, f), "utf8"));
     findings.push(...plan.findings);
@@ -372,6 +470,7 @@ export async function run(argv, root) {
     functions: repo.dirs.length,
     publicFunctions: repo.config,
     plan: plan ? { lastApplied: plan.lastApplied, pending: plan.pending.map((p) => p.file) } : null,
+    advisors,
     findings: findings.filter((f, i, a) => a.findIndex((g) => g.code === f.code && g.object === f.object && g.detail === f.detail) === i),
   };
 }
@@ -389,6 +488,10 @@ if (isMain) {
         console.log(`\nÚltima aplicada: ${res.plan.lastApplied ?? "(ninguna)"}`);
         console.log(`Pendientes en orden (${res.plan.pending.length}):`);
         for (const p of res.plan.pending) console.log(`  ${p}`);
+      }
+      if (res.advisors) {
+        console.log("\nAdvisors de seguridad (lints por nombre):");
+        for (const [k, n] of Object.entries(res.advisors).sort()) console.log(`  ${k}: ${n}`);
       }
       console.log(`\nHallazgos: ${errors.length} errores, ${res.findings.length - errors.length} avisos`);
       for (const f of res.findings) console.log(`[${f.severity}] ${f.code} ${f.object}: ${f.detail}`);

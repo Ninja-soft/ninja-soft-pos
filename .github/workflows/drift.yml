@@ -1,0 +1,123 @@
+name: Drift prod/repo
+
+# SEC-04 · Control nocturno de drift entre producción y el repo.
+# Corre `scripts/deploy-check.mjs --remote --advisors` contra la Management API
+# de Supabase (sólo lectura) y falla ante errores: M3 (migración del repo sin
+# aplicar y más vieja que la última aplicada), R1/R2 (Edge desplegada con un
+# verify_jwt distinto al de la lista pública), A1/A2 (advisors de seguridad por
+# encima de scripts/security-baseline.json). Si falla, abre o comenta un issue
+# con label `drift`.
+#
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  token personal de supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_REF   ref del proyecto de producción
+# Sin secrets el job termina en verde con un ::warning:: (ver docs/13-deployment.md §6.1).
+on:
+  schedule:
+    - cron: "0 9 * * *" # todos los días 06:00 ART
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Secrets
+        id: secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::warning title=Drift prod/repo::Faltan los secrets SUPABASE_ACCESS_TOKEN y/o SUPABASE_PROJECT_REF; se saltea el chequeo (docs/13-deployment.md §6.1)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Drift prod/repo: salteado, faltan secrets." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.skip == 'false'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.skip == 'false'
+        with:
+          node-version: 22
+
+      - name: deploy-check --remote --advisors
+        id: check
+        if: steps.secrets.outputs.skip == 'false'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set +e
+          node scripts/deploy-check.mjs --remote --advisors > raw.txt 2>&1
+          code=$?
+          set -e
+          # El reporte no lleva secretos; por las dudas se tapa el ref (va a un issue, donde no hay máscara).
+          sed "s/${SUPABASE_PROJECT_REF}/<ref>/g" raw.txt > drift-report.txt
+          rm -f raw.txt
+          cat drift-report.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Drift prod/repo"
+            echo ""
+            echo "Salida de \`deploy-check --remote --advisors\` (código $code):"
+            echo ""
+            echo '```'
+            cat drift-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Abrir o actualizar issue `drift`
+        if: steps.check.outcome == 'success' && steps.check.outputs.code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CODE: ${{ steps.check.outputs.code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$CODE" = "1" ]; then
+            what="El chequeo encontró errores de drift (M3, R1, R2 o advisors A1/A2)."
+          else
+            what="El chequeo no pudo completarse (código $CODE): revisar la Management API o los secrets."
+          fi
+          {
+            echo "$what"
+            echo ""
+            echo "- Corrida: $RUN_URL"
+            echo "- Fecha (UTC): $(date -u +'%Y-%m-%d %H:%M')"
+            echo "- Commit: \`${GITHUB_SHA::8}\`"
+            echo ""
+            echo '```'
+            head -c 60000 drift-report.txt
+            echo '```'
+            echo ""
+            echo "Cómo leerlo y qué hacer: docs/13-deployment.md §6.1 y §11."
+          } > issue-body.md
+          gh label create drift --color B60205 --description "Drift prod/repo (drift.yml)" 2>/dev/null || true
+          num=$(gh issue list --label drift --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body-file issue-body.md
+          else
+            gh issue create --title "Drift prod/repo detectado" --label drift --body-file issue-body.md
+          fi
+
+      - name: Fallar si hay drift
+        if: steps.check.outcome == 'success' && steps.check.outputs.code != '0'
+        env:
+          CODE: ${{ steps.check.outputs.code }}
+        run: |
+          echo "::error title=Drift prod/repo::deploy-check salió con $CODE; ver el resumen y el issue con label drift."
+          exit 1

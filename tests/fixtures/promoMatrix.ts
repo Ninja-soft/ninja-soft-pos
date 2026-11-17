@@ -559,6 +559,65 @@ export const PROMO_CASES: PromoCase[] = [
     ctx: CTX,
     expected: { discount: 37.5, applied: [{ id: "p1", discount: 37.5 }] },
   },
+  // PRD-02: casos que create_sale arma desde caminos posteriores a ADR-074
+  // (precio libre de ADR-151, seña de ADR-088 y entrega de reserva de ADR-096).
+  // El motor sólo ve la línea y los pagos; lo demás lo prueba
+  // tests/integration/rls-promociones-create-sale.test.ts.
+  {
+    // ADR-151: la línea entra con el precio que tipeó el cajero (no el de lista).
+    name: "precio libre: 10% sobre el precio tipeado",
+    promos: [promo({ id: "p1" })],
+    lines: [line("libre", "catX", null, 1234.56, 1), line("prodB", "catY", "brB", 500, 1)],
+    ctx: CTX,
+    expected: { discount: 173.46, applied: [{ id: "p1", discount: 173.46 }], firstLines: [123.46, 50] },
+  },
+  {
+    name: "precio libre: precio fijo por debajo de lo tipeado",
+    promos: [promo({ id: "p1", action_type: "fixed_price", action_value: 800, scope: "product", scope_product_id: "libre" })],
+    lines: [line("libre", "catX", null, 1500, 1), line("prodB", "catY", "brB", 500, 1)],
+    ctx: CTX,
+    expected: { discount: 700, applied: [{ id: "p1", discount: 700 }], firstLines: [700, 0] },
+  },
+  {
+    name: "precio libre: tipeado por debajo del precio fijo no descuenta",
+    promos: [promo({ id: "p1", action_type: "fixed_price", action_value: 800, scope: "product", scope_product_id: "libre" })],
+    lines: [line("libre", "catX", null, 700, 1)],
+    ctx: CTX,
+    expected: { discount: 0, applied: [] },
+  },
+  {
+    // ADR-088: la seña del turno viaja como pago 'sena' y cuenta como un pago más.
+    name: "seña: promo sin condición de cobro aplica igual",
+    promos: [promo({ id: "p1" })],
+    lines: TWO,
+    ctx: { ...CTX, payments: [{ method: "sena" }, { method: "cash" }] },
+    expected: { discount: 150, applied: [{ id: "p1", discount: 150 }] },
+  },
+  {
+    name: "seña: promo de efectivo con parte en seña no aplica",
+    promos: [promo({ id: "p1", payment_method: "cash" })],
+    lines: TWO,
+    ctx: { ...CTX, payments: [{ method: "sena" }, { method: "cash" }] },
+    expected: { discount: 0, applied: [] },
+  },
+  {
+    name: "seña: Visa con seña queda afuera y gana la promo sin condición",
+    promos: [promo({ id: "p1", action_value: 15, card_brands: ["visa"] }), promo({ id: "p2", action_value: 5 })],
+    lines: TWO,
+    ctx: { ...CTX, payments: [{ method: "sena" }, { method: "credit", cardBrand: "Visa" }] },
+    expected: { discount: 75, applied: [{ id: "p2", discount: 75 }] },
+  },
+  {
+    // ADR-096: la venta que entrega la reserva trae sus renglones y el regalo aparte.
+    name: "reserva: 2x1 sobre lo reservado con el regalo afuera",
+    promos: [
+      promo({ id: "g1", action_type: "gift", action_value: 0, gift_product_id: "llavero", gift_qty: 1, min_amount: 300 }),
+      promo({ id: "p1", action_type: "nxm", buy_qty: 2, pay_qty: 1 }),
+    ],
+    lines: [line("campera", "catX", null, 100, 4), line("llavero", null, null, 0, 1, 0, true)],
+    ctx: CTX,
+    expected: { discount: 200, applied: [{ id: "p1", discount: 200 }], firstLines: [200, 0], gifts: ["g1"] },
+  },
 ];
 
 /** Argumentos de promotion_preview / _promo_eval_core para un caso. */

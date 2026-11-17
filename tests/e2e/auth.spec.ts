@@ -10,10 +10,12 @@ test.describe("auth · páginas públicas", () => {
   test("login renderiza el formulario", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByText("Iniciar", { exact: false }).first()).toBeVisible();
-    await expect(page.getByLabel("Email")).toBeVisible();
-    await expect(page.getByLabel("Contraseña")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Ingresar con Google/ })).toBeVisible();
+    // exact: el separador "o con tu email" y el botón "Mostrar contraseña"
+    // también matchean por substring.
+    await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Contraseña", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Iniciar sesión" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Continuar con Google/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Olvidé mi contraseña" })).toBeVisible();
   });
 
@@ -24,7 +26,7 @@ test.describe("auth · páginas públicas", () => {
       return route.abort();
     });
     await page.goto("/login");
-    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Iniciar sesión" }).click();
     // Zod marca el error en el form; no hubo request de login.
     await expect(page.locator("form [role=alert], form .text-danger, form .text-destructive").first()).toBeVisible();
     expect(authCalls).toBe(0);
@@ -51,8 +53,8 @@ test.describe("auth · páginas públicas", () => {
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     });
     await page.goto("/recover");
-    await expect(page.getByText("Recuperar contraseña")).toBeVisible();
-    await page.getByLabel("Email").fill("e2e-recover@example.com");
+    await expect(page.getByText("Recuperá tu contraseña")).toBeVisible();
+    await page.getByLabel("Email", { exact: true }).fill("e2e-recover@example.com");
     await page.getByRole("button", { name: "Enviar enlace" }).click();
     await expect(
       page.getByText("Si el email está registrado, vas a recibir un enlace en breve."),

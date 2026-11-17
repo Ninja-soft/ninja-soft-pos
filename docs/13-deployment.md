@@ -51,9 +51,16 @@ Post-deploy (§11.2): healthcheck profundo + smoke de piloto en el tenant QA
 - Framework: Next.js.
 - Node version: 20.x.
 - Install command: `pnpm install --frozen-lockfile`.
-- Build command: `pnpm build`.
+- Build command: `pnpm build` (= `next build && node scripts/build-check.mjs`, ver §3.1.1).
 - Output directory: `.next`.
 - Root directory: `/`.
+
+### 3.1.1 Memoria del build y chequeo de `BUILD_ID` (OPS-55)
+
+- **El problema.** El chequeo de tipos de `next build` corre en un proceso hijo (jest-worker de Next 14.2). Con el heap por defecto de Node 20 (~2 GB en una máquina de 7-8 GB) el proyecto entero no entra y ese hijo muere por OOM. En Linux V8 aborta con `SIGABRT`, el hijo sale con código `null`, y el jest-worker que trae Next lo trata como cierre normal: no rechaza la llamada pendiente, el proceso padre se queda sin nada que hacer y **`next build` termina con código 0 sin haber escrito el build**. En Windows el hijo sale con 134 y ahí sí falla. Reproducido con el jest-worker de Next en Node 20 Linux (WSL): el padre sale 0 después del `FATAL ERROR ... heap out of memory`.
+- **La defensa.** El script `build` de `package.json` encadena `node scripts/build-check.mjs`, que sale 1 si no existe `.next/BUILD_ID` (o está vacío). Va en el propio script y no en un `postbuild` porque pnpm 9 no corre `pre`/`post` scripts salvo con `enable-pre-post-scripts`; con `&&` corre igual en CI, en Vercel (Build command `pnpm build`) y en local. No se usa `typescript.ignoreBuildErrors`.
+- **Heap explícito.** En CI los jobs `quality` y `e2e-smoke` corren el build con `NODE_OPTIONS=--max-old-space-size=6144` (igual que el typecheck). Local: si `pnpm build` falla por memoria, `NODE_OPTIONS=--max-old-space-size=8192 pnpm build`.
+- **Vercel.** La máquina de build estándar de Vercel tiene 8 GB de RAM (4 vCPU); el heap que le queda a Node depende de cómo Vercel arme el entorno y no se ve desde el repo. Al 2026-11-17 los últimos 40 deploys de producción figuran `success` en GitHub, así que hoy entra; desde OPS-55, si el chequeo de tipos se queda sin memoria el deploy falla con `build-check: next build terminó sin generar el build` en lugar de salir verde. **Si eso pasa** (paso manual de Lucas, no está aplicado): Vercel → Project → Settings → Environment Variables → `NODE_OPTIONS` = `--max-old-space-size=6144` en Production y Preview, y redeploy. No subirlo a más de ~6 GB: el resto de la memoria la usan webpack y los workers de páginas.
 
 ### 3.2 Branches
 - Production branch: `main`.
@@ -134,7 +141,7 @@ npx supabase functions deploy <nombre> --project-ref hrkditzrsavehnhngakb
 
 | Script | Qué hace |
 |---|---|
-| `pnpm lint` / `typecheck` / `test` / `build` | Gate automático (CI `quality`). |
+| `pnpm lint` / `typecheck` / `test` / `build` | Gate automático (CI `quality`). `build` falla si no quedó `.next/BUILD_ID` (§3.1.1). |
 | `pnpm test:rls` | Suite de aislamiento multi-tenant (CI `rls`, Supabase local). |
 | `pnpm test:e2e` | Playwright completo (ver `tests/e2e/README.md`). |
 | `pnpm test:smoke` | Smoke de piloto: sesión, caja, venta en efectivo, ticket, anulación, cierre y reporte (§11.2). |
@@ -145,7 +152,7 @@ npx supabase functions deploy <nombre> --project-ref hrkditzrsavehnhngakb
 
 `.github/workflows/ci.yml`, en cada PR y push a `main`:
 
-- **quality:** install → lint → typecheck → **deploy check** (`scripts/deploy-check.mjs --base=origin/<rama base>`: nombres y timestamps de migraciones, migraciones existentes sin tocar, lista exacta de Edge públicas) → test → build.
+- **quality:** install → lint → typecheck → **deploy check** (`scripts/deploy-check.mjs --base=origin/<rama base>`: nombres y timestamps de migraciones, migraciones existentes sin tocar, lista exacta de Edge públicas) → test → build (heap de 6 GB + chequeo de `BUILD_ID`, §3.1.1).
 - **rls:** `supabase start` aplica todas las migraciones en orden y corre `pnpm test:rls`. Si falla, hay fuga entre tenants, una policy rota o una migración que no aplica desde cero: no mergear.
 
 No hay deploy automático de base ni de Edge Functions: se hace a mano (§4) con el checklist de §11.

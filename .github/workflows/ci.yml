@@ -59,7 +59,13 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Mismo heap que el typecheck: el chequeo de tipos de `next build` muere
+      # por OOM con el default (~2 GB). `pnpm build` termina con
+      # scripts/build-check.mjs, que falla si no quedó .next/BUILD_ID (en Linux
+      # Next sale 0 cuando el worker de tipos muere por OOM; OPS-55).
       - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm build
 
   # Suite de aislamiento multi-tenant + RLS (F1.5) contra un Supabase local
@@ -144,14 +150,12 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       # Mismo heap que el typecheck de `quality`: el chequeo de tipos de
-      # `next build` muere por OOM con el default (~2 GB) y el step igual
-      # termina en 0 sin .next; por eso se valida BUILD_ID.
+      # `next build` muere por OOM con el default (~2 GB). El BUILD_ID lo valida
+      # scripts/build-check.mjs, encadenado en el script `build` (OPS-55).
       - name: Build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-        run: |
-          pnpm build
-          test -f .next/BUILD_ID || { echo "next build no generó .next/BUILD_ID"; exit 1; }
+        run: pnpm build
 
       - name: Start app
         run: |

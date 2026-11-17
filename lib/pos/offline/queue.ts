@@ -18,6 +18,8 @@ export interface OfflineSalePayload {
   promo_id: string | null;
   promo_name: string | null;
   cash_shift_id: string;
+  /** SEC-43 (ADR-187): clave del cobro online que se cortó (misma venta). */
+  client_request_id?: string | null;
 }
 
 /** Resumen para el ticket provisorio. */

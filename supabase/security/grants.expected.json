@@ -2175,6 +2175,13 @@
       "authenticated": false,
       "config": "search_path=public, pg_temp",
       "secdef": true,
+      "sig": "_sale_fulfilled_replay_result(p_tenant uuid, p_sale uuid)"
+    },
+    {
+      "anon": false,
+      "authenticated": false,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
       "sig": "_sale_fulfillment_mode(p_sale uuid)"
     },
     {
@@ -2225,6 +2232,20 @@
       "config": "search_path=public, pg_temp",
       "secdef": true,
       "sig": "_sale_replay_result(p_tenant uuid, p_sale uuid)"
+    },
+    {
+      "anon": false,
+      "authenticated": false,
+      "config": "search_path=public, pg_temp",
+      "secdef": false,
+      "sig": "_sale_request_plan_hash(p_sale jsonb, p_plan jsonb)"
+    },
+    {
+      "anon": false,
+      "authenticated": false,
+      "config": "search_path=public, pg_temp",
+      "secdef": true,
+      "sig": "_sale_request_replay(p_tenant uuid, p_req uuid, p_hash text)"
     },
     {
       "anon": false,

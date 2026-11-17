@@ -17,6 +17,7 @@ import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import type { SettlementLineRow } from "@/lib/reports/processorReconciliation";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { posApi } from "@/modules/pos/api";
+import { newSaleRequestId, saleRequestMismatchMessage } from "@/lib/pos/saleRequestKey";
 import {
   settlementErrorMessage,
   usePaymentsForLink,
@@ -249,6 +250,9 @@ export function CreateSaleFromLineModal({
   const [name, setName] = useState(`Cobro Mercado Pago ${line.external_id ?? ""}`.trim());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // SEC-43 (ADR-187): una clave por modal. Si se corta la red y se reintenta,
+  // el servidor devuelve la venta ya registrada en lugar de crear otra.
+  const [requestId, setRequestId] = useState(newSaleRequestId);
 
   async function create() {
     setBusy(true);
@@ -259,6 +263,15 @@ export function CreateSaleFromLineModal({
         [{ product_id: null, name: name.trim() || "Cobro Mercado Pago", quantity: 1, unit_price: amount, discount: 0 }],
         [{ method: "qr", amount, ...(reference ? { reference } : {}) }],
         0,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        requestId,
       );
       const { data: pay } = await createClient()
         .from("payments")
@@ -272,6 +285,12 @@ export function CreateSaleFromLineModal({
       onDone();
       onClose();
     } catch (e) {
+      const dup = saleRequestMismatchMessage(e instanceof Error ? e.message : String((e as { message?: string })?.message ?? ""));
+      if (dup) {
+        setRequestId(newSaleRequestId());
+        setError(dup);
+        return;
+      }
       setError(settlementErrorMessage(e));
     } finally {
       setBusy(false);

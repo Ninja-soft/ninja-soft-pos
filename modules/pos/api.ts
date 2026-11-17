@@ -153,7 +153,11 @@ export interface CreateSaleResult {
     origin_store_id: string;
     fulfillment_store_id: string;
     pickup_code: string | null;
+    /** SEC-43: en el reintento, si la entrega pide código (no se vuelve a mostrar). */
+    has_pickup_code?: boolean;
   }[];
+  /** SEC-43 (ADR-187): la venta ya estaba grabada con esta clave (reintento). */
+  replayed?: boolean;
 }
 
 // Descriptor de un extra del cobro. Viaja en `p_extras` y create_sale lo

@@ -4,53 +4,112 @@
 -- Si se corta la red DESPUÉS de que el servidor grabó la venta y ANTES de la
 -- respuesta, el reintento del POS duplicaba la venta. Ahora el POS manda una
 -- clave por cobro (p_client_request_id, uuid) y la reusa en los reintentos del
--- mismo cobro: la segunda llamada devuelve la venta ya grabada, con el mismo
--- resultado, sin volver a mover stock, caja, cupón, mesa ni nada.
+-- mismo cobro (online o guardado sin conexión): la segunda llamada devuelve la
+-- venta ya grabada, sin volver a mover stock, caja, cupón, mesa ni nada. Si
+-- la clave llega con otros datos (otro pago, otro carrito), falla con
+-- sale_request_mismatch y el número de la venta ya registrada.
 --
---   A) sales.client_request_id + índice único parcial por negocio.
---   B) _sale_replay_result(tenant, sale): rearma desde las filas el mismo
---      jsonb que devuelve create_sale (helper interno, sin EXECUTE de clientes).
---   C) create_sale: copia EXACTA de la definición de producción
---      (pg_get_functiondef, igual a 20261219100100_precio_libre_editor_precios)
---      con bloques marcados SEC-43 y un parámetro opcional más AL FINAL
---      (p_client_request_id uuid default null). Se borra la firma de 14
---      argumentos antes (una sola create_sale); los llamadores internos
---      (_offline_run_sale, _channel_bill, _pc_complete, _pc_dry_run,
---      exchange_sale) la llaman con 14 argumentos y siguen resolviendo por el
---      default. sync_offline_sale sigue con su client_sale_id (ADR-077).
+--   A) sales.client_request_id + índice único parcial por negocio y
+--      sales.client_request_hash (huella de los datos del pedido).
+--   B) Helpers internos (sin EXECUTE de clientes): _sale_request_replay
+--      (lock por clave + búsqueda + control de huella), _sale_replay_result y
+--      _sale_fulfilled_replay_result (rearman la respuesta desde las filas) y
+--      _sale_request_plan_hash (huella de p_sale + p_plan de los wrappers).
+--   C) create_sale: copia EXACTA de producción (pg_get_functiondef, igual a
+--      20261219100100_precio_libre_editor_precios) con bloques marcados SEC-43
+--      y un parámetro opcional más AL FINAL (p_client_request_id uuid default
+--      null). Se borra la firma de 14 argumentos antes; los llamadores
+--      internos (_channel_bill, _pc_complete, _pc_dry_run, exchange_sale) la
+--      llaman con 14 argumentos y siguen resolviendo por el default.
 --   D) pos_sale_create_fulfilled: copia EXACTA de producción (igual a
---      20261215100000_cobro_envio_costo) que lee la clave de p_sale y la mira
---      ANTES de mover stock entre sucursales (si no, el reintento movía stock
---      de nuevo aunque create_sale devolviera la venta existente).
+--      20261215100000_cobro_envio_costo); mira la clave ANTES de mover stock
+--      entre sucursales.
+--   E) pos_sale_create_delivery: copia EXACTA de producción (igual a
+--      20261226100000_logistica_l1_direcciones); mira la clave ANTES de
+--      guardar direcciones del cliente.
+--   F) _offline_run_sale: copia EXACTA de producción (igual a
+--      20261103200000_venta_offline); pasa la clave del payload offline
+--      (client_request_id) a create_sale. Si la venta online ya había entrado,
+--      la sincronización la reconoce y no duplica.
 --
 -- Carrera: dos envíos simultáneos con la misma clave se serializan con un
 -- advisory lock por (negocio, clave) tomado antes de cualquier lock de fila o
 -- efecto; el segundo encuentra la venta del primero y la devuelve. Además el
--- insert de la venta (lo primero que escribe la función) usa el índice único
+-- insert de la venta (lo primero que escribe create_sale) usa el índice único
 -- como árbitro (on conflict do nothing): no hay efectos previos que deshacer.
 -- Sin clave, todo es exactamente como antes. La clave es opcional: la API y
 -- los clientes viejos no cambian.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- A) Columna e índice
+-- A) Columnas e índice
 -- -----------------------------------------------------------------------------
 alter table public.sales add column if not exists client_request_id uuid;
+alter table public.sales add column if not exists client_request_hash text;
 
 comment on column public.sales.client_request_id is
   'SEC-43 (ADR-187): clave de idempotencia del cobro que mandó el POS. Única por negocio; el reintento con la misma clave devuelve esta venta.';
+comment on column public.sales.client_request_hash is
+  'SEC-43 (ADR-187): md5 del jsonb canónico de los datos del pedido (ítems, pagos, descuentos, promo, cupón, extras, cliente, origen o reparto). Un reintento con la misma clave y otra huella falla con sale_request_mismatch.';
 
 create unique index if not exists sales_client_request_uniq
   on public.sales (tenant_id, client_request_id)
   where client_request_id is not null;
 
 -- -----------------------------------------------------------------------------
--- B) Resultado de create_sale rearmado desde una venta ya grabada
+-- B) Helpers internos
 -- -----------------------------------------------------------------------------
--- Mismas claves que el return de create_sale. offline_conflicts es null (sólo
--- existe en la sincronización offline, que no usa esta clave). service se
--- rearma igual que _sale_apply_service lo devuelve: renglones de servicio o con
--- nota y, con servicios, el período y el vencimiento guardados en la venta.
+-- Lock por (negocio, clave) y venta ya grabada con esa clave (null si no hay).
+-- Con la misma clave y otra huella: sale_request_mismatch con el número de la
+-- venta registrada (en el mensaje y en el detalle). Una venta sin huella
+-- guardada no se compara.
+create or replace function public._sale_request_replay(p_tenant uuid, p_req uuid, p_hash text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_id     uuid;
+  v_number bigint;
+  v_hash   text;
+begin
+  if p_req is null then
+    return null;
+  end if;
+  perform pg_advisory_xact_lock(hashtext('sale_request:' || p_tenant::text || ':' || p_req::text));
+  select s.id, s.number, s.client_request_hash into v_id, v_number, v_hash
+    from sales s
+   where s.tenant_id = p_tenant and s.client_request_id = p_req;
+  if v_id is not null and p_hash is not null and v_hash is not null and v_hash <> p_hash then
+    raise exception 'sale_request_mismatch: %', v_number
+      using detail = jsonb_build_object('sale_id', v_id, 'number', v_number)::text;
+  end if;
+  return v_id;
+end;
+$$;
+revoke all on function public._sale_request_replay(uuid, uuid, text) from public, anon, authenticated;
+
+-- Huella de los wrappers con reparto: p_sale tal como llegó (sin la clave ni
+-- lo que no define la venta: turno, notas, nombre de la promo, servicio) y el
+-- plan de entregas que mandó el POS.
+create or replace function public._sale_request_plan_hash(p_sale jsonb, p_plan jsonb)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select md5(jsonb_build_object(
+           'sale', p_sale - 'p_client_request_id' - 'client_request_id' - 'p_cash_shift_id'
+                          - 'p_notes' - 'p_promo_name' - 'p_service',
+           'plan', coalesce(p_plan, 'null'::jsonb))::text);
+$$;
+revoke all on function public._sale_request_plan_hash(jsonb, jsonb) from public, anon, authenticated;
+
+-- Mismas claves que el return de create_sale, más 'replayed': true.
+-- offline_conflicts es null (sólo existe en la venta offline nueva). service
+-- se rearma igual que _sale_apply_service lo devuelve: renglones de servicio
+-- o con nota y, con servicios, el período y el vencimiento de la venta.
 create or replace function public._sale_replay_result(p_tenant uuid, p_sale uuid)
 returns jsonb
 language sql
@@ -85,7 +144,8 @@ as $$
                                                            and a.entity_id = ap.id
                                                            and a.action = 'appointment_charged'
                                          where ap.sale_id = s.id and ap.tenant_id = p_tenant
-                                         limit 1), 0))
+                                         limit 1), 0),
+           'replayed', true)
     from sales s
     cross join lateral (
       select count(*)::int as n
@@ -96,6 +156,29 @@ as $$
    where s.id = p_sale and s.tenant_id = p_tenant;
 $$;
 revoke all on function public._sale_replay_result(uuid, uuid) from public, anon, authenticated;
+
+-- Lo mismo para pos_sale_create_fulfilled / _delivery: la venta y sus
+-- entregas. El código de retiro no se puede volver a mostrar (sólo se guarda
+-- su hash): pickup_code null y has_pickup_code dice si la entrega lo pide.
+create or replace function public._sale_fulfilled_replay_result(p_tenant uuid, p_sale uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select _sale_replay_result(p_tenant, p_sale) || jsonb_build_object(
+           'deliveries', coalesce((select jsonb_agg(jsonb_build_object(
+               'id', d.id, 'number', d.number, 'part', d.part,
+               'mode', case d.delivery_type when 'inmediato' then 'ahora' else d.delivery_type end,
+               'origin_store_id', d.store_id, 'fulfillment_store_id', d.fulfillment_store_id,
+               'pickup_code', null, 'has_pickup_code', d.pickup_code_hash is not null) order by d.part)
+             from dispatches d where d.sale_id = p_sale and d.tenant_id = p_tenant), '[]'::jsonb),
+           'fulfillment_id', (select d.fulfillment_id from dispatches d
+                               where d.sale_id = p_sale and d.tenant_id = p_tenant
+                               order by d.part limit 1));
+$$;
+revoke all on function public._sale_fulfilled_replay_result(uuid, uuid) from public, anon, authenticated;
 
 -- -----------------------------------------------------------------------------
 -- C) create_sale (copia de producción + bloques SEC-43)
@@ -248,8 +331,9 @@ declare
   v_wl_for      int;
   -- <<< ADR-096
   -- SEC-43 >>>
-  -- Clave de idempotencia del cobro (ADR-187): venta ya grabada con esta clave.
+  -- Clave de idempotencia del cobro (ADR-187): venta ya grabada y huella del pedido.
   v_replay      uuid;
+  v_req_hash    text;
   -- <<< SEC-43
 begin
   if v_tenant is null then
@@ -261,15 +345,28 @@ begin
   -- SEC-43 >>>
   -- Clave de idempotencia (ADR-187). El POS manda la misma clave en los
   -- reintentos del mismo cobro. Si la venta de este negocio con esa clave ya
-  -- está grabada, se devuelve tal cual, sin tocar stock, caja ni nada más.
-  -- El lock serializa dos envíos simultáneos de la misma clave ANTES de
-  -- cualquier lock de fila o efecto: el segundo espera al primero y, si el
+  -- está grabada, se devuelve tal cual, sin tocar stock, caja ni nada más; con
+  -- otra huella (otro carrito, otro pago) falla con sale_request_mismatch.
+  -- _sale_request_replay toma un lock por (negocio, clave) ANTES de cualquier
+  -- lock de fila o efecto: un envío simultáneo espera al primero y, si el
   -- primero confirmó, lee su venta (read committed: snapshot nuevo por sentencia).
+  -- Los wrappers con reparto dejan su propia huella (p_sale + plan) en
+  -- ninja.sale_request_hash; si no, es la de los argumentos de esta función
+  -- (sin turno, notas, nombre de la promo ni servicio).
   if p_client_request_id is not null then
-    perform pg_advisory_xact_lock(hashtext('sale_request:' || v_tenant::text || ':' || p_client_request_id::text));
-    select s.id into v_replay
-      from sales s
-     where s.tenant_id = v_tenant and s.client_request_id = p_client_request_id;
+    v_req_hash := coalesce(nullif(current_setting('ninja.sale_request_hash', true), ''),
+                           md5(jsonb_build_object(
+                             'items', coalesce(p_items, '[]'::jsonb),
+                             'payments', coalesce(p_payments, '[]'::jsonb),
+                             'discount_total', coalesce(p_discount_total, 0),
+                             'customer_id', p_customer_id,
+                             'extras', coalesce(p_extras, '[]'::jsonb),
+                             'table_order_id', p_table_order_id,
+                             'delivery_order_id', p_delivery_order_id,
+                             'promo_discount', coalesce(p_promo_discount, 0),
+                             'promo_id', p_promo_id,
+                             'coupon_id', p_coupon_id)::text));
+    v_replay := _sale_request_replay(v_tenant, p_client_request_id, v_req_hash);
     if v_replay is not null then
       return _sale_replay_result(v_tenant, v_replay);
     end if;
@@ -1034,7 +1131,7 @@ begin
                      coupon_id, coupon_code, coupon_discount,
                      cbte_letter, fiscal_snapshot, net_taxed, net_exempt, net_untaxed,
                      iva_total, internal_tax_total, perception_total,
-                     client_request_id)  -- SEC-43
+                     client_request_id, client_request_hash)  -- SEC-43
   values (v_tenant, v_store, v_shift, p_customer_id, v_number, 'completed',
           v_subtotal, v_subtotal - v_total_np,
           coalesce((v_tax ->> 'iva_total')::numeric, 0) + coalesce((v_tax ->> 'internal_total')::numeric, 0) + v_perc,
@@ -1054,7 +1151,7 @@ begin
           coalesce((v_tax ->> 'net_taxed')::numeric, 0), coalesce((v_tax ->> 'net_exempt')::numeric, 0),
           coalesce((v_tax ->> 'net_untaxed')::numeric, 0), coalesce((v_tax ->> 'iva_total')::numeric, 0),
           coalesce((v_tax ->> 'internal_total')::numeric, 0), v_perc,
-          p_client_request_id)  -- SEC-43
+          p_client_request_id, v_req_hash)  -- SEC-43
   -- SEC-43 >>>
   -- Carrera que el lock de arriba no cubre (otro camino que grabe la clave):
   -- el índice sales_client_request_uniq decide. Sólo ese índice es árbitro;
@@ -1065,9 +1162,7 @@ begin
   returning id into v_sale_id;
   -- SEC-43 >>>
   if v_sale_id is null then
-    select s.id into v_replay
-      from sales s
-     where s.tenant_id = v_tenant and s.client_request_id = p_client_request_id;
+    v_replay := _sale_request_replay(v_tenant, p_client_request_id, v_req_hash);
     if v_replay is null then
       raise exception 'sale_request_conflict';
     end if;
@@ -1733,6 +1828,7 @@ declare
   v_extras   jsonb;
   -- SEC-43 >>>
   v_req      uuid;
+  v_req_hash text;
   v_replay   uuid;
   -- <<< SEC-43
 begin
@@ -1777,30 +1873,22 @@ begin
 
   -- SEC-43 >>>
   -- Clave de idempotencia del cobro (ADR-187), la misma que create_sale.
-  -- Acá se mira ANTES de mover stock entre sucursales: el reintento de una
-  -- venta ya grabada devuelve la venta y sus entregas, sin efectos. Mismo
-  -- lock que create_sale (que lo vuelve a tomar en esta transacción).
+  -- Se mira ANTES de mover stock entre sucursales: el reintento de una venta
+  -- ya grabada devuelve la venta y sus entregas, sin efectos. La huella es
+  -- la del pedido que mandó el POS (p_sale + plan), o la que dejó
+  -- pos_sale_create_delivery; create_sale la guarda en la venta.
   begin
     v_req := nullif(coalesce(p_sale ->> 'p_client_request_id', p_sale ->> 'client_request_id'), '')::uuid;
   exception when others then
     raise exception 'invalid_client_request_id';
   end;
   if v_req is not null then
-    perform pg_advisory_xact_lock(hashtext('sale_request:' || v_tenant::text || ':' || v_req::text));
-    select s.id into v_replay
-      from sales s
-     where s.tenant_id = v_tenant and s.client_request_id = v_req;
+    v_req_hash := coalesce(nullif(current_setting('ninja.sale_request_hash', true), ''),
+                           _sale_request_plan_hash(p_sale, p_plan));
+    perform set_config('ninja.sale_request_hash', v_req_hash, true);
+    v_replay := _sale_request_replay(v_tenant, v_req, v_req_hash);
     if v_replay is not null then
-      return _sale_replay_result(v_tenant, v_replay) || jsonb_build_object(
-        'deliveries', coalesce((select jsonb_agg(jsonb_build_object(
-            'id', d.id, 'number', d.number, 'part', d.part,
-            'mode', case d.delivery_type when 'inmediato' then 'ahora' else d.delivery_type end,
-            'origin_store_id', d.store_id, 'fulfillment_store_id', d.fulfillment_store_id,
-            'pickup_code', null) order by d.part)
-          from dispatches d where d.sale_id = v_replay and d.tenant_id = v_tenant), '[]'::jsonb),
-        'fulfillment_id', (select d.fulfillment_id from dispatches d
-                             where d.sale_id = v_replay and d.tenant_id = v_tenant
-                             order by d.part limit 1));
+      return _sale_fulfilled_replay_result(v_tenant, v_replay);
     end if;
   end if;
   -- <<< SEC-43
@@ -2058,6 +2146,7 @@ begin
     p_service         => case when jsonb_typeof(p_sale -> 'p_service') = 'object' then p_sale -> 'p_service' end,
     p_client_request_id => v_req  -- SEC-43
   );
+  perform set_config('ninja.sale_request_hash', '', true);  -- SEC-43
   v_sale := (v_res ->> 'sale_id')::uuid;
   select s.number, c.name into v_sale_no, v_cname
     from sales s left join customers c on c.id = s.customer_id
@@ -2151,3 +2240,209 @@ $function$;
 
 revoke all on function public.pos_sale_create_fulfilled(jsonb, jsonb) from public, anon;
 grant execute on function public.pos_sale_create_fulfilled(jsonb, jsonb) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- E) pos_sale_create_delivery (copia de producción + bloques SEC-43)
+-- -----------------------------------------------------------------------------
+create or replace function public.pos_sale_create_delivery(p_sale jsonb, p_plan jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_tenant   uuid := current_tenant_id();
+  v_customer uuid;
+  v_dels     jsonb := coalesce(p_plan -> 'deliveries', '[]'::jsonb);
+  v_plan     jsonb := p_plan;
+  v_d        jsonb;
+  v_idx      int;
+  v_addr     customer_addresses;
+  v_ship     jsonb;
+  v_addr_id  uuid;
+  v_envio    jsonb := '[]'::jsonb;
+  v_res      jsonb;
+  v_k        int := 0;
+  v_e        jsonb;
+  r          jsonb;
+  -- SEC-43 >>>
+  v_req      uuid;
+  v_req_hash text;
+  v_replay   uuid;
+  -- <<< SEC-43
+begin
+  if v_tenant is null then
+    raise exception 'no_tenant' using errcode = '42501';
+  end if;
+  if stock_my_role() is null or stock_my_role() = 'viewer' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_sale) is distinct from 'object' or jsonb_typeof(v_dels) is distinct from 'array'
+     or jsonb_array_length(v_dels) > 10 then
+    raise exception 'invalid_plan';
+  end if;
+  begin
+    v_customer := nullif(p_sale ->> 'p_customer_id', '')::uuid;
+  exception when others then
+    raise exception 'customer_not_found';
+  end;
+
+  -- SEC-43 >>>
+  -- Clave de idempotencia del cobro (ADR-187). Se mira ANTES de guardar
+  -- direcciones en el cliente: el reintento de una venta ya grabada devuelve
+  -- la venta y sus entregas sin escribir nada (ni direcciones, ni ship_to,
+  -- ni auditoría). La huella (p_sale + plan tal como llegó) queda en
+  -- ninja.sale_request_hash para pos_sale_create_fulfilled y create_sale.
+  begin
+    v_req := nullif(coalesce(p_sale ->> 'p_client_request_id', p_sale ->> 'client_request_id'), '')::uuid;
+  exception when others then
+    raise exception 'invalid_client_request_id';
+  end;
+  if v_req is not null then
+    v_req_hash := _sale_request_plan_hash(p_sale, p_plan);
+    perform set_config('ninja.sale_request_hash', v_req_hash, true);
+    v_replay := _sale_request_replay(v_tenant, v_req, v_req_hash);
+    if v_replay is not null then
+      return _sale_fulfilled_replay_result(v_tenant, v_replay);
+    end if;
+  end if;
+  -- <<< SEC-43
+
+  for v_idx in 0 .. jsonb_array_length(v_dels) - 1 loop
+    v_d := v_dels -> v_idx;
+    if v_d ->> 'mode' is distinct from 'envio' then
+      continue;
+    end if;
+    if v_customer is null then
+      raise exception 'customer_required_for_shipping' using errcode = 'check_violation';
+    end if;
+    if not exists (select 1 from customers c
+                    where c.id = v_customer and c.tenant_id = v_tenant and c.deleted_at is null) then
+      raise exception 'customer_not_found';
+    end if;
+    v_ship := null;
+    v_addr_id := null;
+    if nullif(v_d ->> 'address_id', '') is not null then
+      if not tenant_has_feature_for(v_tenant, 'direcciones_geo') then
+        raise exception 'feature_not_in_plan: direcciones_geo' using errcode = 'check_violation';
+      end if;
+      select * into v_addr from customer_addresses a
+       where a.id = (v_d ->> 'address_id')::uuid and a.tenant_id = v_tenant
+         and a.customer_id = v_customer and a.deleted_at is null;
+      if v_addr.id is null then
+        raise exception 'address_not_found';
+      end if;
+      v_addr_id := v_addr.id;
+      v_ship := _customer_address_snapshot(v_addr);
+    elsif jsonb_typeof(v_d -> 'ship_to') = 'object' then
+      if not tenant_has_feature_for(v_tenant, 'direcciones_geo') then
+        raise exception 'feature_not_in_plan: direcciones_geo' using errcode = 'check_violation';
+      end if;
+      v_ship := _ship_to_clean(v_d -> 'ship_to');
+      if coalesce((v_d ->> 'save_to_customer')::boolean, false) then
+        perform _customer_address_assert(v_tenant);
+        v_addr := _customer_address_insert(v_tenant, v_customer, v_ship,
+                                           coalesce((v_d ->> 'make_default')::boolean, false));
+        v_addr_id := v_addr.id;
+      end if;
+    end if;
+    -- El texto de la entrega sale de la dirección estructurada si no vino.
+    if v_ship is not null and char_length(btrim(coalesce(v_d ->> 'ship_address', ''))) < 5 then
+      v_plan := jsonb_set(v_plan, array['deliveries', v_idx::text, 'ship_address'], to_jsonb(_ship_to_text(v_ship)));
+    end if;
+    v_envio := v_envio || jsonb_build_array(jsonb_build_object('address_id', v_addr_id, 'ship_to', v_ship));
+  end loop;
+
+  v_res := pos_sale_create_fulfilled(p_sale, v_plan);
+
+  -- pos_sale_create_fulfilled devuelve las entregas por envío en el orden del
+  -- plan: la k-ésima es la k-ésima entrega por envío pedida.
+  for r in select x from jsonb_array_elements(coalesce(v_res -> 'deliveries', '[]'::jsonb)) x loop
+    if r ->> 'mode' is distinct from 'envio' then
+      continue;
+    end if;
+    v_e := v_envio -> v_k;
+    v_k := v_k + 1;
+    if v_e is null or (v_e -> 'ship_to') is null or jsonb_typeof(v_e -> 'ship_to') = 'null' then
+      continue;
+    end if;
+    update dispatches
+       set address_id = nullif(v_e ->> 'address_id', '')::uuid, ship_to = v_e -> 'ship_to'
+     where id = (r ->> 'id')::uuid and tenant_id = v_tenant;
+    insert into audit_logs (tenant_id, actor_user_id, entity_type, entity_id, action, after_data)
+    values (v_tenant, auth.uid(), 'dispatches', (r ->> 'id')::uuid, 'dispatch_address_set',
+            jsonb_build_object('address_id', v_e ->> 'address_id', 'text', _ship_to_text(v_e -> 'ship_to'),
+                               'geo_quality', v_e -> 'ship_to' ->> 'geo_quality', 'sale_id', v_res ->> 'sale_id'));
+  end loop;
+
+  return v_res;
+end;
+$function$;
+
+revoke all on function public.pos_sale_create_delivery(jsonb, jsonb) from public, anon;
+grant execute on function public.pos_sale_create_delivery(jsonb, jsonb) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- F) _offline_run_sale (copia de producción + bloques SEC-43)
+-- -----------------------------------------------------------------------------
+create or replace function public._offline_run_sale(p_payload jsonb, p_shift uuid, p_client_sale_id uuid, p_sold_at timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_res   jsonb;
+  v_sale  uuid;
+  v_err   text;
+  v_state text;
+  -- SEC-43 >>>
+  v_req   uuid;
+  -- <<< SEC-43
+begin
+  perform set_config('ninja.offline_sync', '1', true);
+  perform set_config('ninja.offline_sold_at', coalesce(p_sold_at::text, ''), true);
+  begin
+    -- SEC-43 >>>
+    -- La clave del cobro online que falló por un corte (ADR-187): si esa
+    -- venta sí había entrado, create_sale la devuelve (replayed) y no duplica.
+    v_req := nullif(p_payload ->> 'client_request_id', '')::uuid;
+    -- <<< SEC-43
+    v_res := create_sale(
+      p_items             => coalesce(p_payload -> 'items', '[]'::jsonb),
+      p_payments          => coalesce(p_payload -> 'payments', '[]'::jsonb),
+      p_discount_total    => coalesce(_offline_num(p_payload ->> 'discount_total'), 0),
+      p_customer_id       => nullif(p_payload ->> 'customer_id', '')::uuid,
+      p_notes             => nullif(p_payload ->> 'notes', ''),
+      p_extras            => coalesce(p_payload -> 'extras', '[]'::jsonb),
+      p_table_order_id    => null,
+      p_delivery_order_id => null,
+      p_promo_discount    => coalesce(_offline_num(p_payload ->> 'promo_discount'), 0),
+      p_promo_id          => nullif(p_payload ->> 'promo_id', '')::uuid,
+      p_promo_name        => nullif(p_payload ->> 'promo_name', ''),
+      p_coupon_id         => null,
+      p_cash_shift_id     => p_shift,
+      p_client_request_id => v_req);  -- SEC-43
+    v_sale := (v_res ->> 'sale_id')::uuid;
+    -- SEC-43 >>>
+    -- Una venta online ya grabada (replay) no se marca como offline.
+    if not coalesce((v_res ->> 'replayed')::boolean, false) then
+    -- <<< SEC-43
+    update sales
+       set offline_sold_at = p_sold_at, offline_client_id = p_client_sale_id
+     where id = v_sale and tenant_id = current_tenant_id();
+    end if;  -- SEC-43
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate;
+    v_err := sqlerrm;
+  end;
+  perform set_config('ninja.offline_sync', '', true);
+  perform set_config('ninja.offline_sold_at', '', true);
+  if v_err is not null then
+    return jsonb_build_object('ok', false, 'error', left(v_err, 500), 'sqlstate', v_state);
+  end if;
+  return jsonb_build_object('ok', true, 'result', v_res);
+end;
+$function$;
+
+revoke all on function public._offline_run_sale(jsonb, uuid, uuid, timestamptz) from public, anon, authenticated;

@@ -114,6 +114,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Docs: roadmap F8–F15 al día con producción (OPS-08).** 22 notas de "sin aplicar" / "sin desplegar" corregidas tras verificar migraciones (SEC-02) y Edge Functions en prod. Los estados funcionales no cambian.
+
 - **Docs: roadmap F1.5–F6 y tabla de fases al día con producción (OPS-07).** Las notas "sin aplicar" / "sin desplegar" de ese bloque se corrigieron después de verificar en prod las migraciones (SEC-02) y las Edge Functions. F21 pasa a hecha y el corte de `create_sale` con `tenant_id` explícito (ADR-093) queda tildado. Sólo quedan pendientes los faltantes funcionales.
 
 - **Seguridad: los objetos nuevos no le dan nada a `anon` (SEC-09).** Las tablas, secuencias y funciones que cree una migración nacen sin ningún permiso para `anon` (antes, las tablas nuevas eran legibles). Si un flujo público necesita leer una tabla directo, se otorga explícito. Test con objetos temporales en `grants-parity`. Los defaults del rol interno `supabase_admin` no se pueden cambiar desde las migraciones (sólo crea objetos de Supabase). Migración `20270120100100_sec09_default_privileges_anon`.

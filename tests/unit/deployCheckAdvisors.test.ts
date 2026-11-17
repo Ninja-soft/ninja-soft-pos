@@ -89,7 +89,7 @@ describe("deploy-check · advisors", () => {
       "A2:error:public.secreta",
       "A3:warn:rls_disabled_in_public",
     ]);
-    expect(f[0].detail).toMatch(/^3 > umbral 2: public\.public_catalog, public\.api_token_issue, public\.secreta$/);
+    expect(f[0]?.detail).toMatch(/^3 > umbral 2: public\.public_catalog, public\.api_token_issue, public\.secreta$/);
   });
 
   it("en el umbral no hay hallazgos", () => {
@@ -106,6 +106,6 @@ describe("deploy-check · advisors", () => {
       JSON.parse(fs.readFileSync(path.join(ROOT, "supabase", "security", "anon-allowlist.json"), "utf8")),
     );
     expect(allow).toContain("api_token_issue");
-    expect(new Set(allow).size).toBe(baseline.advisors.anon_security_definer_function_executable.max);
+    expect(new Set(allow).size).toBe(baseline.advisors.anon_security_definer_function_executable?.max);
   });
 });

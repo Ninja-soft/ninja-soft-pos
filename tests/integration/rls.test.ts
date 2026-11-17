@@ -192,6 +192,37 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
   // Aislamiento de lectura
   // ---------------------------------------------------------------------------
 
+  it("SEC-11: anon no ejecuta las RPCs autenticadas del grupo C", async () => {
+    const anon = createClient(URL_!, ANON!, { auth: { persistSession: false } });
+    const zero = "00000000-0000-0000-0000-000000000000";
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ["open_cash_shift", { p_register_id: zero, p_opening_amount: 0 }],
+      ["empty_my_catalog", {}],
+      [
+        "add_table_order_item",
+        {
+          p_order_id: zero,
+          p_product_id: zero,
+          p_name: "x",
+          p_qty: 1,
+          p_unit_price: 1,
+          p_modifiers: [],
+          p_notes: null,
+          p_course: 1,
+          p_hold: false,
+          p_allergens: null,
+        },
+      ],
+      ["fire_table_order_course", { p_order_id: zero, p_course: 1 }],
+      ["set_table_order_item_course", { p_item_id: zero, p_course: 1 }],
+      ["validate_coupon", { p_code: "X", p_subtotal: 100, p_customer_id: null }],
+    ];
+    for (const [fn, args] of calls) {
+      const { error } = await anon.rpc(fn as never, args as never);
+      expect(error?.message, fn).toMatch(/permission denied/);
+    }
+  });
+
   it("products: el tenant A no ve productos del tenant B", async () => {
     const { data: own } = await ctx.ownerA
       .from("products")

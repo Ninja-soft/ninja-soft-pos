@@ -1,0 +1,40 @@
+{
+  "description": "Orders API, topic order: QR vencido sin pago (order.expired, la Edge crea las orders con PT15M).",
+  "intent": { "id": "c4e6a8b0-1d3f-4b5c-9e7a-2f4d6b8c0e33", "amount": 980.5, "mp_order_id": "ORD01JQ6Z9Y8X7W6V5T4S3R2Q1P0N" },
+  "request": {
+    "method": "POST",
+    "query": "",
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+      "x-signature": "ts=1763388000000,v1=d2b0f9e7c5a3d1b8f3b1f0c8e2a6d4b9f7e5c1a3d8b6f2e4c9a7d5b3f1e8c6a4"
+    },
+    "body": {
+      "action": "order.expired",
+      "api_version": "v1",
+      "application_id": "7364821905123456",
+      "date_created": "2026-11-17T12:00:00.000-03:00",
+      "live_mode": true,
+      "type": "order",
+      "user_id": "1234567890",
+      "data": {
+        "id": "ORD01JQ6Z9Y8X7W6V5T4S3R2Q1P0N",
+        "external_reference": "c4e6a8b0-1d3f-4b5c-9e7a-2f4d6b8c0e33",
+        "status": "expired",
+        "status_detail": "expired",
+        "total_amount": "980.50",
+        "type": "qr",
+        "version": 2
+      }
+    }
+  },
+  "mpResponse": {
+    "id": "ORD01JQ6Z9Y8X7W6V5T4S3R2Q1P0N",
+    "type": "qr",
+    "external_reference": "c4e6a8b0-1d3f-4b5c-9e7a-2f4d6b8c0e33",
+    "status": "expired",
+    "status_detail": "expired",
+    "total_amount": "980.50",
+    "transactions": { "payments": [] }
+  }
+}

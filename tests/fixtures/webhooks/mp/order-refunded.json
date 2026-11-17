@@ -1,0 +1,50 @@
+{
+  "description": "Orders API, topic order: order devuelta (order.refunded). La order re-leída viene con status refunded.",
+  "intent": { "id": "a7d3e9f1-2c4b-4a6d-8e0f-3b5c7d9e1f22", "amount": 2300, "mp_order_id": "ORD01JQ5A1B2C3D4E5F6G7H8J9K0M" },
+  "request": {
+    "method": "POST",
+    "query": "",
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      "x-signature": "ts=1763384400000,v1=7c5a3d1b8f3b1f0c8e2a6d4b9f7e5c1a3d8b6f2e4c9a7d5b3f1e8c6a4d2b0f9e"
+    },
+    "body": {
+      "action": "order.refunded",
+      "api_version": "v1",
+      "application_id": "7364821905123456",
+      "date_created": "2026-11-17T11:00:00.000-03:00",
+      "live_mode": true,
+      "type": "order",
+      "user_id": "1234567890",
+      "data": {
+        "id": "ORD01JQ5A1B2C3D4E5F6G7H8J9K0M",
+        "external_reference": "a7d3e9f1-2c4b-4a6d-8e0f-3b5c7d9e1f22",
+        "status": "refunded",
+        "status_detail": "refunded",
+        "total_amount": "2300.00",
+        "type": "qr",
+        "version": 4
+      }
+    }
+  },
+  "mpResponse": {
+    "id": "ORD01JQ5A1B2C3D4E5F6G7H8J9K0M",
+    "type": "qr",
+    "external_reference": "a7d3e9f1-2c4b-4a6d-8e0f-3b5c7d9e1f22",
+    "status": "refunded",
+    "status_detail": "refunded",
+    "total_amount": "2300.00",
+    "transactions": {
+      "payments": [
+        {
+          "id": "PAY01JQ5A1B2C3D4E5F6G7H8J9K0N",
+          "amount": "2300.00",
+          "status": "refunded",
+          "status_detail": "refunded",
+          "payment_method": { "id": "debvisa", "type": "debit_card", "installments": 1 }
+        }
+      ]
+    }
+  }
+}

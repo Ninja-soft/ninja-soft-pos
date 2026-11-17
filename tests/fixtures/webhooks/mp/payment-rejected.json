@@ -1,0 +1,33 @@
+{
+  "description": "Checkout Pro: pago rechazado (status rejected, cc_rejected_insufficient_amount).",
+  "intent": { "id": "0a2c4e6f-8b1d-4f3a-9c5e-7b9d1f3a5c55", "amount": 4500 },
+  "request": {
+    "method": "POST",
+    "query": "intent=0a2c4e6f-8b1d-4f3a-9c5e-7b9d1f3a5c55&data.id=91234567999&type=payment",
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": "3c5e7a9b-1d2f-4b4c-8e6a-8b0d2f4c6e8a",
+      "x-signature": "ts=1763395200000,v1=a3d8b6f2e4c9a7d5b3f1e8c6a4d2b0f9e7c5a3d1b8f3b1f0c8e2a6d4b9f7e5c1"
+    },
+    "body": {
+      "action": "payment.updated",
+      "api_version": "v1",
+      "data": { "id": "91234567999" },
+      "date_created": "2026-11-17T14:00:00Z",
+      "id": 124512345999,
+      "live_mode": true,
+      "type": "payment",
+      "user_id": 1234567890
+    }
+  },
+  "mpResponse": {
+    "id": 91234567999,
+    "status": "rejected",
+    "status_detail": "cc_rejected_insufficient_amount",
+    "external_reference": "0a2c4e6f-8b1d-4f3a-9c5e-7b9d1f3a5c55",
+    "transaction_amount": 4500,
+    "currency_id": "ARS",
+    "payment_type_id": "credit_card",
+    "payment_method_id": "master"
+  }
+}

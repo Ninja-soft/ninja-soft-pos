@@ -84,8 +84,13 @@ describe("migración 20261108200000", () => {
   // ADR-151 recrea create_sale copiando la de ADR-116 con bloques marcados
   // (tests/unit/precioLibreEditor.test.ts lo compara).
   const ADR151 = "20261219100100_precio_libre_editor_precios.sql";
+  // SEC-43 (ADR-187) recrea create_sale copiando la de ADR-151 con un parámetro
+  // opcional más y bloques marcados (tests/unit/saleIdempotency.test.ts lo compara).
+  const SEC43 = "20270123100000_sec43_create_sale_idempotency.sql";
   const later = readdirSync(DIR)
-    .filter((f) => f.endsWith(".sql") && f > MIG && f !== ADR093 && f !== ADR096 && f !== ADR116 && f !== ADR151)
+    .filter(
+      (f) => f.endsWith(".sql") && f > MIG && f !== ADR093 && f !== ADR096 && f !== ADR116 && f !== ADR151 && f !== SEC43,
+    )
     .map((f) => readFileSync(join(DIR, f), "utf8"));
   const adr093 = readFileSync(join(DIR, ADR093), "utf8");
   const adr096 = readFileSync(join(DIR, ADR096), "utf8");
@@ -113,7 +118,7 @@ describe("migración 20261108200000", () => {
       .join("\n")
       .replace(/\s+/g, " ");
 
-  it("es la última definición de create_sale y de return_sale_v2 (salvo las copias de ADR-093, ADR-096, ADR-116 y ADR-151)", () => {
+  it("es la última definición de create_sale y de return_sale_v2 (salvo las copias de ADR-093, ADR-096, ADR-116, ADR-151 y SEC-43)", () => {
     for (const s of later) {
       expect(s).not.toMatch(/function (public\.)?create_sale\(/);
       expect(s).not.toMatch(/function (public\.)?return_sale_v2\(/);

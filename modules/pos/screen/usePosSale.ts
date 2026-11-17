@@ -15,6 +15,16 @@ import { toSalePayments, type CreateSaleResult, type SaleServiceInput } from "@/
 import { fulfillmentErrorMessage, type PlanPayload } from "@/lib/stock/fulfillment";
 import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
 import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflinePos";
+import {
+  loadSaleRequestKey,
+  pendingSaleRequestKey,
+  saleCartSignature,
+  saleKeyAfter,
+  saleRequestMismatchMessage,
+  saveSaleRequestKey,
+  type SaleKeyEvent,
+  type SaleRequestKey,
+} from "@/lib/pos/saleRequestKey";
 
 // Registro de la venta (create_sale) del POS. Movido tal cual desde la página:
 // mismos ítems, extras, packs, promo, cupón, mesa/delivery atómicos y el mismo
@@ -144,6 +154,16 @@ export function saleErrorTitle(msg: string): string {
                                                   : "No se pudo cobrar";
 }
 
+/**
+ * SEC-43: líneas base del carrito para la firma de la clave, sin las que
+ * agrega la hoja de cobro (recargo del medio o de las cuotas, garantía): cambiar
+ * de 3 cuotas a efectivo después de un corte tiene que reusar la clave para
+ * que el servidor detecte la venta ya hecha (sale_request_mismatch).
+ */
+export function saleCartBaseItems(lines: CartLine[]) {
+  return buildSaleItemsAndExtras(cartToSaleLines(lines), []).items;
+}
+
 /** Líneas del carrito → líneas de create_sale (sin campos de UI). */
 export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
   return lines.map((l) => ({
@@ -205,11 +225,36 @@ export function usePosSale(ctx: {
   const qc = useQueryClient();
   const { sale } = usePosMutations();
   const handlePriceMismatch = usePriceRefresh();
-  // Idempotencia del lado del POS (docs/35-idempotencia-ventas.md): create_sale
-  // no tiene clave de idempotencia online, así que un segundo "Cobrar" mientras
-  // el primero está en vuelo se descarta acá. `sale.isPending` deshabilita el
-  // botón recién en el próximo render; el ref corta el doble toque del mismo frame.
+  // Idempotencia del lado del POS (docs/35-idempotencia-ventas.md): un segundo
+  // "Cobrar" mientras el primero está en vuelo se descarta acá. `sale.isPending`
+  // deshabilita el botón recién en el próximo render; el ref corta el doble
+  // toque del mismo frame.
   const inFlight = useRef(false);
+  // SEC-43 (ADR-187): clave de idempotencia del cobro. Se reusa en los
+  // reintentos del mismo carrito (corte de red, PIN, otro medio de pago o de
+  // cuotas, venta guardada sin conexión después del corte) y se descarta SÓLO
+  // al confirmar la venta (saleKeyAfter). Vive en sessionStorage para
+  // sobrevivir a una recarga del POS (undefined = todavía no se leyó).
+  const requestKey = useRef<SaleRequestKey | null | undefined>(undefined);
+  const currentKey = () => {
+    if (requestKey.current === undefined) requestKey.current = loadSaleRequestKey();
+    return requestKey.current;
+  };
+  const keyEvent = (event: SaleKeyEvent, cart: string) => {
+    const k = saleKeyAfter(event, currentKey() ?? null, cart);
+    requestKey.current = k;
+    saveSaleRequestKey(k);
+    return k;
+  };
+  const cartSignature = () =>
+    saleCartSignature({
+      items: saleCartBaseItems(ctx.lines),
+      customerId: ctx.customerId,
+      tableOrderId: ctx.tableOrderId ?? null,
+      deliveryOrderId: ctx.deliveryOrderId ?? null,
+      appointmentId: ctx.appointmentId ?? null,
+      reservationId: ctx.reservationId ?? null,
+    });
 
   async function handleSale(
     payments: CheckoutPayment[],
@@ -258,6 +303,8 @@ export function usePosSale(ctx: {
         : saleExtras;
       // ADR-096: la venta entrega la reserva en la misma transacción.
       const allExtras = ctx.reservationId ? [...withAppt, { kind: "reservation", id: ctx.reservationId }] : withAppt;
+      const cart = cartSignature();
+      const key = keyEvent("attempt", cart)!;
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
@@ -276,8 +323,21 @@ export function usePosSale(ctx: {
         service: ctx.service ?? null,
         // ADR-136: con reparto, la venta y las entregas en una transacción.
         fulfillment: plan,
+        // SEC-43: misma clave en el reintento del mismo cobro.
+        clientRequestId: key.key,
       });
+      // La venta quedó: la próxima, aunque sea igual, es otro cobro.
+      keyEvent("confirmed", cart);
       if (res.deliveries && res.deliveries.length > 0) ctx.onDeliveries?.(res.deliveries, res.number);
+      // SEC-43: la venta ya había entrado (reintento después de un corte). El
+      // código de retiro sólo se muestra una vez (se guarda su hash).
+      if (res.replayed && (res.deliveries ?? []).some((d) => d.has_pickup_code && !d.pickup_code)) {
+        toast({
+          title: "El código de retiro se mostró en el primer intento",
+          description: "No se puede volver a ver. Revisá la entrega en Expedición antes de entregarla.",
+          variant: "info",
+        });
+      }
       // Turno (H38): enlazar la venta y marcarlo 'realizado' (best-effort).
       if (ctx.appointmentId) {
         try {
@@ -287,7 +347,8 @@ export function usePosSale(ctx: {
         }
       }
       toast({
-        title: `Venta #${res.number} registrada`,
+        // SEC-43: el reintento devolvió la venta que ya había entrado.
+        title: res.replayed ? `La venta #${res.number} ya estaba registrada` : `Venta #${res.number} registrada`,
         description: `Total ${formatCurrency(res.total)}`,
         variant: "success",
       });
@@ -321,6 +382,28 @@ export function usePosSale(ctx: {
       // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
       if (handlePriceMismatch(e, ctx.lines)) return;
       const msg = e instanceof Error ? e.message : String((e as { message?: string } | null)?.message ?? "");
+      // SEC-43: la clave ya tiene una venta registrada con otros datos.
+      const dupMsg = saleRequestMismatchMessage(msg);
+      if (dupMsg) {
+        // La clave NO se borra: puede ser el reintento de la venta que entró.
+        // Si de verdad es otra venta, el cajero la rota a mano y cobra de nuevo.
+        const cartNow = cartSignature();
+        void qc.invalidateQueries({ queryKey: ["sales"] });
+        toast({
+          title: dupMsg,
+          variant: "error",
+          actions: [
+            {
+              label: "Es una venta nueva",
+              onClick: () => {
+                keyEvent("new_sale", cartNow);
+                toast({ title: "Listo: cobrá de nuevo y se registra como una venta nueva", variant: "info" });
+              },
+            },
+          ],
+        });
+        return;
+      }
       if (ctx.onError?.(msg)) return;
       // ADR-136: errores del reparto de entregas.
       const planMsg = plan ? fulfillmentErrorMessage(msg) : null;
@@ -352,6 +435,10 @@ export function usePosSale(ctx: {
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
     const gross = items.reduce((a, it) => a + it.unit_price * it.quantity - (it.discount ?? 0), 0);
     const total = Math.max(gross - ctx.discountTotal - promoDisc, 0);
+    // SEC-43: si el cobro online de este mismo carrito se cortó sin confirmar,
+    // la venta offline lleva su clave: si la online sí entró, el servidor la
+    // reconoce al sincronizar y no la duplica.
+    const pendingKey = pendingSaleRequestKey(currentKey() ?? null, cartSignature());
     const res = await ctx.offline.saveSale({
       total,
       change: change ?? 0,
@@ -371,6 +458,7 @@ export function usePosSale(ctx: {
         promo_discount: promoDisc,
         promo_id: promoDisc > 0 ? (promo?.id ?? null) : null,
         promo_name: promoDisc > 0 ? (promo?.name ?? null) : null,
+        ...(pendingKey ? { client_request_id: pendingKey } : {}),
       },
       lines: items.map((it, i) => ({
         name: it.name ?? ctx.lines[i]?.name ?? "Producto",
@@ -383,6 +471,7 @@ export function usePosSale(ctx: {
       toast({ title: res.message, variant: "error" });
       return;
     }
+    keyEvent("confirmed", "");
     toast({
       title: `Venta guardada sin conexión (${res.entry.provisional})`,
       description: `Total ${formatCurrency(res.entry.total)}. Se envía sola cuando vuelve la conexión.`,

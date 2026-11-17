@@ -228,6 +228,10 @@ export function InternalShell({
             <DropdownItem onSelect={() => setPwOpen(true)}>
               <KeyRound size={15} /> Cambiar contraseña
             </DropdownItem>
+            {/* MFA del staff (SEC-23, ADR-186). */}
+            <DropdownItem onSelect={() => router.push("/internal/seguridad/mfa")}>
+              <ShieldCheck size={15} /> Verificación en dos pasos
+            </DropdownItem>
             <DropdownSeparator />
             <DropdownItem onSelect={signOut} className="text-destructive">
               <LogOut size={15} /> Cerrar sesión

@@ -153,7 +153,11 @@ export interface CreateSaleResult {
     origin_store_id: string;
     fulfillment_store_id: string;
     pickup_code: string | null;
+    /** SEC-43: en el reintento, si la entrega pide código (no se vuelve a mostrar). */
+    has_pickup_code?: boolean;
   }[];
+  /** SEC-43 (ADR-187): la venta ya estaba grabada con esta clave (reintento). */
+  replayed?: boolean;
 }
 
 // Descriptor de un extra del cobro. Viaja en `p_extras` y create_sale lo
@@ -2162,6 +2166,10 @@ export const posApi = {
     // de los orígenes, llama a create_sale con estos mismos argumentos y abre
     // las entregas en la misma transacción. Sin plan, create_sale como siempre.
     fulfillment?: PlanPayload | null,
+    // SEC-43 (ADR-187): clave de idempotencia del cobro. El reintento del mismo
+    // cobro manda la misma y el servidor devuelve la venta ya grabada. Con plan
+    // viaja dentro de p_sale (pos_sale_create_fulfilled la lee de ahí).
+    clientRequestId?: string | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
@@ -2202,6 +2210,7 @@ export const posApi = {
       // sucursal de ese turno (no en la sucursal principal).
       ...(getActiveShiftId() ? { p_cash_shift_id: getActiveShiftId() } : {}),
       ...(service ? { p_service: service } : {}),
+      ...(clientRequestId ? { p_client_request_id: clientRequestId } : {}),
     };
     const { data, error } = fulfillment
       ? await supabase.rpc(planRpc(fulfillment) as never, { p_sale: args, p_plan: fulfillment } as never)

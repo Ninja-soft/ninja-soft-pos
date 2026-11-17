@@ -15,7 +15,8 @@
 // se re-codifican en su mismo formato; WebP/GIF/AVIF se copian tal cual.
 //
 // Seguridad:
-//   • verify_jwt = true. El tenant sale SIEMPRE del JWT (current_tenant_id).
+//   • verify_jwt = true. El tenant sale SIEMPRE del JWT (current_tenant_id) y
+//     el usuario tiene que ser miembro activo de ese tenant (SEC-27).
 //   • La URL de origen NO se toma del body ni de product_images (el tenant puede
 //     escribir esa tabla): tiene que ser una foto del producto maestro
 //     (catalog_items.foto_url / fotos, ADR-109) al que apunta
@@ -28,7 +29,6 @@
 // { ok: false, reason } con 200 y la foto externa QUEDA: el producto nunca se
 // queda sin foto por culpa de la copia.
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 import {
   PRODUCT_IMAGES_BUCKET,
@@ -41,6 +41,7 @@ import {
   normalizeImageType,
   productImagePath,
 } from "../_shared/productImage.ts";
+import { authenticateTenantUser, requireTenantMember } from "../_shared/tenantAuth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -100,22 +101,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-    auth: { persistSession: false },
-  });
-  const {
-    data: { user },
-  } = await userClient.auth.getUser();
-  if (!user) return json({ error: "unauthorized" }, 401);
-  const tenantId = String(
-    (user.app_metadata as { current_tenant_id?: string } | undefined)?.current_tenant_id ?? "",
-  );
-  if (!tenantId) return json({ error: "no_tenant" }, 400);
+  // SEC-27: el tenant del claim ya no alcanza (corre con service_role): el
+  // usuario tiene que ser miembro activo y no suspendido de ese tenant.
+  const session = await authenticateTenantUser(req, { respond: json });
+  if (session instanceof Response) return session;
 
   let productId = "";
   try {
@@ -125,7 +114,9 @@ Deno.serve(async (req: Request) => {
   }
   if (!/^[0-9a-f-]{36}$/i.test(productId)) return json({ error: "invalid_product" }, 400);
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const member = await requireTenantMember(session, { respond: json });
+  if (member instanceof Response) return member;
+  const { tenantId, admin } = member;
 
   // Producto del tenant del JWT (nunca de otro).
   const { data: product } = await admin

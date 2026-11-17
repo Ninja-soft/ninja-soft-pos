@@ -9,10 +9,10 @@
 // (token de prueba) y guarda el ambiente en el intent (mp_env) para que
 // mp_webhook consulte el pago con la misma credencial.
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { bodyStoreId, insertIntentWithScope } from "../_shared/paymentSecrets.ts";
 import { edgeTimer } from "../_shared/timing.ts";
+import { authenticateTenantUser, requireTenantMember } from "../_shared/tenantAuth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -32,51 +32,39 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-    auth: { persistSession: false },
-  });
-  // Auth y body en paralelo (ADR-048, "QR más rápido").
-  const [{ data: { user }, error }, b] = await Promise.all([
-    userClient.auth.getUser(),
+  // Auth y body en paralelo (ADR-048, "QR más rápido"). SEC-27: getUser +
+  // claim current_tenant_id (401 / 400 no_tenant).
+  const [session, b] = await Promise.all([
+    authenticateTenantUser(req, { respond: json }),
     req.json().catch(() => null) as Promise<Record<string, unknown> | null>,
   ]);
   timer.mark("auth");
-  if (error || !user) return json({ error: "unauthorized" }, 401);
-  const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
-    ?.current_tenant_id;
-  if (!tenantId) return json({ error: "no_tenant" }, 400);
+  if (session instanceof Response) return session;
+  // Sólo para lanzar las lecturas en paralelo con la membresía: nada se usa
+  // si requireTenantMember responde 403.
+  const { tenantId, admin } = session;
   if (!b) return json({ error: "invalid_json" }, 400);
   const amount = Number(b.amount);
   if (!Number.isFinite(amount) || amount <= 0) return json({ error: "invalid_amount" }, 400);
   const title = String(b.title ?? "Venta").slice(0, 120);
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  // Miembro activo, plan y credencial en UNA ronda (antes, tres seguidas).
+  // Miembro activo (SEC-27: requireTenantMember), plan y credencial en UNA
+  // ronda (antes, tres seguidas).
   // Gating de plan (enforcement real): el botón del POS sólo se oculta en la
   // UI; acá se bloquea de verdad. Esta Edge corre con service_role (saltea
   // RLS) y crea el intent ANTES del cobro, así que es el primer punto donde hay
   // que validar el plan del tenant. Sin el feature 'mercado_pago' no se genera
   // el link. (El trigger en `payments` es la red de seguridad de la venta.)
-  const [{ data: mem }, { data: mpAllowed }, cred] = await Promise.all([
-    admin
-      .from("tenant_users")
-      .select("role")
-      .eq("tenant_id", tenantId)
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .maybeSingle(),
+  const [member, { data: mpAllowed }, cred] = await Promise.all([
+    requireTenantMember(session, { respond: json }),
     admin.rpc("tenant_has_feature_for", { p_tenant: tenantId, p_key: "mercado_pago" }),
     // Access Token del tenant (producción o prueba según el switch Sandbox;
     // refresh OAuth incluido). ADR-057: la de la sucursal si tiene una propia.
     tenantMpCredential(admin, tenantId, null, { storeId: bodyStoreId(b) }),
   ]);
   timer.mark("prechecks");
-  if (!mem) return json({ error: "forbidden" }, 403);
+  if (member instanceof Response) return member;
   if (mpAllowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
   if (!cred) return json({ error: "not_connected" }, 400);
 

@@ -13,6 +13,32 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/\\evil.com")).toBe("/dashboard");
   });
 
+  it("rechaza caracteres de control, espacios y barras invertidas, también codificados", () => {
+    for (const bad of [
+      "/%09/evil.com",
+      "/\t/evil.com",
+      "/%0a/evil.com",
+      "/%0d%0a/evil.com",
+      "/%20/evil.com",
+      "/ /evil.com",
+      "/%5cevil.com",
+      "/%5c%5cevil.com",
+      "/%2f%2fevil.com",
+      "/%252f%252fevil.com",
+      "/foo\\..\\evil",
+      "/%E0%A4%A",
+      "/ /evil.com",
+    ]) {
+      expect(safeNextPath(bad), bad).toBe("/dashboard");
+    }
+  });
+
+  it("acepta rutas con query y caracteres codificados legítimos", () => {
+    expect(safeNextPath("/internal/tenants?tab=plan")).toBe("/internal/tenants?tab=plan");
+    expect(safeNextPath("/c/mi-negocio?q=caf%C3%A9")).toBe("/c/mi-negocio?q=caf%C3%A9");
+    expect(safeNextPath("/internal/seguridad/mfa", "/internal/tenants")).toBe("/internal/seguridad/mfa");
+  });
+
   it("usa el fallback si no hay next", () => {
     expect(safeNextPath(null)).toBe("/dashboard");
     expect(safeNextPath(undefined, "/internal/tenants")).toBe("/internal/tenants");

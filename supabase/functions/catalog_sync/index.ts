@@ -52,6 +52,7 @@
 // el gateway; la autenticación real es el X-Cron-Secret o el JWT del staff).
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import {
   applyFeedError,
   applyPage,
@@ -408,6 +409,9 @@ Deno.serve(async (req: Request) => {
   if (authErr || !user) return json({ error: "unauthorized" }, 401);
   const meta = (user.app_metadata ?? {}) as { is_internal?: boolean; internal_level?: string };
   if (!meta.is_internal) return json({ error: "forbidden" }, 403);
+  // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+  const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+  if (mfa) return json({ error: mfa }, 403);
   if (meta.internal_level === "support") return json({ error: "forbidden" }, 403);
 
   const action = String(body.action ?? "start");

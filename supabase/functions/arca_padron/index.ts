@@ -28,6 +28,7 @@
 // la clave, el Token ni el Sign.
 // =============================================================================
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import type { ArcaEnv } from "../_shared/arca/config.ts";
 import { postSoap, type FetchLike } from "../_shared/arca/client.ts";
 import { platformAuth } from "../_shared/arca/platformAuth.ts";
@@ -160,6 +161,9 @@ Deno.serve(async (req) => {
     if (!internalHeader || (user.app_metadata as { is_internal?: boolean } | null)?.is_internal !== true) {
       return json({ error: "forbidden" }, 403);
     }
+    // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+    const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+    if (mfa) return json({ error: mfa }, 403);
     const { error: scopeErr } = await userClient.rpc("internal_arca_padron_get");
     if (scopeErr) return json({ error: "forbidden" }, 403);
     const cuit = String(body.cuit ?? "").replace(/\D/g, "");

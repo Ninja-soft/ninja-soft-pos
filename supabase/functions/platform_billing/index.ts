@@ -42,6 +42,7 @@ import {
   parsePersonaV2,
   rateLimited,
 } from "../_shared/arca/padron.ts";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -100,6 +101,9 @@ Deno.serve(async (req) => {
   // Autorización con la base (RLS / RPC con el JWT del usuario).
   let tenantId: string;
   if (isStaff) {
+    // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+    const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+    if (mfa) return json({ error: mfa }, 403);
     tenantId = String(body.tenant_id ?? "");
     if (!UUID.test(tenantId)) return json({ error: "invalid_tenant_id" }, 400);
     const { error } = await userClient.rpc("internal_billing_profile_get", { p_tenant: tenantId });

@@ -130,6 +130,23 @@ Cobrador asignable: staff `admin`, `super_admin` o con el permiso Cobranzas.
 
 Todo con `(select internal_scope())` (panel interno) y `staff_is_owner()` (= `internal_level() = 'super_admin'`); cada persona lee sus filas por `staff_my_member_ids()`. Los insumos del cálculo (`staff_settlement_inputs`) son sólo `service_role` (Edge `staff_payouts`).
 
+### 3.1d Verificación en dos pasos del staff (implementado, SEC-23 · ADR-186)
+
+El staff interno usa **TOTP** (app autenticadora; sin SMS ni códigos de recuperación). Es obligatoria cuando el flag global `system_settings.internal_mfa_required` vale `true` (arranca en `false`; se prende por SQL con `service_role`).
+
+| Capa | Con el flag prendido, una sesión de staff `aal1`… | Cómo lee el flag |
+|---|---|---|
+| Base: `is_internal()` (y por ende `internal_scope()`, policies y RPC internas) | Deja de ser interna: `forbidden` o filas vacías. Los usuarios que no son staff no cambian. | `internal_mfa_required()`, sólo si el JWT es de staff (PK de `system_settings`). |
+| Middleware de Next (`/internal/*`, `/login/mfa`) | Con factor verificado → `/login/mfa` (challenge). Sin factor → `/internal/seguridad/mfa` (enrolar). | RPC `internal_mfa_required`, sólo para staff, cache de 30 s. Si falla, no redirige (la base sigue cerrando). |
+| Edges con rama de staff (lista completa en ADR-186) | `403 { error: "mfa_required" }`; las de suscripción, compra de catálogo y asistente IA lo tratan como usuario común (camino del dueño). | `staffMfaRejection` (`_shared/internalMfa.ts`); si la lectura falla, asume prendido (salvo que la RPC todavía no exista). |
+
+Con el flag apagado nada de esto cambia el comportamiento. La pantalla `/internal/seguridad/mfa` (menú del usuario → "Verificación en dos pasos") funciona igual con el flag apagado para enrolar antes de prenderlo: agrega y elimina apps autenticadoras. Con un factor verificado, Supabase Auth exige una sesión `aal2` para agregar otro o eliminarlo.
+
+| Acción | support | admin | super_admin | La propia persona |
+|---|---|---|---|---|
+| Enrolar, listar y eliminar sus factores | | | | ✅ |
+| Resetear la verificación de otra persona del staff (`internal_mfa_reset`, motivo, auditado, corta sus sesiones) | ❌ | ❌ | ✅ | ❌ (nunca a sí mismo) |
+
 ### 3.2 Roles objetivo por área
 
 Estos roles pueden implementarse como permisos granulares sobre `internal_level` o como una tabla futura `internal_staff_roles`:

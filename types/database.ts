@@ -3828,6 +3828,7 @@ export type Database = {
       }
       create_sale: {
         Args: {
+          p_client_request_id?: string
           p_customer_id?: string
           p_discount_total?: number
           p_items: Json
@@ -3874,6 +3875,11 @@ export type Database = {
           id: string
           internal_level: string
         }[]
+      }
+      internal_mfa_required: { Args: never; Returns: boolean }
+      internal_mfa_reset: {
+        Args: { p_motivo: string; p_user_id: string }
+        Returns: Json
       }
       internal_notify: {
         Args: {

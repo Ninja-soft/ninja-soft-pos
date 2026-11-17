@@ -14,6 +14,7 @@
 // resend son los caminos soportados ahora.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { staffMfaRejection } from "../_shared/internalMfa.ts";
 import { sendWithChain, type SendArgs } from "../_shared/mailer.ts";
 
 const cors = {
@@ -58,6 +59,9 @@ Deno.serve(async (req: Request) => {
     } = await userClient.auth.getUser();
     if (error || !user) return json({ error: "unauthorized" }, 401);
     if (!(user.app_metadata ?? {}).is_internal) return json({ error: "forbidden" }, 403);
+    // MFA del staff (SEC-23): con el flag prendido, aal1 no pasa.
+    const mfa = await staffMfaRejection(userClient, req.headers.get("Authorization"));
+    if (mfa) return json({ error: mfa }, 403);
 
     let b: { to?: string; subject?: string; html?: string };
     try {

@@ -96,7 +96,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [x] Tests de RLS para tablas críticas: productos, ventas, caja, clientes, audit logs. — *Lectura y escritura cross-tenant bloqueadas; además `payment_secrets` (deny-all) y `tenant_notes` (solo staff).*
 - [x] Tests de permisos por rol: owner, manager, cashier, viewer. *Hecho: `tests/integration/roles.test.ts` cubre owner, manager, cashier y viewer (ADR-071).*
 - [~] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte. *`tests/e2e/smoke-piloto.spec.ts` (`pnpm test:smoke`, ADR-098) recorre todo en un solo flujo en el tenant QA, más el healthcheck sin sesión (verde en modo público contra un build local). Falta la primera corrida verde con sesión QA contra producción (docs/13-deployment.md §11.2).*
-- [x] Idempotencia documentada para venta/anulación antes de integrar pagos externos. *`docs/35-idempotencia-ventas.md` (ADR-098): venta online, offline, cobro en espera, anulación (idempotente por estado), devolución, pagos externos y API. El POS corta el doble "Cobrar" en vuelo (`modules/pos/screen/usePosSale.ts`). Deuda documentada: clave de idempotencia en `create_sale` en su próxima recreación.*
+- [x] Idempotencia documentada para venta/anulación antes de integrar pagos externos. *`docs/35-idempotencia-ventas.md` (ADR-098): venta online, offline, cobro en espera, anulación (idempotente por estado), devolución, pagos externos y API. El POS corta el doble "Cobrar" en vuelo (`modules/pos/screen/usePosSale.ts`). Clave de idempotencia `p_client_request_id` en `create_sale`, los wrappers de reparto y envío y la venta offline (SEC-43, ADR-187): el reintento del mismo cobro devuelve la venta ya grabada y, con otros datos, avisa `sale_request_mismatch`.*
 - [x] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *`GET /api/health` (liveness con env y commit) y `?deep=1` (Supabase Auth y base, 503 si falla), público sin redirect a login (`middleware.ts`), `lib/health.ts`, `tests/unit/health.test.ts`. Checklist en `docs/14-observability.md` §9.2 (ADR-098).*
 - [x] **Gating server-side real + hardening de seguridad SaaS** *(2026-06-08)*: enforcement backend de **medios de pago por plan** (trigger en `payments`, PRs #215/#240) y de **features de escritura** (descuentos/garantías/cuenta corriente/listas en `create_sale`/escrituras, con advisory lock en el correlativo, PR #250); hardening (policy de planes cerrada a `anon`, guards en RPCs, revokes defensivos, índices/policies de performance, PR #248); **auditoría SaaS exhaustiva** (seguridad/RLS/pagos/funcional/IA/emails) — base sólida, sin fugas, fixes aplicados. *La UI nunca es la única barrera (ver convención de features de plan en `CLAUDE.md`).*
 - [~] Backup/restore de Supabase probado en staging o entorno descartable. *Procedimiento escrito y verificable en `docs/security-reviews/disaster-recovery.md` §Backup y restore (dump lógico, restore en proyecto descartable, `deploy-check --remote`, conteos, `test:rls` y smoke; ADR-098). Falta ejecutarlo una vez (necesita un proyecto descartable o Docker) y confirmar plan, retención y PITR del proyecto.*
@@ -1269,7 +1269,8 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
   - [x] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
   - [x] `current_tenant_id()` valida la membresía activa (o staff en `internal_scope()`) y todas las policies la llaman como initplan `(select current_tenant_id())`; `ensure_current_tenant()` corrige un negocio activo inválido (ADR-083, raíz de S-07).
-  - [ ] Pendiente: medir con `EXPLAIN` en producción, helper `tenantScoped()`, validar la membresía también en las Edge Functions que leen el claim y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
+  - [x] Membresía también en las Edge Functions que leen el claim: helper `requireTenantMember` (`supabase/functions/_shared/tenantAuth.ts` + lógica pura `tenantMember.ts`: miembro activo de `tenant_users` y usuario sin ban de Auth ni `suspended_at`, mismas respuestas 401 / 400 / 403) en `tiendita_copy_image` (copiaba con service_role sin chequear) y en `talo`, `ualabis`, `viumi`, `dlocalgo`, `getnet`, `gocuotas`, `mobbex_create_qr`, `mp_create_qr`, `mp_point` y `mp_cupon`; `tests/unit/edgeMembership.test.ts` falla si una Edge lee el claim sin helper, RPC guard o consulta a `tenant_users` (allowlist con motivo). *(SEC-27, 2026-11-17; el resto del chequeo inline pasa al helper en SEC-27b.)*
+  - [ ] Pendiente: medir con `EXPLAIN` en producción, helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
 
 - [~] **H119: Más acciones bajo PIN (parcial: cambio de precio y cajón hechos, ADR-056 y ADR-063).** · *BASE `pin_supervisor`. Requiere H116.*
   - [x] Cambio de precio en la línea con precio resuelto en el servidor: `create_sale` valida el precio y el cambio manual pide PIN de `cambio_precio` (`20261019100000_precio_servidor`, ADR-056). *(Auditoría 2026-11-05.)*
@@ -1910,7 +1911,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F14** | 8/68 | 41 | 19 | 12% | 42% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
-| **F17** | 98/130 | 18 | 14 | 75% | 82% |
+| **F17** | 99/131 | 18 | 14 | 76% | 82% |
 | **F18** | 42/114 | 55 | 17 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **F20** | 32/78 | 0 | 46 | 41% | 41% |
@@ -1919,7 +1920,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F23** | 13/15 | 2 | 0 | 87% | 93% |
 | **F24** | 36/135 | 11 | 88 | 27% | 31% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 715/1343 | 324 | 304 | 53% | 65% |
+| **Total** | 716/1344 | 324 | 304 | 53% | 65% |
 <!-- roadmap-progress:end -->
 
 ---

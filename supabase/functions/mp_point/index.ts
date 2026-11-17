@@ -36,7 +36,6 @@
 // funcionando (POS viejos). Si la sucursal o la caja apagaron el medio
 // (config_overrides) → payment_method_disabled_in_store.
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 import {
@@ -55,6 +54,7 @@ import {
   type MpOrder,
 } from "../_shared/mpOrders.ts";
 import { locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
+import { authenticateTenantUser, requireTenantMember } from "../_shared/tenantAuth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -83,22 +83,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-    auth: { persistSession: false },
-  });
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
-  if (error || !user) return json({ error: "unauthorized" }, 401);
-  const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
-    ?.current_tenant_id;
-  if (!tenantId) return json({ error: "no_tenant" }, 400);
+  // SEC-27: getUser + claim current_tenant_id (401 / 400 no_tenant).
+  const session = await authenticateTenantUser(req, { respond: json });
+  if (session instanceof Response) return session;
 
   let b: Record<string, unknown>;
   try {
@@ -111,18 +98,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: "invalid_action" }, 400);
   }
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  // Miembro activo del tenant (rol para las actions de configuración).
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!mem) return json({ error: "forbidden" }, 403);
-  const canManage = mem.role === "owner" || mem.role === "manager";
+  // Miembro activo (y no suspendido) del tenant del JWT (SEC-27): 403 si no.
+  const member = await requireTenantMember(session, { respond: json });
+  if (member instanceof Response) return member;
+  const { user, tenantId, admin, role } = member;
+  const canManage = role === "owner" || role === "manager";
 
   // ── devices: lista las terminales Point de la cuenta ───────────────────────
   if (action === "devices" || action === "pdv") {

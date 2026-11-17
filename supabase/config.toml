@@ -42,6 +42,15 @@ enable_signup = true
 double_confirm_changes = false
 enable_confirmations = false
 
+# MFA TOTP del staff interno (SEC-23, ADR-186). Sólo local: en prod TOTP viene
+# habilitado por defecto en Supabase Auth (Authentication › MFA).
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [analytics]
 enabled = false
 

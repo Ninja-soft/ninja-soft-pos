@@ -191,9 +191,16 @@ describe("migraciones 20261219100000 y 20261219100100", () => {
     expect(sql).toContain(`grant execute on function public.create_sale(${SIG}) to authenticated;`);
   });
 
-  it("es la última definición de create_sale", () => {
+  it("es la última definición de create_sale (salvo la copia de SEC-43)", () => {
+    // SEC-43 (ADR-187) la recrea copiándola con un parámetro opcional más y
+    // bloques marcados (tests/unit/saleIdempotency.test.ts lo compara).
     const later = readdirSync(DIR)
-      .filter((f) => f.endsWith(".sql") && f > "20261219100100_precio_libre_editor_precios.sql")
+      .filter(
+        (f) =>
+          f.endsWith(".sql") &&
+          f > "20261219100100_precio_libre_editor_precios.sql" &&
+          f !== "20270123100000_sec43_create_sale_idempotency.sql",
+      )
       .map((f) => readFileSync(join(DIR, f), "utf8"));
     for (const s of later) expect(s).not.toMatch(/function (public\.)?create_sale\(/);
   });

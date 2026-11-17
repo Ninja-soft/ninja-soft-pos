@@ -118,6 +118,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Membresía validada en las Edge Functions que usan el negocio de la sesión (SEC-27).** Helper `requireTenantMember` (`supabase/functions/_shared/tenantAuth.ts`, lógica pura en `tenantMember.ts`): además del login y del negocio activo, exige que el usuario sea miembro activo de ese negocio y que su cuenta no esté baneada ni suspendida; las respuestas de error son las mismas de siempre (401 `unauthorized`, 400 `no_tenant`, 403 `forbidden`). `tiendita_copy_image` copiaba fotos con service_role sin chequear la membresía: ahora la valida. Pasan al helper `talo`, `ualabis`, `viumi`, `dlocalgo`, `getnet`, `gocuotas`, `mobbex_create_qr`, `mp_create_qr`, `mp_point` y `mp_cupon` (sin cambios para el cajero). `tests/unit/edgeMembership.test.ts` hace fallar CI si una Edge lee `current_tenant_id` sin el helper, un RPC guard o la consulta a `tenant_users`. Sin migración; hay que desplegar las 11 Edges.
+
 - **CI: tabla de avance del roadmap verificada (OPS-13).** `scripts/roadmap-progress.mjs --check` falla si la tabla de `docs/02-roadmap.md` no coincide con los checkboxes; corre en el job `quality`. Tabla recalculada tras OPS-07 a OPS-09 (53 % hecho, 65 % contando parciales a la mitad).
 
 - **Docs: hitos del MVP con su estado real (OPS-12).** Las 47 casillas de `docs/01-mvp.md` §6 quedan revisadas: 43 hechas con la ruta o el test que lo prueba, 2 parciales (corrida del checklist de QA, monitoreo) y 2 pendientes enlazadas a su tarea (prueba de carga, backups verificados).

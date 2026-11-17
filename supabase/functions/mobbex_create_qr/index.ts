@@ -18,7 +18,6 @@
 // Mobbex responde HTTP 200 también en error ({ result:false, code, error }).
 // Lógica pura en _shared/mobbex.ts.
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
   MOBBEX_API,
   buildCheckoutBody,
@@ -26,6 +25,7 @@ import {
   parseCheckoutResponse,
 } from "../_shared/mobbex.ts";
 import { bodyStoreId, insertIntentWithScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { authenticateTenantUser, requireTenantMember } from "../_shared/tenantAuth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -44,21 +44,10 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-    auth: { persistSession: false },
-  });
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
-  if (error || !user) return json({ error: "unauthorized" }, 401);
-  const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
-    ?.current_tenant_id;
-  if (!tenantId) return json({ error: "no_tenant" }, 400);
+  // SEC-27: getUser + claim current_tenant_id (401 / 400 no_tenant).
+  const session = await authenticateTenantUser(req, { respond: json });
+  if (session instanceof Response) return session;
 
   let b: Record<string, unknown>;
   try {
@@ -70,16 +59,10 @@ Deno.serve(async (req: Request) => {
   if (!Number.isFinite(amount) || amount <= 0) return json({ error: "invalid_amount" }, 400);
   const title = String(b.title ?? "Venta").slice(0, 120);
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!mem) return json({ error: "forbidden" }, 403);
+  // Miembro activo (y no suspendido) del tenant del JWT (SEC-27): 403 si no.
+  const member = await requireTenantMember(session, { respond: json });
+  if (member instanceof Response) return member;
+  const { user, tenantId, admin } = member;
 
   // Gating de plan (enforcement real): el botón "Cobrar con QR · Mobbex" del POS
   // sólo se oculta en la UI; acá se bloquea de verdad. Esta Edge corre con

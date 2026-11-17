@@ -29,7 +29,7 @@
 // tenant_has_feature_for(tenant,'mercado_pago') en create; Mercado Pago apagado
 // en la sucursal o la caja → payment_method_disabled_in_store.
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { authenticateTenantUser, requireTenantMember } from "../_shared/tenantAuth.ts";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 import { applyOrderToIntent, type OrderIntentRow } from "../_shared/mpIntents.ts";
@@ -88,35 +88,22 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-    auth: { persistSession: false },
-  });
-  const [{ data: { user }, error }, body] = await Promise.all([
-    userClient.auth.getUser(),
+  // SEC-27: getUser + claim current_tenant_id (401 / 400 no_tenant), en
+  // paralelo con el body.
+  const [session, body] = await Promise.all([
+    authenticateTenantUser(req, { respond: json }),
     req.json().catch(() => null) as Promise<Record<string, unknown> | null>,
   ]);
-  if (error || !user) return json({ error: "unauthorized" }, 401);
-  const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id;
-  if (!tenantId) return json({ error: "no_tenant" }, 400);
+  if (session instanceof Response) return session;
   if (!body) return json({ error: "invalid_json" }, 400);
   const b = body;
   const action = String(b.action ?? "");
   if (!["create", "status", "cancel", "limits"].includes(action)) return json({ error: "invalid_action" }, 400);
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!mem) return json({ error: "forbidden" }, 403);
+  // Miembro activo (y no suspendido) del tenant del JWT (SEC-27): 403 si no.
+  const member = await requireTenantMember(session, { respond: json });
+  if (member instanceof Response) return member;
+  const { user, tenantId, admin } = member;
 
   const audit = (act: string, entityId: string, after: Record<string, unknown>) =>
     admin.from("audit_logs").insert({

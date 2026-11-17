@@ -14,6 +14,11 @@
 -- postgres.
 -- `revoke all` en vez de nombrar privilegios: MAINTAIN existe en PG17 (prod)
 -- y no en PG15 (local).
+-- Funciones: el EXECUTE de PUBLIC es un default GLOBAL de Postgres y un
+-- default por esquema sólo puede sumar, no quitar; revocarlo globalmente
+-- afectaría funciones de otros esquemas (p. ej. `private`, usado en policies).
+-- Por eso cada función nueva de `public` lleva `revoke execute … from public,
+-- anon` explícito en su migración (docs/04-database.md §6.1, lint SEC-15).
 -- =============================================================================
 
 alter default privileges for role postgres in schema public revoke all on tables from anon;

@@ -6899,3 +6899,38 @@ Pasos:
 ### Verificación
 
 `tests/unit/mpWebhooks.test.ts` (los casos `DIFIERE DE LA TARJETA` de firma pasan a: report procesa y registra; enforce 401 sin leer MP ni escribir — inválida, sin ts, sin header, vencida —; enforce con firma válida en ms y s acredita; enforce sin secreto — token manual o app sin `webhook_secret` — procesa y registra; off procesa sin nota; modo ilegible / desconocido → report; cache de 60 s; aviso de contracargo en enforce → 401 sin procesar; lecturas del modo y del secreto colgadas → report / error al tope de 2 s sin cachear; error al leer el secreto → 503 en enforce y nota en report; enforce con token OAuth vencido y firma inválida → 401 sin refresh ni escrituras; lo mismo para orders) y `tests/unit/webhookLog.test.ts` (`wh.note` no cambia el estado).
+
+## ADR-190: PIN de devoluciones acumulado por venta y token de supervisor sin carrera (SEC-61)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar; reversible) · migración `20270126100000_sec61_supervisor_token` · **Hito:** F1.5 / SEC
+
+### Contexto
+
+Review de SEC-59 (`20270124100000`, el PIN de `sale_return` se evalúa con el total final):
+
+1. **Carrera del token.** `require_supervisor` consume el token con `update … where t.id = (select c.id … where c.consumed_at is null …)`. El subselect corre una sola vez; si dos transacciones traen el mismo token, la segunda espera el lock de la primera y al re-chequear la fila (READ COMMITTED) sólo re-evalúa `t.id = …`: las dos lo consumen. Afecta a todas las acciones con PIN (precio, descuento, anulación, devolución, retiro, ingreso, cajón, reintegro MP…).
+2. **Fragmentación.** Cada devolución se comparaba sola contra el umbral: N devoluciones de $499 con umbral $500 nunca pedían PIN.
+3. Un `total` negativo en `sale_returns` se ignoraba en silencio.
+
+### Decisión
+
+1. `require_supervisor` (copia de la definición de prod, sin drift) repite en el WHERE del UPDATE todas las condiciones de validez (`tenant_id`, `action`, `requested_by`, `consumed_at is null`, `expires_at > now()`, monto). Si otra transacción consumió el token, el UPDATE no afecta filas y sale por el camino existente: `supervisor_token_invalid` (42501). El subselect elige el token con `for update skip locked`: si otra transacción tiene tomado el más viejo, se usa el siguiente token válido del header; si no hay otro, `supervisor_token_invalid` sin esperar. Firma, grants (`authenticated`), `SECURITY DEFINER` y `search_path` iguales: el contrato con el front no cambia.
+2. **Acumulado por venta (por defecto).** `trg_sale_returns_supervisor` evalúa la política `sale_return` con `least(Σ devoluciones previas de la venta + new.total, sales.total)` y con ese mismo monto valida el token. `sale_returns` no tiene anulación: cuentan todas las devoluciones previas. El tope en el total de la venta absorbe los centavos del redondeo por línea del prorrateo (`return_sale_v2` / `return_sale`). Un `pg_advisory_xact_lock` por venta serializa dos devoluciones concurrentes de la misma venta (`return_sale_v2` y el legado `return_sale` ya toman uno por negocio; el INSERT directo en `sale_returns` no).
+   - Consecuencia: una vez que lo devuelto de una venta llega al umbral, **cada** devolución posterior de esa venta pide PIN (aunque sea chica).
+   - Front: `withSupervisor` (`modules/sales/api.ts`, devolución y cambio) ya pide el token con el total de la venta, que es ≥ el monto que valida el servidor. Sin cambios de front.
+3. `total < 0` → `invalid_total`.
+
+**Reversible:** volver a evaluar cada devolución sola es recrear `trg_sale_returns_supervisor` pasando `new.total` a `require_supervisor` (sin el acumulado ni el lock); el punto 1 es independiente.
+
+### Doble PIN con reintegro por Mercado Pago (comportamiento intencional)
+
+Una devolución con pata MP pasa por dos controles: `sale_return` (trigger, con el acumulado) y `reintegro_mp` (`return_sale_v2`, siempre exigido salvo supervisor, con el monto MP). Son dos acciones distintas de la política y el front pide los dos tokens en la misma llamada (`withSupervisor` con `sale_return` y `reintegro_mp`): un mismo supervisor puede tener que poner el PIN dos veces. Se deja así a propósito (el reintegro mueve dinero fuera del negocio y su control no depende del umbral de devoluciones); unificarlo en un solo token queda como deuda de UX, no de seguridad.
+
+### Alternativas descartadas
+
+- **Acumular por cliente o por turno:** el cliente puede no estar y el turno no ata la devolución a la venta; por venta es lo que el cajero puede fragmentar.
+- **Mandar el acumulado desde el front:** el front no conoce el total de esta devolución antes de que el servidor la calcule; el total de la venta ya lo cubre.
+
+### Verificación
+
+`tests/integration/flujo-devoluciones.test.ts` (CI, Supabase local): 7c ahora valida con el acumulado (un token por el valor de esa sola devolución no alcanza; el del total de la venta sí); 8a dos devoluciones de $300 con umbral $500 → la segunda pide PIN; 8b el mismo token en dos devoluciones en paralelo → pasa una sola y queda una auditoría (se serializan por el lock de negocio: documenta el comportamiento, no la carrera); 8g regresión real con psql (una conexión tiene el token tomado y lo consume; `require_supervisor` en otra conexión con ese token → `supervisor_token_invalid`; el código anterior lo consumía de nuevo); 8c `exchange_sale`, 8d `return_sale` (legado) y 8e vale (`store_credit`) piden PIN y pasan con el token; 8f `total < 0` → `invalid_total`.

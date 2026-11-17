@@ -57,9 +57,16 @@
 //     UPDATE fija el total real: 'supervisor_required:sale_return' sin token,
 //     'supervisor_token_invalid' con un token de monto menor. Antes del arreglo
 //     sólo corría en el INSERT (total 0) y con umbral > 0 nunca pedía PIN.
+//   * PIN (SEC-61, 20270126100000 · ADR-190): la política se evalúa con el
+//     ACUMULADO de la venta (devoluciones previas + esta, topeado en el total
+//     de la venta) y el token tiene que cubrir ese acumulado: el front lo pide
+//     con el total de la venta. require_supervisor consume el token con las
+//     condiciones de validez en el WHERE del UPDATE: el mismo token usado dos
+//     veces a la vez pasa una sola. total < 0 → 'invalid_total'.
 // =============================================================================
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { execFileSync, spawn } from "node:child_process";
 
 const URL_ = process.env.SUPABASE_TEST_URL;
 const ANON = process.env.SUPABASE_TEST_ANON_KEY;
@@ -67,6 +74,36 @@ const SERVICE = process.env.SUPABASE_TEST_SERVICE_KEY;
 // Crea negocios, ventas y devoluciones: sólo contra un Supabase local.
 const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(URL_ ?? "");
 const enabled = Boolean(URL_ && ANON && SERVICE && isLocal);
+
+// Caso 8g (SEC-61): dos conexiones a la base con psql (DB_URL de
+// `supabase status -o env`, mismo patrón que security-lint). Sin DB_URL local
+// o sin psql, ese caso se salta.
+const DB_URL = process.env.DB_URL;
+const dbLocal = (() => {
+  try {
+    return ["127.0.0.1", "localhost", "host.docker.internal"].includes(
+      new URL(DB_URL ?? "").hostname,
+    );
+  } catch {
+    return false;
+  }
+})();
+const hasPsql = (() => {
+  try {
+    execFileSync("psql", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const psqlEnabled = Boolean(DB_URL && dbLocal && hasPsql);
+const PSQL_ARGS = ["-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-f", "-"];
+const psql = (sql: string) =>
+  execFileSync("psql", [DB_URL!, ...PSQL_ARGS], {
+    encoding: "utf8",
+    input: sql,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 
 const STAMP = `ops22-${Math.random().toString(36).slice(2, 8)}`;
 const PASSWORD = "Rls-test-1234!";
@@ -76,8 +113,14 @@ const PASSWORD = "Rls-test-1234!";
 // ---------------------------------------------------------------------------
 const OPENING = 5_000;
 const OPENING_2 = 2_000;
-// chicle: devolución por debajo del umbral de PIN (caso 7d).
-const PRICES = { yerba: 1000, galletitas: 1500, chicle: 200 } as const;
+// chicle: devolución por debajo del umbral de PIN (caso 7d). alfajor: dos
+// devoluciones de $300 que juntas pasan el umbral (caso 8a, SEC-61).
+const PRICES = {
+  yerba: 1000,
+  galletitas: 1500,
+  chicle: 200,
+  alfajor: 300,
+} as const;
 type Prod = keyof typeof PRICES;
 const PIN_THRESHOLD = 500;
 
@@ -245,6 +288,44 @@ async function sell(key: string, p: Prod, qty: number) {
   };
   ctx.sales[key] = sold;
   return sold;
+}
+
+/** Token de supervisor emitido para el cajero (lo que deja verify_supervisor_pin). */
+async function mint(amount: number, action = "sale_return") {
+  const { data, error } = await ctx.admin
+    .from("supervisor_auth_tokens")
+    .insert({
+      tenant_id: ctx.tenant,
+      action,
+      supervisor_id: ctx.ownerId,
+      requested_by: ctx.cashierId,
+      reason: "Devolución autorizada",
+      amount,
+      expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+    } as never)
+    .select("id")
+    .single();
+  if (error || !data) throw error ?? new Error("token");
+  return (data as unknown as { id: string }).id;
+}
+
+/** Sesión nueva del cajero con el token en el header. */
+async function withToken(token: string) {
+  const client = createClient(URL_!, ANON!, {
+    auth: { persistSession: false },
+    global: { headers: { "x-ninja-supervisor-token": token } },
+  });
+  const { error } = await client.auth.signInWithPassword({
+    email: ctx.cashierEmail,
+    password: PASSWORD,
+  });
+  if (error) throw error;
+  return client;
+}
+
+async function tokenRow(token: string) {
+  const [tok] = await rowsOf("supervisor_auth_tokens", "id", token);
+  return tok!;
 }
 
 const giveBack = (
@@ -768,43 +849,18 @@ describe.skipIf(!enabled)("OPS-22 · flujo de devoluciones", () => {
 
   it("7c. con un token de supervisor la devolución pasa; un token de monto menor no alcanza", async () => {
     const sold = ctx.sales.parcial!;
-    const mint = async (amount: number) => {
-      const { data, error } = await ctx.admin
-        .from("supervisor_auth_tokens")
-        .insert({
-          tenant_id: ctx.tenant,
-          action: "sale_return",
-          supervisor_id: ctx.ownerId,
-          requested_by: ctx.cashierId,
-          reason: "Devolución autorizada",
-          amount,
-          expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
-        } as never)
-        .select("id")
-        .single();
-      if (error || !data) throw error ?? new Error("token");
-      return (data as unknown as { id: string }).id;
-    };
-    const withToken = async (token: string) => {
-      const client = createClient(URL_!, ANON!, {
-        auth: { persistSession: false },
-        global: { headers: { "x-ninja-supervisor-token": token } },
-      });
-      const { error } = await client.auth.signInWithPassword({
-        email: ctx.cashierEmail,
-        password: PASSWORD,
-      });
-      if (error) throw error;
-      return client;
-    };
-
-    // El token queda atado al monto: uno de $500 no cubre $1.000.
+    // Caso 1 ya devolvió 1 de 3 yerbas ($1.000): esta suma $2.000 (SEC-61).
     const before = await snapshot(sold, ctx.shift2);
+    // El token queda atado al monto: uno de $500 no cubre el acumulado.
     const low = await giveBack(await withToken(await mint(PIN_THRESHOLD)), sold, 1);
     expect(low.error?.message).toMatch(/supervisor_token_invalid/);
+    // Uno por el valor de ESTA devolución tampoco: cuenta el acumulado.
+    const one = await giveBack(await withToken(await mint(PRICES.yerba)), sold, 1);
+    expect(one.error?.message).toMatch(/supervisor_token_invalid/);
     expect(await snapshot(sold, ctx.shift2)).toEqual(before);
 
-    const token = await mint(PRICES.yerba);
+    // Como el front: el PIN se pide con el total de la venta.
+    const token = await mint(PRICES.yerba * sold.qty);
     const r = await giveBack(await withToken(token), sold, 1);
     expect(r.error).toBeNull();
     const ret = (r.data as Row).return_id as string;
@@ -834,7 +890,7 @@ describe.skipIf(!enabled)("OPS-22 · flujo de devoluciones", () => {
       pin_action: "sale_return",
       ref_id: sold.id,
     });
-    expect(Number(mine[0]!.after_data.amount)).toBe(PRICES.yerba);
+    expect(Number(mine[0]!.after_data.amount)).toBe(2 * PRICES.yerba);
     const [row] = await rowsOf("sale_returns", "id", ret);
     expect(Number(row!.total)).toBe(PRICES.yerba);
   });
@@ -851,4 +907,232 @@ describe.skipIf(!enabled)("OPS-22 · flujo de devoluciones", () => {
       cash: before.cash - PRICES.chicle,
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // SEC-61 · ADR-190
+  // ---------------------------------------------------------------------------
+  it("8a. dos devoluciones de $300 con umbral $500: la segunda pide PIN (acumulado por venta)", async () => {
+    const sold = await sell("fragmentada", "alfajor", 2);
+    const first = await giveBack(ctx.cashier, sold, 1);
+    expect(first.error).toBeNull();
+    expect(Number((first.data as Row).total)).toBe(PRICES.alfajor);
+
+    // Sola sería $300 < $500, pero la venta ya lleva $300 devueltos: $600.
+    const before = await snapshot(sold, ctx.shift2);
+    const second = await giveBack(ctx.cashier, sold, 1);
+    expect(second.error?.message).toMatch(/supervisor_required:sale_return/);
+    expect(await snapshot(sold, ctx.shift2)).toEqual(before);
+
+    const token = await mint(PRICES.alfajor * sold.qty);
+    const ok = await giveBack(await withToken(token), sold, 1);
+    expect(ok.error).toBeNull();
+    expect(await snapshot(sold, ctx.shift2)).toMatchObject({
+      returned: 2,
+      returns: 2,
+      cash: before.cash - PRICES.alfajor,
+    });
+    const { data: used } = await ctx.admin
+      .from("audit_logs")
+      .select("after_data")
+      .eq("tenant_id", ctx.tenant)
+      .eq("action", "supervisor_override_used");
+    const mine = ((used ?? []) as unknown as { after_data: Row }[]).filter(
+      (u) => u.after_data.token_id === token,
+    );
+    expect(mine).toHaveLength(1);
+    expect(Number(mine[0]!.after_data.amount)).toBe(2 * PRICES.alfajor);
+  });
+
+  it("8b. el mismo token usado dos veces en paralelo: pasa una sola devolución", async () => {
+    const a = await sell("paralelo-a", "yerba", 1);
+    const b = await sell("paralelo-b", "yerba", 1);
+    const token = await mint(PRICES.yerba);
+    const [c1, c2] = await Promise.all([withToken(token), withToken(token)]);
+    const res = await Promise.all([giveBack(c1, a, 1), giveBack(c2, b, 1)]);
+    const ok = res.filter((r) => r.error === null);
+    const ko = res.filter((r) => r.error !== null);
+    expect(ok).toHaveLength(1);
+    expect(ko).toHaveLength(1);
+    expect(ko[0]!.error!.message).toMatch(/supervisor_token_invalid/);
+    // Sólo una de las dos ventas quedó devuelta y el token, consumido una vez.
+    const returned = (await returnedQty(a)) + (await returnedQty(b));
+    expect(returned).toBe(1);
+    const tok = await tokenRow(token);
+    expect(tok.consumed_at).not.toBeNull();
+    expect([a.id, b.id]).toContain(tok.consumed_ref);
+    const { data: used } = await ctx.admin
+      .from("audit_logs")
+      .select("after_data")
+      .eq("tenant_id", ctx.tenant)
+      .eq("action", "supervisor_override_used");
+    expect(
+      ((used ?? []) as unknown as { after_data: Row }[]).filter(
+        (u) => u.after_data.token_id === token,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("8c. exchange_sale pide el PIN de la devolución y pasa con el token", async () => {
+    const sold = await sell("cambio", "yerba", 1);
+    const exchange = (c: SupabaseClient) =>
+      rpc(c, "exchange_sale", {
+        p_sale_id: sold.id,
+        p_return_items: [{ sale_item_id: sold.item, quantity: 1 }],
+        p_new_items: [
+          {
+            product_id: ctx.products.yerba,
+            quantity: 1,
+            unit_price: PRICES.yerba,
+            discount: 0,
+          },
+        ],
+        p_difference_payments: [],
+        p_customer_id: ctx.customer,
+      });
+    const before = await snapshot(sold, ctx.shift2);
+    const no = await exchange(ctx.cashier);
+    expect(no.error?.message).toMatch(/supervisor_required:sale_return/);
+    expect(await snapshot(sold, ctx.shift2)).toEqual(before);
+
+    const token = await mint(PRICES.yerba);
+    const ok = await exchange(await withToken(token));
+    expect(ok.error).toBeNull();
+    expect(await returnedQty(sold)).toBe(1);
+    const tok = await tokenRow(token);
+    expect(tok.consumed_at).not.toBeNull();
+    expect(tok.consumed_ref).toBe(sold.id);
+  });
+
+  it("8d. return_sale (legado) pide PIN y pasa con el token", async () => {
+    const sold = await sell("legado", "yerba", 1);
+    const legacy = (c: SupabaseClient) =>
+      rpc(c, "return_sale", {
+        p_sale_id: sold.id,
+        p_items: [{ sale_item_id: sold.item, quantity: 1 }],
+        p_refund: "cash",
+      });
+    const before = await snapshot(sold, ctx.shift2);
+    const no = await legacy(ctx.cashier);
+    expect(no.error?.message).toMatch(/supervisor_required:sale_return/);
+    expect(await snapshot(sold, ctx.shift2)).toEqual(before);
+
+    const token = await mint(PRICES.yerba);
+    const ok = await legacy(await withToken(token));
+    expect(ok.error).toBeNull();
+    expect(await returnedQty(sold)).toBe(1);
+    expect((await tokenRow(token)).consumed_at).not.toBeNull();
+  });
+
+  it("8e. reintegro con vale (store_credit) pide PIN y pasa con el token", async () => {
+    const sold = await sell("vale", "yerba", 1);
+    const credit = { p_refund: "store_credit", p_customer_id: ctx.customer };
+    const before = await snapshot(sold, ctx.shift2);
+    const no = await giveBack(ctx.cashier, sold, 1, credit);
+    expect(no.error?.message).toMatch(/supervisor_required:sale_return/);
+    expect(await snapshot(sold, ctx.shift2)).toEqual(before);
+
+    const token = await mint(PRICES.yerba);
+    const ok = await giveBack(await withToken(token), sold, 1, credit);
+    expect(ok.error).toBeNull();
+    expect((ok.data as Row).refund).toBe("store_credit");
+    // El vale no mueve caja.
+    expect(await snapshot(sold, ctx.shift2)).toMatchObject({
+      returned: 1,
+      returns: 1,
+      cash: before.cash,
+    });
+    expect((await tokenRow(token)).consumed_at).not.toBeNull();
+  });
+
+  it("8f. una devolución con total negativo se rechaza", async () => {
+    const sold = await sell("negativo", "chicle", 1);
+    const r = await ctx.admin.from("sale_returns").insert({
+      tenant_id: ctx.tenant,
+      sale_id: sold.id,
+      number: 999_999,
+      refund_method: "cash",
+      total: -1,
+    } as never);
+    expect(r.error?.message).toMatch(/invalid_total/);
+    expect(await returnsOf(sold)).toHaveLength(0);
+  });
+
+  // Regresión real de la carrera (8b no la reproduce: return_sale_v2 toma el
+  // lock de negocio antes del trigger y las dos devoluciones se serializan).
+  // Conexión A toma el token FOR UPDATE, espera y lo marca consumido. Mientras
+  // tanto la conexión B (cajero, token en el header) llama require_supervisor.
+  // Código pre-SEC-61: el subselect de B elige el token (A todavía no
+  // commiteó), el UPDATE espera el lock de A y, al re-chequear la fila, sólo
+  // re-evalúa `t.id = …` → lo consume OTRA vez y devuelve el supervisor (con
+  // su auditoría). Ahora: 'skip locked' lo saltea (y el WHERE externo exige
+  // consumed_at is null) → 'supervisor_token_invalid'.
+  it.skipIf(!psqlEnabled)(
+    "8g. un token tomado y consumido por otra conexión no se vuelve a consumir (psql)",
+    async () => {
+      const token = await mint(PRICES.yerba);
+      const marker = `sec61-hold-${STAMP}`;
+      const a = spawn("psql", [DB_URL!, ...PSQL_ARGS], {
+        stdio: ["pipe", "ignore", "pipe"],
+      });
+      let aErr = "";
+      a.stderr.on("data", (d) => (aErr += String(d)));
+      const aDone = new Promise<number | null>((res) => a.on("exit", res));
+      a.stdin.end(`begin;
+select id from public.supervisor_auth_tokens where id = '${token}' for update;
+select pg_sleep(4), '${marker}';
+update public.supervisor_auth_tokens set consumed_at = now() where id = '${token}';
+commit;
+`);
+      // Esperar a que A tenga el lock (está en el pg_sleep).
+      let holding = false;
+      for (let i = 0; i < 50 && !holding; i++) {
+        holding =
+          psql(`select count(*) from pg_stat_activity
+                 where pid <> pg_backend_pid() and wait_event = 'PgSleep'
+                   and query like '%${marker}%';`).trim() !== "0";
+        if (!holding) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(holding, "la conexión A no llegó a tomar el token").toBe(true);
+
+      const claims = JSON.stringify({
+        sub: ctx.cashierId,
+        role: "authenticated",
+        app_metadata: { current_tenant_id: ctx.tenant },
+      });
+      const headers = JSON.stringify({ "x-ninja-supervisor-token": token });
+      let bOut = "";
+      let bErr = "";
+      try {
+        bOut = psql(`begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '${claims}', true);
+select set_config('request.headers', '${headers}', true);
+select public.require_supervisor('sale_return', ${PRICES.yerba}, null);
+commit;
+`);
+      } catch (e) {
+        bErr = String((e as { stderr?: unknown }).stderr ?? e);
+      }
+      expect(await aDone, aErr).toBe(0);
+      expect(bErr, `require_supervisor pasó con un token tomado: ${bOut}`).toMatch(
+        /supervisor_token_invalid/,
+      );
+
+      // Consumido una sola vez (por A) y sin auditoría de uso.
+      const tok = await tokenRow(token);
+      expect(tok.consumed_at).not.toBeNull();
+      expect(tok.consumed_ref).toBeNull();
+      const { data: used } = await ctx.admin
+        .from("audit_logs")
+        .select("after_data")
+        .eq("tenant_id", ctx.tenant)
+        .eq("action", "supervisor_override_used");
+      expect(
+        ((used ?? []) as unknown as { after_data: Row }[]).filter(
+          (u) => u.after_data.token_id === token,
+        ),
+      ).toHaveLength(0);
+    },
+    30_000,
+  );
 });

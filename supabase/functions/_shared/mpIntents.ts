@@ -13,10 +13,20 @@
 // * PAY-27: applyOrderToIntent con `{ strict: true }` (sólo mp_orders_webhook)
 //   lanza si falla la escritura del estado, para responder 503 y que MP
 //   reintente. Sin la opción ignora el error como siempre (el polling vuelve).
+// * PAY-28 (ADR-191): el cambio de estado y su auditoría van en UNA
+//   transacción (RPC _mp_intent_transition, sólo service_role): o quedan los
+//   dos o ninguno. Lo usan todos los llamadores (webhook, mp_qr, mp_point,
+//   mp_cupon, pending_charges_sync) con la misma condición de siempre
+//   (approved: `status <> 'approved'`; el resto: `status = 'pending'`). Si la
+//   base todavía no tiene la función (Edge desplegada antes que la
+//   migración) cae al camino de dos pasos de antes (y lo loguea).
+//   Llamadores NO estrictos (polling): si la RPC falla por otro motivo, caen
+//   también al camino de dos pasos; si eso también falla, devuelven el
+//   estado que quedó guardado (nunca uno no persistido).
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders } from "./mpAuth.ts";
-import { type MpEnv, type MpOrder, type ResolvedOrder, resolveOrder } from "./mpOrders.ts";
+import { type IntentStatus, type MpEnv, type MpOrder, type ResolvedOrder, resolveOrder } from "./mpOrders.ts";
 
 export interface OrderIntentRow {
   id: string;
@@ -54,7 +64,7 @@ export class IntentWriteError extends Error {
   }
 }
 
-/** Auditoría que no se pudo grabar: no se lanza (ver applyOrderToIntent). */
+/** Auditoría que no se pudo grabar (sólo el camino viejo, sin la RPC). */
 function auditFailed(error: unknown, intent: string, action: string): void {
   if (!error) return;
   console.error("[mp_orders] audit_logs no se pudo grabar", {
@@ -64,11 +74,109 @@ function auditFailed(error: unknown, intent: string, action: string): void {
   });
 }
 
+/** La RPC no existe (base sin la migración PAY-28): PostgREST PGRST202 / Postgres 42883. */
+export function isMissingRpc(err: unknown): boolean {
+  const e = (err ?? {}) as { code?: string; message?: string };
+  return e.code === "PGRST202" || e.code === "42883" ||
+    /_mp_intent_transition/.test(String(e.message ?? "")) && /could not find|does not exist/i.test(String(e.message ?? ""));
+}
+
+type Transition = {
+  status: string;
+  mpPaymentId: string | null;
+  /** true: sólo desde `pending`; false: cualquier estado salvo `approved`. */
+  onlyPending: boolean;
+  audit: { action: string; actor: string | null; after: Record<string, unknown> } | null;
+};
+
+/**
+ * PAY-28: transición del intent + auditoría atómicas. Devuelve si cambió una
+ * fila; con `error` si la base falló (nada quedó escrito: la transacción se
+ * revierte entera). Sin la RPC en la base, o (no estricto) si la RPC falló,
+ * el camino viejo de dos pasos.
+ */
+async function transitionIntent(
+  admin: SupabaseClient,
+  row: OrderIntentRow,
+  t: Transition,
+  strict: boolean | undefined,
+): Promise<{ changed: boolean; error: unknown }> {
+  const { data, error } = await admin.rpc("_mp_intent_transition", {
+    p_intent: row.id,
+    p_status: t.status,
+    p_mp_payment_id: t.mpPaymentId,
+    p_only_pending: t.onlyPending,
+    p_audit_action: t.audit?.action ?? null,
+    p_actor: t.audit?.actor ?? null,
+    p_audit_after: t.audit?.after ?? null,
+  });
+  if (!error) return { changed: data === true, error: null };
+  const missing = isMissingRpc(error);
+  // Estricto (webhook): el error vuelve como 503 y MP reintenta las dos cosas.
+  if (!missing && strict) return { changed: false, error };
+  // Sin la función, o polling con la RPC fallida: dos pasos (pre PAY-28), así
+  // lo devuelto coincide con lo guardado. Se loguea: acá no hay atomicidad.
+  console.error("[mp_orders] _mp_intent_transition no disponible, camino de dos pasos", {
+    intent: row.id,
+    reason: missing ? "missing_rpc" : "rpc_error",
+    error: String((error as { message?: string }).message ?? error).slice(0, 200),
+  });
+  return await legacyTransition(admin, row, t);
+}
+
+/** Camino de dos pasos (pre PAY-28): update del intent y después el audit aparte. */
+async function legacyTransition(
+  admin: SupabaseClient,
+  row: OrderIntentRow,
+  t: Transition,
+): Promise<{ changed: boolean; error: unknown }> {
+  const values: Record<string, unknown> = { status: t.status };
+  if (t.mpPaymentId != null) values.mp_payment_id = t.mpPaymentId;
+  let q = admin.from("mp_payment_intents").update(values).eq("id", row.id);
+  q = t.onlyPending ? q.eq("status", "pending") : q.neq("status", "approved");
+  const { data: upd, error: updErr } = await q.select("id");
+  if (updErr) return { changed: false, error: updErr };
+  const changed = (upd ?? []).length > 0;
+  if (changed && t.audit) {
+    const { error: auditErr } = await admin.from("audit_logs").insert({
+      tenant_id: row.tenant_id,
+      actor_user_id: t.audit.actor,
+      entity_type: "mp_payment_intents",
+      entity_id: row.id,
+      action: t.audit.action,
+      after_data: t.audit.after,
+    });
+    auditFailed(auditErr, row.id, t.audit.action);
+  }
+  return { changed, error: null };
+}
+
+/**
+ * Error de la transición: estricto lanza (503). Si no, se loguea y se
+ * devuelve el resultado con el estado que quedó guardado (el leído), nunca
+ * uno que no se persistió; el polling vuelve a intentar.
+ */
+function onTransitionError(
+  error: unknown,
+  row: OrderIntentRow,
+  res: ResolvedOrder,
+  strict: boolean | undefined,
+): ResolvedOrder {
+  if (!error) return res;
+  if (strict) throw new IntentWriteError(error);
+  console.error("[mp_orders] no se pudo actualizar el intent", {
+    intent: row.id,
+    error: String((error as { message?: string }).message ?? error).slice(0, 200),
+  });
+  return { ...res, status: row.status as IntentStatus };
+}
+
 /**
  * Aplica el estado de la order al intent local. Devuelve el resultado resuelto.
- * `strict` (PAY-27): si falla el update del estado lanza IntentWriteError. Un
- * error de la auditoría (después del update) sólo se loguea: el intent ya
- * cambió y un reintento sale por idempotencia sin volver a auditar.
+ * `strict` (PAY-27): si falla la escritura lanza IntentWriteError. PAY-28: la
+ * escritura es estado + auditoría en una transacción, así que un error no
+ * deja el intent cambiado sin su auditoría (ni al revés) y el reintento
+ * vuelve a intentar las dos.
  */
 export async function applyOrderToIntent(
   admin: SupabaseClient,
@@ -88,21 +196,14 @@ export async function applyOrderToIntent(
   }
 
   if (res.status === "approved") {
-    const { data: upd, error: updErr } = await admin
-      .from("mp_payment_intents")
-      .update({ status: "approved", mp_payment_id: res.paymentId })
-      .eq("id", row.id)
-      .neq("status", "approved")
-      .select("id");
-    if (updErr && opts.strict) throw new IntentWriteError(updErr);
-    if ((upd ?? []).length > 0) {
-      const { error: auditErr } = await admin.from("audit_logs").insert({
-        tenant_id: row.tenant_id,
-        actor_user_id: actor.userId,
-        entity_type: "mp_payment_intents",
-        entity_id: row.id,
+    const { error } = await transitionIntent(admin, row, {
+      status: "approved",
+      mpPaymentId: res.paymentId ?? null,
+      onlyPending: false,
+      audit: {
         action: "mp_order_approved",
-        after_data: {
+        actor: actor.userId,
+        after: {
           provider_key: row.provider_key,
           mp_order_id: row.mp_order_id,
           mp_payment_id: res.paymentId,
@@ -111,41 +212,38 @@ export async function applyOrderToIntent(
           source: actor.source,
           previous_status: row.status,
         },
-      });
-      if (opts.strict) auditFailed(auditErr, row.id, "mp_order_approved");
-    }
-    return res;
+      },
+    }, opts.strict);
+    return onTransitionError(error, row, res, opts.strict);
   }
 
   if (res.status !== "pending") {
-    const { data: upd, error: updErr } = await admin
-      .from("mp_payment_intents")
-      .update({ status: res.status, mp_payment_id: res.paymentId ?? row.mp_payment_id })
-      .eq("id", row.id)
-      .eq("status", "pending")
-      .select("id");
-    if (updErr && opts.strict) throw new IntentWriteError(updErr);
-    if ((upd ?? []).length > 0 && res.reason === "amount_mismatch") {
+    const mismatch = res.reason === "amount_mismatch";
+    const { changed, error } = await transitionIntent(admin, row, {
+      status: res.status,
+      mpPaymentId: res.paymentId ?? row.mp_payment_id ?? null,
+      onlyPending: true,
+      audit: mismatch
+        ? {
+            action: "mp_order_amount_mismatch",
+            actor: actor.userId,
+            after: {
+              provider_key: row.provider_key,
+              mp_order_id: row.mp_order_id,
+              mp_payment_id: res.paymentId,
+              expected: Number(row.amount),
+              order_total: order.total_amount ?? null,
+              source: actor.source,
+            },
+          }
+        : null,
+    }, opts.strict);
+    if (error) return onTransitionError(error, row, res, opts.strict);
+    if (changed && mismatch) {
       console.error("[mp_orders] amount_mismatch, NO se acredita", {
         intent: row.id,
         order: order.id,
       });
-      const { error: auditErr } = await admin.from("audit_logs").insert({
-        tenant_id: row.tenant_id,
-        actor_user_id: actor.userId,
-        entity_type: "mp_payment_intents",
-        entity_id: row.id,
-        action: "mp_order_amount_mismatch",
-        after_data: {
-          provider_key: row.provider_key,
-          mp_order_id: row.mp_order_id,
-          mp_payment_id: res.paymentId,
-          expected: Number(row.amount),
-          order_total: order.total_amount ?? null,
-          source: actor.source,
-        },
-      });
-      if (opts.strict) auditFailed(auditErr, row.id, "mp_order_amount_mismatch");
     }
   }
   return res;

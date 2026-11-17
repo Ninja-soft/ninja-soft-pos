@@ -2,7 +2,7 @@
 // =============================================================================
 // Avance del roadmap por fase (docs/02-roadmap.md).
 //
-// Cuenta los checkboxes de cada fase (F0 a F18 y TX): `- [x]` hecho,
+// Cuenta los checkboxes de cada fase (F0 a Fn, cualquier número, y TX): `- [x]` hecho,
 // `- [~]` parcial, `- [ ]` pendiente, a cualquier nivel de sangría.
 // Una sección de fase empieza en un título `## Fx` o `### Fx` (o `TX`) y
 // termina en el próximo título de fase o en otro título del mismo nivel o
@@ -16,10 +16,12 @@
 //   node scripts/roadmap-progress.mjs --write   la reescribe en el roadmap,
 //                                               entre los marcadores
 //                                               <!-- roadmap-progress:start/end -->
+//   node scripts/roadmap-progress.mjs --check   sale con 1 si la tabla escrita
+//                                               no coincide con la calculada (CI)
 // Puro Node, sin dependencias.
 // =============================================================================
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,23 +101,61 @@ export function renderTable(phases) {
   ].join("\n");
 }
 
+/** El markdown con la tabla recalculada entre los marcadores, o null si faltan. */
+export function applyTable(md) {
+  const s = md.indexOf(START);
+  const e = md.indexOf(END);
+  if (s === -1 || e === -1 || e < s) return null;
+  const table = renderTable(countByPhase(md));
+  const eol = md.includes("\r\n") ? "\r\n" : "\n";
+  return md.slice(0, s + START.length) + eol + table.replace(/\n/g, eol) + eol + md.slice(e);
+}
+
+/** true si la tabla escrita coincide con la calculada (ignora el fin de línea). */
+export function isUpToDate(md) {
+  const out = applyTable(md);
+  const norm = (x) => x.replace(/\r\n/g, "\n");
+  return out !== null && norm(out) === norm(md);
+}
+
 function main() {
   const md = readFileSync(FILE, "utf8");
   const table = renderTable(countByPhase(md));
-  if (!process.argv.includes("--write")) {
+  const write = process.argv.includes("--write");
+  const check = process.argv.includes("--check");
+  if (!write && !check) {
     process.stdout.write(table + "\n");
     return;
   }
-  const s = md.indexOf(START);
-  const e = md.indexOf(END);
-  if (s === -1 || e === -1 || e < s) {
+  const out = applyTable(md);
+  if (out === null) {
     console.error(`No encuentro los marcadores ${START} / ${END} en ${FILE}`);
     process.exit(1);
   }
-  const eol = md.includes("\r\n") ? "\r\n" : "\n";
-  const out = md.slice(0, s + START.length) + eol + table.replace(/\n/g, eol) + eol + md.slice(e);
+  if (check) {
+    if (isUpToDate(md)) {
+      process.stdout.write("roadmap-progress: tabla al día.\n");
+      return;
+    }
+    console.error(
+      "roadmap-progress: la tabla de avance de docs/02-roadmap.md está desactualizada. Corré `node scripts/roadmap-progress.mjs --write` y commiteá.",
+    );
+    process.stdout.write(table + "\n");
+    process.exit(1);
+  }
   writeFileSync(FILE, out);
   process.stdout.write(table + "\n");
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();
+// realpath de ambos lados: un symlink o la capitalización de Windows no dejan
+// a --check saliendo 0 sin correr.
+const isMain = (() => {
+  try {
+    const a = realpathSync(process.argv[1] ?? "");
+    const b = realpathSync(fileURLToPath(import.meta.url));
+    return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+  } catch {
+    return false;
+  }
+})();
+if (isMain) main();

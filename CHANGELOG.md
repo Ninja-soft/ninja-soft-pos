@@ -116,6 +116,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **CI: tabla de avance del roadmap verificada (OPS-13).** `scripts/roadmap-progress.mjs --check` falla si la tabla de `docs/02-roadmap.md` no coincide con los checkboxes; corre en el job `quality`. Tabla recalculada tras OPS-07 a OPS-09 (53 % hecho, 65 % contando parciales a la mitad).
+
 - **Docs: hitos del MVP con su estado real (OPS-12).** Las 47 casillas de `docs/01-mvp.md` §6 quedan revisadas: 43 hechas con la ruta o el test que lo prueba, 2 parciales (corrida del checklist de QA, monitoreo) y 2 pendientes enlazadas a su tarea (prueba de carga, backups verificados).
 
 - **Docs: estados de despliegue reconciliados en decision-log y specs (OPS-11 · ADR-185).** Las líneas de estado de 104 ADR y las frases de estado de las specs de cobranza, tesorería, logística, base de datos y venta offline reflejan producción; el método de verificación queda en ADR-185.

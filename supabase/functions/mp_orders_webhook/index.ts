@@ -12,84 +12,31 @@
 //     external_reference = intent. Idempotente (transiciones desde pending).
 //   * Responde 200 enseguida (MP corta a los 22 s y reintenta): el trabajo
 //     corre en segundo plano con EdgeRuntime.waitUntil cuando está disponible.
+//
+// OPS-23: la lógica vive en _shared/mpWebhookHandlers.ts (handleMpOrdersWebhook,
+// testeada con Vitest); acá sólo se arman las dependencias reales.
 // =============================================================================
-import { readJsonLimited } from "../_shared/requestGuard.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { runInBackground, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
-import {
-  applyOrderToIntent,
-  fetchOrder,
-  ORDER_INTENT_COLUMNS,
-  type OrderIntentRow,
-} from "../_shared/mpIntents.ts";
-import { parseOrderNotification } from "../_shared/mpOrders.ts";
-import { withWebhookLog, type WebhookCtx } from "../_shared/webhookLog.ts";
+import { applyOrderToIntent, fetchOrder, ORDER_INTENT_COLUMNS, type OrderIntentRow } from "../_shared/mpIntents.ts";
+import { handleMpOrdersWebhook, type WebhookDb } from "../_shared/mpWebhookHandlers.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
-const ok = () =>
-  new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+const sb = (db: WebhookDb) => db as unknown as SupabaseClient;
 
-async function handle(orderId: string, wh: WebhookCtx): Promise<void> {
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  const { data: rowRaw } = await admin
-    .from("mp_payment_intents")
-    .select(ORDER_INTENT_COLUMNS)
-    .eq("mp_order_id", orderId)
-    .maybeSingle();
-  const row = rowRaw as OrderIntentRow | null;
-  if (!row) return; // order que no es nuestra (u otra integración de la cuenta).
-  wh.tenant(row.tenant_id);
-  if (row.status === "approved") return; // ya acreditado: idempotente.
-
-  // ADR-057: la credencial (negocio o sucursal) con la que se creó el cobro.
-  const cred = await tenantMpCredential(admin, row.tenant_id, row.mp_env ?? "prod", {
-    scopeStoreId: await intentSecretScope(admin, row.id),
-  });
-  if (!cred) {
-    wh.fail("sin credencial de Mercado Pago");
-    return;
-  }
-  const got = await fetchOrder(cred.token, orderId);
-  if (!got.ok) {
-    console.error("[mp_orders_webhook] no se pudo leer la order", {
-      orderId,
-      status: got.status,
-    });
-    wh.fail(`no se pudo leer la order (${got.status})`);
-    return;
-  }
-  await applyOrderToIntent(admin, row, got.order, { userId: null, source: "webhook" });
-  wh.done();
-}
-
-Deno.serve(withWebhookLog("mercadopago_orders", "mp_orders_webhook", async (req: Request, wh) => {
-  try {
-    const reqUrl = new URL(req.url);
-    let body: unknown = null;
-    if (req.method === "POST") {
-      try {
-        body = await readJsonLimited(req);
-      } catch {
-        body = null;
-      }
-    }
-    const n = parseOrderNotification(reqUrl, body);
-    if (n.type !== "order" || !n.orderId) return ok();
-    wh.ref(n.orderId);
-
-    const work = handle(n.orderId, wh);
-    wh.defer(work);
-    const pending = runInBackground(work);
-    if (pending) await pending;
-    return ok();
-  } catch (e) {
-    wh.fail(e);
-    return ok();
-  }
-}));
+Deno.serve(withWebhookLog("mercadopago_orders", "mp_orders_webhook", (req: Request, wh) =>
+  handleMpOrdersWebhook(req, wh, {
+    db: () => {
+      const url = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      return createClient(url, serviceKey, { auth: { persistSession: false } }) as unknown as WebhookDb;
+    },
+    intentColumns: ORDER_INTENT_COLUMNS,
+    credential: (db, tenantId, env, opts) => tenantMpCredential(sb(db), tenantId, env, opts),
+    secretScope: (db, intentId) => intentSecretScope(db, intentId),
+    fetchOrder,
+    applyOrder: (db, row, order, actor) => applyOrderToIntent(sb(db), row as OrderIntentRow, order, actor),
+    runInBackground,
+    log: { error: (message, data) => console.error(message, data) },
+  })));

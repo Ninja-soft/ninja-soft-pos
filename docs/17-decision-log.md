@@ -6646,3 +6646,23 @@ ADR-041 integró Directo infiriendo la API del plugin de WooCommerce (API Key, S
 - Sin migración. Orden de deploy: Edges `directo`, `directo_webhook`, `set_payment_secret`, `pending_charges_sync` y después el front. Los negocios con credencial vieja tienen que volver a cargar usuario, contraseña y Policy Product de la API 2.0 (las de la API vieja no sirven en estos hosts).
 - Inferido, a confirmar con Directo en QA: duración del token (se usa `exp` del JWT o 30 minutos), el HTTP de un login inválido, que `maximumRate` sea la cantidad máxima de cuotas (así se muestra), cancelación o devolución de órdenes (el documento no las describe; la baja es local).
 - Tests: `tests/unit/directo.test.ts` (login, 403 con re-login único, timeout, cuerpos, estados, webhook con fetch simulado, fullName, sexTypeId, compatibilidad de secretos).
+
+## ADR-182: Dependencias de runtime vulnerables: parches menores ya, ECharts 6 y zod 4 diferidos con mitigación (OPS-46)
+
+**Fecha:** 2026-11-16 · **Estado:** aceptada (decidido por agente, revisar) · **Hito:** OPS / seguridad
+
+### Contexto
+
+`pnpm audit --prod` marcaba una crítica en `dompurify` (SAFE_FOR_TEMPLATES bypass, ≤3.4.16), XSS en `echarts` < 6.1.0 (GHSA-fgmj-fm8m-jvvx), DoS de memoria en `zod` ≤ 4.6.5 (GHSA-mrhx-c7xc-m3w5) y `uuid` 8 transitivo de `exceljs`. Las críticas de `next` las cubre OPS-45.
+
+### Decisión
+
+1. **DOMPurify 3.4.18** (dependencia directa) y override `^3.4.18` para la copia opcional de `jspdf`. El código de la app ya no lo usa: el modo HTML de tickets se retiró en comprobantes v2 (#423, ADR-119).
+2. **Overrides** `uuid ^11.1.1` (última con build CJS; `exceljs` hace `require('uuid')`) y `form-data ^4.0.6`.
+3. **ECharts queda en 5.5.1.** El CVE sólo afecta el tooltip por defecto de la serie `lines`, que la app no registra (`echarts-core.ts` registra Bar, Line, Pie, Heatmap y Treemap; `account/EChart.tsx`, Bar y Pie). Los tooltips de `components/charts/builders.ts`, `mrrMovementChart` y `fxChartOption` usan formatters propios que escapan con `esc()`; los que usan el tooltip por defecto (`clientes/cuentas`, `OwnerLive`) quedan cubiertos por el escape propio de ECharts 5 para nombres y cabecera (`tooltipMarkup`), que la serie `lines` es la única que se saltea. `tests/unit/echarts-xss.test.ts` cubre el escape de ranking, dona y barras apiladas y avisa si alguien registra `LinesChart`. El salto a 6.x es una tarea P2 aparte, junto con cubrir el resto de los builders y validar el color en `dot()`.
+4. **zod queda en 3.x.** Los arrays de la API pública tienen `.max(MAX_BATCH)` y hay tope de bytes del cuerpo (`lib/api-publica/http.ts`); `client-error` no tiene arrays. La migración a zod 4 es una tarea P2 aparte.
+
+### Alternativas descartadas
+
+- Subir ECharts 6 y zod 4 en este PR: dos saltos mayores con API rota (opciones de ECharts, `z.string().email()`/errores de zod) para riesgos ya mitigados.
+- Sacar `dompurify` de las dependencias: `jspdf` la usa en `html()`; se deja fijada y parcheada.

@@ -117,6 +117,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **Seguridad: dependencias vulnerables (OPS-46 · ADR-182).** DOMPurify pasa a 3.4.18 (había una crítica) y se fuerzan `uuid` 11 y `form-data` 4.0.6 en las dependencias de `exceljs` y compañía. ECharts 5 y zod 3 quedan con el riesgo mitigado y documentado (los gráficos no usan la serie afectada y escapan los nombres en los tooltips; la API pública limita el tamaño de las listas) hasta pasar a ECharts 6 y zod 4 en tareas aparte.
+
 - **Seguridad: `internal_impersonate` exige JWT en el gateway (SEC-26).** La Edge de "acceder como el negocio" estaba desplegada con `verify_jwt = false` aunque no es pública (validaba la sesión adentro). Se redesplegó con `verify_jwt = true` y quedó declarada en `supabase/config.toml` para que un deploy futuro no la vuelva a abrir. Sin token, el gateway responde 401; el staff la sigue usando igual.
 
 - **Seguridad: 6 RPCs autenticadas cerradas para anon (SEC-11).** `open_cash_shift`, `empty_my_catalog`, `add_table_order_item`, `fire_table_order_course`, `set_table_order_item_course` y `validate_coupon` se podían invocar sin sesión (fallaban adentro, pero quedaban expuestas). Se revoca EXECUTE a `public` y `anon` y se deja explícito el de `authenticated`; nada cambia para el usuario logueado. Migración `20270119100100_sec11_revoke_anon_rpcs`.

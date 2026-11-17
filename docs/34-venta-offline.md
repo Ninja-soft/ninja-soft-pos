@@ -84,7 +84,7 @@ POS con conexión ── foto local (IndexedDB): catálogo con precios, polític
 
 ## 7. ARCA
 
-La venta offline no se factura en el momento: el ticket es **provisorio** ("no válido como factura"). Al sincronizar, `create_sale` inserta la venta y la cola fiscal la toma como cualquier otra (en la rama de ARCA, el trigger `arca_sales_enqueue`), con CAE o, si ARCA no responde, CAEA. Pendiente para esa rama: usar `sales.offline_sold_at` como fecha del comprobante dentro de la ventana que acepta WSFE y reimprimir el ticket con CAE.
+La venta offline no se factura en el momento: el ticket es **provisorio** ("no válido como factura"). Al sincronizar, `create_sale` inserta la venta y la cola fiscal la toma como cualquier otra (en la rama de ARCA, el trigger `arca_sales_enqueue`), con CAE o, si ARCA no responde, CAEA. El comprobante con CAE lleva la fecha real de la venta (`sales.offline_sold_at`, que `arca_snapshot` manda en `sale`), acotada por `pickCbteDate` a la ventana que acepta WSFE (5 días productos, 10 servicios) y al último autorizado de la serie; si se movió, se emite igual con la fecha mínima permitida y queda el evento `fecha_ajustada` en `fiscal_document_events` (FIS-001). Las NC y la emisión por CAEA siguen con la fecha del día. Pendiente: reimprimir el ticket con CAE.
 
 ## 8. Abrir y recargar el POS sin conexión (H65, ADR-087)
 

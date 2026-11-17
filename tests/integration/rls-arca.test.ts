@@ -209,6 +209,25 @@ describe.skipIf(!enabled)("facturación ARCA · RLS, gating, cola y contingencia
     expect(again.data).toEqual([]);
     const caj = await rpc(ctx.cashier.client, "arca_claim", { p_tenant: ctx.tenant });
     expect(caj.error).not.toBeNull();
+    // FIS-001: la foto trae el momento real de la venta offline.
+    const soldAt = "2026-10-12T22:15:00+00:00";
+    await ctx.admin.from("sales").update({ offline_sold_at: soldAt } as never).eq("id", ctx.saleId);
+    const snap = await rpc(ctx.admin, "arca_snapshot", { p_doc: ctx.docId });
+    expect(new Date(String((snap.data as { sale: { offline_sold_at: string } }).sale.offline_sold_at)).toISOString()).toBe(
+      new Date(soldAt).toISOString(),
+    );
+    // FIS-001: evento fecha_ajustada, idempotente y sólo para service_role.
+    const evP = { action: "fecha_ajustada", error_code: "ventana_arca", error_msg: "Venta del 2026-10-05; comprobante con fecha 2026-10-08." };
+    expect((await rpc(ctx.admin, "arca_log_event", { p_doc: ctx.docId, p: evP })).data).toBe(true);
+    expect((await rpc(ctx.admin, "arca_log_event", { p_doc: ctx.docId, p: evP })).data).toBe(false);
+    expect((await rpc(ctx.admin, "arca_log_event", { p_doc: ctx.docId, p: { ...evP, action: "FECAESolicitar" } })).error).not.toBeNull();
+    expect((await rpc(ctx.owner.client, "arca_log_event", { p_doc: ctx.docId, p: evP })).error).not.toBeNull();
+    const { data: evs } = await ctx.owner.client
+      .from("fiscal_document_events" as never)
+      .select("action, outcome, error_code")
+      .eq("document_id", ctx.docId)
+      .eq("action", "fecha_ajustada");
+    expect(evs).toEqual([{ action: "fecha_ajustada", outcome: "ok", error_code: "ventana_arca" }]);
     await rpc(ctx.admin, "arca_mark_sending", { p_doc: ctx.docId, p: { cbte_nro: 12, cbte_fch: "2026-10-13", concepto: 1, doc_tipo: 99, doc_nro: "0" } });
     const ok = await rpc(ctx.admin, "arca_apply_result", {
       p_doc: ctx.docId,

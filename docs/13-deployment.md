@@ -94,7 +94,17 @@ Post-deploy (§11.2): healthcheck profundo + smoke de piloto en el tenant QA
 
 ### 4.2.1 Historial de migraciones
 
-`supabase_migrations.schema_migrations` de prod se llenó con el MCP: guarda la hora de aplicación como versión, así que ninguna versión coincide con un archivo del repo, y las migraciones aplicadas por SQL directo después del 14-06-2026 no tienen fila. **Hasta hacer el repair (SEC-02) está prohibido `supabase db push`**: reaplicaría todo.
+**Estado (2026-11-17, SEC-02 · ADR-183): el historial de prod es igual al repo.** `schema_migrations` tiene una fila por archivo de `supabase/migrations/` con la versión del archivo (466 al hacer el repair) y `deploy-check --applied` da 0 pendientes. El historial viejo (200 filas con la hora de aplicación del MCP y su `statements`) quedó en `supabase_migrations.schema_migrations_bak_20261117`; no se borra.
+
+**Regla desde el repair:** el MCP `apply_migration` registra la hora de aplicación como versión. Después de aplicar una migración con él, en el mismo paso, se renombra esa fila a la versión del archivo:
+
+```sql
+update supabase_migrations.schema_migrations
+   set version = '<versión del archivo>'
+ where version = '<versión que dejó el MCP>' and name = '<nombre del archivo>';
+```
+
+Así el historial sigue igual al repo y `supabase db push` / `deploy-check --applied` no ven pendientes falsos. Antes del repair el historial se llenó sólo con el MCP, así que ninguna versión coincidía con un archivo y las migraciones aplicadas por SQL directo después del 14-06-2026 no tenían fila.
 
 `scripts/migration-repair-plan.mjs` arma el plan para dejar el historial igual al repo (el repo es la fuente de verdad: toda fila remota sin archivo queda `reverted` y todo archivo con evidencia en el historial queda `applied`). Los archivos **sin ninguna fila remota** quedan fuera del plan salvo con `--include-unverified`: marcarlos `applied` sin que estén en la base haría que `db push` los saltee para siempre, así que antes se verifica su contenido en la base (SEC-02). No toca la base:
 

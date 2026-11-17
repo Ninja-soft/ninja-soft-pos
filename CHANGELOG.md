@@ -114,6 +114,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Docs: roadmap F16–F24 y TX al día con producción (OPS-09).** 28 notas de "sin aplicar" / "sin desplegar" corregidas tras verificar migraciones (SEC-02) y Edge Functions (`nubceo_sync`, `platform_mp_reconcile`, `geo`, `routing`) en prod. Con OPS-07 y OPS-08, el roadmap completo ya no tiene estados de deploy desactualizados.
+
 - **Docs: roadmap F8–F15 al día con producción (OPS-08).** 22 notas de "sin aplicar" / "sin desplegar" corregidas tras verificar migraciones (SEC-02) y Edge Functions en prod. Los estados funcionales no cambian.
 
 - **Docs: roadmap F1.5–F6 y tabla de fases al día con producción (OPS-07).** Las notas "sin aplicar" / "sin desplegar" de ese bloque se corrigieron después de verificar en prod las migraciones (SEC-02) y las Edge Functions. F21 pasa a hecha y el corte de `create_sale` con `tenant_id` explícito (ADR-093) queda tildado. Sólo quedan pendientes los faltantes funcionales.

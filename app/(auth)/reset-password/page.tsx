@@ -7,14 +7,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { AuthAlert, AuthHeading, AuthLink } from "@/components/auth/AuthBits";
+import { PASSWORD_HINT, validatePassword } from "@/modules/auth/password";
+import { authPasswordErrorMessage } from "@/lib/auth/passwordErrors";
 
-function validatePassword(value: string) {
-  if (value.length < 10) return "Mínimo 10 caracteres.";
-  if (!/[A-Z]/.test(value)) return "Debe incluir al menos una mayúscula.";
-  if (!/[a-z]/.test(value)) return "Debe incluir al menos una minúscula.";
-  if (!/[0-9]/.test(value)) return "Debe incluir al menos un número.";
-  return null;
-}
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -86,7 +81,7 @@ export default function ResetPasswordPage() {
     const { error: err } = await createClient().auth.updateUser({ password });
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(authPasswordErrorMessage(err));
       return;
     }
     setDone(true);
@@ -125,7 +120,7 @@ export default function ResetPasswordPage() {
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            hint="Mínimo 10 caracteres, una mayúscula, una minúscula y un número."
+            hint={PASSWORD_HINT}
           />
           <PasswordInput
             label="Repetir contraseña"

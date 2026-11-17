@@ -36,6 +36,13 @@ site_url = "http://localhost:8080"
 additional_redirect_urls = ["http://localhost:8080"]
 jwt_expiry = 3600
 enable_signup = true
+# Política de contraseña (SEC-22): misma regla que modules/auth/password.ts
+# (mínimo 10, mayúscula + minúscula + número; docs/05-security.md §3). Valores
+# válidos de password_requirements (CLI 2.122.0): "", "letters_digits",
+# "lower_upper_letters_digits", "lower_upper_letters_digits_symbols".
+# Prod se configura aparte en el dashboard de Auth (no hay `config push`).
+minimum_password_length = 10
+password_requirements = "lower_upper_letters_digits"
 
 [auth.email]
 enable_signup = true

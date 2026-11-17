@@ -15,6 +15,7 @@
 import { clientIp, createIpLimiter, readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { sendWithChain } from "../_shared/mailer.ts";
+import { allowedRecoveryOrigins, pickRecoveryOrigin } from "../_shared/recoveryOrigins.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -28,12 +29,8 @@ const json = (b: unknown, s = 200) =>
   });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DEFAULT_ORIGIN = "https://pos.soft.ninja";
-const ALLOWED_ORIGINS = [
-  /^https:\/\/pos\.soft\.ninja$/,
-  /^https:\/\/ninja-soft-pos(-[a-z0-9-]+)?\.vercel\.app$/,
-  /^http:\/\/localhost:\d+$/,
-];
+// SEC-62: sólo orígenes exactos (ver _shared/recoveryOrigins.ts).
+const ALLOWED_ORIGINS = allowedRecoveryOrigins(Deno.env.get("RECOVERY_EXTRA_ORIGINS"));
 const KIND = "password_recovery";
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_PER_WINDOW = 3;
@@ -70,9 +67,7 @@ Deno.serve(async (req: Request) => {
   }
   const email = String(b.email ?? "").trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return json({ error: "invalid_email" }, 400);
-  const origin = ALLOWED_ORIGINS.some((re) => re.test(String(b.origin ?? "")))
-    ? String(b.origin)
-    : DEFAULT_ORIGIN;
+  const origin = pickRecoveryOrigin(b.origin, ALLOWED_ORIGINS);
 
   try {
     const admin = createClient(

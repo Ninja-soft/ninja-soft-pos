@@ -1,5 +1,5 @@
 {
-  "description": "Mismo aviso que payment-approved pero con un x-signature que no corresponde al manifest (v1 de otra clave). mp_webhook y mp_orders_webhook no validan x-signature hoy: sólo mp_billing_webhook lo hace.",
+  "description": "Mismo aviso que payment-approved pero con un x-signature que no corresponde al manifest (v1 de otra clave). SEC-60: en modo report se registra signature_invalid y se procesa; en enforce responde 401 sin escribir.",
   "intent": { "id": "e1f3a5b7-9c0d-4e2f-8a4b-6c8d0e2f4a44", "amount": 12000 },
   "request": {
     "method": "POST",

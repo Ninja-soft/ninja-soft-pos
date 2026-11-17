@@ -112,6 +112,21 @@ Deuda para SEC-27b:
 - `catalog_purchase_checkout` toma el negocio del body (`b.tenant_id ?? meta.current_tenant_id`) en la rama de staff y opera con service_role: verificar que su guard (staff con MFA, o dueño activo) cubra todos los caminos.
 - Detección automática de Edges que usan service_role con un `tenant_id` del body (hoy el test sólo mira el claim `current_tenant_id`).
 
+### 4.4 Firma de los webhooks de Mercado Pago (SEC-60)
+
+Los webhooks públicos de cobros de Mercado Pago no confían en el cuerpo: `mp_webhook` y `mp_orders_webhook` vuelven a leer el pago / la order en MP con el token del negocio y exigen `external_reference` = intent y monto exacto. Desde SEC-60 (ADR-189) además verifican `x-signature` (`_shared/mpWebhookSignature.ts` sobre `verifyMpSignature`, el mismo HMAC de `mp_billing_webhook`) según un modo global:
+
+| `system_settings.mp_webhook_signature_mode` | Firma válida | Firma inválida / sin `ts` / sin header / vencida (> 10 min) | Sin secreto para ese aviso |
+|---|---|---|---|
+| `off` | procesa | procesa (no se mira) | procesa |
+| `report` (inicial; también sin fila, valor desconocido o lectura fallida) | procesa | procesa + nota `signature_*` en `webhook_events.error` | procesa + `signature_missing_secret` |
+| `enforce` | procesa | **401** `invalid_signature`, sin leer MP ni escribir | procesa + `signature_missing_secret` |
+
+- **Secreto:** la clave secreta de webhooks de la app de NinjaSoft (`platform_secrets.mercadopago.webhook_secret`, la de `mp_billing_webhook`). Se usa cuando la credencial del cobro es OAuth (app de plataforma) y para los avisos de contracargos / reclamos de la app. Un negocio con Access Token manual usa su propia app y no guardamos su secreto: nunca se le corta.
+- La nota (`wh.note`) no cambia el estado de la fila (`ok` / `ignored` / `error`) ni guarda datos sensibles. El modo y el secreto se cachean 60 s en el isolate; una excepción de la verificación sigue de largo (`signature_check_failed`).
+- La firma se verifica después de leer el intent y la credencial (para saber si es OAuth) y antes de leer MP o escribir el estado. La única escritura posible antes es el refresh OAuth del token del negocio cuando está por vencer (no depende del contenido del aviso).
+- Pasar a `enforce` es una decisión humana después de revisar `webhook_events` (ver ADR-189).
+
 ## 5. Validación de input
 
 - **Todo input externo se valida con Zod.** Sin excepciones.

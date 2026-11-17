@@ -9,10 +9,10 @@
 // SupabaseClient desde esm.sh y tsc no resuelve URLs (en runtime ese import de
 // tipo no existe). Sólo se falsean la base y la red (fetch).
 //
-// Los casos marcados `// DIFIERE DE LA TARJETA:` documentan el comportamiento
-// actual cuando no coincide con lo que pedía OPS-23 (se decide aparte). Los de
-// timeout / 5xx ya se resolvieron en PAY-27 (ADR-188): 503 para que MP
-// reintente. Quedan los de firma (SEC-60).
+// Los casos `DIFIERE DE LA TARJETA` de OPS-23 ya se resolvieron: timeout / 5xx
+// en PAY-27 (ADR-188, 503 para que MP reintente) y firma en SEC-60 (ADR-189,
+// x-signature según system_settings.mp_webhook_signature_mode: off | report |
+// enforce, default report).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   handleMpOrdersWebhook,
@@ -22,6 +22,12 @@ import {
   type WebhookDb,
 } from "@/supabase/functions/_shared/mpWebhookHandlers";
 import type { WebhookCtx } from "@/supabase/functions/_shared/webhookLog";
+import { signMpWebhook } from "@/supabase/functions/_shared/mpSignature";
+import {
+  MP_SIGNATURE_CACHE_MS,
+  readMpSignatureMode,
+  resetMpSignatureCache,
+} from "@/supabase/functions/_shared/mpWebhookSignature";
 import orderProcessed from "@/tests/fixtures/webhooks/mp/order-processed.json";
 import orderRefunded from "@/tests/fixtures/webhooks/mp/order-refunded.json";
 import orderExpired from "@/tests/fixtures/webhooks/mp/order-expired.json";
@@ -204,6 +210,7 @@ function createWh() {
     ref: null as string | number | null,
     done: false,
     failures: [] as unknown[],
+    notes: [] as string[],
     deferred: [] as Promise<unknown>[],
   };
   const wh: WebhookCtx = {
@@ -218,6 +225,9 @@ function createWh() {
     },
     fail(err) {
       state.failures.push(err ?? "error");
+    },
+    note(text) {
+      state.notes.push(text);
     },
     defer(work) {
       state.deferred.push(work);
@@ -267,6 +277,14 @@ const SECRETS: Row = {
 };
 
 const PLATFORM: Row = { key: "mercadopago", secrets: { client_id: "cid", client_secret: "csecret" } };
+
+// SEC-60: clave de firma de la app de plataforma (valor de prueba) y modo.
+const WEBHOOK_SECRET = "clave-de-webhook-de-prueba";
+const PLATFORM_SIGNED: Row = {
+  key: "mercadopago",
+  secrets: { client_id: "cid", client_secret: "csecret", webhook_secret: WEBHOOK_SECRET },
+};
+const modeRow = (value: unknown): Row => ({ key: "mp_webhook_signature_mode", value });
 
 /** Credencial OAuth; `expiresInMs` negativo = token ya vencido. */
 function oauthSecrets(expiresInMs: number): Row {
@@ -326,6 +344,7 @@ beforeEach(async () => {
     ORDER_INTENT_COLUMNS: mpIntents.ORDER_INTENT_COLUMNS,
   };
   vi.spyOn(console, "error").mockImplementation(() => {});
+  resetMpSignatureCache();
 });
 
 afterEach(() => {
@@ -542,33 +561,160 @@ describe("mp_webhook (handleMpWebhook)", () => {
     expect(writes.map((w) => w.affected)).toEqual([1, 0]);
   });
 
-  it("firma inválida: no se valida x-signature, el aviso se procesa igual", async () => {
-    const { db, tables, writes } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
-    const mp = createFakeMp({ [payPath]: { body: invalidSignature.mpResponse } });
+  // -------------------------------------------------------------------------
+  // SEC-60 (ADR-189): x-signature según system_settings.mp_webhook_signature_mode.
+  // -------------------------------------------------------------------------
+  const SIG_NOW = 1763391600000 + 1000; // 1 s después del ts de los fixtures
+  const REQ_ID = paymentApproved.request.headers["x-request-id"];
+  const PAY_ID = "91234567890";
+  const validSig = (ts = String(SIG_NOW)) => signMpWebhook(WEBHOOK_SECRET, PAY_ID, REQ_ID, ts);
+
+  async function runSigned(o: {
+    mode?: unknown;
+    signature: string | null;
+    secrets?: Row;
+    platform?: Row;
+    faults?: Fault[];
+  }) {
+    const seed: Record<string, Row[]> = {
+      mp_payment_intents: [paymentIntentRow(intent)],
+      payment_secrets: [o.secrets ?? oauthSecrets(24 * 3600_000)],
+      platform_secrets: [o.platform ?? PLATFORM_SIGNED],
+    };
+    if (o.mode !== undefined) seed.system_settings = [modeRow(o.mode)];
+    const fake = createFakeDb(seed, { faults: o.faults });
+    const mp = createFakeMp({ [payPath]: { body: paymentApproved.mpResponse } });
+    const headers: Record<string, string> = { ...paymentApproved.request.headers };
+    if (o.signature === null) delete headers["x-signature"];
+    else headers["x-signature"] = o.signature;
+    const deps = paymentDeps(fake.db, mp.fetchMp);
+    deps.nowMs = () => SIG_NOW;
     const { wh, state } = createWh();
+    const res = await handleMpWebhook(toRequest("mp_webhook", { ...paymentApproved.request, headers }), wh, deps);
+    return { res, state, mp, deps, ...fake };
+  }
 
-    const res = await handleMpWebhook(toRequest("mp_webhook", invalidSignature.request), wh, paymentDeps(db, mp.fetchMp));
+  const INVALID_SIG = invalidSignature.request.headers["x-signature"].replace("1763391600000", String(SIG_NOW));
+  const NO_TS_SIG = signatureWithoutTs.request.headers["x-signature"];
 
-    // DIFIERE DE LA TARJETA: la tarjeta pide 401 sin escribir nada. mp_webhook
-    // no valida x-signature (sólo mp_billing_webhook lo hace): responde 200 y
-    // acredita, porque la defensa es re-leer el pago en MP con el token del
-    // negocio (external_reference + monto), no la firma.
-    expect(await bodyOf(res)).toEqual(OK_200);
-    expect(writes).toHaveLength(1);
-    expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
-    expect(state.done).toBe(true);
+  it("report (sin fila, el default): firma inválida o sin ts se registran y el aviso se procesa igual", async () => {
+    for (const [signature, reason] of [
+      [INVALID_SIG, "signature_invalid"],
+      [NO_TS_SIG, "signature_no_ts"],
+    ] as const) {
+      resetMpSignatureCache();
+      const { res, state, tables, writes } = await runSigned({ signature });
+      expect(await bodyOf(res)).toEqual(OK_200);
+      expect(writes).toHaveLength(1);
+      expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+      expect(state).toMatchObject({ done: true, failures: [], notes: [reason] });
+    }
   });
 
-  it("x-signature sin ts: el header se ignora y el aviso se procesa igual", async () => {
-    const { db, tables } = createFakeDb({ mp_payment_intents: [paymentIntentRow(intent)], payment_secrets: [SECRETS] });
-    const mp = createFakeMp({ [payPath]: { body: signatureWithoutTs.mpResponse } });
-    const { wh } = createWh();
+  it("report: firma válida no deja nota; la fila 'report' explícita se comporta igual", async () => {
+    const { res, state } = await runSigned({ mode: "report", signature: await validSig() });
+    expect(await bodyOf(res)).toEqual(OK_200);
+    expect(state).toMatchObject({ done: true, failures: [], notes: [] });
+  });
 
-    const res = await handleMpWebhook(toRequest("mp_webhook", signatureWithoutTs.request), wh, paymentDeps(db, mp.fetchMp));
+  it("enforce: firma inválida, sin ts, ausente o vencida → 401 sin leer MP ni escribir", async () => {
+    const old = String(SIG_NOW - 11 * 60_000);
+    for (const [signature, reason] of [
+      [INVALID_SIG, "signature_invalid"],
+      [NO_TS_SIG, "signature_no_ts"],
+      [null, "signature_missing"],
+      [await validSig(old), "signature_expired"],
+    ] as const) {
+      resetMpSignatureCache();
+      const { res, state, tables, writes, mp } = await runSigned({ mode: "enforce", signature });
+      expect(await bodyOf(res)).toEqual({ status: 401, type: "application/json", body: { error: "invalid_signature" } });
+      expect(writes).toEqual([]);
+      expect(mp.calls).toEqual([]);
+      expect(tables.mp_payment_intents[0]).toMatchObject({ status: "pending" });
+      expect(state).toMatchObject({ done: false, notes: [reason] });
+    }
+  });
 
-    // DIFIERE DE LA TARJETA: igual que la firma inválida, no hay validación.
+  it("enforce: firma válida (ts en ms o en segundos) acredita sin nota", async () => {
+    for (const ts of [String(SIG_NOW), String(Math.floor(SIG_NOW / 1000))]) {
+      resetMpSignatureCache();
+      const { res, state, tables } = await runSigned({ mode: "enforce", signature: await validSig(ts) });
+      expect(await bodyOf(res)).toEqual(OK_200);
+      expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+      expect(state).toMatchObject({ done: true, notes: [] });
+    }
+  });
+
+  it("enforce sin secreto (token manual del negocio o app sin webhook_secret): procesa y registra", async () => {
+    for (const o of [{ secrets: SECRETS }, { platform: PLATFORM }]) {
+      resetMpSignatureCache();
+      const { res, state, tables } = await runSigned({ mode: "enforce", signature: INVALID_SIG, ...o });
+      expect(await bodyOf(res)).toEqual(OK_200);
+      expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+      expect(state).toMatchObject({ done: true, failures: [], notes: ["signature_missing_secret"] });
+    }
+  });
+
+  it("off: no mira la firma (como antes de SEC-60)", async () => {
+    const { res, state, tables } = await runSigned({ mode: "off", signature: INVALID_SIG });
     expect(await bodyOf(res)).toEqual(OK_200);
     expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(state.notes).toEqual([]);
+  });
+
+  it("lectura del modo que falla o valor desconocido → report (nunca enforce por error)", async () => {
+    const cases = [
+      { mode: "enforce", faults: [{ table: "system_settings", op: "select", message: "db down" }] as Fault[] },
+      { mode: "strict" },
+      { mode: { mode: "enforce" } },
+    ];
+    for (const c of cases) {
+      resetMpSignatureCache();
+      const { res, state, tables } = await runSigned({ ...c, signature: INVALID_SIG });
+      expect(await bodyOf(res)).toEqual(OK_200);
+      expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+      expect(state.notes).toEqual(["signature_invalid"]);
+    }
+  });
+
+  it("el modo se cachea 60 s en el isolate; una lectura fallida no se cachea", async () => {
+    const { db, tables } = createFakeDb(
+      { system_settings: [modeRow("enforce")] },
+      { faults: [{ table: "system_settings", op: "select", message: "db down", times: 1 }] },
+    );
+    expect(await readMpSignatureMode(db, 0)).toBe("report"); // falla → report, sin cachear
+    expect(await readMpSignatureMode(db, 1)).toBe("enforce");
+    tables.system_settings![0]!.value = "off";
+    expect(await readMpSignatureMode(db, MP_SIGNATURE_CACHE_MS)).toBe("enforce");
+    expect(await readMpSignatureMode(db, MP_SIGNATURE_CACHE_MS + 2)).toBe("off");
+  });
+
+  it("aviso de contracargo (app de plataforma): enforce con firma inválida → 401 sin procesar; report sigue", async () => {
+    const delivery = {
+      method: "POST",
+      query: "type=topic_chargebacks_wh&data.id=777&user_id=456",
+      headers: { "content-type": "application/json", "x-request-id": REQ_ID, "x-signature": INVALID_SIG },
+      body: {},
+    };
+    for (const [mode, status] of [
+      ["enforce", 401],
+      ["report", 200],
+    ] as const) {
+      resetMpSignatureCache();
+      const { db } = createFakeDb({
+        system_settings: [modeRow(mode)],
+        platform_secrets: [PLATFORM_SIGNED],
+        payment_secrets: [{ tenant_id: TENANT, store_id: null, provider_key: "mercadopago", "secrets->>mp_user_id": "456" }],
+      });
+      const mp = createFakeMp({});
+      const deps = paymentDeps(db, mp.fetchMp);
+      deps.nowMs = () => SIG_NOW;
+      const { wh, state } = createWh();
+      const res = await handleMpWebhook(toRequest("mp_webhook", delivery), wh, deps);
+      expect(res.status).toBe(status);
+      expect(state.notes).toEqual(["signature_invalid"]);
+      expect(deps.disputes.enabled).toHaveBeenCalledTimes(mode === "enforce" ? 0 : 1);
+    }
   });
 
   it("pago con external_reference de otro intent: 200 sin escribir (antifraude #1)", async () => {
@@ -1056,19 +1202,65 @@ describe("mp_orders_webhook (handleMpOrdersWebhook)", () => {
     expect(state.failures).toEqual([boom]);
   });
 
-  it("firma inválida o sin ts en una order: tampoco se valida", async () => {
-    const { db, tables } = setup(orderProcessed, { body: orderProcessed.mpResponse });
-    const req = {
-      ...orderProcessed.request,
-      headers: { ...orderProcessed.request.headers, "x-signature": signatureWithoutTs.request.headers["x-signature"] },
+  // SEC-60 (ADR-189): firma de la order según el modo global.
+  const ORDER_NOW = 1763380800000 + 1000;
+  async function runOrderSigned(o: { mode?: unknown; signature: string; secrets?: Row }) {
+    const seed: Record<string, Row[]> = {
+      mp_payment_intents: [orderIntentRow(orderProcessed.intent)],
+      payment_secrets: [o.secrets ?? oauthSecrets(24 * 3600_000)],
+      platform_secrets: [PLATFORM_SIGNED],
+      audit_logs: [],
     };
-    const { wh } = createWh();
+    if (o.mode !== undefined) seed.system_settings = [modeRow(o.mode)];
+    const fake = createFakeDb(seed);
+    const mp = createFakeMp({ [`/v1/orders/${orderProcessed.intent.mp_order_id}`]: { body: orderProcessed.mpResponse } });
+    vi.stubGlobal("fetch", mp.fetchMp);
+    const req = { ...orderProcessed.request, headers: { ...orderProcessed.request.headers, "x-signature": o.signature } };
+    const deps = ordersDeps(fake.db);
+    deps.nowMs = () => ORDER_NOW;
+    const { wh, state } = createWh();
+    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", req), wh, deps);
+    return { res, state, mp, ...fake };
+  }
+  const ORDER_INVALID_SIG = `ts=${ORDER_NOW},v1=${"0".repeat(64)}`;
 
-    const res = await handleMpOrdersWebhook(toRequest("mp_orders_webhook", req), wh, ordersDeps(db));
-
-    // DIFIERE DE LA TARJETA: sin validación de x-signature (ver mp_webhook).
+  it("order en report: firma sin ts se registra y la order se acredita igual", async () => {
+    const { res, state, tables } = await runOrderSigned({ signature: signatureWithoutTs.request.headers["x-signature"] });
     expect(await bodyOf(res)).toEqual(OK_200);
     expect(tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(state).toMatchObject({ done: true, failures: [], notes: ["signature_no_ts"] });
+  });
+
+  it("order en enforce: firma inválida → 401 sin leer MP, sin escribir ni auditar; firma válida acredita", async () => {
+    const bad = await runOrderSigned({ mode: "enforce", signature: ORDER_INVALID_SIG });
+    expect(await bodyOf(bad.res)).toEqual({ status: 401, type: "application/json", body: { error: "invalid_signature" } });
+    expect(bad.mp.calls).toEqual([]);
+    expect(bad.writes).toEqual([]);
+    expect(bad.tables.audit_logs).toEqual([]);
+    expect(bad.state.notes).toEqual(["signature_invalid"]);
+
+    resetMpSignatureCache();
+    const orderId = orderProcessed.intent.mp_order_id;
+    const good = await runOrderSigned({
+      mode: "enforce",
+      signature: await signMpWebhook(WEBHOOK_SECRET, orderId, orderProcessed.request.headers["x-request-id"], String(ORDER_NOW)),
+    });
+    expect(await bodyOf(good.res)).toEqual(OK_200);
+    expect(good.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(good.state.notes).toEqual([]);
+  });
+
+  it("order en enforce sin secreto (token manual): procesa y registra; en off no mira la firma", async () => {
+    const manual = await runOrderSigned({ mode: "enforce", signature: ORDER_INVALID_SIG, secrets: SECRETS });
+    expect(await bodyOf(manual.res)).toEqual(OK_200);
+    expect(manual.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(manual.state.notes).toEqual(["signature_missing_secret"]);
+
+    resetMpSignatureCache();
+    const off = await runOrderSigned({ mode: "off", signature: ORDER_INVALID_SIG });
+    expect(await bodyOf(off.res)).toEqual(OK_200);
+    expect(off.tables.mp_payment_intents[0]).toMatchObject({ status: "approved" });
+    expect(off.state.notes).toEqual([]);
   });
 
   it("aviso que no es topic order o sin data.id válido: 200 sin abrir la base", async () => {

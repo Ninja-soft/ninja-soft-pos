@@ -6810,3 +6810,166 @@ ADR-098 documentó que, si la red se corta después de que el servidor grabó la
 ### Verificación
 
 Unit: `tests/unit/saleIdempotency.test.ts`. Integración (CI, base local): `tests/integration/rls-sale-idempotency.test.ts`. Casos: misma clave dos veces y en paralelo (una venta, un movimiento de stock y uno de caja, mismo resultado con `replayed`), misma clave con otro pago (`sale_request_mismatch` con el número), sin clave (dos ventas), otro negocio (no choca), venta offline con la clave de una online que entró (`synced`, sin duplicar ni marcar offline) o con otros datos (`needs_review`), y venta con envío reintentada sin volver a guardar la dirección ni auditar el `ship_to`. También que los helpers no se ejecutan desde el cliente. `grants.expected.json` con la firma nueva y los helpers.
+
+## ADR-188: Webhooks de Mercado Pago responden 503 ante fallas transitorias (PAY-27)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · sin migración · **Hito:** F1.5 / PAY
+
+### Contexto
+
+`mp_webhook` y `mp_orders_webhook` respondían 200 aunque no hubieran podido leer el pago / la order en Mercado Pago (fetch rechazado, timeout, 5xx), leer la credencial o grabar el intent. MP sólo reintenta lo que no recibe 2xx, así que un pago aprobado podía quedar `pending` y `payment_intents_expire_sweep` lo vencía. `mp_orders_webhook` además leía y aplicaba la order en segundo plano (`EdgeRuntime.waitUntil`) porque MP corta la notificación a los **22 s** (cabecera de `mp_orders_webhook/index.ts`): la falla ya no podía cambiar la respuesta.
+
+### Decisión
+
+Principio: **ante cualquier duda de que el pago pudo quedar sin acreditar, 503** `{ok:false, retry:true}` (con `Retry-After: 60`). Los reintentos de MP son finitos y la acreditación es idempotente (`.neq("status","approved")` en `mp_webhook`; `applyOrderToIntent` sólo transiciona desde `pending` y el reintento de una order ya acreditada sale antes de auditar).
+
+1. **503:** lectura a MP que rechaza o vence; MP **5xx o 429**; **401 con credencial OAuth** (puede ser un token vencido que el refresh arregla); error de base al leer el intent, el alcance (`intentSecretScope`), la credencial (`payment_secrets`, `platform_secrets`) o al escribir el estado; refresh OAuth fallido (rechazo, timeout o no-OK) **con el token ya vencido**; tope de la credencial vencido; y cualquier excepción no prevista (el `catch` general pasó de 200 a 503, con `wh.fail`).
+2. **200 (no se reintenta):** 4xx definitivo de MP (400, 403, 404 y 401 con token manual / de prueba, que reintentar no arregla); intent u order desconocidos, otro topic, sin `?intent`; sin credencial (no hay fila: distinto de "la base falló"); `external_reference` ajeno y `amount_mismatch` (no se acredita). Todos quedan con `wh.fail` cuando corresponde.
+3. **Modos estrictos opcionales** (sólo los usan estos dos webhooks; las demás Edges no cambian): `loadProviderSecret(..., { strict })` e `intentSecretScope(admin, id, { strict })` lanzan `SecretLoadError` ante error de base (salvo columna inexistente: base sin la migración); `tenantMpCredential(..., { strict, refreshTimeoutMs })` además lanza `MpRefreshError` si el refresh no sale y el token ya venció (si todavía está vigente, < 5 min, se usa) y devuelve `oauth` (aditivo); `applyOrderToIntent(..., { strict })` lanza `IntentWriteError` si falla el update del estado. `updateSecretRow` devuelve `{ error }` (antes `void`; los llamadores viejos lo ignoran).
+4. **Token rotado que no se pudo guardar:** se loguea siempre (`mp_oauth_refresh_save_failed`) pero **no** se lanza ni en modo estricto. MP ya entregó un access_token nuevo (y rotó el refresh_token): usarlo acredita este pago. Un 503 haría que el reintento refresque con el refresh_token viejo y el pago nunca se acreditaría por webhook.
+5. **Presupuesto dentro de 22 s:** cadena de credencial (alcance + secreto + refresh) con tope de **6 s** (`MP_CREDENTIAL_TIMEOUT_MS`) y el POST `/oauth/token` con `AbortSignal.timeout(5 s)`; lectura del pago / order con **8 s** (`MP_READ_TIMEOUT_MS`, `AbortController` sobre respuesta y cuerpo, más una carrera por si una dependencia ignora el signal). Peor caso ~14 s más consultas cortas a la base. Si vence el tope de la credencial con un refresh en curso, la cadena **no** se aborta: va a `wh.defer`, que la mantiene viva (el registro de `withWebhookLog` corre con `EdgeRuntime.waitUntil` y la espera) hasta guardar el token.
+6. **`mp_orders_webhook`, opción (a), todo sincrónico:** credencial, lectura de la order y `applyOrderToIntent` (update + auditoría, consultas cortas) antes de responder; `runInBackground` ya no se usa. Si la auditoría falla después del update, sólo se loguea: el reintento saldría por "ya acreditado" y no la escribiría igual. Se descartó (b), segundo plano con una marca propia de reintento: necesita tabla / columna y un barrido nuevo para lo que MP ya hace.
+7. **Registro:** `withWebhookLog` marca `error` todo status ≥ 500 y no deduplica por `x-request-id` (`webhook_events` sólo tiene PK `uuid`): cada reintento queda como fila propia y se procesa.
+
+### Pendiente
+
+- Las lecturas de disputas (ADR-064) no tienen timeout propio ni modo estricto (cada negocio va en su propio `try`).
+- Las consultas a la base no tienen timeout propio (dependen del de PostgREST).
+- Validación de `x-signature` en estos webhooks: SEC-60 (ADR-189).
+
+## ADR-189: Firma `x-signature` en los webhooks de cobros de Mercado Pago, con modo report / enforce (SEC-60)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · migración `20270125100000_sec60_mp_webhook_signature` · **Hito:** F1.5 / SEC
+
+### Contexto
+
+`mp_webhook` (Checkout Pro con `?intent` y avisos de contracargos / reclamos, ADR-064) y `mp_orders_webhook` (topic `order`: QR dinámico y Point, ADR-032) no miraban `x-signature`. La defensa era (y sigue siendo) re-leer el pago / la order en MP con el token del negocio y exigir `external_reference` = intent y monto exacto. `mp_billing_webhook` ya validaba la firma con `_shared/mpSignature.ts` (F20-0b · H126) cuando `platform_secrets.mercadopago.webhook_secret` está cargado. Exigir la firma con un secreto mal configurado cortaría todos los cobros de MP en producción.
+
+### Qué secreto firma qué webhook (lo encontrado en el repo)
+
+MP firma `x-signature` con la **clave secreta de webhooks de la aplicación** dueña de la notificación (doc "Webhooks > Validar origen": `HMAC-SHA256(secret, "id:<data.id>;request-id:<x-request-id>;ts:<ts>;")`).
+
+| Webhook / aviso | Cómo llega | App que lo firma | Secreto en NinjaSoft |
+|---|---|---|---|
+| `mp_billing_webhook` (suscripciones) | URL del preapproval, cuenta de NinjaSoft | app de NinjaSoft | `platform_secrets.mercadopago.webhook_secret` (lo carga staff en `set_platform_secret`; ya se usa) |
+| `mp_webhook` con `?intent`, credencial **OAuth** (`payment_secrets.secrets.via = 'oauth'`) | `notification_url` del pago (`mp_create_qr`, `catalog_purchase_checkout`, `ml_facturacion`…) creado con el token OAuth de la app de NinjaSoft | app de NinjaSoft | el mismo `webhook_secret` de plataforma |
+| `mp_webhook` avisos de contracargo / reclamo | configurados en "Tus integraciones" de la app (ADR-064; el negocio se busca por `mp_user_id`, que sólo existe en conexiones OAuth) | app de NinjaSoft | el mismo |
+| `mp_orders_webhook` con credencial OAuth | URL configurada en el panel de la app (evento Order) | app de NinjaSoft | el mismo |
+| `mp_webhook` / `mp_orders_webhook` con **Access Token manual** del negocio | cobro creado con el token de la app propia del negocio | app del negocio | **ninguno**: `payment_secrets` de `mercadopago` guarda `access_token`, `test_access_token`, `refresh_token`, `expires_at`, `via`, `mp_user_id`; no hay `webhook_secret` por negocio ni UI para cargarlo |
+
+No está verificado contra tráfico real que MP firme las `notification_url` por pago con el secreto de la app dueña del token (la doc lo describe para los webhooks configurados en la app); el modo `report` existe justamente para comprobarlo antes de exigirlo.
+
+### Decisión
+
+1. **Flag global** `system_settings.mp_webhook_signature_mode` (jsonb string): `off` | `report` | `enforce`. La migración inserta la fila en `report`. Sin fila, valor desconocido o lectura fallida → `report` (nunca `enforce` por error). Las Edges lo leen con service_role por PK (`_shared/mpWebhookSignature.ts`, `readMpSignatureMode`), en paralelo con la lectura del intent, con tope de **2 s** y cache de **60 s** en el isolate; la lectura fallida o vencida da `report` y no se cachea (en `report` / `off` el webhook nunca espera más de ese tope por esto). Sin funciones nuevas ni cambios de grants (SEC-23 ya sacó las escrituras de `system_settings` al Data API).
+2. **Secreto:** `platform_secrets.mercadopago.webhook_secret` (cache 60 s) cuando la credencial del cobro es OAuth (`tenantMpCredential` devuelve `oauth`) o el aviso es de la app (contracargos / reclamos). Con token manual, o con la app sin `webhook_secret`, el aviso no tiene secreto: `signature_missing_secret`. La lectura del secreto también tiene tope de 2 s; un **error** al leerlo (falla de base o tope) no es "sin secreto": en `enforce` responde **503** (MP reintenta, sin escribir) y en `report` deja la nota `signature_secret_error` y sigue. No se cachea.
+3. **Modos** (`decideMpSignature`):
+   - `off`: no se mira la firma.
+   - `report`: se verifica; motivo `signature_missing_secret`, `signature_missing` (sin header), `signature_no_ts`, `signature_invalid` o `signature_expired` queda en `webhook_events.error` vía `wh.note` y se procesa como siempre.
+   - `enforce`: firma ausente, sin `ts`, inválida o vencida → **401** `{error:"invalid_signature"}` sin leer MP ni escribir el estado. Sin secreto → como `report` (no se corta a quien no tiene secreto).
+4. **Anti-replay:** la ventana de `verifyMpSignature` (10 min, `ts` en ms o en s), la misma que `mp_billing_webhook`; vale en `report` (sólo nota) y en `enforce`.
+5. **Dónde:** siempre antes de leer MP y de escribir el estado. En **`enforce`**, ANTES de `webhookCredential` (que puede refrescar el token OAuth y escribir `payment_secrets`): para decidir si es de la app de plataforma se lee sólo el alcance del intent y la fila de `payment_secrets` (`via = 'oauth'` con `access_token`, en producción) sin refresh, con el tope de la credencial; un error de base ahí → 503. Con la firma OK recién se pide la credencial. En `report` / `off` va después de la credencial (el orden de siempre, no corta nada). En los avisos de disputas, antes de `handleDisputeNotice`. El `data.id` del manifest sale de la query (`data.id`) y, si no vino, del cuerpo.
+6. **`wh.note`** (nuevo en `WebhookCtx`): escribe el motivo en la columna `error` sin cambiar el estado de la fila (`ok` / `ignored` / `error` siguen saliendo del resultado real; con un error real se guarda `nota | error`). Sin datos sensibles: sólo el código. Una excepción de la verificación se anota `signature_check_failed` y sigue (nunca corta un cobro).
+
+### Plan de despliegue (decisión humana)
+
+Precondiciones para pasar a `enforce`:
+
+- (a) Confirmar en `report` que **todos** los tipos de aviso que llegan (pagos con `?intent`, orders, contracargos, reclamos) traen `x-signature` y `data.id` en la query (el manifest usa el `data.id` de la query; si falta, se usa el del cuerpo y la firma puede no coincidir). Si aparece `signature_missing` (o `signature_invalid` / `signature_no_ts`) en avisos de negocios OAuth, **NO** pasar a `enforce`.
+- (b) Rotar `webhook_secret` en la app de MP y en Panel interno tarda hasta **60 s por isolate** en tomar efecto (cache): durante esa ventana, en `enforce`, los avisos firmados con la clave nueva pueden recibir 401 (MP los reintenta). Rotar primero en `report`, o aceptar esa ventana.
+- (c) Los negocios con **Access Token manual** quedan sin verificación de firma aun en `enforce` (no guardamos el secreto de su app): su defensa sigue siendo la re-lectura del pago / la order en MP con su token (`external_reference` + monto).
+
+Pasos:
+
+
+1. Aplicar la migración y desplegar `mp_webhook` y `mp_orders_webhook` → quedan en `report`.
+2. Confirmar que `platform_secrets.mercadopago.webhook_secret` está cargado (Panel interno › Pagos de plataforma) con la clave de la app de NinjaSoft ("Tus integraciones" › Webhooks › Clave secreta).
+3. Mirar `webhook_events` unos días: `select function_name, error, count(*) from webhook_events where function_name in ('mp_webhook','mp_orders_webhook') and error like 'signature_%' and created_at > now() - interval '7 days' group by 1, 2 order by 3 desc;`. Pasar a `enforce` sólo si `signature_invalid`, `signature_no_ts`, `signature_missing` y `signature_expired` son 0 (o explicados) en avisos de negocios OAuth. `signature_expired` en reintentos de MP indicaría que reusa el `ts`: en ese caso no pasar a `enforce`.
+4. Pasar a `enforce` (SQL editor):
+   `update public.system_settings set value = '"enforce"'::jsonb, updated_at = now() where key = 'mp_webhook_signature_mode';`
+   Volver atrás: el mismo update con `'"report"'`. Tarda hasta 60 s en tomar efecto por el cache.
+
+### Alternativas descartadas
+
+- **Exigir la firma de una:** con el secreto mal cargado (o si MP firma las `notification_url` con otra clave) se cortan todos los cobros.
+- **Secreto por negocio (`payment_secrets.webhook_secret`):** no existe hoy ni hay UI; queda como pendiente si en `report` se ve que hace falta para negocios con token manual.
+- **Función lectora `SECURITY DEFINER`:** innecesaria, las Edges usan service_role.
+- **Marcar `error` cuando la firma no coincide en `report`:** ensuciaba Salud de webhooks y las alertas por un aviso que se procesó bien.
+
+### Verificación
+
+`tests/unit/mpWebhooks.test.ts` (los casos `DIFIERE DE LA TARJETA` de firma pasan a: report procesa y registra; enforce 401 sin leer MP ni escribir — inválida, sin ts, sin header, vencida —; enforce con firma válida en ms y s acredita; enforce sin secreto — token manual o app sin `webhook_secret` — procesa y registra; off procesa sin nota; modo ilegible / desconocido → report; cache de 60 s; aviso de contracargo en enforce → 401 sin procesar; lecturas del modo y del secreto colgadas → report / error al tope de 2 s sin cachear; error al leer el secreto → 503 en enforce y nota en report; enforce con token OAuth vencido y firma inválida → 401 sin refresh ni escrituras; lo mismo para orders) y `tests/unit/webhookLog.test.ts` (`wh.note` no cambia el estado).
+
+## ADR-190: PIN de devoluciones acumulado por venta y token de supervisor sin carrera (SEC-61)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar; reversible) · migración `20270126100000_sec61_supervisor_token` · **Hito:** F1.5 / SEC
+
+### Contexto
+
+Review de SEC-59 (`20270124100000`, el PIN de `sale_return` se evalúa con el total final):
+
+1. **Carrera del token.** `require_supervisor` consume el token con `update … where t.id = (select c.id … where c.consumed_at is null …)`. El subselect corre una sola vez; si dos transacciones traen el mismo token, la segunda espera el lock de la primera y al re-chequear la fila (READ COMMITTED) sólo re-evalúa `t.id = …`: las dos lo consumen. Afecta a todas las acciones con PIN (precio, descuento, anulación, devolución, retiro, ingreso, cajón, reintegro MP…).
+2. **Fragmentación.** Cada devolución se comparaba sola contra el umbral: N devoluciones de $499 con umbral $500 nunca pedían PIN.
+3. Un `total` negativo en `sale_returns` se ignoraba en silencio.
+
+### Decisión
+
+1. `require_supervisor` (copia de la definición de prod, sin drift) repite en el WHERE del UPDATE todas las condiciones de validez (`tenant_id`, `action`, `requested_by`, `consumed_at is null`, `expires_at > now()`, monto). Si otra transacción consumió el token, el UPDATE no afecta filas y sale por el camino existente: `supervisor_token_invalid` (42501). El subselect elige el token con `for update skip locked`: si otra transacción tiene tomado el más viejo, se usa el siguiente token válido del header; si no hay otro, `supervisor_token_invalid` sin esperar. Firma, grants (`authenticated`), `SECURITY DEFINER` y `search_path` iguales: el contrato con el front no cambia.
+2. **Acumulado por venta (por defecto).** `trg_sale_returns_supervisor` evalúa la política `sale_return` con `least(Σ devoluciones previas de la venta + new.total, sales.total)` y con ese mismo monto valida el token. `sale_returns` no tiene anulación: cuentan todas las devoluciones previas. El tope en el total de la venta absorbe los centavos del redondeo por línea del prorrateo (`return_sale_v2` / `return_sale`). Un `pg_advisory_xact_lock` por venta serializa dos devoluciones concurrentes de la misma venta (`return_sale_v2` y el legado `return_sale` ya toman uno por negocio; el INSERT directo en `sale_returns` no).
+   - Consecuencia: una vez que lo devuelto de una venta llega al umbral, **cada** devolución posterior de esa venta pide PIN (aunque sea chica).
+   - Front: `withSupervisor` (`modules/sales/api.ts`, devolución y cambio) ya pide el token con el total de la venta, que es ≥ el monto que valida el servidor. Sin cambios de front.
+3. `total < 0` → `invalid_total`.
+
+**Reversible:** volver a evaluar cada devolución sola es recrear `trg_sale_returns_supervisor` pasando `new.total` a `require_supervisor` (sin el acumulado ni el lock); el punto 1 es independiente.
+
+### Doble PIN con reintegro por Mercado Pago (comportamiento intencional)
+
+Una devolución con pata MP pasa por dos controles: `sale_return` (trigger, con el acumulado) y `reintegro_mp` (`return_sale_v2`, siempre exigido salvo supervisor, con el monto MP). Son dos acciones distintas de la política y el front pide los dos tokens en la misma llamada (`withSupervisor` con `sale_return` y `reintegro_mp`): un mismo supervisor puede tener que poner el PIN dos veces. Se deja así a propósito (el reintegro mueve dinero fuera del negocio y su control no depende del umbral de devoluciones); unificarlo en un solo token queda como deuda de UX, no de seguridad.
+
+### Alternativas descartadas
+
+- **Acumular por cliente o por turno:** el cliente puede no estar y el turno no ata la devolución a la venta; por venta es lo que el cajero puede fragmentar.
+- **Mandar el acumulado desde el front:** el front no conoce el total de esta devolución antes de que el servidor la calcule; el total de la venta ya lo cubre.
+
+### Verificación
+
+`tests/integration/flujo-devoluciones.test.ts` (CI, Supabase local): 7c ahora valida con el acumulado (un token por el valor de esa sola devolución no alcanza; el del total de la venta sí); 8a dos devoluciones de $300 con umbral $500 → la segunda pide PIN; 8b el mismo token en dos devoluciones en paralelo → pasa una sola y queda una auditoría (se serializan por el lock de negocio: documenta el comportamiento, no la carrera); 8g regresión real con psql (una conexión tiene el token tomado y lo consume; `require_supervisor` en otra conexión con ese token → `supervisor_token_invalid`; el código anterior lo consumía de nuevo); 8c `exchange_sale`, 8d `return_sale` (legado) y 8e vale (`store_credit`) piden PIN y pasan con el token; 8f `total < 0` → `invalid_total`.
+
+## ADR-191: Bordes de los webhooks de Mercado Pago: token rotado sin guardar, estado + auditoría atómicos, order antes de `mp_order_id` y 401 con OAuth (PAY-28)
+
+**Fecha:** 2026-11-17 · **Estado:** aceptada (decidido por agente, revisar) · migración `20270127100000_pay28_mp_intent_transition` · **Hito:** F1.5 / PAY
+
+### Contexto
+
+Review de PAY-27 (ADR-188). Cuatro bordes en los que un cobro podía quedar sin acreditar o sin rastro:
+
+1. **Token rotado sin guardar** (`_shared/mpAuth.ts`): si el refresh OAuth salía bien pero `updateSecretRow` fallaba, sólo se logueaba. MP ya había rotado el `refresh_token`: el guardado queda muerto y cada refresh posterior falla → 503 en bucle hasta que el negocio reconecte, sin nada visible para staff.
+2. **Estado y auditoría por separado** (`applyOrderToIntent`, `_shared/mpIntents.ts`): update de `mp_payment_intents` y después insert en `audit_logs`. Si el segundo fallaba, el webhook respondía 200 con el intent acreditado y sin auditoría, y el reintento salía por "ya acreditado" sin escribirla.
+3. **Aviso de order antes de guardar `mp_order_id`**: `mp_qr` y `mp_point` crean la order en MP y recién después guardan `mp_order_id`; un aviso que llega en ese hueco no encuentra el intent y respondía 200 (MP no reintenta; el polling del POS lo cubría si seguía abierto).
+4. **401 con OAuth**: respondía 503 y MP reintentaba, pero el reintento volvía a usar el mismo token si `expires_at` decía vigente (token revocado / rotado por otro lado): 503 hasta agotar los reintentos.
+
+### Decisión
+
+1. **Reintentos + rastro operable.** El guardado del token rotado se reintenta **2 veces** (backoff 150 ms y 400 ms: 3 intentos, dentro del tope de credencial de 6 s; si el tope vence, la cadena sigue en `wh.defer`). Si sigue fallando: `console.error` (`mp_oauth_refresh_save_failed`, como antes) e insert en **`audit_logs`** con `action = 'mp_oauth_refresh_save_failed'`, `entity_type = 'payment_secrets'`, `entity_id` = fila de la credencial, `tenant_id`, y `after_data` `{provider_key, store_id, attempts, error, hint}` — **sin tokens**. Se eligió `audit_logs` porque no existe una tabla de alertas de staff (`ops_alerts` / `platform_alerts` no existen; `alert_events` es de reglas del negocio, H162) y el panel interno ya lee `audit_logs` por negocio. Sigue sin lanzar (ADR-188 §4: el token nuevo en memoria acredita este pago). Aplica a **todos** los llamadores de `tenantMpCredential` sin cambiar su valor de retorno.
+2. **RPC `_mp_intent_transition`** (`SECURITY DEFINER`, `search_path = public, pg_temp`, `revoke all … from public, anon, authenticated`, `grant execute … to service_role`): en una transacción hace el update con la **misma condición** de antes (`p_only_pending = false` → `status <> 'approved'` para acreditar; `true` → `status = 'pending'` para rechazo / vencimiento; `mp_payment_id = coalesce(p_mp_payment_id, mp_payment_id)`) y, si cambió una fila y viene `p_audit_action`, inserta el audit con el payload que arma la Edge (el mismo de siempre). Si el insert falla, se revierte el update. Valida estado (`approved|rejected|cancelled|expired`) y acción (`mp_order_approved|mp_order_amount_mismatch`). Devuelve `true` si cambió el intent.
+   - La usa `applyOrderToIntent`, así que cubre a **todos** sus llamadores: `mp_orders_webhook` (estricto: un error → `IntentWriteError` → 503, sin audit suelto) y `mp_qr`, `mp_point`, `mp_cupon` y `pending_charges_sync` (no estrictos). Misma semántica de transición e idempotencia.
+   - **No estrictos (polling), review de PAY-28:** si la RPC falla por algo que no es "función inexistente", caen al camino de dos pasos (update del intent y audit aparte, con el error del audit logueado), así lo que se devuelve al POS coincide con lo guardado, como antes de PAY-28. Si también falla ese update, se devuelve el estado **guardado** (el leído, normalmente `pending`), nunca uno que no se persistió. El estricto no cae al camino viejo: error → 503.
+   - **Compatibilidad de despliegue:** si la función no existe todavía (`PGRST202` / `42883`), cae al camino de dos pasos de antes y lo **loguea** (`_mp_intent_transition no disponible, camino de dos pasos`, `reason: missing_rpc | rpc_error`) para ver si se pierde la atomicidad. El orden migración / Edge no rompe nada.
+   - **`mp_webhook` (Checkout Pro) no cambia:** hoy **no** escribe `audit_logs` al acreditar (sólo el update con `.neq("status","approved")`), así que no hay par estado / audit que unir. Agregar una auditoría nueva ahí queda como decisión aparte.
+3. **Order desconocida → 503 en ventana.** Si el intent no se encuentra por `mp_order_id`, se responde **503** (`wh.note("order_not_found_yet")`) sólo si el aviso tiene **≤ 10 min** (`MP_ORDER_NOT_FOUND_WINDOW_MS`); fuera de la ventana, o sin hora, **200** como siempre (órdenes de otras integraciones de la misma cuenta no se reintentan para siempre). **Fuente del tiempo:** la **más vieja** entre `date_created` del cuerpo del aviso y `ts` de `x-signature` (ms, o s si tiene < 13 dígitos); se descartan valores ilegibles o más de 10 min en el futuro. Se toma la más vieja para que un `ts` regenerado en cada reintento (no confirmado, ADR-189) no estire la ventana. Reloj: `deps.nowMs` (el mismo de la firma). No se lee la order en MP (sin intent no hay credencial del negocio). No se tocan `mp_qr` / `mp_point`.
+   - **Dependencia:** la ventana sólo existe si el aviso trae `date_created` en el cuerpo o `ts` en `x-signature`. Si MP no manda ninguno (p. ej. sin firma configurada y sin `date_created`), queda **200 como hoy** y el cobro lo recupera el polling del POS (`mp_qr` / `mp_point` status) o `pending_charges_sync`.
+4. **401 con OAuth → refresh forzado.** Ante un 401 al leer el pago / la order con credencial OAuth, se pide la credencial de nuevo con `forceRefresh: true` (refresca aunque `expires_at` diga vigente) **una vez**, y si dio un token **distinto** se relee. Antes del POST `/oauth/token` (review de PAY-28): si el `access_token` cargado ya no es el que dio 401 (`staleToken`), o al releer la fila de `payment_secrets` cambiaron `refresh_token` / `expires_at` (otra Edge ya rotó), se usa el token **guardado** sin refrescar; **cooldown por fila de 60 s** (`MP_FORCED_REFRESH_COOLDOWN_MS`): no se fuerza si la fila se rotó (`secrets.refreshed_at`, que ahora se graba en cada refresh) o se actualizó (`updated_at`) hace menos de 60 s, así un 401 persistente (cuenta equivocada, permisos) no rota el `refresh_token` en cada reintento de MP; si la relectura falla, no se fuerza (rotar a ciegas es peor). Si el refresh no sale (sin token nuevo, error, tope) o MP vuelve a dar 401 → 503 como antes. Presupuesto: el handler lleva un reloj de **20 s** (`MP_WEBHOOK_BUDGET_MS`, MP corta a los 22 s); la credencial forzada usa `min(6 s, lo que queda − 1,5 s)` y la relectura `min(8 s, lo que queda)`; con menos de 3 s restantes no se intenta. En modo estricto, un refresh forzado fallido con el token todavía vigente no lanza (se usa el mismo token y se responde 503).
+
+### Riesgos
+
+- El refresh forzado rota el `refresh_token`: si en paralelo otra Edge refresca con el viejo, esa falla (riesgo que ya existía con el refresh normal; la relectura y el cooldown lo achican, no lo eliminan: no hay lock entre Edges). El guardado con reintentos + audit de §1 lo deja visible.
+- La ventana de §3 puede dar hasta ~10 min de 503 (y filas `error` en `webhook_events`) para avisos de orders de otras integraciones de la cuenta.
+
+### Pendiente
+
+- Auditoría al acreditar en `mp_webhook` (Checkout Pro), si se decide.
+- Vista / alerta de staff sobre `audit_logs.action = 'mp_oauth_refresh_save_failed'` (hoy se consulta a mano).
+
+### Verificación
+
+`tests/unit/mpWebhooks.test.ts` (bloque PAY-28): guardado del token que falla 3 veces → 3 intentos + un audit sin tokens y acredita; que sale al 3.er intento → guarda sin audit; llamador no estricto → mismo valor de retorno; la RPC recibe la condición y el payload de siempre; audit que falla dentro de la RPC → 503, intent `pending` y sin audit, el reintento escribe los dos; monto distinto → `p_only_pending` + `mp_order_amount_mismatch`; base sin la función → camino viejo con log; polling con la RPC fallida → camino de dos pasos y devuelve lo guardado; RPC y update viejo fallidos → devuelve `pending` sin audit; estricto con la RPC fallida → 503 sin caer al camino viejo; order desconocida dentro / fuera de la ventana, más vieja entre `date_created` y `ts`, sin hora → 200, y reintento que acredita cuando aparece `mp_order_id`; 401 con OAuth → refresh forzado → acredita (pagos y orders), 401 de nuevo → 503 con un solo refresh, token manual sin refresh, otra Edge ya rotó → usa el guardado sin `/oauth/token`, 401 persistente en 3 reintentos → un solo refresh (cooldown), `updated_at` reciente → no fuerza. `tests/integration/rls-mp-intent-transition.test.ts` (Supabase local): sin EXECUTE para anon / authenticated, transición una sola vez con un audit, approved intocable, rechazo sólo desde pending, estado / acción inválidos sin escribir.

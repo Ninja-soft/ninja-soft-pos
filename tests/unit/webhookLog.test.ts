@@ -130,6 +130,31 @@ describe("withWebhookLog", () => {
     });
   });
 
+  it("SEC-60: wh.note queda en `error` sin cambiar el estado; con un error real se suman", async () => {
+    const { waits, fetchMock } = setup();
+    const handler = withWebhookLog("mercadopago", "mp_webhook", (_req, wh) => {
+      wh.note("signature_invalid");
+      wh.done();
+      return new Response("ok", { status: 200 });
+    });
+    await handler(new Request("https://f/mp_webhook", { method: "POST" }));
+    await Promise.all(waits);
+    expect(bodyOf(fetchMock)).toMatchObject({ status: "ok", error: "signature_invalid", http_status: 200 });
+
+    const both = buildWebhookEvent({
+      provider: "mercadopago",
+      functionName: "mp_webhook",
+      httpStatus: 200,
+      processed: false,
+      error: "amount_mismatch",
+      note: "signature_missing_secret",
+      durationMs: 1,
+      tenantId: null,
+      payloadRef: null,
+    });
+    expect(both).toMatchObject({ status: "error", error: "signature_missing_secret | amount_mismatch" });
+  });
+
   it("si el registro falla, el webhook responde igual", async () => {
     const { waits } = setup();
     vi.stubGlobal("fetch", vi.fn(async () => {

@@ -1,0 +1,50 @@
+{
+  "description": "Orders API, topic order: QR dinámico cobrado (order.processed). La Edge sólo toma data.id y vuelve a leer la order con GET /v1/orders/{id}.",
+  "intent": { "id": "5b0e7c2a-3f41-4c8e-9a52-1d6f0b7e8a11", "amount": 1500, "mp_order_id": "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3" },
+  "request": {
+    "method": "POST",
+    "query": "",
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": "8f1c2e4a-6b3d-4e5f-9a7b-0c1d2e3f4a5b",
+      "x-signature": "ts=1763380800000,v1=3b1f0c8e2a6d4b9f7e5c1a3d8b6f2e4c9a7d5b3f1e8c6a4d2b0f9e7c5a3d1b8f"
+    },
+    "body": {
+      "action": "order.processed",
+      "api_version": "v1",
+      "application_id": "7364821905123456",
+      "date_created": "2026-11-17T10:00:00.000-03:00",
+      "live_mode": true,
+      "type": "order",
+      "user_id": "1234567890",
+      "data": {
+        "id": "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3",
+        "external_reference": "5b0e7c2a-3f41-4c8e-9a52-1d6f0b7e8a11",
+        "status": "processed",
+        "status_detail": "accredited",
+        "total_amount": "1500.00",
+        "type": "qr",
+        "version": 3
+      }
+    }
+  },
+  "mpResponse": {
+    "id": "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3",
+    "type": "qr",
+    "external_reference": "5b0e7c2a-3f41-4c8e-9a52-1d6f0b7e8a11",
+    "status": "processed",
+    "status_detail": "accredited",
+    "total_amount": "1500.00",
+    "transactions": {
+      "payments": [
+        {
+          "id": "PAY01JQ4S4KY8HWQ6NA5PXB65B3D4",
+          "amount": "1500.00",
+          "status": "processed",
+          "status_detail": "accredited",
+          "payment_method": { "id": "visa", "type": "credit_card", "installments": 1 }
+        }
+      ]
+    }
+  }
+}

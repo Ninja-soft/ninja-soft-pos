@@ -1,0 +1,31 @@
+{
+  "description": "Mismo aviso que payment-approved pero con un x-signature que no corresponde al manifest (v1 de otra clave). SEC-60: en modo report se registra signature_invalid y se procesa; en enforce responde 401 sin escribir.",
+  "intent": { "id": "e1f3a5b7-9c0d-4e2f-8a4b-6c8d0e2f4a44", "amount": 12000 },
+  "request": {
+    "method": "POST",
+    "query": "intent=e1f3a5b7-9c0d-4e2f-8a4b-6c8d0e2f4a44&data.id=91234567890&type=payment",
+    "headers": {
+      "content-type": "application/json",
+      "x-request-id": "2b4d6f8a-0c1e-4a3b-9d5f-7a9c1e3b5d7f",
+      "x-signature": "ts=1763391600000,v1=0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "body": {
+      "action": "payment.updated",
+      "api_version": "v1",
+      "data": { "id": "91234567890" },
+      "date_created": "2026-11-17T13:00:00Z",
+      "id": 124512345678,
+      "live_mode": true,
+      "type": "payment",
+      "user_id": 1234567890
+    }
+  },
+  "mpResponse": {
+    "id": 91234567890,
+    "status": "approved",
+    "status_detail": "accredited",
+    "external_reference": "e1f3a5b7-9c0d-4e2f-8a4b-6c8d0e2f4a44",
+    "transaction_amount": 12000,
+    "currency_id": "ARS"
+  }
+}

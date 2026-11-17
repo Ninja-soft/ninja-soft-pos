@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -27,6 +27,10 @@ export default function LoginPage({
   searchParams?: { next?: string; reason?: string; error?: string };
 }) {
   const router = useRouter();
+  // TEMPORAL OPS-15: prueba negativa del job e2e-smoke. Se revierte.
+  useEffect(() => {
+    console.error("OPS-15 prueba negativa: error inyectado en /login");
+  }, []);
   const { toast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
   // Aviso de cierre de sesión por inactividad (?reason=inactivity), seteado por

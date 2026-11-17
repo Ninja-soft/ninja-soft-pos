@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { evaluatePromotions, cardKey, r2, arPromoClock } from "@/lib/promotions/engine";
 import { PROMO_CASES, promoSqlArgs } from "../fixtures/promoMatrix";
@@ -58,3 +59,14 @@ describe("utilidades del motor", () => {
     expect(arPromoClock(new Date("2026-11-05T01:30:00Z"))).toEqual({ weekday: 3, minutes: 22 * 60 + 30, date: "2026-11-04" });
   });
 });
+
+// PRD-02: la misma matriz como JSON para correrla contra _promo_eval_core en
+// PGlite a mano (el repo no trae PGlite; ver tests/integration/rls-promociones.test.ts):
+//   PROMO_MATRIX_JSON=ruta.json pnpm exec vitest run tests/unit/promo-matrix.test.ts
+const out = process.env.PROMO_MATRIX_JSON;
+if (out) {
+  writeFileSync(
+    out,
+    JSON.stringify(PROMO_CASES.map((c) => ({ name: c.name, args: promoSqlArgs(c), expected: c.expected }))),
+  );
+}

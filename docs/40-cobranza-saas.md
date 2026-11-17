@@ -1,8 +1,8 @@
 # Cobranza SaaS: cómo NinjaSoft cobra, factura y gestiona la deuda de sus clientes
 
-> **Estado:** diseño (2026-10-13). **F20-3 construida** (2026-10-14, ADR-117, sin aplicar ni desplegar): ver §8.3. Ningún punto de este documento está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
+> **Estado:** diseño (2026-10-13). **F20-3 construida** (2026-10-14, ADR-117, aplicada y desplegada): ver §8.3. Ningún punto de este documento está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
 > **Estado:** diseño (2026-10-13). **F20-1 (cuenta corriente) tiene código desde el 2026-10-14 (ADR-115), ver §23. F20-8 (suscripción por cuenta corriente) tiene código desde el 2026-10-14 (ADR-120), ver §24.** El resto no está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
-> **Estado F21:** participación del staff y gastos **construida** el 2026-10-14 (ADR-121, sin aplicar ni desplegar), ver §20.
+> **Estado F21:** participación del staff y gastos **construida** el 2026-10-14 (ADR-121, aplicada y desplegada), ver §20.
 >
 > **Alcance.** Es la cobranza de la **plataforma**: NinjaSoft le cobra la suscripción a cada negocio (tenant). No hay que confundirla con la cuenta corriente que un negocio le da a **sus** clientes (ADR-037, `customer_account_*`) ni con la facturación ARCA de las ventas del negocio (ADR-072, `fiscal_documents`). Este diseño reutiliza patrones y código de las dos, pero sus tablas son otras.
 >
@@ -649,7 +649,7 @@ El interruptor tiene tres niveles: `platform_billing_settings.auto_invoice_enabl
 
 ### 8.3 Estado de F20-3 (2026-10-14, ADR-117)
 
-Construido en `feat/cobranza-datos-fiscales`. Migración `20261113300000_cobranza_datos_fiscales` (sin aplicar) y Edge `platform_billing` (sin desplegar).
+Construido en `feat/cobranza-datos-fiscales`. Migración `20261113300000_cobranza_datos_fiscales` (aplicada) y Edge `platform_billing` (desplegada).
 
 - **Tablas:** `platform_issuer_profile` (emisor por ambiente, una fila activa; condición vacía = letra pendiente), `tenant_billing_profiles` (historia con `valid_from`/`valid_to`, una fila abierta, baja lógica) y `platform_fiscal_lookups` (cache de 30 días y rate limit).
 - **Diferencias con §6.2:** la condición frente al IVA se guarda con el vocabulario de `lib/tax/catalog.ts` (`responsable_inscripto`, `monotributo`, etc.) y el id de ARCA se deriva con `fiscal_condition_arca_id`; `verification` suma `staff` (revisado a mano por el staff, con motivo). Con datos de la empresa la fila guarda el email y, si se verificó, la copia de ese CUIT.
@@ -1427,7 +1427,7 @@ Cada fase es un PR chico y testeable por su cuenta. Las migraciones van **antes*
 
 ## 20. Participación del staff y gastos (F21, construido)
 
-> **Estado (2026-10-14):** construido en `feat/staff-participacion`, decisión [ADR-121](./17-decision-log.md). Migración `20261116300000_staff_participacion` **sin aplicar** y Edge `staff_payouts` **sin desplegar**. Base del reparto decidida por el dueño: **cobrado neto** del mes (§22 #15).
+> **Estado (2026-10-14):** construido en `feat/staff-participacion`, decisión [ADR-121](./17-decision-log.md). Migración `20261116300000_staff_participacion` **aplicada** y Edge `staff_payouts` **desplegada**. Base del reparto decidida por el dueño: **cobrado neto** del mes (§22 #15).
 
 ### 20.1 Qué se pidió
 
@@ -1621,7 +1621,7 @@ Respuestas a las preguntas de la sección 21. Mandan sobre lo propuesto arriba c
 
 ## 23. Estado de F20-1: cuenta corriente de la plataforma (2026-10-14)
 
-Código en `feat/cobranza-ledger`, decisión [ADR-115](./17-decision-log.md). Migraciones **sin aplicar**: `20261113100000_cobranza_ledger` (modelo, motor, backfill y cron) y `20261113100100_cobranza_ledger_rpc` (permisos, topes, estado de cuenta y operaciones).
+Código en `feat/cobranza-ledger`, decisión [ADR-115](./17-decision-log.md). Migraciones **aplicadas**: `20261113100000_cobranza_ledger` (modelo, motor, backfill y cron) y `20261113100100_cobranza_ledger_rpc` (permisos, topes, estado de cuenta y operaciones).
 
 **Construido**
 
@@ -1641,7 +1641,7 @@ Código en `feat/cobranza-ledger`, decisión [ADR-115](./17-decision-log.md). Mi
 
 ## 24. Estado de F20-8: suscripción por cuenta corriente (2026-10-14)
 
-Código en `feat/cobranza-cta-cte`, decisión [ADR-120](./17-decision-log.md). Migración **sin aplicar**: `20261116100000_cobranza_cuenta_corriente`. Edges cambiadas **sin desplegar**: `mp_billing_webhook` y `mp_subscription_checkout`.
+Código en `feat/cobranza-cta-cte`, decisión [ADR-120](./17-decision-log.md). Migración **aplicada**: `20261116100000_cobranza_cuenta_corriente`. Edges cambiadas **desplegada**: `mp_billing_webhook` y `mp_subscription_checkout`.
 
 **Construido**
 
@@ -1667,7 +1667,7 @@ Código en `feat/cobranza-cta-cte`, decisión [ADR-120](./17-decision-log.md). M
 
 ## 25. Estado de F20-2: snapshots de MRR y KPIs de cobranza (2026-10-14)
 
-Código en `feat/h128-mrr-kpis`, decisión [ADR-127](./17-decision-log.md). Migración **sin aplicar**: `20261122100000_cobranza_mrr_snapshots`.
+Código en `feat/h128-mrr-kpis`, decisión [ADR-127](./17-decision-log.md). Migración **aplicada**: `20261122100000_cobranza_mrr_snapshots`.
 
 - `platform_mrr_snapshots` (por negocio y día) y `platform_mrr_daily` (agregado), cron `platform-mrr-snapshot` 00:10 ART que completa los días faltantes y backfill de hasta 400 días desde la auditoría de `subscriptions`.
 - Cobranzas › **Métricas**: MRR, ARR, ARPA, MRR en mora, NRR, GRR, churn de clientes, movimiento de MRR por mes (gráfico y tabla), cobrado bruto y neto, deuda vencida con aging, DSO y efectividad. Sólo Cobranzas, admin y super_admin.
@@ -1676,7 +1676,7 @@ Código en `feat/h128-mrr-kpis`, decisión [ADR-127](./17-decision-log.md). Migr
 
 ## 26. Estado de F20-9: punitorios, mora y promesas (2026-10-14)
 
-Código en `feat/h135-mora-punitorios`, decisión [ADR-128](./17-decision-log.md). Migración **sin aplicar**: `20261124100000_cobranza_mora_punitorios`. Sin Edges.
+Código en `feat/h135-mora-punitorios`, decisión [ADR-128](./17-decision-log.md). Migración **aplicada**: `20261124100000_cobranza_mora_punitorios`. Sin Edges.
 
 | Pieza | Cómo quedó |
 |---|---|
@@ -1695,7 +1695,7 @@ Código en `feat/h135-mora-punitorios`, decisión [ADR-128](./17-decision-log.md
 
 ## 27. Estado de F20-10 y F20-11: prorrateo, conciliación y cobranza 360 (2026-10-14)
 
-Código en `feat/h136-cobranza-360`, decisión [ADR-131](./17-decision-log.md). Migración **sin aplicar**: `20261126100000_cobranza_360`. Edge nueva **sin desplegar**: `platform_mp_reconcile`.
+Código en `feat/h136-cobranza-360`, decisión [ADR-131](./17-decision-log.md). Migración **aplicada**: `20261126100000_cobranza_360`. Edge nueva **desplegada**: `platform_mp_reconcile`.
 
 | Pieza | Cómo quedó |
 |---|---|
@@ -1718,7 +1718,7 @@ Código en `feat/h136-cobranza-360`, decisión [ADR-131](./17-decision-log.md). 
 
 ## 28. Complemento de email de NinjaSoft y auditoría del cobro (2026-10-15)
 
-Código en `feat/addon-emails-y-cobro`, decisión [ADR-156](./17-decision-log.md) (tabla de hallazgos con severidad). Migración **sin aplicar**: `20261224100000_addon_email_cobro`. Edges **sin desplegar**: `email_addon_admin` (nueva), `mp_billing_webhook`, `mp_update_subscription_amount`, `mp_subscription_checkout`, `send_receipt_email`, `send_quote_email`, `account_reminders`, `set_tenant_smtp`.
+Código en `feat/addon-emails-y-cobro`, decisión [ADR-156](./17-decision-log.md) (tabla de hallazgos con severidad). Migración **aplicada**: `20261224100000_addon_email_cobro`. Edges **desplegada**: `email_addon_admin` (nueva), `mp_billing_webhook`, `mp_update_subscription_amount`, `mp_subscription_checkout`, `send_receipt_email`, `send_quote_email`, `account_reminders`, `set_tenant_smtp`.
 
 | Pieza | Cómo quedó |
 |---|---|

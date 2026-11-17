@@ -889,7 +889,7 @@ Migraciones `20261021100000_features_listas_precios_pro`, `20261021100100_listas
 
 ## 8.17 Extensión F20-9: mora, punitorios y promesas de la cobranza de la plataforma (ADR-128)
 
-Migración `20261124100000_cobranza_mora_punitorios` (sin aplicar; requiere las de ADR-115 y ADR-120). Todo es de plataforma: sin `tenant_id = current_tenant_id()` en las políticas; SELECT sólo staff con `(select internal_scope())` y el negocio lee por RPC.
+Migración `20261124100000_cobranza_mora_punitorios` (aplicada; requiere las de ADR-115 y ADR-120). Todo es de plataforma: sin `tenant_id = current_tenant_id()` en las políticas; SELECT sólo staff con `(select internal_scope())` y el negocio lee por RPC.
 
 - [x] Configuración: `platform_interest_policies` (tasa mensual en bp, gracia, `daily_prorata` o `per_month_started`, `cap_bp`, mínimo por mes, ND `on_collection` o `monthly`), `platform_interest_policy_plans(plan_id → policy_id)`, `platform_dunning_ladders` + `platform_dunning_steps(offset_days, action notify|past_due|soft_restrict|suspend|mark_uncollectible, channels, requires_no_promise, min_debt_cents, title, body)` y `platform_holidays(day, name)` editable. `platform_billing_settings` suma interruptores (punitorios apagados por defecto, con débito automático, escalera, promesas del cliente y áreas de la restricción blanda); `tenant_billing_terms` suma `interest_policy_id`, `interest_enabled`, `dunning_ladder_id` y `self_promise_enabled` (null = hereda).
 - [x] Estado de trabajo: `platform_interest_accruals` (por cargo: política congelada, vencimiento efectivo, devengado, liquidado y posteado por mes), `platform_interest_pauses` (`tenant_id` null = pausa global), `platform_collection_status` (estado de cobranza derivado: al día, vencida, en promesa, incobrable; restricción blanda y estado puesto por la escalera).
@@ -916,7 +916,7 @@ Migraciones `20261125100000_features_catalogo_pedidos` y `20261125100100_catalog
 - [x] RPC anon SECURITY DEFINER: `public_catalog` (suma `ordering`, variantes con precio y disponible de la sucursal del catálogo), `public_catalog_order_create` (honeypot, rate limit, plan, precios de la lista `catalogo`, disponible, tipo de entrega con `_order_delivery_check`, reserva canal `pedido`, aviso y email encolado) y `public_catalog_order_status` (por token, sin ids). Helpers cerrados a anon y authenticated.
 ## 8.20 Extensión F20-10 y F20-11: prorrateo, conciliación con Mercado Pago y cobranza 360 (H136, ADR-131)
 
-Migración `20261126100000_cobranza_360` (sin aplicar; requiere las de ADR-115, ADR-120 y ADR-128). Todo es de plataforma: SELECT sólo staff con `(select internal_scope())`, sin `is_internal()`, sin escritura directa; todo por RPC SECURITY DEFINER con motivo y auditoría.
+Migración `20261126100000_cobranza_360` (aplicada; requiere las de ADR-115, ADR-120 y ADR-128). Todo es de plataforma: SELECT sólo staff con `(select internal_scope())`, sin `is_internal()`, sin escritura directa; todo por RPC SECURITY DEFINER con motivo y auditoría.
 
 - [x] Permisos finos: `platform_staff_permissions.permission` acepta `cobranzas` (ver y gestionar, el de siempre), `cobranzas_ver` (sólo ver) y `cobranzas_asignar` (asignar cobradores). `platform_billing_capabilities()` / `platform_billing_can(view|manage|assign)`.
 - [x] `tenant_billing_terms` suma `assigned_staff_id`, `assigned_at` y `assigned_by` (cobrador asignado).
@@ -927,7 +927,7 @@ Migración `20261126100000_cobranza_360` (sin aplicar; requiere las de ADR-115, 
 
 ## 8.21 Extensión F11: depósitos vendibles por sucursal, venta de otra sucursal y entregas partidas (H33 + H32, ADR-136)
 
-Migraciones `20261202100000_features_entregas_remitos` y `20261202100100_depositos_venta_entregas` (sin aplicar). No recrean `create_sale`.
+Migraciones `20261202100000_features_entregas_remitos` y `20261202100100_depositos_venta_entregas` (aplicadas). No recrean `create_sale`.
 
 - [x] `warehouses` suma `sellable` (el salón siempre; merma y devoluciones nacen en `false` por el trigger `warehouses_sellable_default`) y `sale_priority` (0 a 999, menor = primero). `_sale_salon_take` (la llama create_sale, ADR-088) toma de los depósitos vendibles por prioridad.
 - [x] `warehouse_store_links(warehouse_id, store_id, deleted_at)`: sucursales distintas de la del depósito que pueden vender su stock (N a N, baja lógica, único parcial). RLS de lectura por negocio; sin escritura por REST; `role_write_guard` 'manage'.

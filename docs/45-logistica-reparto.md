@@ -1,6 +1,6 @@
 # 45 · Logística y reparto: auditoría y plan de integración
 
-> **Estado:** L0 (H143) hecho en código, sin aplicar (2026-10-15, ver ADR-149 § L0); L1 (H144, ADR-157) y L2 (H145, ADR-161) hechos en código; L5 (H148, ADR-165) hecho en código, sin aplicar; L3, L4 y L6 propuestas. Lo que no dice "hecho" no está construido todavía fuera de lo que la §2 marca como "existe". Decisión: [ADR-149](./17-decision-log.md). Hitos: F22 en [`02-roadmap.md`](./02-roadmap.md) (H143 a H149).
+> **Estado:** L0 (H143) hecho en código, aplicada (2026-10-15, ver ADR-149 § L0); L1 (H144, ADR-157) y L2 (H145, ADR-161) hechos en código; L5 (H148, ADR-165) hecho en código, aplicada; L3, L4 y L6 propuestas. Lo que no dice "hecho" no está construido todavía fuera de lo que la §2 marca como "existe". Decisión: [ADR-149](./17-decision-log.md). Hitos: F22 en [`02-roadmap.md`](./02-roadmap.md) (H143 a H149).
 >
 > **Para quién:** producto, backend, frontend, QA y el dueño (la §13 dice qué tiene que conseguir él).
 
@@ -61,7 +61,7 @@ Cada requisito tiene un código que se usa en las fases (§15).
 - **Código**: lectura de `app/(app)/{expedicion,pedidos,remitos,envios,delivery}`, `components/pos/checkout/CheckoutDeliveryBlock.tsx`, `components/pos/fulfillment/*`, `components/shipping/*`, `components/remitos/*`, `lib/stock/fulfillment.ts`, `lib/orders/logic.ts`, `lib/remitos/{logic,cot}.ts`, `modules/{orders,remitos,shipping}`, `components/layout/AppShell.tsx` y las migraciones `20261123100100_pedidos_despacho`, `20261202100100_depositos_venta_entregas`, `20261202100200_remitos`, `20261215100000_cobro_envio_costo`, `20261110300100_envios_nucleo`, `20260608720000_delivery_orders`, `20261013200200_traslados`.
 - **Tests existentes** (2026-10-15, rama sobre `origin/main` `da618471`): 12 archivos, **196 tests, todos verdes**: `tests/unit/{entregasDepositos,remitos,cobroClienteEnvio,pedidosDespacho,stockTransfers,warehouses,shippingStatus,shippingWorker,deliveryChannels}` y `tests/components/{CobroClienteEnvio,EntregasDepositos,Remitos}`. Cubren la lógica pura y los formularios, no el circuito completo ni las RPC contra una base.
 - **Producción, sólo lectura** (`begin read only`):
-  - Tablas y funciones existen: `dispatches`, `dispatch_items`, `remitos`, `remito_items`, `remito_points`, `sale_orders`, `shipments`, `shipment_events`, `delivery_orders`, `delivery_zones`, `stock_transfers`, `warehouses`; RPC `dispatch_*`, `remito_*`, `sale_order_*`, `pos_sale_create_fulfilled` (ya con el renglón "Envío" y `shipping_fee`, o sea que `20261215100000_cobro_envio_costo` está aplicada aunque ADR-146 y el CHANGELOG digan "sin aplicar").
+  - Tablas y funciones existen: `dispatches`, `dispatch_items`, `remitos`, `remito_items`, `remito_points`, `sale_orders`, `shipments`, `shipment_events`, `delivery_orders`, `delivery_zones`, `stock_transfers`, `warehouses`; RPC `dispatch_*`, `remito_*`, `sale_order_*`, `pos_sale_create_fulfilled` (ya con el renglón "Envío" y `shipping_fee`, o sea que `20261215100000_cobro_envio_costo` está aplicada aunque ADR-146 y el CHANGELOG digan "aplicada").
   - **Datos**: 0 entregas, 0 pedidos de salón, 0 remitos, 0 envíos, 0 transferencias; 1 pedido de delivery y 1 zona. El circuito **nunca se usó en producción**, así que se puede cambiar el modelo sin migrar datos reales.
   - **No hay ni una columna de coordenadas** fuera de `delivery_channel_orders` (posición del repartidor de las apps). `customers.address` es un único texto.
   - PostGIS está **disponible pero no instalado**. Ninguna tabla está publicada en `supabase_realtime`. `pg_cron` y `pg_net` instalados.
@@ -125,7 +125,7 @@ Cada requisito tiene un código que se usa en las fases (§15).
 
 **Documentación desactualizada**
 
-- **A27.** ADR-129, ADR-136, ADR-146 y el CHANGELOG dicen "migración sin aplicar", pero las tablas y funciones existen en producción. `docs/23-restaurant-cafe-operations.md` §9 tiene todo sin marcar aunque H49 está hecho.
+- **A27.** ADR-129, ADR-136, ADR-146 y el CHANGELOG dicen "migración aplicada", pero las tablas y funciones existen en producción. `docs/23-restaurant-cafe-operations.md` §9 tiene todo sin marcar aunque H49 está hecho.
 - **A28. Código muerto** (sólo lo usan los tests): `useRemitoForDispatch` (`modules/remitos/api.ts:124`), `cotProviderFor`, `manualCotProvider`, `arbaCotProvider` (`lib/remitos/cot.ts`), `planSummary` (`lib/stock/fulfillment.ts:305`, duplica `deliverySummary`).
 
 ---
@@ -421,7 +421,7 @@ Leaflet queda como alternativa liviana si el bundle de MapLibre complica a telé
 5. Se muestra un **mini mapa con el pin**, arrastrable para corregir (queda `geo_source = 'pin'`).
 6. Si nada encuentra la dirección (barrios nuevos, rurales), se carga a mano por campos y se marca el pin en el mapa.
 
-La Edge `geo` lleva rate limit por negocio, User-Agent "NinjaSoftPOS/1.0 (contacto)", atribuciones en la respuesta y un interruptor por proveedor para apagarlo sin desplegar (lo pide la política de Nominatim).
+La Edge `geo` lleva rate limit por negocio, User-Agent "NinjaSoftPOS/1.0 (contacto)", atribuciones en la respuesta y un interruptor por proveedor para apagarlo desplegada (lo pide la política de Nominatim).
 
 ### 7.3 Ruteo (distancias y trazado)
 

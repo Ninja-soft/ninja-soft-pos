@@ -210,3 +210,27 @@ En caso de incidente confirmado:
 3. **Notificar:** clientes afectados en 72hs si hay exposición de datos.
 4. **Documentar:** post-mortem en [`docs/security-reviews/`](./security-reviews/README.md) con timeline, causa, remediación.
 5. **Prevenir:** acción concreta para que no vuelva a ocurrir.
+
+## 14. Superficie anónima (SEC-13)
+
+Las únicas funciones SECURITY DEFINER que `anon` puede ejecutar son las de `supabase/security/anon-allowlist.json` (19). `tests/unit/anonAllowlist.test.ts` exige que coincidan con `grants.expected.json`, y la paridad estricta de CI exige que la base coincida con el esperado: una función nueva expuesta a anon sin pasar por la allowlist rompe CI. Relevamiento del 2026-11-17 leyendo cada cuerpo en producción.
+
+**API pública (`_api_auth(token, scope)`)**: token `nsat_(test_)?` + 64 hex (`gen_random_bytes(32)`, 256 bits, 1 h de vida), buscado por `sha256` (equivalente a tiempo constante), cliente y token no revocados ni vencidos, rate limit por cliente (ventana deslizante, 600/min por defecto) **después** de resolver el token, negocio no suspendido ni dado de baja, feature `api_publica` y scope.
+
+| Función | Qué valida | Token / comparación | Qué devuelve | Rate limit | Huecos (tarjeta) |
+|---|---|---|---|---|---|
+| `ai_public_config()` | nada | — | campos de `platform_secrets.ai_config` en lista blanca (imagen, proveedor, texto, precio del complemento) | no | — |
+| `api_token_issue` | client_id, secret (`sha256`), estado del negocio, feature, scope | secret 256 bits; hash | access token, scope, entorno; audita | por cliente (cuenta secretos malos) | client_id conocido vs desconocido distinguible por el 429 (SEC-57) |
+| `api_v1_customers_list` | `_api_auth` `customers:read` | hash | **PII completa** (nombre, email, teléfono, documento, dirección) | por cliente | credencial de sandbox lee datos reales (SEC-56) |
+| `api_v1_customers_upsert` / `prices_update` / `products_upsert` / `stock_adjust` | `_api_auth` + scope de escritura; sandbox revierte | hash | resultado de la escritura | por cliente | eco de hasta 200 caracteres del error SQL (SEC-57) |
+| `api_v1_products_list` | `products:read` | hash | productos con **costo**, precio, stock | por cliente | sandbox lee datos reales (SEC-56) |
+| `api_v1_sales_list` | `sales:read`, rango ≤ 93 días | hash | ventas, ítems, pagos con `reference` libre | por cliente | sandbox lee datos reales (SEC-56) |
+| `api_v1_stock_list` / `stores_list` | `stock:read`, sucursal del negocio | hash | stock / sucursales | por cliente | — |
+| `current_tenant_id()` | claim + membresía activa | — | `null` para anon | — | — |
+| `public_catalog(slug)` | negocio activo o en prueba, feature `catalogo_publico` | slug público | marca, teléfono y dirección del negocio, productos con precio (sin costo, sin insumos) | no (SEC-34) | — |
+| `public_catalog_order_create` | honeypot, negocio y features, token del cliente ≥ 32 chars, validación de datos | token generado por el cliente (256 bits en el real), se guarda `sha256` | número de pedido, total, código de retiro; reserva stock y **manda email** a la dirección cargada | 5 por IP y negocio cada 10 min, 60 por negocio por hora | IP falsificable por `x-forwarded-for` (SEC-51); relay de emails (SEC-52) |
+| `public_catalog_order_status(token)` | token, `sha256`, origen catálogo | hash | estado, líneas, **nombre y dirección del cliente**, seguimiento | no (SEC-34) | sin chequeo de estado del negocio (SEC-54) |
+| `public_plans()` | nada | — | planes activos con precio y límites | no | — |
+| `public_product_sheet(slug, product)` | negocio activo, feature `etiquetas_pro`, producto del negocio | uuid del producto | ficha con precio, medios y cuotas | no (SEC-34) | no excluye insumos ni exige `catalogo_publico` (SEC-57) |
+| `quote_public_get(token)` | token 32–80 chars | **texto plano**, igualdad | cliente con **documento y dirección**, ítems, totales, datos del emisor | no (SEC-34) | token sin hash (SEC-53); sin estado del negocio ni vencimiento del link (SEC-54) |
+| `quote_public_respond` | mismo token, `FOR UPDATE`, borrador o enviado, no vencido | texto plano | `{status}`; audita | no (SEC-34) | acepta borradores (SEC-55); token sin hash (SEC-53) |

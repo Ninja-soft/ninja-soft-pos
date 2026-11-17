@@ -157,6 +157,23 @@ npx supabase functions deploy <nombre> --project-ref hrkditzrsavehnhngakb
 
 No hay deploy automático de base ni de Edge Functions: se hace a mano (§4) con el checklist de §11.
 
+### 6.1 Drift nocturno prod/repo (SEC-04)
+
+`.github/workflows/drift.yml` corre todos los días a las 09:00 UTC (y a mano con *Run workflow*) `node scripts/deploy-check.mjs --remote --advisors` contra producción, sólo lectura:
+
+- **Falla** ante errores: `M3` (migración del repo sin aplicar y más vieja que la última aplicada), `R1`/`R2` (Edge desplegada con un `verify_jwt` distinto de la lista pública), `A1` (un advisor de seguridad supera su umbral de `scripts/security-baseline.json`) o `A2` (SECURITY DEFINER ejecutable por anon fuera de `supabase/security/anon-allowlist.json`). Los avisos (`M4`, `W1`, `R3`, `A3`) quedan en el resumen sin cortar.
+- Si falla, abre un issue con label `drift` o, si ya hay uno abierto, le agrega un comentario con el resumen (sin secretos; el ref del proyecto se reemplaza por `<ref>`). Cerrar el issue al corregir.
+- `--advisors` lee `GET /v1/projects/{ref}/advisors/security` (lints de Splinter: `name`, `title`, `level`, `metadata`) y cuenta por `name`. Umbrales hoy: `anon_security_definer_function_executable` ≤ 19 (la allowlist) y `function_search_path_mutable` = 0 como error; `rls_disabled_in_public`, `policy_exists_rls_disabled` y `security_definer_view` = 0 como aviso hasta confirmar el valor de prod. Bajar un umbral al corregir; subirlo se justifica en el PR.
+
+**Secrets (los carga un admin del repo, SEC-05):** GitHub → *Settings → Secrets and variables → Actions → New repository secret*:
+
+| Secret | Valor |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Token personal de [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens) de una cuenta con acceso al proyecto de prod (idealmente una cuenta de servicio). |
+| `SUPABASE_PROJECT_REF` | Ref del proyecto de producción (el subdominio de `<ref>.supabase.co`). |
+
+Con `gh`: `gh secret set SUPABASE_ACCESS_TOKEN` y `gh secret set SUPABASE_PROJECT_REF` (piden el valor por stdin). **Sin los secrets el job termina en verde con un `::warning::`** y no consulta nada. Para probarlo: *Actions → Drift prod/repo → Run workflow*.
+
 ## 7. Rollback
 
 ### 7.1 Frontend (Vercel)

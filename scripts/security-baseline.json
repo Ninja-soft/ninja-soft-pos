@@ -1,0 +1,30 @@
+{
+  "_doc": "Umbrales de los advisors de seguridad de Supabase (GET /v1/projects/{ref}/advisors/security) para `deploy-check --advisors` (SEC-04, workflow drift.yml). `max` = cantidad de lints con ese `name` permitida; superarlo da A1 con la severidad indicada (error por defecto). Bajar un umbral cuando se corrige; subirlo exige justificarlo en el PR (y, para SECURITY DEFINER, sumar la función a supabase/security/anon-allowlist.json).",
+  "advisors": {
+    "anon_security_definer_function_executable": {
+      "max": 19,
+      "severity": "error",
+      "reason": "Las 19 funciones de supabase/security/anon-allowlist.json (SEC-13). Cualquier otra además da A2."
+    },
+    "function_search_path_mutable": {
+      "max": 0,
+      "severity": "error",
+      "reason": "Toda función fija search_path (SEC-15)."
+    },
+    "rls_disabled_in_public": {
+      "max": 0,
+      "severity": "warn",
+      "reason": "Tabla de public sin RLS. Aviso hasta confirmar el valor de prod; pasar a error después de la primera corrida."
+    },
+    "policy_exists_rls_disabled": {
+      "max": 0,
+      "severity": "warn",
+      "reason": "Policies en una tabla con RLS apagada. Aviso hasta confirmar el valor de prod."
+    },
+    "security_definer_view": {
+      "max": 0,
+      "severity": "warn",
+      "reason": "Vista que corre con los permisos del dueño. Aviso hasta confirmar el valor de prod."
+    }
+  }
+}

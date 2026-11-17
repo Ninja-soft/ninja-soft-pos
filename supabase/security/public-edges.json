@@ -106,9 +106,9 @@
       "auth": ["reconsulta"],
       "ipLimit": false,
       "bodyLimit": true,
-      "unitTest": null,
-      "tasks": ["SEC-32"],
-      "notes": "MODO, ?intent=<id>. external_intention_id = intent obligatorio; re-consulta best-effort (contrato de MODO sin confirmar). Sin re-consulta posible NUNCA aprueba, pero sí aplica rejected/cancelled/expired del cuerpo sin verificar. No usa state de un solo uso."
+      "unitTest": "tests/unit/modoWebhook.test.ts",
+      "tasks": ["SEC-32", "SEC-63"],
+      "notes": "MODO, ?intent=<id>. external_intention_id = intent obligatorio; re-consulta a MODO con las credenciales del negocio (contrato de MODO sin confirmar). Sólo aplica el estado que devuelve MODO (approved con monto); si la re-consulta falla responde 503 sin escribir y sin credenciales 200 sin escribir: nunca aplica el estado del cuerpo (SEC-63). Handler en _shared/modoWebhookHandler.ts. No usa state de un solo uso."
     },
     {
       "name": "mp_billing_webhook",

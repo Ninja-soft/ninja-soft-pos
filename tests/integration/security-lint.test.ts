@@ -54,15 +54,18 @@ function sigs(sql: string): string[] {
 const NOT_EXT = "not exists (select 1 from pg_depend d where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')";
 const SIG = "p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'";
 
+/** Consulta del chequeo (1); la usa también la sonda (1b). */
+const ANON_SECDEF_SQL = `select ${SIG} from pg_proc p
+      where p.pronamespace = 'public'::regnamespace and p.prosecdef
+        and has_function_privilege('anon', p.oid, 'EXECUTE') and ${NOT_EXT} order by 1;`;
+
 export const TENANT_GUARD_RE =
   "(current_tenant_id\\(|auth\\.uid\\(|internal_scope|is_internal|platform_staff_billing_role|_assert|_edge_guard)";
 
 describe.skipIf(!enabled)("security-lint · funciones de public", () => {
   it("(1) SECURITY DEFINER ejecutables por anon = allowlist", () => {
     const allow = new Set((readJson("anon-allowlist.json").functions as { sig: string }[]).map((f) => f.sig));
-    const exposed = sigs(`select ${SIG} from pg_proc p
-      where p.pronamespace = 'public'::regnamespace and p.prosecdef
-        and has_function_privilege('anon', p.oid, 'EXECUTE') and ${NOT_EXT} order by 1;`);
+    const exposed = sigs(ANON_SECDEF_SQL);
     const extra = exposed.filter((s) => !allow.has(s));
     expect(
       extra,
@@ -78,10 +81,9 @@ describe.skipIf(!enabled)("security-lint · funciones de public", () => {
     const found = sigs(`begin;
 create function public._lint_probe_secdef() returns int language sql security definer
   set search_path = public, pg_temp as 'select 1';
-select ${SIG} from pg_proc p
- where p.proname = '_lint_probe_secdef' and p.prosecdef and has_function_privilege('anon', p.oid, 'EXECUTE');
+${ANON_SECDEF_SQL}
 rollback;`);
-    expect(found).toEqual(["_lint_probe_secdef()"]);
+    expect(found).toContain("_lint_probe_secdef()");
   });
 
   it("(2) SECURITY DEFINER con p_tenant ejecutables por authenticated llaman a un guard", () => {
@@ -91,7 +93,7 @@ rollback;`);
         and has_function_privilege('authenticated', p.oid, 'EXECUTE')
         and coalesce(array_to_string(p.proargnames, ','), '') ~ '(^|,)p_tenant(_id)?(,|$)'
         and ${NOT_EXT}
-        and pg_get_functiondef(p.oid) !~* '${TENANT_GUARD_RE}'
+        and p.prosrc !~* '${TENANT_GUARD_RE}'
       order by 1;`);
     const extra = found.filter((s) => !allow.has(s));
     expect(
@@ -106,7 +108,8 @@ rollback;`);
     const base = new Set(readJson("search-path-baseline.json").functions as string[]);
     const mutable = sigs(`select ${SIG} from pg_proc p
       where p.pronamespace = 'public'::regnamespace and p.prokind in ('f', 'p')
-        and p.proconfig is null and ${NOT_EXT} order by 1;`);
+        and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%')
+        and ${NOT_EXT} order by 1;`);
     const extra = mutable.filter((s) => !base.has(s));
     expect(
       extra,

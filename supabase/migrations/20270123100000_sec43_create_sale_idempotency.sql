@@ -1885,11 +1885,12 @@ begin
   if v_req is not null then
     v_req_hash := coalesce(nullif(current_setting('ninja.sale_request_hash', true), ''),
                            _sale_request_plan_hash(p_sale, p_plan));
-    perform set_config('ninja.sale_request_hash', v_req_hash, true);
     v_replay := _sale_request_replay(v_tenant, v_req, v_req_hash);
     if v_replay is not null then
       return _sale_fulfilled_replay_result(v_tenant, v_replay);
     end if;
+    -- Recién ahora: un replay no deja la huella en la sesión.
+    perform set_config('ninja.sale_request_hash', v_req_hash, true);
   end if;
   -- <<< SEC-43
 
@@ -2300,11 +2301,12 @@ begin
   end;
   if v_req is not null then
     v_req_hash := _sale_request_plan_hash(p_sale, p_plan);
-    perform set_config('ninja.sale_request_hash', v_req_hash, true);
     v_replay := _sale_request_replay(v_tenant, v_req, v_req_hash);
     if v_replay is not null then
       return _sale_fulfilled_replay_result(v_tenant, v_replay);
     end if;
+    -- Recién ahora: un replay no deja la huella en la sesión.
+    perform set_config('ninja.sale_request_hash', v_req_hash, true);
   end if;
   -- <<< SEC-43
 

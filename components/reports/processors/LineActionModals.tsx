@@ -17,7 +17,7 @@ import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import type { SettlementLineRow } from "@/lib/reports/processorReconciliation";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { posApi } from "@/modules/pos/api";
-import { newSaleRequestId, saleRequestMismatchMessage } from "@/lib/pos/saleRequestKey";
+import { clearStableRequestId, saleRequestMismatchMessage, stableRequestId } from "@/lib/pos/saleRequestKey";
 import {
   settlementErrorMessage,
   usePaymentsForLink,
@@ -250,9 +250,12 @@ export function CreateSaleFromLineModal({
   const [name, setName] = useState(`Cobro Mercado Pago ${line.external_id ?? ""}`.trim());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // SEC-43 (ADR-187): una clave por modal. Si se corta la red y se reintenta,
-  // el servidor devuelve la venta ya registrada en lugar de crear otra.
-  const [requestId, setRequestId] = useState(newSaleRequestId);
+  // SEC-43 (ADR-187): una clave por línea de conciliación, en sessionStorage
+  // hasta que la venta se confirma. Si se corta la red y se reintenta (aunque
+  // se cierre y se vuelva a abrir el modal), el servidor devuelve la venta ya
+  // registrada en lugar de crear otra.
+  const keyName = `settlement-line:${line.id}`;
+  const [requestId] = useState(() => stableRequestId(keyName));
 
   async function create() {
     setBusy(true);
@@ -281,14 +284,15 @@ export function CreateSaleFromLineModal({
         .limit(1)
         .maybeSingle();
       if (pay?.id) await resolve.mutateAsync({ lineId: line.id, action: "link", paymentId: pay.id, note: "Venta creada desde la conciliación" });
+      clearStableRequestId(keyName);
       toast({ title: `Venta ${res.number} registrada y conciliada`, variant: "success" });
       onDone();
       onClose();
     } catch (e) {
       const dup = saleRequestMismatchMessage(e instanceof Error ? e.message : String((e as { message?: string })?.message ?? ""));
       if (dup) {
-        setRequestId(newSaleRequestId());
-        setError(dup);
+        // Sin rotar la clave: la venta de esta línea ya existe; se vincula a mano.
+        setError(`${dup} Si es esa venta, vinculala con "Vincular a una venta".`);
         return;
       }
       setError(settlementErrorMessage(e));

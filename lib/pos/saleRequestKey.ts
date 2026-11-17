@@ -8,12 +8,14 @@
 //
 // Reglas:
 //   - La clave nace en el primer "Cobrar" del carrito.
-//   - Se reusa mientras el carrito sea el mismo (reintentos, PIN de
-//     supervisor, cambio de medio de pago después de un error).
-//   - Cambia si cambia el carrito (otro cobro) y se descarta cuando la venta
-//     se confirma (online o guardada sin conexión), cuando se vacía el
-//     carrito o cuando el servidor dice que ya hay otra venta con esa clave:
-//     la venta siguiente, aunque sea idéntica, lleva otra clave.
+//   - Se reusa mientras las líneas base del carrito sean las mismas
+//     (reintentos, PIN de supervisor, cambio de medio de pago o de cuotas
+//     después de un error). El recargo del medio y la garantía no son parte
+//     de la firma: los decide el servidor con la huella.
+//   - Cambia si cambia el carrito (otro cobro). Se descarta SÓLO cuando la
+//     venta se confirma (online o guardada sin conexión): vaciar el carrito
+//     o un sale_request_mismatch no la borran. Después de un mismatch, el
+//     cajero la rota a mano ("Es una venta nueva") si de verdad es otra venta.
 //   - Si el cobro online se cortó y el cajero lo guarda sin conexión, la venta
 //     offline lleva la misma clave: si la online había entrado, la
 //     sincronización la reconoce y no duplica.
@@ -109,4 +111,62 @@ export function saleRequestMismatchMessage(msg: string): string | null {
   if (!msg.includes("sale_request_mismatch")) return null;
   const n = msg.match(/sale_request_mismatch:\s*(\d+)/)?.[1];
   return `Esta venta ya se registró${n ? ` (N° ${n})` : ""} con otros datos. Revisá Ventas antes de volver a cobrar.`;
+}
+
+// ---------------------------------------------------------------------------
+// Ciclo de vida de la clave del POS.
+//   attempt   → la del carrito (nextSaleRequestKey).
+//   confirmed → null: la venta quedó (online o guardada sin conexión).
+//   new_sale  → otra clave para el mismo carrito (acción explícita del cajero
+//               después de un sale_request_mismatch).
+//   cart_cleared / mismatch → la misma: puede ser el reintento de un cobro
+//               que sí entró.
+// ---------------------------------------------------------------------------
+export type SaleKeyEvent = "attempt" | "confirmed" | "new_sale" | "cart_cleared" | "mismatch";
+
+export function saleKeyAfter(
+  event: SaleKeyEvent,
+  prev: SaleRequestKey | null,
+  cart: string,
+  newId: () => string = newSaleRequestId,
+): SaleRequestKey | null {
+  switch (event) {
+    case "attempt":
+      return nextSaleRequestKey(prev, cart, newId);
+    case "confirmed":
+      return null;
+    case "new_sale":
+      return { key: newId(), cart };
+    default:
+      return prev;
+  }
+}
+
+/**
+ * Clave estable para un pedido identificado por `name` (p. ej. una línea de
+ * conciliación), guardada en sessionStorage hasta que se confirma.
+ */
+export function stableRequestId(name: string, store: KeyStorage | null = sessionStore(), newId = newSaleRequestId): string {
+  const storageKey = `${SALE_REQUEST_STORAGE_KEY}:${name}`;
+  try {
+    const v = store?.getItem(storageKey);
+    if (v) return v;
+  } catch {
+    // sin storage: clave sólo en memoria.
+  }
+  const id = newId();
+  try {
+    store?.setItem(storageKey, id);
+  } catch {
+    // idem
+  }
+  return id;
+}
+
+export function clearStableRequestId(name: string, store: KeyStorage | null = sessionStore()): void {
+  try {
+    store?.removeItem(`${SALE_REQUEST_STORAGE_KEY}:${name}`);
+  } catch {
+    // idem
+  }
 }

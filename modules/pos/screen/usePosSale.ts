@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/Toast";
 import type { CheckoutPayment, PaymentExtra, Promo } from "@/components/pos/checkout/types";
@@ -17,11 +17,12 @@ import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
 import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflinePos";
 import {
   loadSaleRequestKey,
-  nextSaleRequestKey,
   pendingSaleRequestKey,
   saleCartSignature,
+  saleKeyAfter,
   saleRequestMismatchMessage,
   saveSaleRequestKey,
+  type SaleKeyEvent,
   type SaleRequestKey,
 } from "@/lib/pos/saleRequestKey";
 
@@ -153,6 +154,16 @@ export function saleErrorTitle(msg: string): string {
                                                   : "No se pudo cobrar";
 }
 
+/**
+ * SEC-43: líneas base del carrito para la firma de la clave, sin las que
+ * agrega la hoja de cobro (recargo del medio o de las cuotas, garantía): cambiar
+ * de 3 cuotas a efectivo después de un corte tiene que reusar la clave para
+ * que el servidor detecte la venta ya hecha (sale_request_mismatch).
+ */
+export function saleCartBaseItems(lines: CartLine[]) {
+  return buildSaleItemsAndExtras(cartToSaleLines(lines), []).items;
+}
+
 /** Líneas del carrito → líneas de create_sale (sin campos de UI). */
 export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
   return lines.map((l) => ({
@@ -220,38 +231,30 @@ export function usePosSale(ctx: {
   // toque del mismo frame.
   const inFlight = useRef(false);
   // SEC-43 (ADR-187): clave de idempotencia del cobro. Se reusa en los
-  // reintentos del mismo carrito (corte de red, PIN, otro medio de pago, venta
-  // guardada sin conexión después del corte) y se descarta al confirmar la
-  // venta o al vaciar el carrito. Vive en sessionStorage para sobrevivir a una
-  // recarga del POS (undefined = todavía no se leyó).
+  // reintentos del mismo carrito (corte de red, PIN, otro medio de pago o de
+  // cuotas, venta guardada sin conexión después del corte) y se descarta SÓLO
+  // al confirmar la venta (saleKeyAfter). Vive en sessionStorage para
+  // sobrevivir a una recarga del POS (undefined = todavía no se leyó).
   const requestKey = useRef<SaleRequestKey | null | undefined>(undefined);
   const currentKey = () => {
     if (requestKey.current === undefined) requestKey.current = loadSaleRequestKey();
     return requestKey.current;
   };
-  const setKey = (k: SaleRequestKey | null) => {
+  const keyEvent = (event: SaleKeyEvent, cart: string) => {
+    const k = saleKeyAfter(event, currentKey() ?? null, cart);
     requestKey.current = k;
     saveSaleRequestKey(k);
+    return k;
   };
-  const cartSignature = (items: unknown[]) =>
+  const cartSignature = () =>
     saleCartSignature({
-      items,
+      items: saleCartBaseItems(ctx.lines),
       customerId: ctx.customerId,
       tableOrderId: ctx.tableOrderId ?? null,
       deliveryOrderId: ctx.deliveryOrderId ?? null,
       appointmentId: ctx.appointmentId ?? null,
       reservationId: ctx.reservationId ?? null,
     });
-  // Carrito vaciado (cancelar, limpiar, venta hecha): el próximo es otro cobro.
-  const prevLineCount = useRef<number | null>(null);
-  const lineCount = ctx.lines.length;
-  useEffect(() => {
-    if (prevLineCount.current !== null && prevLineCount.current > 0 && lineCount === 0) {
-      requestKey.current = null;
-      saveSaleRequestKey(null);
-    }
-    prevLineCount.current = lineCount;
-  }, [lineCount]);
 
   async function handleSale(
     payments: CheckoutPayment[],
@@ -300,8 +303,8 @@ export function usePosSale(ctx: {
         : saleExtras;
       // ADR-096: la venta entrega la reserva en la misma transacción.
       const allExtras = ctx.reservationId ? [...withAppt, { kind: "reservation", id: ctx.reservationId }] : withAppt;
-      const key = nextSaleRequestKey(currentKey(), cartSignature(items));
-      setKey(key);
+      const cart = cartSignature();
+      const key = keyEvent("attempt", cart)!;
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
@@ -324,7 +327,7 @@ export function usePosSale(ctx: {
         clientRequestId: key.key,
       });
       // La venta quedó: la próxima, aunque sea igual, es otro cobro.
-      setKey(null);
+      keyEvent("confirmed", cart);
       if (res.deliveries && res.deliveries.length > 0) ctx.onDeliveries?.(res.deliveries, res.number);
       // SEC-43: la venta ya había entrado (reintento después de un corte). El
       // código de retiro sólo se muestra una vez (se guarda su hash).
@@ -344,7 +347,8 @@ export function usePosSale(ctx: {
         }
       }
       toast({
-        title: `Venta #${res.number} registrada`,
+        // SEC-43: el reintento devolvió la venta que ya había entrado.
+        title: res.replayed ? `La venta #${res.number} ya estaba registrada` : `Venta #${res.number} registrada`,
         description: `Total ${formatCurrency(res.total)}`,
         variant: "success",
       });
@@ -381,9 +385,23 @@ export function usePosSale(ctx: {
       // SEC-43: la clave ya tiene una venta registrada con otros datos.
       const dupMsg = saleRequestMismatchMessage(msg);
       if (dupMsg) {
-        setKey(null);
+        // La clave NO se borra: puede ser el reintento de la venta que entró.
+        // Si de verdad es otra venta, el cajero la rota a mano y cobra de nuevo.
+        const cartNow = cartSignature();
         void qc.invalidateQueries({ queryKey: ["sales"] });
-        toast({ title: dupMsg, variant: "error" });
+        toast({
+          title: dupMsg,
+          variant: "error",
+          actions: [
+            {
+              label: "Es una venta nueva",
+              onClick: () => {
+                keyEvent("new_sale", cartNow);
+                toast({ title: "Listo: cobrá de nuevo y se registra como una venta nueva", variant: "info" });
+              },
+            },
+          ],
+        });
         return;
       }
       if (ctx.onError?.(msg)) return;
@@ -420,7 +438,7 @@ export function usePosSale(ctx: {
     // SEC-43: si el cobro online de este mismo carrito se cortó sin confirmar,
     // la venta offline lleva su clave: si la online sí entró, el servidor la
     // reconoce al sincronizar y no la duplica.
-    const pendingKey = pendingSaleRequestKey(currentKey() ?? null, cartSignature(items));
+    const pendingKey = pendingSaleRequestKey(currentKey() ?? null, cartSignature());
     const res = await ctx.offline.saveSale({
       total,
       change: change ?? 0,
@@ -453,7 +471,7 @@ export function usePosSale(ctx: {
       toast({ title: res.message, variant: "error" });
       return;
     }
-    setKey(null);
+    keyEvent("confirmed", "");
     toast({
       title: `Venta guardada sin conexión (${res.entry.provisional})`,
       description: `Total ${formatCurrency(res.entry.total)}. Se envía sola cuando vuelve la conexión.`,

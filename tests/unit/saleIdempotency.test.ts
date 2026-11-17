@@ -11,7 +11,13 @@ import {
   saleRequestMismatchMessage,
   saveSaleRequestKey,
   type SaleCartIdentity,
+  clearStableRequestId,
+  saleKeyAfter,
+  stableRequestId,
 } from "@/lib/pos/saleRequestKey";
+import { buildSaleItemsAndExtras } from "@/modules/pending-charges/logic";
+import { cartToSaleLines, saleCartBaseItems } from "@/modules/pos/screen/usePosSale";
+import type { CartLine } from "@/modules/pos/store";
 
 const ROOT = join(__dirname, "..", "..");
 const read = (f: string) => readFileSync(join(ROOT, f), "utf8").replace(/\r\n/g, "\n");
@@ -131,8 +137,60 @@ describe("clave del cobro en el POS", () => {
     expect(hook).toContain("clientRequestId: key.key,");
     expect(hook).toContain("...(pendingKey ? { client_request_id: pendingKey } : {}),");
     expect(hook).toContain("saleRequestMismatchMessage(msg)");
-    // La conciliación que crea una venta también manda una clave estable.
-    expect(read("components/reports/processors/LineActionModals.tsx")).toMatch(/useState\(newSaleRequestId\)/);
+    // Sólo se borra al confirmar: ni al vaciar el carrito ni en un mismatch.
+    expect(hook).not.toMatch(/setKey\(null\)|useEffect/);
+    expect(hook).toContain('keyEvent("confirmed", cart);');
+    expect(hook).toContain('label: "Es una venta nueva"');
+    expect(hook).toContain('keyEvent("new_sale", cartNow);');
+    expect(hook).toContain("items: saleCartBaseItems(ctx.lines),");
+    // La conciliación que crea una venta usa una clave por línea, persistida.
+    const modal = read("components/reports/processors/LineActionModals.tsx");
+    expect(modal).toContain("stableRequestId(keyName)");
+    expect(modal).toContain("clearStableRequestId(keyName);");
+  });
+
+  it("la firma usa las líneas base: el recargo de cuotas o del medio no rota la clave", () => {
+    const lines = [
+      { lineId: "l1", productId: "p1", name: "Yerba", quantity: 1, unitPrice: 1000, discount: 0 },
+    ] as unknown as CartLine[];
+    const base = saleCartBaseItems(lines);
+    const withSurcharge = buildSaleItemsAndExtras(cartToSaleLines(lines), [
+      { kind: "surcharge", amount: 150, name: "Recargo 3 cuotas" },
+    ]).items;
+    expect(withSurcharge).toHaveLength(2);
+    expect(base).toEqual([withSurcharge[0]]);
+    const sig = (items: unknown[]) => saleCartSignature(cart({ items }));
+    const k = nextSaleRequestKey(null, sig(base), ids());
+    // Cambiar de 3 cuotas a efectivo: mismas líneas base → misma clave.
+    expect(nextSaleRequestKey(k, sig(saleCartBaseItems(lines)), ids()).key).toBe(k.key);
+  });
+
+  it("ciclo de vida: se borra sólo al confirmar; vaciar el carrito o un mismatch la conservan", () => {
+    const newId = ids();
+    const c = saleCartSignature(cart());
+    const k = saleKeyAfter("attempt", null, c, newId)!;
+    expect(saleKeyAfter("cart_cleared", k, "", newId)).toBe(k);
+    expect(saleKeyAfter("mismatch", k, c, newId)).toBe(k);
+    // Vació el carrito y volvió a cargar lo mismo: misma clave.
+    expect(saleKeyAfter("attempt", k, c, newId)).toBe(k);
+    expect(saleKeyAfter("confirmed", k, c, newId)).toBeNull();
+    // "Es una venta nueva": otra clave para el mismo carrito.
+    const fresh = saleKeyAfter("new_sale", k, c, newId)!;
+    expect(fresh.key).not.toBe(k.key);
+    expect(fresh.cart).toBe(c);
+    expect(saleKeyAfter("attempt", fresh, c, newId)).toBe(fresh);
+    // Otro carrito: rota sola.
+    const other = saleCartSignature(cart({ customerId: "c" }));
+    expect(saleKeyAfter("attempt", fresh, other, newId)!.key).not.toBe(fresh.key);
+  });
+
+  it("clave estable por pedido (conciliación): la misma hasta confirmar", () => {
+    const st = memStore();
+    const a = stableRequestId("settlement-line:1", st, () => "x1");
+    expect(stableRequestId("settlement-line:1", st, () => "x2")).toBe(a);
+    expect(stableRequestId("settlement-line:2", st, () => "y1")).toBe("y1");
+    clearStableRequestId("settlement-line:1", st);
+    expect(stableRequestId("settlement-line:1", st, () => "x3")).toBe("x3");
   });
 });
 
@@ -254,6 +312,12 @@ describe("migración 20270123100000_sec43_create_sale_idempotency", () => {
       pf.indexOf("transfer_move_stock("),
     );
     expect(pf).toContain("p_client_request_id => v_req  -- SEC-43");
+    // La huella va a la sesión recién cuando no es un replay.
+    for (const body of [pf, fnText(MIG, /create or replace function public\.pos_sale_create_delivery\(/).body]) {
+      expect(body.indexOf("return _sale_fulfilled_replay_result(v_tenant, v_replay)")).toBeLessThan(
+        body.indexOf("perform set_config('ninja.sale_request_hash', v_req_hash, true);"),
+      );
+    }
     const pd = fnText(MIG, /create or replace function public\.pos_sale_create_delivery\(/).body;
     const replay = pd.indexOf("return _sale_fulfilled_replay_result(v_tenant, v_replay)");
     expect(replay).toBeGreaterThan(0);

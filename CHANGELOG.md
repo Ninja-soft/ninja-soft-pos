@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Lint de seguridad de funciones en CI (SEC-15).** `tests/integration/security-lint.test.ts` corre contra la base de CI y falla si una migración deja: una función SECURITY DEFINER ejecutable sin sesión fuera de la lista blanca, una que recibe el negocio por parámetro sin validar membresía, una función con `search_path` mutable nueva, o una función de trigger ejecutable por la API. El mensaje trae el `revoke` listo para pegar. Reglas para migraciones en `docs/workflows/git-workflow.md`.
+
 - **Superficie anónima documentada y vigilada (SEC-13).** `supabase/security/anon-allowlist.json` lista las 19 funciones que se pueden llamar sin sesión (catálogo y pedidos públicos, presupuesto público, planes, API pública con token) con su motivo, y un test hace fallar CI si aparece otra. `docs/05-security.md` §14 documenta qué valida y qué devuelve cada una; el relevamiento abrió 7 tareas nuevas (IP falsificable en pedidos públicos, emails de pedidos a cualquier dirección, token de presupuesto sin hash, chequeos de estado del negocio, entre otras).
 
 - **Foto de grants de producción y test de paridad (SEC-06).** `pnpm security:snapshot` guarda en `supabase/security/grants.prod.json` qué puede hacer `anon` y `authenticated` sobre cada tabla y función de la base (más RLS, policies, SECURITY DEFINER y `search_path`). Hoy: anon puede insertar en 163 tablas, 41 funciones SECURITY DEFINER son ejecutables por anon y 25 no fijan `search_path`. `grants.expected.json` es el estado objetivo (arranca igual) y `tests/integration/grants-parity.test.ts` compara la base de CI contra él e imprime el diff; pasa a estricto en SEC-07. Sin dependencias nuevas.

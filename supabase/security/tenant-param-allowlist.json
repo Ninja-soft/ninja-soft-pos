@@ -1,0 +1,9 @@
+{
+  "_doc": "SECURITY DEFINER ejecutables por authenticated que reciben p_tenant/p_tenant_id sin llamar a un guard reconocido (current_tenant_id, auth.uid, internal_scope, is_internal, platform_staff_billing_role, *_assert*, *_edge_guard). Cada excepción lleva motivo; el chequeo (2) de tests/integration/security-lint.test.ts no se desactiva (SEC-15).",
+  "functions": [
+    {
+      "sig": "assert_account_active(p_tenant uuid)",
+      "reason": "Es un guard: lanza error si el negocio está suspendido o dado de baja y no devuelve datos. Lo único que deja inferir de otro negocio es si está suspendido (anotado en SEC-57)."
+    }
+  ]
+}

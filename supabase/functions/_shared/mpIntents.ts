@@ -19,11 +19,14 @@
 //   mp_cupon, pending_charges_sync) con la misma condición de siempre
 //   (approved: `status <> 'approved'`; el resto: `status = 'pending'`). Si la
 //   base todavía no tiene la función (Edge desplegada antes que la
-//   migración) cae al camino de dos pasos de antes.
+//   migración) cae al camino de dos pasos de antes (y lo loguea).
+//   Llamadores NO estrictos (polling): si la RPC falla por otro motivo, caen
+//   también al camino de dos pasos; si eso también falla, devuelven el
+//   estado que quedó guardado (nunca uno no persistido).
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders } from "./mpAuth.ts";
-import { type MpEnv, type MpOrder, type ResolvedOrder, resolveOrder } from "./mpOrders.ts";
+import { type IntentStatus, type MpEnv, type MpOrder, type ResolvedOrder, resolveOrder } from "./mpOrders.ts";
 
 export interface OrderIntentRow {
   id: string;
@@ -89,12 +92,14 @@ type Transition = {
 /**
  * PAY-28: transición del intent + auditoría atómicas. Devuelve si cambió una
  * fila; con `error` si la base falló (nada quedó escrito: la transacción se
- * revierte entera). Sin la RPC en la base, el camino viejo de dos pasos.
+ * revierte entera). Sin la RPC en la base, o (no estricto) si la RPC falló,
+ * el camino viejo de dos pasos.
  */
 async function transitionIntent(
   admin: SupabaseClient,
   row: OrderIntentRow,
   t: Transition,
+  strict: boolean | undefined,
 ): Promise<{ changed: boolean; error: unknown }> {
   const { data, error } = await admin.rpc("_mp_intent_transition", {
     p_intent: row.id,
@@ -106,9 +111,25 @@ async function transitionIntent(
     p_audit_after: t.audit?.after ?? null,
   });
   if (!error) return { changed: data === true, error: null };
-  if (!isMissingRpc(error)) return { changed: false, error };
+  const missing = isMissingRpc(error);
+  // Estricto (webhook): el error vuelve como 503 y MP reintenta las dos cosas.
+  if (!missing && strict) return { changed: false, error };
+  // Sin la función, o polling con la RPC fallida: dos pasos (pre PAY-28), así
+  // lo devuelto coincide con lo guardado. Se loguea: acá no hay atomicidad.
+  console.error("[mp_orders] _mp_intent_transition no disponible, camino de dos pasos", {
+    intent: row.id,
+    reason: missing ? "missing_rpc" : "rpc_error",
+    error: String((error as { message?: string }).message ?? error).slice(0, 200),
+  });
+  return await legacyTransition(admin, row, t);
+}
 
-  // Base sin la migración: update y después auditoría (pre PAY-28).
+/** Camino de dos pasos (pre PAY-28): update del intent y después el audit aparte. */
+async function legacyTransition(
+  admin: SupabaseClient,
+  row: OrderIntentRow,
+  t: Transition,
+): Promise<{ changed: boolean; error: unknown }> {
   const values: Record<string, unknown> = { status: t.status };
   if (t.mpPaymentId != null) values.mp_payment_id = t.mpPaymentId;
   let q = admin.from("mp_payment_intents").update(values).eq("id", row.id);
@@ -130,14 +151,24 @@ async function transitionIntent(
   return { changed, error: null };
 }
 
-/** Error de la transición: estricto lanza (503); si no, se loguea y sigue (el polling vuelve). */
-function onTransitionError(error: unknown, row: OrderIntentRow, strict: boolean | undefined): void {
-  if (!error) return;
+/**
+ * Error de la transición: estricto lanza (503). Si no, se loguea y se
+ * devuelve el resultado con el estado que quedó guardado (el leído), nunca
+ * uno que no se persistió; el polling vuelve a intentar.
+ */
+function onTransitionError(
+  error: unknown,
+  row: OrderIntentRow,
+  res: ResolvedOrder,
+  strict: boolean | undefined,
+): ResolvedOrder {
+  if (!error) return res;
   if (strict) throw new IntentWriteError(error);
   console.error("[mp_orders] no se pudo actualizar el intent", {
     intent: row.id,
     error: String((error as { message?: string }).message ?? error).slice(0, 200),
   });
+  return { ...res, status: row.status as IntentStatus };
 }
 
 /**
@@ -182,9 +213,8 @@ export async function applyOrderToIntent(
           previous_status: row.status,
         },
       },
-    });
-    onTransitionError(error, row, opts.strict);
-    return res;
+    }, opts.strict);
+    return onTransitionError(error, row, res, opts.strict);
   }
 
   if (res.status !== "pending") {
@@ -207,8 +237,8 @@ export async function applyOrderToIntent(
             },
           }
         : null,
-    });
-    onTransitionError(error, row, opts.strict);
+    }, opts.strict);
+    if (error) return onTransitionError(error, row, res, opts.strict);
     if (changed && mismatch) {
       console.error("[mp_orders] amount_mismatch, NO se acredita", {
         intent: row.id,

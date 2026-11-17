@@ -17,7 +17,12 @@
 //   fallando, queda un rastro en audit_logs (`mp_oauth_refresh_save_failed`,
 //   sin tokens) para que staff reconecte. Vale para TODOS los llamadores y no
 //   cambia el valor devuelto. `forceRefresh` (sólo los webhooks, ante un 401
-//   de MP con credencial OAuth) refresca aunque `expires_at` diga vigente.
+//   de MP con credencial OAuth) refresca aunque `expires_at` diga vigente,
+//   pero antes relee la fila: si otra Edge ya rotó el token (cambió
+//   refresh_token / expires_at) usa el guardado sin refrescar, y si la fila se
+//   rotó / actualizó hace menos de 60 s no fuerza (cooldown): un 401
+//   persistente (cuenta equivocada, permisos) no rota el refresh_token en
+//   cada reintento de MP.
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { type MpEnv, pickMpCredential } from "./mpOrders.ts";
@@ -31,6 +36,8 @@ type Secrets = {
   refresh_token?: string | null;
   expires_at?: string | null;
   via?: string;
+  /** PAY-28: cuándo se rotó el token por última vez (cooldown del refresh forzado). */
+  refreshed_at?: string;
 };
 
 type RowRef = { rowId: string | null; tenantId: string; storeId: string | null };
@@ -44,6 +51,11 @@ export type MpCredentialOpts = {
   refreshTimeoutMs?: number;
   /** PAY-28: refrescar aunque `expires_at` diga vigente (401 de MP con OAuth). */
   forceRefresh?: boolean;
+  /**
+   * PAY-28: token que recibió el 401. Si el guardado ya es otro (otra Edge
+   * rotó), se usa ése sin refrescar.
+   */
+  staleToken?: string;
 };
 
 /**
@@ -52,6 +64,46 @@ export type MpCredentialOpts = {
  * credencial de los webhooks (6 s) o, si se pasa, en wh.defer.
  */
 export const MP_TOKEN_SAVE_BACKOFF_MS = [150, 400] as const;
+
+/** PAY-28: no se fuerza un refresh si la fila se rotó / actualizó hace menos de esto. */
+export const MP_FORCED_REFRESH_COOLDOWN_MS = 60_000;
+
+/**
+ * PAY-28: relee la fila de la credencial antes de un refresh forzado.
+ * Devuelve los secretos a usar sin refrescar (otra Edge ya rotó el token, o
+ * cooldown), o null si corresponde refrescar. Ante un error de lectura no
+ * fuerza (devuelve los secretos cargados): rotar a ciegas es peor.
+ */
+async function forcedRefreshGate(
+  admin: SupabaseClient,
+  ref: RowRef,
+  sec: Secrets,
+  staleToken: string | undefined,
+): Promise<Secrets | null> {
+  // El token cargado ya no es el que dio 401: otra Edge rotó antes de esta carga.
+  if (staleToken && sec.access_token && sec.access_token !== staleToken) return sec;
+  let q = admin.from("payment_secrets").select("secrets, updated_at");
+  if (ref.rowId) {
+    q = q.eq("id", ref.rowId);
+  } else {
+    q = q.eq("tenant_id", ref.tenantId).eq("provider_key", "mercadopago");
+    q = ref.storeId ? q.eq("store_id", ref.storeId) : q.is("store_id", null);
+  }
+  const { data, error } = await q.maybeSingle();
+  if (error || !data) return sec;
+  const row = data as { secrets?: Secrets | null; updated_at?: string | null };
+  const fresh = (row.secrets ?? {}) as Secrets;
+  if (fresh.refresh_token !== sec.refresh_token || fresh.expires_at !== sec.expires_at) {
+    // Otra Edge ya rotó: usar lo guardado (sólo si trae un access_token).
+    return fresh.access_token ? { ...sec, ...fresh } : sec;
+  }
+  const last = Math.max(
+    Date.parse(fresh.refreshed_at ?? "") || 0,
+    Date.parse(row.updated_at ?? "") || 0,
+  );
+  if (Date.now() - last < MP_FORCED_REFRESH_COOLDOWN_MS) return sec;
+  return null;
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -121,7 +173,7 @@ async function refreshIfNeeded(
   admin: SupabaseClient,
   ref: RowRef,
   sec: Secrets,
-  opts: { strict?: boolean; refreshTimeoutMs?: number; forceRefresh?: boolean } = {},
+  opts: { strict?: boolean; refreshTimeoutMs?: number; forceRefresh?: boolean; staleToken?: string } = {},
 ): Promise<Secrets> {
   const aboutToExpire =
     sec.expires_at && Date.parse(sec.expires_at) - Date.now() < 5 * 60 * 1000;
@@ -134,6 +186,11 @@ async function refreshIfNeeded(
     if (opts.strict && expired()) throw new MpRefreshError(detail);
     return sec;
   };
+  // PAY-28: refresh forzado con el token todavía vigente → releer la fila.
+  if (opts.forceRefresh && !aboutToExpire) {
+    const skip = await forcedRefreshGate(admin, ref, sec, opts.staleToken);
+    if (skip) return skip;
+  }
 
   const { data: plat, error: platErr } = await admin
     .from("platform_secrets")
@@ -169,6 +226,7 @@ async function refreshIfNeeded(
     expires_at: t.expires_in
       ? new Date(Date.now() + t.expires_in * 1000).toISOString()
       : sec.expires_at,
+    refreshed_at: new Date().toISOString(),
   };
   // Se reescribe la MISMA fila usada (negocio o sucursal, ADR-057), con
   // reintentos y rastro en audit_logs si no sale (PAY-28).
@@ -191,7 +249,7 @@ export async function tenantMpCredential(
   forceEnv?: MpEnv | null,
   opts: MpCredentialOpts = {},
 ): Promise<{ token: string; env: MpEnv; scopeStoreId: string | null; oauth: boolean } | null> {
-  const { strict, refreshTimeoutMs, forceRefresh, ...scope } = opts;
+  const { strict, refreshTimeoutMs, forceRefresh, staleToken, ...scope } = opts;
   // Secreto y switch Sandbox en paralelo (antes eran dos rondas seguidas).
   const [loaded, methodRes] = await Promise.all([
     loadProviderSecret(admin, tenantId, "mercadopago", { ...scope, strict }),
@@ -216,6 +274,7 @@ export async function tenantMpCredential(
       strict,
       refreshTimeoutMs,
       forceRefresh,
+      staleToken,
     });
     return sec.access_token
       ? { token: sec.access_token, env: "prod", scopeStoreId, oauth: sec.via === "oauth" }

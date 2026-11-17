@@ -97,7 +97,13 @@ export type CredentialFn = (
   db: WebhookDb,
   tenantId: string,
   env: MpEnv,
-  opts: { scopeStoreId: string | null; strict?: boolean; refreshTimeoutMs?: number; forceRefresh?: boolean },
+  opts: {
+    scopeStoreId: string | null;
+    strict?: boolean;
+    refreshTimeoutMs?: number;
+    forceRefresh?: boolean;
+    staleToken?: string;
+  },
 ) => Promise<MpCredential>;
 
 /** intentSecretScope (_shared/paymentSecrets.ts); `strict` lanza ante error de base. */
@@ -365,7 +371,7 @@ async function webhookCredential(
   tenantId: string,
   env: MpEnv,
   intentId: string,
-  opts: { forceRefresh?: boolean; timeoutMs?: number } = {},
+  opts: { forceRefresh?: boolean; staleToken?: string; timeoutMs?: number } = {},
 ): Promise<CredentialStep> {
   const ms = opts.timeoutMs ?? deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS;
   const chain = (async () => {
@@ -374,7 +380,7 @@ async function webhookCredential(
       scopeStoreId,
       strict: true,
       refreshTimeoutMs: Math.min(MP_REFRESH_TIMEOUT_MS, ms),
-      ...(opts.forceRefresh ? { forceRefresh: true } : {}),
+      ...(opts.forceRefresh ? { forceRefresh: true, staleToken: opts.staleToken } : {}),
     });
   })();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -433,6 +439,7 @@ async function forceRefreshCredential(
   const credMs = Math.min(deps.credentialTimeoutMs ?? MP_CREDENTIAL_TIMEOUT_MS, left - MP_FORCED_RETRY_MIN_MS);
   const step = await webhookCredential(admin, deps, wh, ids.tenantId, ids.env, ids.intentId, {
     forceRefresh: true,
+    staleToken: old.token,
     timeoutMs: credMs,
   });
   if (step.kind !== "cred" || step.cred.token === old.token) return { kind: "give_up" };

@@ -150,15 +150,14 @@ describe("create_sale vigente · promos con precio libre, seña, reserva y cupó
     expect(pricing).toMatch(/promoForPayments = useCallback\(\s*\(pays: PromoPayment\[\]\): PricingPromo \| null => \{\s*if \(appliedCoupon\) return null;/);
   });
 
-  // DIVERGENCIA: el cupón % (y el tope del cupón de monto) se calcula en
-  // create_sale sobre v_subtotal, que incluye las líneas sin producto que agrega
-  // la hoja de cobro (recargo de cuotas, garantía extendida). El POS lo calcula
-  // sobre el subtotal del carrito (usePosPricing: couponDiscount sobre
-  // cartSubtotal) y cobra recargo/garantía enteros. Con cupón + recargo o
-  // garantía el servidor descuenta más que el POS: la venta queda con un total
-  // menor a lo cobrado. Ver el it.fails de tests/integration/rls-promociones-create-sale.test.ts.
-  it.fails("DIVERGENCIA: el cupón se calcula sobre la misma base que el POS (sólo productos)", () => {
+  // PRD-62 (ADR-192): el cupón % (mínimo y tope incluidos) se calcula en
+  // create_sale sobre v_coupon_base, el subtotal sin las líneas sin producto que
+  // agrega la hoja de cobro (recargo de cuotas, garantía extendida), igual que
+  // el POS (usePosPricing: couponDiscount sobre cartSubtotal). Antes era
+  // DIVERGENCIA (it.fails de PRD-02). Ver tests/unit/couponBase.test.ts.
+  it("el cupón se calcula sobre la misma base que el POS (sólo el carrito, PRD-62)", () => {
     const coupon = B.slice(at("v_coupon_disc := case when v_coupon.discount_type = 'percent'"), at("v_total_pre :="));
     expect(coupon).not.toContain(ws("then v_subtotal * coalesce(v_coupon.discount_value, 0) / 100"));
+    expect(coupon).toContain(ws("then v_coupon_base * coalesce(v_coupon.discount_value, 0) / 100"));
   });
 });

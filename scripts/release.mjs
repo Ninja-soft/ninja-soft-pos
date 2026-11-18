@@ -22,9 +22,11 @@
 //        sembrados por las migraciones.
 //     --from      default: último tag v* alcanzable desde --to; si no hay,
 //                 el último merge de tanda/* en el first-parent de --prod.
-//     --to        default HEAD.
-//     --prod      default origin/main. Los bloques ya mergeados ahí se marcan
-//                 aplicados/desplegados ("sí (en main)") salvo que haya datos
+//     --to        default HEAD. Los commits `chore(release): …` (el PR de
+//                 release) no entran en el registro. El rango resuelto se
+//                 imprime siempre en stderr.
+//     --prod      default origin/main. Los bloques ya mergeados ahí figuran
+//                 "sin verificar (en main)" salvo que haya datos
 //                 remotos; el resto queda "pendiente de verificar".
 //     --remote    sólo lectura contra la Management API (SUPABASE_ACCESS_TOKEN
 //                 + SUPABASE_PROJECT_REF, como deploy-check): migraciones de
@@ -55,9 +57,9 @@ import { apiAuth, parseApplied } from "./deploy-check.mjs";
 
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-/** "1.2.3" → [1, 2, 3]; null si no es semver X.Y.Z (sin prerelease). */
+/** "1.2.3" → [1, 2, 3]; null si no es semver X.Y.Z exacto (sin prerelease ni espacios). */
 export function parseSemver(v) {
-  const m = SEMVER_RE.exec(String(v ?? "").trim());
+  const m = SEMVER_RE.exec(String(v ?? ""));
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
 
@@ -210,6 +212,11 @@ export function parseCommitSubject(subject) {
   return { pr, task, type: typeM ? typeM[1] : null, scope: typeM?.[2] ?? null, title: s.trim() };
 }
 
+/** Commit del PR de release (`chore(release): …`): no entra en el registro. */
+export function isReleaseCommit(subject) {
+  return /^chore\(release\)!?:/.test(String(subject).trim());
+}
+
 /** `Merge pull request #587 from Org/tanda/2026-11-17-4` → {pr, branch}. */
 export function parseDeployMerge(subject) {
   const m = /^Merge pull request #(\d+) from [^/\s]+\/(tanda\/\S+)/.exec(String(subject).trim());
@@ -233,13 +240,15 @@ export function groupBlocks(from, firstParent, commitsOf) {
     if (c.parents.length > 1) {
       const inner = commitsOf(c.parents[0], c.parents[1]);
       if (deploy) {
-        blocks.push({ kind: "deploy", branch: deploy.branch, pr: deploy.pr, merge: c.sha, date: c.date, base, end: c.sha, commits: [...pending, ...inner] });
+        const commits = [...pending, ...inner].filter((x) => !isReleaseCommit(x.subject));
+        blocks.push({ kind: "deploy", branch: deploy.branch, pr: deploy.pr, merge: c.sha, date: c.date, base, end: c.sha, commits });
         pending = [];
         base = c.sha;
       } else pending.push(...inner);
     } else pending.push(c);
   }
   const last = firstParent[firstParent.length - 1];
+  pending = pending.filter((x) => !isReleaseCommit(x.subject));
   if (pending.length && last) blocks.push({ kind: "pending", branch: null, pr: null, merge: null, date: last.date, base, end: last.sha, commits: pending });
   return blocks;
 }
@@ -362,7 +371,7 @@ export function migrationStatus(file, { applied, inProd }) {
     const hit = applied.some((a) => a.version === version || (a.name && (a.name === name || a.name === `${version}_${name}`)));
     return hit ? "sí (verificada)" : "no";
   }
-  return inProd ? "sí (en main)" : "pendiente de verificar";
+  return inProd ? "sin verificar (en main)" : "pendiente de verificar";
 }
 
 /** "desplegada" de una Edge: con datos remotos, updated_at ≥ fecha del bloque. */
@@ -375,7 +384,7 @@ export function functionStatus(slug, { deployed, inProd, since }) {
     const day = new Date(at).toISOString().slice(0, 10);
     return since && at < Date.parse(since) ? `no (última ${day})` : `sí (${day})`;
   }
-  return inProd ? "sí (en main)" : "pendiente";
+  return inProd ? "sin verificar (en main)" : "pendiente";
 }
 
 // ---------------------------------------------------------------- registro
@@ -396,14 +405,16 @@ function prLink(n, repoUrl) {
 export function renderRecord(rel) {
   const { version, date, blocks, repoUrl } = rel;
   const total = (k) => blocks.reduce((n, b) => n + (b[k]?.length ?? 0), 0);
+  const uniqueEdges = new Set(blocks.flatMap((b) => (b.functions ?? []).map((f) => f.slug))).size;
+  const planned = blocks[blocks.length - 1]?.kind === "pending";
   const L = [];
   L.push(`# v${version} · ${date}`, "");
   L.push("> Registro del deploy generado por `pnpm release:prepare` (OPS-53). Las columnas *aplicada en prod* y *desplegada* se completan o corrigen después del deploy (ver `docs/workflows/release-workflow.md`).", "");
   L.push(`- **Versión:** \`${version}\``);
-  L.push(`- **Fecha:** ${date}`);
+  L.push(`- **Fecha:** ${date}${planned ? " (deploy previsto)" : ""}`);
   L.push(`- **Rango:** \`${short(rel.from)}..${short(rel.to)}\``);
   L.push(`- **CHANGELOG:** [\`[${version}] - ${date}\`](../../CHANGELOG.md${changelogAnchor(version, date)})`);
-  L.push(`- **Contenido:** ${total("prs")} PRs, ${total("migrations")} migraciones y ${total("functions")} Edge Functions en ${blocks.length} ${blocks.length === 1 ? "bloque" : "bloques"} de deploy.`);
+  L.push(`- **Contenido:** ${total("prs")} PRs, ${total("migrations")} migraciones y ${total("functions")} entradas de Edge Functions (por bloque; ${uniqueEdges} Edges distintas) en ${blocks.length} ${blocks.length === 1 ? "bloque" : "bloques"} de deploy.`);
   if (rel.sources) L.push(`- **Estado:** ${rel.sources}`);
   L.push("");
   blocks.forEach((b, i) => {
@@ -443,7 +454,7 @@ export function renderRecord(rel) {
     L.push(...(notes.length ? notes.map((n) => `- ${n}`) : ["- Sin flags ni notas automáticas."]), "");
   });
   L.push("---", "");
-  L.push("*Aplicada en prod:* `sí (verificada)` = está en `supabase_migrations.schema_migrations` (`--remote`/`--applied`); `sí (en main)` = el bloque ya estaba mergeado en `main` y se tomó por aplicada; `pendiente de verificar` = todavía no. *Desplegada:* con `--remote`/`--deployed`, `sí` si la Edge se desplegó después del último commit del bloque que la tocó (su carpeta o lo que importa). Una Edge cambiada sólo por un `_shared/` también hay que redesplegarla.", "");
+  L.push("*Aplicada en prod:* `sí (verificada)` = está en `supabase_migrations.schema_migrations` (`--remote`/`--applied`); `sin verificar (en main)` = el bloque ya estaba mergeado en `main` pero no se cruzó con producción; `pendiente de verificar` = todavía no. *Desplegada:* con `--remote`/`--deployed`, `sí` si la Edge se desplegó después del último commit del bloque que la tocó (su carpeta o lo que importa). Una Edge cambiada sólo por un `_shared/` también hay que redesplegarla.", "");
   L.push("Si el cambio de un `_shared/` no toca lo que usa esa Edge (por ejemplo, una opción nueva que no pasa), un `no` es esperable: anotarlo en las notas del bloque en lugar de redesplegar a ciegas.", "");
   L.push("El PR de release que agrega este registro no figura en las tablas.", "");
   return L.join("\n");
@@ -533,7 +544,11 @@ export async function collectRelease(root, opts) {
   git.root = root;
   const to = git(["rev-parse", opts.to ?? "HEAD"]).trim();
   const prod = opts.prod ?? "origin/main";
-  const from = git(["rev-parse", opts.from ?? defaultFrom(git, to, prod)]).trim();
+  const fromRef = opts.from ?? defaultFrom(git, to, prod);
+  const from = git(["rev-parse", fromRef]).trim();
+  // Siempre a stderr: sin tags v* el default es un merge de tanda y conviene verlo.
+  const how = opts.from ? "--from" : /^v\d/.test(fromRef) ? "último tag v*" : "SIN tags v*: último merge de tanda/* en " + prod;
+  process.stderr.write(`release: rango ${from.slice(0, 8)}..${to.slice(0, 8)} (from = ${fromRef}, ${how}; to = ${opts.to ?? "HEAD"})\n`);
   const prodSha = tryGit(git, ["rev-parse", prod]);
   const fpText = git(["log", "--first-parent", "--reverse", "--format=%H%x09%P%x09%cs%x09%s", `${from}..${to}`]);
   const firstParent = fpText
@@ -568,7 +583,7 @@ export async function collectRelease(root, opts) {
     deployed = parseDeployed(readFileSync(opts.deployed, "utf8"));
     sources.push(`Edges verificadas con \`${path.basename(opts.deployed)}\``);
   }
-  if (!sources.length) sources.push(`sin datos remotos: lo mergeado en \`${prod}\` figura aplicado/desplegado, el resto pendiente de verificar`);
+  if (!sources.length) sources.push(`sin datos remotos: lo mergeado en \`${prod}\` figura "sin verificar (en main)", el resto "pendiente de verificar"`);
 
   const blocks = raw.map((b) => {
     const inProd = Boolean(prodSha && isAncestor(git, b.end, prodSha));
@@ -616,13 +631,18 @@ function parseArgs(argv) {
   return { cmd, opts };
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** Fecha local de Argentina (AAAA-MM-DD), no la UTC. */
+export function localDate(d = new Date(), timeZone = "America/Argentina/Buenos_Aires") {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+const today = () => localDate();
 
 export async function main(argv, root) {
   const { cmd, opts } = parseArgs(argv);
   const changelogPath = path.join(root, "CHANGELOG.md");
   if (cmd === "notes") {
-    if (!opts.version) throw new Error("uso: release.mjs notes --version X.Y.Z");
+    if (!parseSemver(opts.version)) throw new Error(`versión inválida: "${opts.version ?? ""}" (uso: release.mjs notes --version X.Y.Z)`);
     const body = changelogSection(readFileSync(changelogPath, "utf8"), String(opts.version));
     if (body == null) throw new Error(`el CHANGELOG no tiene la sección [${opts.version}]`);
     const record = `docs/releases/v${opts.version}.md`;

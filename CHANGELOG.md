@@ -15,7 +15,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [0.2.0] - 2026-11-18
 
-> **Estado de despliegue:** primera versión numerada desde `0.1.0`; junta todo lo hecho hasta el deploy de `tanda/2026-11-18-1` (2026-11-18). Lo anterior a esa tanda ya estaba aplicado y desplegado en producción al 2026-11-17, incluidos los grants explícitos del Data API (SEC-07/SEC-08, que reemplazaron al PR #311), y el historial de migraciones de prod coincide con el repo (ADR-183). Las migraciones de la tanda (`20270128100000_fis001_offline_cbte_date` y `20270129100000_prd62_coupon_base`) ya están aplicadas; qué PRs, migraciones y Edge Functions entraron en cada deploy, y qué Edges faltan redesplegar, está en [`docs/releases/v0.2.0.md`](docs/releases/v0.2.0.md).
+> **Estado de despliegue:** deploy previsto 2026-11-18 (todavía no ocurrió). Primera versión numerada desde `0.1.0`; junta todo lo hecho hasta el deploy de `tanda/2026-11-18-1`. Lo anterior a esa tanda ya estaba aplicado y desplegado en producción al 2026-11-17, incluidos los grants explícitos del Data API (SEC-07/SEC-08, que reemplazaron al PR #311), y el historial de migraciones de prod coincide con el repo (ADR-183). Las migraciones de la tanda (`20270128100000_fis001_offline_cbte_date` y `20270129100000_prd62_coupon_base`) ya están aplicadas (verificado contra producción el 2026-11-17, `docs/releases/evidence/`); qué PRs, migraciones y Edge Functions entraron en cada deploy, y qué Edges faltan redesplegar, está en [`docs/releases/v0.2.0.md`](docs/releases/v0.2.0.md).
 
 ### Added
 

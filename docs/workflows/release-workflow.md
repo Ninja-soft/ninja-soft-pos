@@ -70,8 +70,10 @@ Los cambios se juntan en una rama `tanda/AAAA-MM-DD-N` (PRs squash). El deploy a
    - Sube `package.json` (tiene que ser semver y mayor que la actual).
    - Corta `[Unreleased]` del CHANGELOG en `## [X.Y.Z] - fecha` (la nota `> …` del tope se queda en Unreleased).
    - Escribe `docs/releases/vX.Y.Z.md`: rango de commits, PRs (número, tarea, título), migraciones nuevas con *aplicada en prod*, Edge Functions a desplegar con *desplegada* (carpeta propia cambiada o que importa un `_shared/` cambiado, resuelto por imports) y flags/features sembrados. Agrupa por deploy: cada merge `tanda/*` del first-parent es un bloque y lo no mergeado es el bloque "este deploy".
-   - `--from` por defecto es el último tag `v*`; si no hay, el último merge de tanda en `origin/main`. `--to` por defecto es `HEAD`.
-   - Sin `--remote`, lo que ya está en `origin/main` figura `sí (en main)` y el resto `pendiente de verificar`. También acepta `--applied <archivo>` (texto o JSON de `list_migrations` del MCP) y `--deployed <archivo>` (JSON de `list_edge_functions`).
+   - `--from` por defecto es el último tag `v*`; si no hay, el último merge de tanda en `origin/main`. `--to` por defecto es `HEAD`. El rango resuelto se imprime siempre en stderr: revisarlo antes de commitear. Hasta que exista el primer tag (`v0.2.0`, después de su deploy) el default es el merge de tanda y puede no ser lo que querés: pasá `--from`. Con el tag puesto, los defaults de las versiones siguientes quedan bien.
+   - Los commits `chore(release): …` (el propio PR de release) no entran en el registro.
+   - Sin `--remote`, lo que ya está en `origin/main` figura `sin verificar (en main)` y el resto `pendiente de verificar`. También acepta `--applied <archivo>` (texto o JSON de `list_migrations` del MCP) y `--deployed <archivo>` (JSON de `list_edge_functions`). Si se usan, el archivo va a `docs/releases/evidence/` (sólo versiones/nombres de migraciones y slug + `updated_at` de Edges, nunca secretos) para que el `sí (verificada)` tenga respaldo.
+   - La fecha por defecto es la de hoy en Argentina; la del deploy previsto se pasa con `--date`.
    - Revisar el registro: cada Edge con `pendiente`/`no` se despliega con el deploy (o se anota por qué no hace falta). Ajustar a mano la nota de estado de la sección del CHANGELOG si corresponde.
 2. **PR de deploy tanda → `main`**, mergeado con **merge commit** (no squash): ese commit es el que se taggea.
 3. Aplicar migraciones y desplegar las Edges del registro (`docs/13-deployment.md`). Vercel despliega `main`.

@@ -7016,7 +7016,7 @@ PRD-02 (tests de integridad del motor de promociones) encontró una divergencia 
 
 ### Decisión
 
-- **`0.2.0`** sale con el deploy de `tanda/2026-11-18-1` (2026-11-18) y junta todo lo hecho desde `0.1.0`. Desde ahí, **una versión PATCH por cada deploy de tanda** (`0.2.1`, `0.2.2`…); `MINOR` cuando se cierra un hito o lo decide el dueño.
+- **`0.2.0`** sale con el deploy de `tanda/2026-11-18-1` (previsto para el 2026-11-18) y junta todo lo hecho desde `0.1.0`. Desde ahí, **una versión PATCH por cada deploy de tanda** (`0.2.1`, `0.2.2`…); `MINOR` cuando se cierra un hito o lo decide el dueño.
 - `/api/health` toma la versión de `package.json` importado en el build (`APP_VERSION` en `lib/health.ts`), no del entorno.
 - `scripts/release.mjs` (`pnpm release:prepare` / `release:notes`): sube `package.json` (semver y mayor que la actual), corta `[Unreleased]` en `[X.Y.Z] - fecha` y escribe **`docs/releases/vX.Y.Z.md`** con el rango de commits, los PRs (número, tarea, título), las migraciones nuevas con *aplicada en prod* y las Edge Functions afectadas con *desplegada*, agrupados por deploy (cada merge `tanda/*` del first-parent es un bloque; lo no mergeado es "este deploy"). Una Edge cuenta si cambió su carpeta o si alcanza, por imports relativos estáticos (transitivos), un archivo cambiado fuera de ella. `--remote` verifica en sólo lectura contra la Management API (reusa `apiAuth` de `deploy-check`); `--applied`/`--deployed` aceptan las salidas del MCP. `record` regenera sólo el registro para completar las columnas después del deploy.
 - El registro se genera **en un PR a la tanda** antes del deploy; después del deploy exitoso en Vercel se taggea el **merge commit** (`git tag -a vX.Y.Z`) y se crea el release de GitHub con `release:notes` (versión compacta si la sección supera el límite de GitHub). Flujo en `docs/workflows/release-workflow.md`.
@@ -7030,10 +7030,10 @@ PRD-02 (tests de integridad del motor de promociones) encontró una divergencia 
 ### Riesgos
 
 - El análisis de imports es estático: no ve `import()` con rutas calculadas ni import maps (`deno.json`). Hoy las Edges usan rutas relativas literales.
-- Sin datos remotos, "sí (en main)" asume que lo mergeado en `main` se aplicó/desplegó; `--remote` lo verifica.
+- Sin datos remotos, lo mergeado en `main` figura "sin verificar (en main)"; `--remote` (o `--applied`/`--deployed` con la evidencia en `docs/releases/evidence/`) lo verifica. Los commits `chore(release)` no entran en el registro. Sin tags `v*` el `--from` por defecto es el último merge de tanda; el rango resuelto se imprime siempre.
 - *Desplegada* compara la fecha de la Edge con el último commit del bloque que la tocó: una Edge desplegada desde la rama antes del merge figura `no`. En `v0.2.0`, 30 Edges de `tanda/2026-11-17-4` figuran `no` porque `_shared/paymentSecrets.ts` y `_shared/webhookLog.ts` cambiaron (PAY-27 / SEC-60) y sólo se redesplegaron las de Mercado Pago; el cambio es compatible (opción `strict` que las demás no pasan), pero queda a la vista para decidir.
 - El PR de release no figura en su propio registro.
 
 ### Verificación
 
-`tests/unit/release.test.ts`: semver y rechazo de versiones que no suben, corte del CHANGELOG (nota de Unreleased que se queda, segundo corte, vacío, versión repetida), PR/tarea de los asuntos, agrupado por deploy con commits directos en `main`, migraciones agregadas, resolución transitiva `_shared` → Edge, flags sembrados, estados y render del registro, notas compactas. `tests/unit/health.test.ts`: la versión sale de `package.json` aunque haya `npm_package_version`. Generado real: `docs/releases/v0.2.0.md` con los datos de producción del 2026-11-17 (MCP `list_migrations` y `list_edge_functions`).
+`tests/unit/release.test.ts`: semver y rechazo de versiones que no suben, corte del CHANGELOG (nota de Unreleased que se queda, segundo corte, vacío, versión repetida), PR/tarea de los asuntos, agrupado por deploy con commits directos en `main`, migraciones agregadas, resolución transitiva `_shared` → Edge, flags sembrados, estados y render del registro, notas compactas. `tests/unit/health.test.ts`: la versión sale de `package.json` aunque haya `npm_package_version`. Generado real: `docs/releases/v0.2.0.md` con los datos de producción del 2026-11-17 (MCP `list_migrations` y `list_edge_functions`, guardados en `docs/releases/evidence/`).

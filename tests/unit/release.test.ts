@@ -12,6 +12,9 @@ import {
   extractFlags,
   functionStatus,
   groupBlocks,
+  isReleaseCommit,
+  localDate,
+  main,
   migrationStatus,
   parseCommitSubject,
   parseDeployMerge,
@@ -58,7 +61,7 @@ describe("versiones", () => {
   it("parseSemver acepta sólo X.Y.Z", () => {
     expect(parseSemver("0.2.0")).toEqual([0, 2, 0]);
     expect(parseSemver("10.0.31")).toEqual([10, 0, 31]);
-    for (const bad of ["0.2", "v0.2.0", "0.2.0-rc.1", "01.2.3", "", "abc"]) expect(parseSemver(bad)).toBeNull();
+    for (const bad of ["0.2", "v0.2.0", "0.2.0-rc.1", "01.2.3", "", "abc", " 0.2.0", "0.2.0 ", "0.2.0\n"]) expect(parseSemver(bad)).toBeNull();
   });
 
   it("assertNextVersion rechaza no-semver y versiones que no suben", () => {
@@ -70,6 +73,8 @@ describe("versiones", () => {
     expect(() => assertNextVersion("0.10.0", "0.9.9")).toThrow(/mayor/);
     expect(() => assertNextVersion("0.1.0", "0.2")).toThrow(/inválida/);
     expect(() => assertNextVersion("0.1.0", "v0.2.0")).toThrow(/inválida/);
+    expect(() => assertNextVersion("0.1.0", " 0.2.0")).toThrow(/inválida/);
+    expect(() => bumpPackageJson(`{"version": "0.1.0"}`, "0.2.0 ")).toThrow(/inválida/);
   });
 
   it("bumpPackageJson cambia sólo el campo version", () => {
@@ -119,6 +124,20 @@ describe("CHANGELOG", () => {
     expect(small).not.toContain("Detalle largo");
     expect(small).not.toContain("sigue el detalle");
     expect(small).toContain("[CHANGELOG.md](https://x/CHANGELOG.md#020)");
+  });
+
+  it("notes valida la versión antes de buscar la sección", async () => {
+    for (const bad of ["0.2", "0.2.0)", ".*", " 0.2.0"]) {
+      await expect(main(["notes", "--version", bad], process.cwd())).rejects.toThrow(/inválida/);
+    }
+    await expect(main(["notes"], process.cwd())).rejects.toThrow(/inválida/);
+    await expect(main(["prepare", "--version", "0.2.0 "], process.cwd())).rejects.toThrow(/inválida/);
+  });
+
+  it("fecha por defecto: la local de Argentina, no la UTC", () => {
+    // 2026-11-18 01:30 UTC = 2026-11-17 22:30 en Buenos Aires.
+    expect(localDate(new Date("2026-11-18T01:30:00Z"))).toBe("2026-11-17");
+    expect(localDate(new Date("2026-11-18T12:00:00Z"))).toBe("2026-11-18");
   });
 
   it("ancla de GitHub de la sección", () => {
@@ -172,6 +191,26 @@ describe("commits", () => {
     ]);
     expect(blocks[1]?.pr).toBe(12);
     expect(groupBlocks("x", [], () => [])).toEqual([]);
+  });
+
+  it("los commits chore(release) no entran en el registro", () => {
+    expect(isReleaseCommit("chore(release): v0.2.1 (OPS-60) (#610)")).toBe(true);
+    expect(isReleaseCommit("chore(deps): Next (OPS-45) (#589)")).toBe(false);
+    const fp = [
+      { sha: "r1", parents: ["base"], date: "2026-11-18", subject: "chore(release): v0.2.1 (#610)" },
+      { sha: "m1", parents: ["r1", "t1"], date: "2026-11-18", subject: "Merge pull request #611 from Org/tanda/2026-11-18-1" },
+      { sha: "c2", parents: ["m1"], date: "2026-11-19", subject: "feat: c (ABC-3) (#612)" },
+      { sha: "r2", parents: ["c2"], date: "2026-11-19", subject: "chore(release): v0.2.2 (#613)" },
+    ];
+    const inner = [
+      { sha: "a1", parents: ["base"], date: "2026-11-18", subject: "fix: a (ABC-1) (#609)" },
+      { sha: "r0", parents: ["a1"], date: "2026-11-18", subject: "chore(release): v0.2.1 (#610)" },
+    ];
+    const blocks = groupBlocks("base", fp, () => inner);
+    expect(blocks.map((b) => b.commits.map((c) => c.sha))).toEqual([["a1"], ["c2"]]);
+    expect(blocks[1]?.end).toBe("r2");
+    const onlyRelease = groupBlocks("base", [{ sha: "r9", parents: ["base"], date: "2026-11-20", subject: "chore(release): v0.2.3 (#700)" }], () => []);
+    expect(onlyRelease).toEqual([]);
   });
 });
 
@@ -249,7 +288,7 @@ update features set grupo = 'x' where key = 'otra';`;
 
   it("estado de migraciones y Edges", () => {
     const f = "20270129100000_prd62_coupon_base.sql";
-    expect(migrationStatus(f, { applied: null, inProd: true })).toBe("sí (en main)");
+    expect(migrationStatus(f, { applied: null, inProd: true })).toBe("sin verificar (en main)");
     expect(migrationStatus(f, { applied: null, inProd: false })).toBe("pendiente de verificar");
     expect(migrationStatus(f, { applied: [{ version: "20270129100000", name: null }], inProd: false })).toBe("sí (verificada)");
     // aplicada por el MCP: otra versión, mismo nombre
@@ -260,7 +299,7 @@ update features set grupo = 'x' where key = 'otra';`;
     expect(functionStatus("modo_webhook", { deployed, inProd: false, since: "2026-11-17T16:00:00-03:00" })).toBe("sí (2026-11-17)");
     expect(functionStatus("modo_webhook", { deployed, inProd: false, since: "2026-11-17T18:00:00-03:00" })).toBe("no (última 2026-11-17)");
     expect(functionStatus("otra", { deployed, inProd: false, since: null })).toBe("no desplegada");
-    expect(functionStatus("otra", { deployed: null, inProd: true, since: null })).toBe("sí (en main)");
+    expect(functionStatus("otra", { deployed: null, inProd: true, since: null })).toBe("sin verificar (en main)");
     expect(functionStatus("otra", { deployed: null, inProd: false, since: null })).toBe("pendiente");
   });
 });
@@ -284,7 +323,7 @@ describe("registro", () => {
           end: "6002eb5336d2",
           date: "2026-11-17",
           prs: [{ sha: "96818245aaaa", pr: 553, task: "PAY-01", title: "feat(pagos): vencer intents | viejos" }],
-          migrations: [{ file: "20270119100200_intents_expire_sweep.sql", status: "sí (en main)" }],
+          migrations: [{ file: "20270119100200_intents_expire_sweep.sql", status: "sin verificar (en main)" }],
           functions: [],
           removed: [],
           flags: [],
@@ -308,13 +347,14 @@ describe("registro", () => {
       ],
     });
     expect(md).toContain("# v0.2.0 · 2026-11-18");
+    expect(md).toContain("- **Fecha:** 2026-11-18 (deploy previsto)");
     expect(md).toContain("- **Rango:** `81aebad8..66590dc3`");
     expect(md).toContain("(../../CHANGELOG.md#020---2026-11-18)");
-    expect(md).toContain("1 PRs, 1 migraciones y 1 Edge Functions en 2 bloques");
+    expect(md).toContain("1 PRs, 1 migraciones y 1 entradas de Edge Functions (por bloque; 1 Edges distintas) en 2 bloques");
     expect(md).toContain("## 1. tanda/2026-11-16-1");
     expect(md).toContain("PR de deploy [#556](https://github.com/Org/repo/pull/556)");
     expect(md).toContain("| [#553](https://github.com/Org/repo/pull/553) | PAY-01 | feat(pagos): vencer intents \\| viejos | `96818245` |");
-    expect(md).toContain("| `20270119100200_intents_expire_sweep.sql` | sí (en main) |");
+    expect(md).toContain("| `20270119100200_intents_expire_sweep.sql` | sin verificar (en main) |");
     expect(md).toContain("Cambió `supabase/config.toml`");
     expect(md).toContain("## 2. tanda/2026-11-18-1 (este deploy)");
     expect(md).toContain("| `arca_padron` | `_shared/arca/comprobante.ts` | pendiente |");

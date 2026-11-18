@@ -1,6 +1,12 @@
 // Healthcheck (F1.5 · ADR-098). Liveness siempre; con ?deep=1 además prueba que
 // Supabase responde (Auth y PostgREST con la anon key, nada privado). Pensado
 // para un monitor de uptime externo y para el humo post-deploy.
+import pkg from "../package.json";
+
+// Versión de la app (OPS-53): sale de package.json en el build, no de
+// npm_package_version (que sólo existe si el proceso arranca con npm/pnpm y en
+// Vercel no está). La sube `pnpm release:prepare` en cada deploy.
+export const APP_VERSION: string = pkg.version;
 
 export interface HealthCheck {
   ok: boolean;
@@ -54,11 +60,11 @@ export async function deepChecks(opts: {
   return { supabase_auth: auth, supabase_db: db };
 }
 
-export function baseReport(env: Record<string, string | undefined>, now = new Date()): HealthReport {
+export function baseReport(env: Record<string, string | undefined>, now = new Date(), version = APP_VERSION): HealthReport {
   return {
     status: "ok",
     service: "ninja-soft-pos",
-    version: env.npm_package_version ?? "0.1.0",
+    version,
     env: env.VERCEL_ENV ?? env.NODE_ENV ?? "unknown",
     commit: env.VERCEL_GIT_COMMIT_SHA ? env.VERCEL_GIT_COMMIT_SHA.slice(0, 7) : null,
     time: now.toISOString(),

@@ -1,6 +1,6 @@
 {
   "name": "ninja-soft-pos",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "engines": {
@@ -19,6 +19,8 @@
     "security:snapshot": "node scripts/security/grants-snapshot.mjs",
     "test:smoke": "playwright test tests/e2e/smoke-piloto.spec.ts --no-deps",
     "deploy:check": "node scripts/deploy-check.mjs",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:notes": "node scripts/release.mjs notes",
     "format": "prettier --write .",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

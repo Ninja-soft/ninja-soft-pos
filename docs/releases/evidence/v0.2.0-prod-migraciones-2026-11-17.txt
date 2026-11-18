@@ -1,0 +1,18 @@
+# Producción, 2026-11-17: list_migrations del MCP de Supabase (sólo versión y nombre), versiones >= 20270118.
+20270118100000 dlocal_cupones
+20270119100000 sec10_revoke_acc_sync_helpers
+20270119100100 sec11_revoke_anon_rpcs
+20270119100200 intents_expire_sweep
+20270120100000 explicit_data_api_grants
+20270120100100 sec09_default_privileges_anon
+20270120100200 sec12_revoke_trigger_fns
+20270120100300 sec14_tenant_helpers_guard
+20270121100000 sec16_search_path
+20270122100000 sec23_internal_mfa
+20270123100000 sec43_create_sale_idempotency
+20270124100000 sec59_return_supervisor_pin
+20270125100000 sec60_mp_webhook_signature
+20270126100000 sec61_supervisor_token
+20270127100000 pay28_mp_intent_transition
+20270128100000 fis001_offline_cbte_date
+20270129100000 prd62_coupon_base

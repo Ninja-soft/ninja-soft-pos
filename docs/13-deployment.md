@@ -146,6 +146,7 @@ npx supabase functions deploy <nombre> --project-ref hrkditzrsavehnhngakb
 | `pnpm test:e2e` | Playwright completo (ver `tests/e2e/README.md`). |
 | `pnpm test:smoke` | Smoke de piloto: sesión, caja, venta en efectivo, ticket, anulación, cierre y reporte (§11.2). |
 | `pnpm deploy:check` | Chequeo estático de migraciones y Edge públicas (§11.1). |
+| `pnpm release:prepare` / `release:notes` | Versión del deploy: `package.json`, corte del CHANGELOG y registro `docs/releases/vX.Y.Z.md` con PRs, migraciones y Edges a aplicar; notas para el release de GitHub (§8). |
 | `pnpm db:start` / `db:reset` / `db:types` | Supabase local y tipos. |
 
 ## 6. CI/CD: GitHub Actions
@@ -207,8 +208,9 @@ Con `gh`: `gh secret set SUPABASE_ACCESS_TOKEN` y `gh secret set SUPABASE_PROJEC
 - `MAJOR`: breaking change para clientes (cambio de API pública).
 - `MINOR`: nuevas features.
 - `PATCH`: fixes.
-- Tag git por release: `v1.2.3`.
-- `CHANGELOG.md` se actualiza en cada PR a `main`.
+- **Una versión PATCH por cada deploy de tanda** desde `0.2.0` (OPS-53 · ADR-193): `pnpm release:prepare --version X.Y.Z` en un PR a la tanda, tag anotado `vX.Y.Z` sobre el merge commit después de que Vercel despliega bien y release de GitHub con `pnpm release:notes`. Flujo completo en [`workflows/release-workflow.md`](./workflows/release-workflow.md).
+- `docs/releases/vX.Y.Z.md` es el registro de lo que aplicó cada deploy: PRs, migraciones (*aplicada en prod*) y Edge Functions (*desplegada*, incluidas las que cambian sólo por un `_shared/`).
+- `CHANGELOG.md` se actualiza en cada PR (en `[Unreleased]`).
 
 ## 9. Monitoreo post-deploy
 
@@ -231,13 +233,14 @@ Copiar en el PR o en el hilo del deploy y tildar con la salida de cada comando.
 - [ ] Cada `W1` (destructiva) tiene su plan de datos en el ADR.
 - [ ] Backup reciente visible en el dashboard de Supabase (Database → Backups) o dump lógico del día si la migración toca datos (§Backup y restore del DR).
 - [ ] Variables de entorno y secrets nuevos cargados (Vercel y `supabase secrets`), según el ADR.
-- [ ] `CHANGELOG.md` actualizado.
+- [ ] `CHANGELOG.md` actualizado y `pnpm release:prepare --version X.Y.Z` mergeado en la tanda: `docs/releases/vX.Y.Z.md` lista las migraciones y Edges de este deploy.
 
 ### 11.2 Aplicar y verificar
 
 - [ ] Migraciones pendientes aplicadas **en el orden impreso**. Repetir `deploy-check --remote`: 0 pendientes.
-- [ ] Edge Functions del ADR desplegadas. `deploy-check --remote` sin `R1`/`R2`.
-- [ ] Front en producción: `curl https://pos.soft.ninja/api/health` muestra el `commit` del merge.
+- [ ] Edge Functions del ADR y del registro `docs/releases/vX.Y.Z.md` desplegadas. `deploy-check --remote` sin `R1`/`R2`.
+- [ ] Front en producción: `curl https://pos.soft.ninja/api/health` muestra el `commit` del merge y `"version":"X.Y.Z"`.
+- [ ] Tag `vX.Y.Z` sobre el merge commit y release de GitHub (`release-workflow.md`).
 - [ ] `curl https://pos.soft.ninja/api/health?deep=1` → `200` y `"status":"ok"` (Auth y base responden).
 - [ ] Smoke de piloto en el tenant QA (sesión QA, ver `tests/e2e/README.md`):
   ```bash

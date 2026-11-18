@@ -27,6 +27,8 @@ MAJOR.MINOR.PATCH
 
 Hasta llegar a `1.0.0` (lanzamiento público), arrancamos en `0.1.0` e incrementamos `MINOR` a cada hito relevante del MVP.
 
+**Una versión por deploy (OPS-53 · ADR-193).** Desde `0.2.0` (deploy de `tanda/2026-11-18-1`, 2026-11-18) cada deploy de una tanda a producción corta una versión **PATCH** (`0.2.1`, `0.2.2`…). `MINOR` sube cuando se cierra un hito o el dueño lo decide. La versión desplegada se ve en `GET /api/health` (`version`, sale de `package.json` en el build) junto con el `commit`. Lo que aplicó cada versión queda en `docs/releases/vX.Y.Z.md`.
+
 ---
 
 ## Ramas y entornos
@@ -44,30 +46,53 @@ Ver `13-deployment.md` para detalle.
 
 ## Flujo de release
 
-### Release continuo (default)
+### Cambios del día a día
 
 Para casi todos los cambios (`feat`, `fix`, `chore`):
 
-1. PR aprobada.
+1. PR aprobada contra la tanda abierta (`tanda/AAAA-MM-DD-N`), con su entrada en `[Unreleased]` del CHANGELOG.
 2. CI verde.
 3. Checklist de `18-qa-checklist.md` cumplido.
-4. Merge a `main`.
-5. Vercel despliega automáticamente.
+4. Squash a la tanda.
+5. La tanda sale a producción entera en el próximo deploy (abajo).
 6. Smoke test post-deploy (5 minutos).
-7. Si todo ok, `docs-writer` actualiza `CHANGELOG.md` (o ya estaba actualizado en la PR).
 
-Esto pasa varias veces por semana.
+### Deploy de una tanda = una versión (flujo vigente)
 
-### Release con tag (versionado)
+Los cambios se juntan en una rama `tanda/AAAA-MM-DD-N` (PRs squash). El deploy a producción es el merge de esa tanda a `main`. Cada deploy se versiona así:
 
-Cuando se cierra un hito o se quiere marcar un punto de referencia:
+1. **Preparar la versión, en un PR a la tanda** (rama `chore/release-vX.Y.Z` desde la tanda):
+   ```bash
+   pnpm release:prepare --version X.Y.Z --date AAAA-MM-DD --tanda tanda/AAAA-MM-DD-N
+   # opcional, sólo lectura contra prod (SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF):
+   node --env-file=.env.local scripts/release.mjs prepare --version X.Y.Z --remote
+   ```
+   - Sube `package.json` (tiene que ser semver y mayor que la actual).
+   - Corta `[Unreleased]` del CHANGELOG en `## [X.Y.Z] - fecha` (la nota `> …` del tope se queda en Unreleased).
+   - Escribe `docs/releases/vX.Y.Z.md`: rango de commits, PRs (número, tarea, título), migraciones nuevas con *aplicada en prod*, Edge Functions a desplegar con *desplegada* (carpeta propia cambiada o que importa un `_shared/` cambiado, resuelto por imports) y flags/features sembrados. Agrupa por deploy: cada merge `tanda/*` del first-parent es un bloque y lo no mergeado es el bloque "este deploy".
+   - `--from` por defecto es el último tag `v*`; si no hay, el último merge de tanda en `origin/main`. `--to` por defecto es `HEAD`. El rango resuelto se imprime siempre en stderr: revisarlo antes de commitear. Hasta que exista el primer tag (`v0.2.0`, después de su deploy) el default es el merge de tanda y puede no ser lo que querés: pasá `--from`. Con el tag puesto, los defaults de las versiones siguientes quedan bien.
+   - Los commits `chore(release): …` (el propio PR de release) no entran en el registro.
+   - Sin `--remote`, lo que ya está en `origin/main` figura `sin verificar (en main)` y el resto `pendiente de verificar`. También acepta `--applied <archivo>` (texto o JSON de `list_migrations` del MCP) y `--deployed <archivo>` (JSON de `list_edge_functions`). Si se usan, el archivo va a `docs/releases/evidence/` (sólo versiones/nombres de migraciones y slug + `updated_at` de Edges, nunca secretos) para que el `sí (verificada)` tenga respaldo.
+   - La fecha por defecto es la de hoy en Argentina; la del deploy previsto se pasa con `--date`.
+   - Revisar el registro: cada Edge con `pendiente`/`no` se despliega con el deploy (o se anota por qué no hace falta). Ajustar a mano la nota de estado de la sección del CHANGELOG si corresponde.
+2. **PR de deploy tanda → `main`**, mergeado con **merge commit** (no squash): ese commit es el que se taggea.
+3. Aplicar migraciones y desplegar las Edges del registro (`docs/13-deployment.md`). Vercel despliega `main`.
+4. **Después de que Vercel termina bien** (y `/api/health` muestra `X.Y.Z`):
+   ```bash
+   git fetch origin
+   git tag -a vX.Y.Z <merge commit> -m "vX.Y.Z"
+   git push origin vX.Y.Z
+   pnpm release:notes --version X.Y.Z > notas.md
+   gh release create vX.Y.Z --title "vX.Y.Z" --notes-file notas.md --verify-tag
+   ```
+   `release:notes` imprime la sección del CHANGELOG con el link al registro; si no entra en el límite de GitHub queda la versión compacta (títulos de cada entrada y link al CHANGELOG).
+5. **Cerrar el registro** si quedó algo `pendiente`: `node --env-file=.env.local scripts/release.mjs record --version X.Y.Z --to vX.Y.Z --remote` (regenera sólo `docs/releases/vX.Y.Z.md`) o editar las columnas a mano, en un PR a la tanda siguiente.
 
-1. Verificar que `CHANGELOG.md` está al día con todos los cambios desde el último tag.
-2. Bumpear versión en `package.json`.
-3. Commit `release: vX.Y.Z`.
-4. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`.
-5. Push del tag: `git push origin vX.Y.Z`.
-6. Crear release en GitHub con el contenido del `CHANGELOG.md` para esa versión.
+El PR de release no aparece en su propio registro (se genera antes de mergearlo).
+
+### Release fuera de una tanda
+
+Un hotfix directo a `main` también es un deploy: después del merge, `pnpm release:prepare --version X.Y.(Z+1)` en un PR y el tag sobre el commit desplegado.
 
 ### Hotfix urgente
 
@@ -83,12 +108,12 @@ Cuando algo está roto en producción y no se puede esperar:
 
 ---
 
-## Checklist pre-release (cuando se taggea)
+## Checklist pre-release (cada deploy)
 
-Para releases tagueados (`vX.Y.Z`):
+Para cada versión (`vX.Y.Z`):
 
-- [ ] `CHANGELOG.md` con sección completa de la nueva versión.
-- [ ] `package.json` actualizado.
+- [ ] `pnpm release:prepare` corrido en un PR a la tanda: `CHANGELOG.md` con la sección, `package.json` y `docs/releases/vX.Y.Z.md`.
+- [ ] Cada migración y Edge del registro aplicada / desplegada (o con la razón anotada).
 - [ ] Todas las migraciones aplicadas en staging y verificadas.
 - [ ] `security-auditor` corrió el checklist de `18-qa-checklist.md` sección 3.
 - [ ] Smoke test manual en staging.
@@ -110,7 +135,7 @@ Categorías:
 - **Fixed** — bugs corregidos.
 - **Security** — fixes de seguridad.
 
-Sección `[Unreleased]` siempre al tope. Cuando se hace release, se mueve a `[X.Y.Z] - YYYY-MM-DD`.
+Sección `[Unreleased]` siempre al tope. En cada deploy `pnpm release:prepare` la mueve a `[X.Y.Z] - YYYY-MM-DD`.
 
 ---
 
@@ -175,9 +200,9 @@ Los post-mortems no buscan culpables. Buscan que el sistema mejore.
 
 Esta no es una regla, es una guía para arrancar:
 
-- **Diario:** merges a `main`, deploys automáticos.
+- **Cada deploy de tanda:** versión PATCH, tag y release de GitHub.
 - **Semanal:** revisión de incidentes (si los hubo), revisión del CHANGELOG.
-- **Cada hito MVP (H0–H6):** tag versionado.
+- **Cada hito MVP (H0–H6):** versión MINOR.
 - **Mensual:** review de ADRs nuevas, revisión de feature flags acumuladas, revisión de deuda técnica.
 
 Cuando el producto esté en clientes pagos, se ajusta: probablemente ventanas de deploy planificadas para evitar horas pico de venta (medianoche en lugar de mediodía).
